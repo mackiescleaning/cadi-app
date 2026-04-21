@@ -1,4 +1,5 @@
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import CadiWordmark from '../CadiWordmark';
 import {
   LayoutDashboard, Calculator, CalendarDays, Users,
   PoundSterling, Settings, Menu, X,
@@ -67,18 +68,9 @@ export default function AppLayout() {
       <aside className="hidden md:flex flex-col w-64 min-h-screen bg-[#010a4f] text-white fixed left-0 top-0 bottom-0 z-40">
 
         {/* Logo */}
-        <div className="px-6 py-6 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#1f48ff] flex items-center justify-center shrink-0">
-              <svg width="20" height="20" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M7 14C7 10.134 10.134 7 14 7C16.209 7 18.18 8.014 19.5 9.6L17.4 11.35C16.56 10.34 15.35 9.7 14 9.7C11.624 9.7 9.7 11.624 9.7 14C9.7 16.376 11.624 18.3 14 18.3C15.35 18.3 16.56 17.66 17.4 16.65L19.5 18.4C18.18 19.986 16.209 21 14 21C10.134 21 7 17.866 7 14Z" fill="white"/>
-              </svg>
-            </div>
-            <div>
-              <p className="font-black text-base leading-tight text-white tracking-tight">cadi</p>
-              <p className="text-xs text-[#99c5ff]">Business OS</p>
-            </div>
-          </div>
+        <div className="px-6 py-5 border-b border-white/10">
+          <CadiWordmark height={24} />
+          <p className="text-[10px] text-[#99c5ff] mt-1 tracking-wide">Business OS</p>
         </div>
 
         {/* Nav links */}
@@ -187,17 +179,10 @@ export default function AppLayout() {
           <aside className="absolute left-0 top-0 bottom-0 w-72 bg-[#010a4f] text-white flex flex-col">
 
             {/* Logo + close */}
-            <div className="px-6 py-6 border-b border-white/10 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#1f48ff] flex items-center justify-center shrink-0">
-                  <svg width="20" height="20" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M7 14C7 10.134 10.134 7 14 7C16.209 7 18.18 8.014 19.5 9.6L17.4 11.35C16.56 10.34 15.35 9.7 14 9.7C11.624 9.7 9.7 11.624 9.7 14C9.7 16.376 11.624 18.3 14 18.3C15.35 18.3 16.56 17.66 17.4 16.65L19.5 18.4C18.18 19.986 16.209 21 14 21C10.134 21 7 17.866 7 14Z" fill="white"/>
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-black text-base text-white tracking-tight">cadi</p>
-                  <p className="text-xs text-[#99c5ff]">Business OS</p>
-                </div>
+            <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <CadiWordmark height={24} />
+                <p className="text-[10px] text-[#99c5ff] mt-1 tracking-wide">Business OS</p>
               </div>
               <button
                 onClick={() => setMobileMenuOpen(false)}
