@@ -11,14 +11,21 @@
 //   • Saved routes library — load a recurring round in one tap
 //   • Mileage log tab — HMRC-compliant record of every journey
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { listRoutes, createRoute, updateRoute, deleteRoute, listMileageLogs, createMileageLog } from "../lib/db/routesDb";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const HMRC_RATE            = 0.45;
-const HMRC_RATE_HIGH       = 0.25;
-const ANNUAL_MILEAGE_BASE  = 4820; // demo: already logged this year
-const HOME_POSTCODE        = "SW12";
+const HMRC_RATE            = 0.45;  // 45p/mile first 10,000
+const HMRC_RATE_HIGH       = 0.25;  // 25p/mile after 10,000
+const DEFAULT_HOME_POSTCODE = "SW12";
+
+function getCurrentTaxYear() {
+  const now = new Date();
+  const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${y}/${(y + 1).toString().slice(2)}`;
+}
 
 // ─── Postcode distance estimation ────────────────────────────────────────────
 const POSTCODE_COORDS = {
@@ -71,7 +78,7 @@ function buildGoogleMapsUrl(stops, home) {
   return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&waypoints=${wps}&travelmode=driving`;
 }
 
-function calcRouteStats(stops, homePostcode) {
+function calcRouteStats(stops, homePostcode, annualMileageBase = 0) {
   if (stops.length === 0) return { totalMiles: 0, claimValue: 0, fuelCost: 0, legs: [] };
   const allPosts = [homePostcode, ...stops.map(s => s.postcode), homePostcode];
   const legs = [];
@@ -82,7 +89,7 @@ function calcRouteStats(stops, homePostcode) {
     totalMiles += miles;
   }
   totalMiles = Math.round(totalMiles * 10) / 10;
-  const at45       = Math.min(totalMiles, Math.max(0, 10000 - ANNUAL_MILEAGE_BASE));
+  const at45       = Math.min(totalMiles, Math.max(0, 10000 - annualMileageBase));
   const at25       = Math.max(0, totalMiles - at45);
   const claimValue = Math.round((at45 * HMRC_RATE + at25 * HMRC_RATE_HIGH) * 100) / 100;
   const fuelCost   = Math.round(totalMiles * 0.195 * 100) / 100;
@@ -637,7 +644,7 @@ function DaySummaryCard({ stops, stats }) {
 }
 
 // ─── Saved routes panel ───────────────────────────────────────────────────────
-function SavedRoutesPanel({ routes, onLoad }) {
+function SavedRoutesPanel({ routes, onLoad, onDelete, homePostcode = DEFAULT_HOME_POSTCODE }) {
   if (routes.length === 0) return null;
 
   return (
@@ -648,7 +655,7 @@ function SavedRoutesPanel({ routes, onLoad }) {
       </div>
       <div className="divide-y divide-[rgba(153,197,255,0.05)]">
         {routes.map(r => {
-          const rs = calcRouteStats(r.stops, HOME_POSTCODE);
+          const rs = calcRouteStats(r.stops, homePostcode);
           const revenue = r.stops.reduce((s, j) => s + (j.price || 0), 0);
           return (
             <button
@@ -692,7 +699,7 @@ function MileageLogPanel({ log }) {
   return (
     <GCard>
       <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(153,197,255,0.06)]">
-        <SL>Mileage log · 2025/26</SL>
+        <SL>Mileage log · {getCurrentTaxYear()}</SL>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-[rgba(153,197,255,0.4)]">{ytdMiles.toFixed(1)} mi ·</span>
           <GChip color="green">{fmt2(ytdClaim)} YTD claim</GChip>
@@ -732,40 +739,99 @@ function MileageLogPanel({ log }) {
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
-export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileageLogged }) {
-  const { user } = useAuth();
+export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileageLogged: onMileageLoggedProp }) {
+  const routerNavigate = useNavigate();
+  const onNavigate = (tab) => routerNavigate(`/${tab}`);
+  const { user, profile } = useAuth();
   const isLive = Boolean(user);
 
-  const [stops,       setStops]       = useState(isLive ? [] : TODAY_STOPS_DEMO);
-  const [savedRoutes, setSavedRoutes] = useState(isLive ? [] : SAVED_ROUTES_DEMO);
-  const [mileageLog,  setMileageLog]  = useState(isLive ? [] : MILEAGE_LOG_DEMO);
+  // Home postcode from profile or default
+  const homePostcode = profile?.home_postcode || profile?.postcode || DEFAULT_HOME_POSTCODE;
+
+  const [stops,       setStops]       = useState([]);
+  const [savedRoutes, setSavedRoutes] = useState([]);
+  const [mileageLog,  setMileageLog]  = useState([]);
   const [showAddStop, setShowAddStop] = useState(false);
   const [showSave,    setShowSave]    = useState(false);
   const [routeSaved,  setRouteSaved]  = useState(false);
   const [activeTab,   setActiveTab]   = useState("planner");
+  const [loading,     setLoading]     = useState(true);
 
-  const stats         = useMemo(() => calcRouteStats(stops, HOME_POSTCODE), [stops]);
-  const ytdMileage    = (isLive ? 0 : ANNUAL_MILEAGE_BASE) + mileageLog.reduce((s, r) => s + r.miles, 0);
-  const googleMapsUrl = buildGoogleMapsUrl(stops, HOME_POSTCODE);
+  // Load routes + mileage from Supabase
+  useEffect(() => {
+    if (!user) {
+      setStops(TODAY_STOPS_DEMO);
+      setSavedRoutes(SAVED_ROUTES_DEMO);
+      setMileageLog(MILEAGE_LOG_DEMO);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    Promise.all([listRoutes(), listMileageLogs()])
+      .then(([routes, logs]) => {
+        setSavedRoutes(routes.map(r => ({
+          id: r.id, name: r.name, type: r.type,
+          stops: r.stops || [], frequency: r.frequency,
+          totalMiles: Number(r.total_miles) || 0,
+          lastRun: r.last_run,
+        })));
+        setMileageLog(logs.map(l => ({
+          id: l.id, date: l.date, route: l.route_name,
+          miles: Number(l.miles) || 0, claim: Number(l.claim_value) || 0,
+        })));
+      })
+      .catch(() => { setSavedRoutes([]); setMileageLog([]); })
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  const ytdMileage    = mileageLog.reduce((s, r) => s + r.miles, 0);
+  const stats         = useMemo(() => calcRouteStats(stops, homePostcode, ytdMileage), [stops, homePostcode, ytdMileage]);
+  const googleMapsUrl = buildGoogleMapsUrl(stops, homePostcode);
   const totalRevenue  = stops.reduce((s, j) => s + (j.price || 0), 0);
 
   const handleRemoveStop = id  => setStops(prev => prev.filter(s => s.id !== id));
   const handleAddStop    = stop => setStops(prev => [...prev, stop]);
   const handleLoadRoute  = r   => setStops([...r.stops]);
 
-  const handleSaveRoute = ({ name, frequency, logMileage, stats, stops }) => {
-    const newRoute = {
-      id:       `r${Date.now()}`,
-      name, type: stops[0]?.type ?? "residential",
-      stops,  frequency,
-      lastRun: new Date().toISOString().slice(0, 10),
-    };
-    setSavedRoutes(prev => [newRoute, ...prev]);
+  const handleDeleteRoute = useCallback(async (id) => {
+    setSavedRoutes(prev => prev.filter(r => r.id !== id));
+    if (isLive) { try { await deleteRoute(id); } catch {} }
+  }, [isLive]);
 
+  const handleSaveRoute = async ({ name, frequency, logMileage, stats, stops }) => {
+    const routeData = {
+      name, type: stops[0]?.type ?? "residential",
+      stops, frequency, totalMiles: stats.totalMiles,
+      lastRun: new Date().toISOString().split('T')[0],
+    };
+
+    // Save route to Supabase
+    if (isLive) {
+      try {
+        const saved = await createRoute(routeData);
+        setSavedRoutes(prev => [{ ...routeData, id: saved.id }, ...prev]);
+      } catch (err) {
+        console.error('Failed to save route:', err);
+        setSavedRoutes(prev => [{ ...routeData, id: `r${Date.now()}` }, ...prev]);
+      }
+    } else {
+      setSavedRoutes(prev => [{ ...routeData, id: `r${Date.now()}` }, ...prev]);
+    }
+
+    // Log mileage
     if (logMileage) {
-      const entry = { date:new Date().toISOString().slice(0,10), route:name, miles:stats.totalMiles, claim:stats.claimValue };
-      setMileageLog(prev => [entry, ...prev]);
-      onMileageLogged?.({ miles:stats.totalMiles, claimValue:stats.claimValue, route:name });
+      const entry = { date: new Date().toISOString().split('T')[0], route: name, miles: stats.totalMiles, claim: stats.claimValue };
+      if (isLive) {
+        try {
+          const saved = await createMileageLog({ routeName: name, miles: stats.totalMiles, claimValue: stats.claimValue });
+          setMileageLog(prev => [{ id: saved.id, ...entry }, ...prev]);
+        } catch {
+          setMileageLog(prev => [entry, ...prev]);
+        }
+      } else {
+        setMileageLog(prev => [entry, ...prev]);
+      }
+      onMileageLoggedProp?.({ miles: stats.totalMiles, claimValue: stats.claimValue, route: name });
     }
 
     setShowSave(false);
@@ -862,7 +928,24 @@ export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileage
                       )}
                       {stops.length > 1 && (
                         <button
-                          onClick={() => alert("Route optimisation uses Google Maps API in production.")}
+                          onClick={() => { /* Sort stops by proximity — basic nearest-neighbour */
+                            setStops(prev => {
+                              if (prev.length <= 2) return prev;
+                              const remaining = [...prev];
+                              const ordered = [remaining.shift()];
+                              while (remaining.length > 0) {
+                                const last = ordered[ordered.length - 1];
+                                let nearestIdx = 0;
+                                let nearestDist = Infinity;
+                                remaining.forEach((s, i) => {
+                                  const d = estimateMiles(last.postcode, s.postcode);
+                                  if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
+                                });
+                                ordered.push(remaining.splice(nearestIdx, 1)[0]);
+                              }
+                              return ordered;
+                            });
+                          }}
                           className="text-[10px] font-black text-[#99c5ff] hover:text-white transition-colors"
                         >
                           ✨ Optimise
@@ -887,7 +970,7 @@ export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileage
                     <StopList
                       stops={stops}
                       setStops={setStops}
-                      homePostcode={HOME_POSTCODE}
+                      homePostcode={homePostcode}
                       stats={stats}
                       onAddStop={() => setShowAddStop(true)}
                       onRemoveStop={handleRemoveStop}
@@ -895,7 +978,7 @@ export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileage
                   )}
                 </GCard>
 
-                <SavedRoutesPanel routes={savedRoutes} onLoad={handleLoadRoute} />
+                <SavedRoutesPanel routes={savedRoutes} onLoad={handleLoadRoute} onDelete={handleDeleteRoute} homePostcode={homePostcode} />
               </div>
 
               {/* RIGHT: mileage + summary (1/3) */}
@@ -907,7 +990,7 @@ export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileage
                   <GCard className="p-4">
                     <SL className="mb-2">Navigate</SL>
                     <p className="text-[11px] text-[rgba(153,197,255,0.4)] mb-3 leading-relaxed">
-                      Opens Google Maps with all {stops.length} stops in order, starting and ending at home ({HOME_POSTCODE}).
+                      Opens Google Maps with all {stops.length} stops in order, starting and ending at home ({homePostcode}).
                     </p>
                     <a
                       href={googleMapsUrl}

@@ -3,35 +3,38 @@
 // All logic / data / screens unchanged — UI upgraded to dark navy glassmorphism
 // NOTE: the invoice document preview stays clean white — it's customer-facing
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useInvoices } from "../context/InvoiceContext";
+import { useData } from "../context/DataContext";
+import { createMoneyEntry } from "../lib/db/moneyDb";
+import { getBusinessSettings } from "../lib/db/settingsDb";
+import { supabase } from "../lib/supabase";
 
 // ─── Default accounts ─────────────────────────────────────────────────────────
 const DEFAULT_ACCOUNTS = {
   vatRegistered: false, frsRate: 12, isLimitedCostTrader: false,
-  taxRate: 0.20, ytdIncome: 41820, annualTarget: 65000,
+  taxRate: 0.20, ytdIncome: 0, annualTarget: 0,
 };
 
-// ─── Business settings ────────────────────────────────────────────────────────
-const BUSINESS = {
-  name: "Cadi Services", ownerName: "Sarah Mitchell",
-  email: "sarah@cadi.co.uk", phone: "07700 900 123",
-  address: "14 Elm Street, London SW4 8AS",
+// ─── Default business settings (overridden by DB on load) ────────────────────
+const DEFAULT_BUSINESS = {
+  name: "", ownerName: "",
+  email: "", phone: "",
+  address: "",
   vatNumber: "", companyNum: "",
-  bankName: "Starling Bank", sortCode: "60-83-71", accountNum: "12345678",
+  bankName: "", sortCode: "", accountNum: "",
   paymentRef: "INV-", defaultTerms: 14,
   defaultNotes: "Thank you for your business. Please make payment within the agreed terms.",
 };
-
-// Demo invoice data lives in InvoiceContext — shared across all tabs.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt       = (n) => `£${Math.round(n).toLocaleString()}`;
 const fmt2      = (n) => `£${(+n).toFixed(2)}`;
 const fmtDate   = (s) => new Date(s).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const fmtShort  = (s) => new Date(s).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-const today     = "2026-04-07";
+const today     = new Date().toISOString().split("T")[0];
 const addDays   = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x.toISOString().split("T")[0]; };
 
 function calcInvoice(lines, vatRegistered, frsRate) {
@@ -136,16 +139,40 @@ function EmailModal({ invoice, business, onSent, onClose }) {
   const [to,      setTo]      = useState(invoice.customer.email);
   const [subject, setSubject] = useState(`Invoice ${invoice.num} from ${business.name}`);
   const [body,    setBody]    = useState(
-    `Hi ${invoice.customer.name.split(" ")[0]},\n\nPlease find attached invoice ${invoice.num} for ${fmt2(calc.total)}.\n\nPayment is due by ${fmtDate(invoice.dueDate)}.\n\nBank details:\n${business.bankName}\nSort code: ${business.sortCode}\nAccount: ${business.accountNum}\nReference: ${invoice.num}\n\n${business.defaultNotes}\n\nMany thanks,\n${business.ownerName}\n${business.name}`
+    `Hi ${(invoice.customer?.name || "").split(" ")[0] || "there"},\n\nPlease find attached invoice ${invoice.num} for ${fmt2(calc.total)}.\n\n${invoice.terms === 0 ? "Payment is due on receipt." : `Payment is due by ${fmtDate(invoice.dueDate)}.`}\n\nBank details:\n${invoice.bankName || business.bankName}\nSort code: ${invoice.sortCode || business.sortCode}\nAccount: ${invoice.accountNum || business.accountNum}\nReference: ${invoice.num}\n\n${business.defaultNotes}\n\nMany thanks,\n${business.ownerName}\n${business.name}`
   );
   const [sending, setSending] = useState(false);
   const [sent,    setSent]    = useState(false);
+  const [error,   setError]   = useState(null);
 
   const handleSend = async () => {
     setSending(true);
-    await new Promise(r => setTimeout(r, 1400));
-    setSending(false); setSent(true);
-    setTimeout(() => { onSent(); onClose(); }, 1800);
+    setError(null);
+    try {
+      const { error: fnError } = await supabase.functions.invoke('send-invoice', {
+        body: {
+          invoiceId: invoice.id,
+          to,
+          subject,
+          body,
+          invoiceNum: invoice.num,
+          amount: fmt2(calc.total),
+          dueDate: invoice.dueDate,
+          businessName: business.name,
+          replyTo: business.email,
+        },
+      });
+      if (fnError) throw fnError;
+      setSending(false); setSent(true);
+      setTimeout(() => { onSent(); onClose(); }, 1800);
+    } catch (err) {
+      console.error('Failed to send invoice:', err);
+      // Fallback: open mailto link so user can still send
+      const mailtoUrl = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.open(mailtoUrl, '_blank');
+      setSending(false); setSent(true);
+      setTimeout(() => { onSent(); onClose(); }, 1800);
+    }
   };
 
   if (sent) return (
@@ -173,7 +200,8 @@ function EmailModal({ invoice, business, onSent, onClose }) {
           <div><SL className="mb-1.5">To</SL><GInput type="email" value={to} onChange={e => setTo(e.target.value)} /></div>
           <div><SL className="mb-1.5">Subject</SL><GInput type="text" value={subject} onChange={e => setSubject(e.target.value)} /></div>
           <div><SL className="mb-1.5">Message</SL><GTextarea value={body} onChange={e => setBody(e.target.value)} rows={9} className="font-mono text-xs leading-relaxed" /></div>
-          <GAlert type="blue">The invoice PDF will be attached automatically. Bank details are included in the message body.</GAlert>
+          {error && <GAlert type="red">{error}</GAlert>}
+          <GAlert type="blue">Invoice details and bank information are included in the email. Customer can reply directly to your business email.</GAlert>
           <div className="flex gap-2">
             <button onClick={handleSend} disabled={sending || !to}
               className={`flex-1 py-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${sending || !to ? "bg-[rgba(153,197,255,0.05)] text-[rgba(153,197,255,0.25)] cursor-not-allowed" : "bg-[#1f48ff] text-white hover:bg-[#3a5eff]"}`}>
@@ -263,7 +291,8 @@ function InvoiceList({ invoices, accounts, onSelect, onCreate }) {
 
   const outstanding  = invoices.filter(i => i.status !== "paid" && i.status !== "draft").reduce((s,i) => s + calcInvoice(i.lines,false,12).total, 0);
   const overdue      = invoices.filter(i => i.status === "overdue").reduce((s,i) => s + calcInvoice(i.lines,false,12).total, 0);
-  const paidMonth    = invoices.filter(i => i.status === "paid" && i.paidAt?.startsWith("2026-04")).reduce((s,i) => s + calcInvoice(i.lines,false,12).total, 0);
+  const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+  const paidMonth    = invoices.filter(i => i.status === "paid" && i.paidAt?.startsWith(currentMonthPrefix)).reduce((s,i) => s + calcInvoice(i.lines,false,12).total, 0);
   const ytdTotal     = invoices.reduce((s,i) => s + calcInvoice(i.lines,false,12).total, 0);
   const overdueCount = invoices.filter(i => i.status === "overdue").length;
 
@@ -317,7 +346,17 @@ function InvoiceList({ invoices, accounts, onSelect, onCreate }) {
       </div>
 
       {/* Invoice rows */}
-      {filtered.length === 0 ? (
+      {invoices.length === 0 ? (
+        <GCard className="py-16 text-center">
+          <p className="text-4xl mb-3">📄</p>
+          <p className="text-sm font-black text-white mb-1">No invoices yet</p>
+          <p className="text-xs text-[rgba(153,197,255,0.5)] mb-4">Create your first invoice and send it to a customer in seconds.</p>
+          <button onClick={onCreate}
+            className="px-5 py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-bold hover:bg-[#3a5eff] transition-colors shadow-lg shadow-[#1f48ff]/30">
+            + Create your first invoice
+          </button>
+        </GCard>
+      ) : filtered.length === 0 ? (
         <GCard className="py-16 text-center">
           <p className="text-4xl mb-3">📄</p>
           <p className="text-sm font-black text-[rgba(153,197,255,0.5)]">No invoices match — try a different filter.</p>
@@ -377,23 +416,27 @@ function InvoiceList({ invoices, accounts, onSelect, onCreate }) {
 }
 
 // ─── SCREEN: Create / edit invoice ────────────────────────────────────────────
-function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBack }) {
+function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBack, business = DEFAULT_BUSINESS }) {
   const isEdit = !!draftInvoice;
   const [customer, setCustomer] = useState(draftInvoice?.customer ?? { name: "", email: "", address: "", phone: "" });
   const [type,     setType]     = useState(draftInvoice?.type     ?? "residential");
   const [date,     setDate]     = useState(draftInvoice?.date     ?? today);
-  const [terms,    setTerms]    = useState(draftInvoice?.terms    ?? BUSINESS.defaultTerms);
+  const [terms,    setTerms]    = useState(draftInvoice?.terms    ?? business.defaultTerms);
+  const [customDueDate, setCustomDueDate] = useState(draftInvoice?.customDueDate ?? "");
   const [lines,    setLines]    = useState(draftInvoice?.lines    ?? [{ id: 1, desc: "", qty: 1, rate: "", vatRate: 0 }]);
-  const [notes,    setNotes]    = useState(draftInvoice?.notes    ?? BUSINESS.defaultNotes);
+  const [notes,    setNotes]    = useState(draftInvoice?.notes    ?? business.defaultNotes);
+  const [bankName, setBankName] = useState(draftInvoice?.bankName ?? business.bankName ?? "");
+  const [sortCode, setSortCode] = useState(draftInvoice?.sortCode ?? business.sortCode ?? "");
+  const [accountNum, setAccountNum] = useState(draftInvoice?.accountNum ?? business.accountNum ?? "");
 
   // Pin the invoice number on mount — prevents it incrementing on every re-render
   const stableNum = useRef(draftInvoice?.num ?? invNum);
 
-  const dueDate = addDays(date, terms);
+  const dueDate = terms === "custom" ? customDueDate : (terms === 0 ? date : addDays(date, terms));
   const calc    = calcInvoice(lines, accounts.vatRegistered, accounts.frsRate);
   const valid   = customer.name && customer.email && lines.some(l => l.desc && parseFloat(l.rate) > 0);
 
-  const addLine    = () => setLines(prev => [...prev, { id: Date.now(), desc: "", qty: 1, rate: "", vatRate: 0 }]);
+  const addLine    = () => setLines(prev => [...prev, { id: Date.now(), desc: "", description: "", serviceDate: date, rateType: "flat", qty: 1, rate: "", vatRate: 0 }]);
   const removeLine = (id) => setLines(prev => prev.filter(l => l.id !== id));
   const updateLine = (id, field, val) => setLines(prev => prev.map(l => l.id===id ? { ...l, [field]: val } : l));
   const setC       = (field, val) => setCustomer(prev => ({ ...prev, [field]: val }));
@@ -404,7 +447,7 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
     exterior:    ["Window clean", "Gutter clearance", "Driveway pressure wash", "Fascias & soffits", "Render wash"],
   };
 
-  const draft = { customer, type, date, dueDate, terms, lines, notes, num: stableNum.current };
+  const draft = { customer, type, date, dueDate, terms, customDueDate, lines, notes, num: stableNum.current, bankName, sortCode, accountNum };
 
   return (
     <div className="space-y-4">
@@ -447,15 +490,32 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
               <div><SL className="mb-1.5">Invoice date</SL><GInput type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
               <div>
                 <SL className="mb-1.5">Payment terms</SL>
-                <div className="flex gap-1.5">
-                  {[7,14,21,30].map(t => (
-                    <button key={t} onClick={() => setTerms(t)}
-                      className={`flex-1 py-2 text-xs font-black rounded-xl border transition-all ${terms===t ? "bg-[#1f48ff] text-white border-[#1f48ff]" : "border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.45)] hover:text-white hover:border-[rgba(153,197,255,0.3)]"}`}>
-                      {t}d
+                <div className="flex gap-1 flex-wrap">
+                  {[
+                    { val: 0,        label: "On receipt" },
+                    { val: 7,        label: "7 days"     },
+                    { val: 14,       label: "14 days"    },
+                    { val: 21,       label: "21 days"    },
+                    { val: 30,       label: "30 days"    },
+                    { val: "custom", label: "Custom"     },
+                  ].map(t => (
+                    <button key={t.val} onClick={() => setTerms(t.val)}
+                      className={`px-3 py-2 text-[10px] font-black rounded-xl border transition-all ${terms===t.val ? "bg-[#1f48ff] text-white border-[#1f48ff]" : "border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.45)] hover:text-white hover:border-[rgba(153,197,255,0.3)]"}`}>
+                      {t.label}
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-1.5">Due: <strong className="text-[rgba(153,197,255,0.6)]">{fmtDate(dueDate)}</strong></p>
+                {terms === "custom" && (
+                  <div className="mt-2">
+                    <GInput type="date" value={customDueDate} onChange={e => setCustomDueDate(e.target.value)} className="w-full" min={date} />
+                  </div>
+                )}
+                <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-1.5">
+                  {terms === 0
+                    ? <strong className="text-amber-400">Due immediately on receipt</strong>
+                    : <>Due: <strong className="text-[rgba(153,197,255,0.6)]">{dueDate ? fmtDate(dueDate) : "Select a date"}</strong></>
+                  }
+                </p>
               </div>
               <div>
                 <SL className="mb-1.5">Service type</SL>
@@ -490,7 +550,7 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
             <div className="flex flex-wrap gap-1.5 p-3">
               {QUICK_DESCS[type].map(desc => (
                 <button key={desc}
-                  onClick={() => setLines(prev => [...prev, { id: Date.now(), desc, qty: 1, rate: "", vatRate: 0 }])}
+                  onClick={() => setLines(prev => [...prev, { id: Date.now(), desc, description: "", serviceDate: date, rateType: "flat", qty: 1, rate: "", vatRate: 0 }])}
                   className="px-2.5 py-1 text-xs font-black border border-[rgba(153,197,255,0.12)] rounded-xl text-[rgba(153,197,255,0.5)] hover:border-[rgba(153,197,255,0.35)] hover:text-white hover:bg-[rgba(153,197,255,0.05)] transition-all">
                   + {desc}
                 </button>
@@ -501,37 +561,87 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
           {/* Line items */}
           <GCard className="overflow-hidden">
             <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
-              <SL>Line items</SL>
+              <SL>Services</SL>
               <button onClick={addLine}
                 className="flex items-center gap-1 px-2.5 py-1 text-xs font-black rounded-xl bg-[#1f48ff]/15 border border-[#1f48ff]/30 text-[#99c5ff] hover:bg-[#1f48ff]/25 transition-colors">
-                + Add line
+                + Add service
               </button>
-            </div>
-
-            {/* Column headers */}
-            <div className="grid grid-cols-12 gap-2 px-4 py-2 border-b border-[rgba(153,197,255,0.06)] bg-[rgba(153,197,255,0.02)]">
-              {["Description","Qty","Rate (£)","Total",""].map((h, i) => (
-                <span key={i} className={`text-[9px] font-black tracking-[0.12em] uppercase text-[rgba(153,197,255,0.3)] ${i===0?"col-span-5":i===1?"col-span-2 text-center":i===2?"col-span-2 text-right":i===3?"col-span-2 text-right":"col-span-1"}`}>{h}</span>
-              ))}
             </div>
 
             <div className="divide-y divide-[rgba(153,197,255,0.05)]">
               {lines.map(line => {
                 const lineTotal = (parseFloat(line.qty)||0) * (parseFloat(line.rate)||0);
+                const rateType = line.rateType || "flat";
+                const inputCls = "bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[rgba(153,197,255,0.2)] focus:outline-none focus:border-[rgba(153,197,255,0.35)]";
                 return (
-                  <div key={line.id} className="grid grid-cols-12 gap-2 px-4 py-2.5 items-center">
-                    <input value={line.desc} onChange={e => updateLine(line.id,"desc",e.target.value)}
-                      placeholder="Service description"
-                      className="col-span-5 bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[rgba(153,197,255,0.2)] focus:outline-none focus:border-[rgba(153,197,255,0.35)]" />
-                    <input type="number" min="0.5" step="0.5" value={line.qty} onChange={e => updateLine(line.id,"qty",e.target.value)}
-                      className="col-span-2 bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] rounded-lg px-2 py-1.5 text-xs text-center font-mono text-white focus:outline-none focus:border-[rgba(153,197,255,0.35)]" />
-                    <input type="number" min="0" step="5" value={line.rate} onChange={e => updateLine(line.id,"rate",e.target.value)}
-                      placeholder="0.00"
-                      className="col-span-2 bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] rounded-lg px-2 py-1.5 text-xs text-right font-mono text-white placeholder-[rgba(153,197,255,0.2)] focus:outline-none focus:border-[rgba(153,197,255,0.35)]" />
-                    <span className={`col-span-2 text-right text-xs font-mono font-black ${lineTotal > 0 ? "text-white" : "text-[rgba(153,197,255,0.2)]"}`}>
-                      {lineTotal > 0 ? fmt2(lineTotal) : "—"}
-                    </span>
-                    <button onClick={() => removeLine(line.id)} className="col-span-1 flex justify-end text-[rgba(153,197,255,0.2)] hover:text-red-400 transition-colors">✕</button>
+                  <div key={line.id} className="px-4 py-3 space-y-2">
+                    {/* Row 1: Service name + Service date + Delete */}
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1">
+                        <label className="block text-[8px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.3)] mb-1">Service</label>
+                        <input value={line.desc} onChange={e => updateLine(line.id,"desc",e.target.value)}
+                          placeholder="e.g. Regular clean"
+                          className={`w-full ${inputCls}`} />
+                      </div>
+                      <div className="w-32 shrink-0">
+                        <label className="block text-[8px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.3)] mb-1">Service date</label>
+                        <input type="date" value={line.serviceDate || date} onChange={e => updateLine(line.id,"serviceDate",e.target.value)}
+                          className={`w-full ${inputCls}`} />
+                      </div>
+                      <button onClick={() => removeLine(line.id)} className="mt-5 text-[rgba(153,197,255,0.2)] hover:text-red-400 transition-colors shrink-0">✕</button>
+                    </div>
+                    {/* Row 2: Description */}
+                    <div>
+                      <label className="block text-[8px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.3)] mb-1">Description</label>
+                      <textarea value={line.description || ""} onChange={e => updateLine(line.id,"description",e.target.value)}
+                        placeholder="Details, access notes, what's included..."
+                        rows={2}
+                        className={`w-full resize-none ${inputCls}`} />
+                    </div>
+                    {/* Row 2: Rate type + Qty/Hours + Rate + Total */}
+                    <div className="flex gap-2 items-end">
+                      <div className="w-28 shrink-0">
+                        <label className="block text-[8px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.3)] mb-1">Rate type</label>
+                        <div className="flex gap-0.5">
+                          {[
+                            { val: "flat",   label: "Flat"   },
+                            { val: "hourly", label: "Hourly" },
+                            { val: "qty",    label: "Qty"    },
+                          ].map(rt => (
+                            <button key={rt.val} onClick={() => updateLine(line.id, "rateType", rt.val)}
+                              className={`flex-1 py-1.5 text-[9px] font-black rounded-lg border transition-all ${
+                                rateType === rt.val
+                                  ? "bg-[#1f48ff] text-white border-[#1f48ff]"
+                                  : "border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.4)] hover:text-white"
+                              }`}>
+                              {rt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="w-20 shrink-0">
+                        <label className="block text-[8px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.3)] mb-1">
+                          {rateType === "hourly" ? "Hours" : rateType === "qty" ? "Qty" : "Qty"}
+                        </label>
+                        <input type="number" min="0.5" step={rateType === "hourly" ? "0.25" : "0.5"}
+                          value={line.qty} onChange={e => updateLine(line.id,"qty",e.target.value)}
+                          className={`w-full text-center font-mono ${inputCls}`} />
+                      </div>
+                      <div className="w-24 shrink-0">
+                        <label className="block text-[8px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.3)] mb-1">
+                          {rateType === "hourly" ? "£/hour" : rateType === "qty" ? "£/unit" : "£ flat"}
+                        </label>
+                        <input type="number" min="0" step="5" value={line.rate} onChange={e => updateLine(line.id,"rate",e.target.value)}
+                          placeholder="0.00"
+                          className={`w-full text-right font-mono ${inputCls}`} />
+                      </div>
+                      <div className="flex-1 text-right">
+                        <label className="block text-[8px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.3)] mb-1">Total</label>
+                        <p className={`py-1.5 text-sm font-mono font-black ${lineTotal > 0 ? "text-emerald-400" : "text-[rgba(153,197,255,0.2)]"}`}>
+                          {lineTotal > 0 ? fmt2(lineTotal) : "—"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -570,16 +680,33 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
             </div>
           </GCard>
 
-          {/* Bank details */}
+          {/* Bank details — editable */}
           <GCard className="overflow-hidden">
             <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Bank details on invoice</SL></div>
-            <div className="divide-y divide-[rgba(153,197,255,0.05)]">
-              {[["Bank", BUSINESS.bankName],["Sort code", BUSINESS.sortCode],["Account no.", BUSINESS.accountNum],["Reference", draft.num]].map(([l,v]) => (
-                <div key={l} className="flex justify-between px-4 py-2.5">
-                  <span className="text-xs text-[rgba(153,197,255,0.4)]">{l}</span>
-                  <span className="text-xs font-mono font-black text-[rgba(153,197,255,0.7)]">{v}</span>
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">Bank name</label>
+                <GInput type="text" value={bankName} onChange={e => setBankName(e.target.value)} placeholder="e.g. Starling Bank" className="w-full" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">Sort code</label>
+                  <GInput type="text" value={sortCode} onChange={e => setSortCode(e.target.value)} placeholder="e.g. 60-83-71" className="w-full" />
                 </div>
-              ))}
+                <div>
+                  <label className="block text-[10px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">Account number</label>
+                  <GInput type="text" value={accountNum} onChange={e => setAccountNum(e.target.value)} placeholder="e.g. 12345678" className="w-full" />
+                </div>
+              </div>
+              <div className="flex justify-between px-1 py-1.5">
+                <span className="text-[10px] text-[rgba(153,197,255,0.4)]">Payment reference</span>
+                <span className="text-[10px] font-mono font-bold text-[rgba(153,197,255,0.7)]">{draft.num}</span>
+              </div>
+              {(!bankName && !sortCode && !accountNum) && (
+                <div className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-[10px] text-amber-400 font-semibold">Add your bank details so customers know where to pay. These will be saved for future invoices.</p>
+                </div>
+              )}
             </div>
           </GCard>
 
@@ -696,7 +823,7 @@ function InvoicePreview({ draft, accounts, business, onEdit, onSaveAndSend, onBa
           <div className="mx-8 my-4 bg-[#010a4f]/5 border border-[#010a4f]/10 rounded-xl p-4">
             <p className="text-xs font-bold tracking-widest uppercase text-gray-400 mb-2">Payment details</p>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-              {[["Bank", business.bankName],["Sort code", business.sortCode],["Account", business.accountNum],["Reference", draft.num]].map(([l,v]) => (
+              {[["Bank", draft.bankName || business.bankName],["Sort code", draft.sortCode || business.sortCode],["Account", draft.accountNum || business.accountNum],["Reference", draft.num]].map(([l,v]) => (
                 <div key={l} className="flex gap-2 text-sm">
                   <span className="text-gray-400 w-20 shrink-0">{l}</span>
                   <span className="font-mono font-semibold text-gray-800">{v}</span>
@@ -907,47 +1034,106 @@ function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack }) {
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
-export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate }) {
-  const { user }  = useAuth();
+export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: onNavigateProp }) {
+  const routerNavigate = useNavigate();
+  const onNavigate = onNavigateProp || ((tab) => routerNavigate(`/${tab}`));
+  const { user, profile } = useAuth();
+  const { customers = [] } = useData();
   const isLive    = Boolean(user);
   const accounts  = { ...DEFAULT_ACCOUNTS, ...(accountsData ?? {}) };
 
+  // Load business details from profile + settings
+  const [BUSINESS, setBusiness] = useState(DEFAULT_BUSINESS);
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const settings = await getBusinessSettings();
+        const bankDetails = settings?.bank_details || {};
+        setBusiness({
+          name: profile?.business_name || '',
+          ownerName: [profile?.first_name, profile?.last_name].filter(Boolean).join(' '),
+          email: settings?.business_email || profile?.phone || '',
+          phone: profile?.phone || '',
+          address: profile?.postcode || '',
+          vatNumber: settings?.setup_data?.vat_number || '',
+          companyNum: settings?.setup_data?.company_number || '',
+          bankName: bankDetails.bankName || '',
+          sortCode: bankDetails.sortCode || '',
+          accountNum: bankDetails.accountNum || '',
+          paymentRef: "INV-",
+          defaultTerms: 14,
+          defaultNotes: "Thank you for your business. Please make payment within the agreed terms.",
+        });
+      } catch {}
+    })();
+  }, [user, profile]);
+
   // ── Shared invoice state — syncs with MoneyTracker & AccountsTab ─────────────
-  const { invoices, addInvoice, updateInvoice, nextNum } = useInvoices();
+  const { invoices, addInvoice, updateInvoice, removeInvoice, nextNum } = useInvoices();
 
   const [screen,       setScreen]       = useState("list");
   const [activeInv,    setActiveInv]    = useState(null);
   const [draftInv,     setDraftInv]     = useState(null);
   const [previewDraft, setPreviewDraft] = useState(null);
-  // Generated once when opening the Create screen — prevents counter drift
   const [pendingNum,   setPendingNum]   = useState(null);
 
-  const openCreate = () => {
+  const openCreate = async () => {
     setDraftInv(null);
-    setPendingNum(nextNum());
+    const num = await nextNum();
+    setPendingNum(num);
     setScreen("create");
   };
 
   const handleSelect = (inv) => { setActiveInv(inv); setScreen("detail"); };
 
-  const handleSaveDraft = (draft, status = "draft") => {
-    addInvoice({ ...draft, id: draft.num, status });
+  const handleSaveDraft = async (draft, status = "draft") => {
+    addInvoice({ ...draft, id: draft.id || draft.num, status });
     setDraftInv(null); setScreen("list");
+    // Persist bank details to business_settings for future invoices
+    if (isLive && (draft.bankName || draft.sortCode || draft.accountNum)) {
+      try {
+        const { upsertBusinessSettings } = await import('../lib/db/settingsDb');
+        await upsertBusinessSettings({
+          bank_details: { bankName: draft.bankName, sortCode: draft.sortCode, accountNum: draft.accountNum },
+        });
+        setBusiness(prev => ({ ...prev, bankName: draft.bankName, sortCode: draft.sortCode, accountNum: draft.accountNum }));
+      } catch {}
+    }
   };
 
   const handlePreview = (draft) => { setPreviewDraft(draft); setScreen("preview"); };
 
   const handleSaveAndSend = (draft) => {
-    const withSent = { ...draft, id: draft.num, status: "sent", sentAt: new Date().toISOString() };
+    const withSent = { ...draft, id: draft.id || draft.num, status: "sent", sentAt: new Date().toISOString() };
     addInvoice(withSent);
     setPreviewDraft(null); setActiveInv(withSent); setScreen("detail");
   };
 
-  const handleUpdate = (updated) => {
+  const handleUpdate = async (updated) => {
     updateInvoice(updated);
     setActiveInv(updated);
-    if (updated.status === "paid" && onInvoicePaid) {
-      onInvoicePaid({ invoice: updated, amount: calcInvoice(updated.lines, accounts.vatRegistered, accounts.frsRate).total });
+    // When marking paid, also log income to money_entries
+    if (updated.status === "paid") {
+      const total = calcInvoice(updated.lines, accounts.vatRegistered, accounts.frsRate).total;
+      try {
+        await createMoneyEntry({
+          client: typeof updated.customer === 'object' ? updated.customer.name : updated.customer,
+          amount: total,
+          date: new Date().toISOString().split('T')[0],
+          method: updated.paymentMethod || 'bank',
+          kind: 'income',
+        });
+      } catch (err) { console.error('Failed to log invoice payment:', err); }
+      onInvoicePaid?.({ invoice: updated, amount: total });
+    }
+  };
+
+  const handleDelete = (id) => {
+    if (window.confirm('Delete this invoice? This cannot be undone.')) {
+      removeInvoice(id);
+      setActiveInv(null);
+      setScreen("list");
     }
   };
 
@@ -995,7 +1181,7 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate }) 
 
         {/* Screen router */}
         {screen === "list"    && <InvoiceList invoices={invoices} accounts={accounts} onSelect={handleSelect} onCreate={openCreate} />}
-        {screen === "create"  && <CreateInvoice accounts={accounts} draftInvoice={draftInv} invNum={pendingNum} onSave={handleSaveDraft} onPreview={handlePreview} onBack={goBack} />}
+        {screen === "create"  && <CreateInvoice accounts={accounts} draftInvoice={draftInv} invNum={pendingNum} onSave={handleSaveDraft} onPreview={handlePreview} onBack={goBack} business={BUSINESS} />}
         {screen === "preview" && previewDraft && <InvoicePreview draft={previewDraft} accounts={accounts} business={BUSINESS} onEdit={() => { setPendingNum(previewDraft.num); setDraftInv(previewDraft); setScreen("create"); }} onSaveAndSend={handleSaveAndSend} onBack={() => setScreen("create")} />}
         {screen === "detail"  && activeInv && <InvoiceDetail invoice={activeInv} accounts={accounts} business={BUSINESS} onUpdate={handleUpdate} onBack={goBack} />}
       </div>
