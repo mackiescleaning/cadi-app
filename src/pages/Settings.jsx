@@ -145,6 +145,8 @@ export default function Settings() {
     twoFactor: false,
   });
 
+  const [communityOptIn, setCommunityOptIn] = useState(Boolean(authProfile?.community_opt_in));
+
   useEffect(() => {
     if (!authProfile && !user) return;
 
@@ -160,7 +162,20 @@ export default function Settings() {
     if (authProfile?.business_name) {
       setBusiness((prev) => ({ ...prev, name: authProfile.business_name }));
     }
+
+    setCommunityOptIn(Boolean(authProfile?.community_opt_in));
   }, [authProfile, user]);
+
+  const handleCommunityToggle = async (value) => {
+    setCommunityOptIn(value);
+    try { localStorage.setItem('cadi_community_opt_in', value ? '1' : '0'); } catch {}
+    try {
+      await updateProfile({ community_opt_in: value });
+    } catch (err) {
+      console.error('Failed to update community opt-in:', err);
+      setCommunityOptIn(!value);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -344,6 +359,18 @@ export default function Settings() {
               <Save size={14} /> Save Changes
             </button>
           </div>
+
+          <Section title="Cadi Community" desc="Controls whether your business appears on the public leaderboard">
+            <SettingRow
+              icon={Sparkles}
+              label={communityOptIn ? 'Community member' : 'Join the community'}
+              desc={communityOptIn
+                ? `${business.name || 'Your business'} is visible to other Cadi users`
+                : 'Share your business name, sector, and health score on the leaderboard'}
+            >
+              <Toggle enabled={communityOptIn} onChange={handleCommunityToggle} />
+            </SettingRow>
+          </Section>
         </div>
       )}
 

@@ -1841,6 +1841,16 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     if (profile?.community_opt_in) return true;
     try { return localStorage.getItem('cadi_community_opt_in') === '1'; } catch { return false; }
   });
+  // Keep the toggle in sync when it's changed elsewhere (e.g. Settings)
+  useEffect(() => {
+    if (profile?.community_opt_in === true) {
+      setCommunityOptIn(true);
+      try { localStorage.setItem('cadi_community_opt_in', '1'); } catch {}
+    } else if (profile?.community_opt_in === false) {
+      setCommunityOptIn(false);
+      try { localStorage.removeItem('cadi_community_opt_in'); } catch {}
+    }
+  }, [profile?.community_opt_in]);
   const [liveBoard,        setLiveBoard]        = useState([]);
 
   const score   = useMemo(() => calcHealthScore({ accounts, weekJobs, invoices, jobsToday }), [accounts, weekJobs, invoices, jobsToday]);
