@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { usePlan } from '../hooks/usePlan';
 import { supabase } from '../lib/supabase';
 import { getBusinessSettings, upsertBusinessSettings } from '../lib/db/settingsDb';
 import {
@@ -104,7 +106,9 @@ const TABS = [
 ];
 
 export default function Settings() {
-  const { user, profile: authProfile, updateProfile } = useAuth();
+  const navigate = useNavigate();
+  const { user, profile: authProfile, updateProfile, signOut } = useAuth();
+  const { isPro, priceMonthly } = usePlan();
   const [activeTab, setActiveTab] = useState('profile');
   const [saved, setSaved] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -121,6 +125,8 @@ export default function Settings() {
     address: '', website: '',
     vatNumber: '', companyNumber: '',
     hourlyRate: '', currency: 'GBP',
+    businessEmail: '', homePostcode: '',
+    bankName: '', sortCode: '', accountNum: '',
     workingDays: { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false },
     startTime: '08:00', endTime: '18:00',
   });
@@ -164,10 +170,20 @@ export default function Settings() {
         const settings = await getBusinessSettings();
         if (!mounted || !settings) return;
 
+        const bd = settings.bank_details || {};
+        const sd = settings.setup_data || {};
         setBusiness((prev) => ({
           ...prev,
           hourlyRate: settings.hourly_rate != null ? String(settings.hourly_rate) : prev.hourlyRate,
           currency: settings.currency || prev.currency,
+          businessEmail: settings.business_email || sd.business_email || prev.businessEmail,
+          homePostcode: authProfile?.home_postcode || authProfile?.postcode || prev.homePostcode,
+          bankName: bd.bankName || prev.bankName,
+          sortCode: bd.sortCode || prev.sortCode,
+          accountNum: bd.accountNum || prev.accountNum,
+          workingDays: sd.working_days || prev.workingDays,
+          startTime: sd.start_time || prev.startTime,
+          endTime: sd.finish_time || prev.endTime,
         }));
 
         if (settings.notifications && typeof settings.notifications === 'object') {
@@ -212,9 +228,20 @@ export default function Settings() {
       await upsertBusinessSettings({
         hourly_rate: Number(business.hourlyRate) || 0,
         currency: business.currency,
+        business_email: business.businessEmail,
+        bank_details: { bankName: business.bankName, sortCode: business.sortCode, accountNum: business.accountNum },
+        setup_data: {
+          working_days: business.workingDays,
+          start_time: business.startTime,
+          finish_time: business.endTime,
+        },
       });
 
-      await updateProfile({ business_name: business.name });
+      await updateProfile({
+        business_name: business.name,
+        home_postcode: business.homePostcode,
+        postcode: business.homePostcode,
+      });
       showSaved();
     } catch {
       // Keep local values when persistence fails.
@@ -265,7 +292,7 @@ export default function Settings() {
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap shrink-0 ${
               activeTab === id
                 ? 'bg-[#1f48ff] text-white shadow-sm'
                 : 'text-gray-500 hover:text-[#010a4f]'
@@ -338,6 +365,28 @@ export default function Settings() {
                 onChange={v => updateBusiness('vatNumber', v)} placeholder="GB000000000" />
               <InputField label="Company Number" value={business.companyNumber}
                 onChange={v => updateBusiness('companyNumber', v)} placeholder="Optional" />
+            </div>
+          </div>
+
+          {/* Business email + postcode */}
+          <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6 space-y-4">
+            <h3 className="font-bold text-[#010a4f]">Contact & Location</h3>
+            <InputField label="Business Email (for invoice reply-to)" value={business.businessEmail || ''}
+              onChange={v => updateBusiness('businessEmail', v)} placeholder="invoices@yourbusiness.co.uk" />
+            <InputField label="Home / Business Postcode (for route planning)" value={business.homePostcode || ''}
+              onChange={v => updateBusiness('homePostcode', v)} placeholder="e.g. SW12 8AA" />
+          </div>
+
+          {/* Bank details */}
+          <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6 space-y-4">
+            <h3 className="font-bold text-[#010a4f]">Bank Details (shown on invoices)</h3>
+            <InputField label="Bank Name" value={business.bankName || ''}
+              onChange={v => updateBusiness('bankName', v)} placeholder="e.g. Starling Bank" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <InputField label="Sort Code" value={business.sortCode || ''}
+                onChange={v => updateBusiness('sortCode', v)} placeholder="e.g. 60-83-71" />
+              <InputField label="Account Number" value={business.accountNum || ''}
+                onChange={v => updateBusiness('accountNum', v)} placeholder="e.g. 12345678" />
             </div>
           </div>
 
@@ -457,8 +506,8 @@ export default function Settings() {
                 <span key={f} className="text-xs px-3 py-1.5 bg-white/10 rounded-full text-white/70">{f}</span>
               ))}
             </div>
-            <button className="w-full py-3 bg-[#1f48ff] text-white font-bold rounded-xl hover:bg-white hover:text-[#010a4f] transition-colors">
-              Upgrade to Pro — £9/month
+            <button onClick={() => navigate('/upgrade')} className="w-full py-3 bg-[#1f48ff] text-white font-bold rounded-xl hover:bg-white hover:text-[#010a4f] transition-colors">
+              Upgrade to Pro — £{priceMonthly}/month
             </button>
           </div>
 
@@ -472,10 +521,10 @@ export default function Settings() {
             </div>
             <div className="p-6">
               <div className="flex items-end gap-2 mb-1">
-                <p className="text-3xl font-black text-[#010a4f]">£9</p>
+                <p className="text-3xl font-black text-[#010a4f]">£59</p>
                 <p className="text-gray-400 mb-1">/month</p>
               </div>
-              <p className="text-sm text-gray-500 mb-5">Save 30% with annual billing — £63/year</p>
+              <p className="text-sm text-gray-500 mb-5">Save 30% with annual billing — £590/year (save £118)</p>
               <div className="space-y-2 mb-6">
                 {[
                   'Unlimited clients & jobs',
@@ -570,18 +619,35 @@ export default function Settings() {
 
           {/* Data */}
           <Section title="Your Data" desc="Export or delete your account data">
-            <SettingRow icon={Download} label="Export All Data" desc="Download everything as a CSV file">
-              <button className="text-xs font-bold px-4 py-2 border-2 border-gray-200 rounded-xl text-gray-500 hover:border-[#1f48ff] hover:text-[#1f48ff] transition-colors">
+            <SettingRow icon={Download} label="Export All Data" desc="Download everything as a JSON file">
+              <button
+                onClick={async () => {
+                  const data = { profile: authProfile, settings: await getBusinessSettings() };
+                  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a'); a.href = url; a.download = 'cadi-data-export.json'; a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="text-xs font-bold px-4 py-2 border-2 border-gray-200 rounded-xl text-gray-500 hover:border-[#1f48ff] hover:text-[#1f48ff] transition-colors">
                 Export
               </button>
             </SettingRow>
             <SettingRow icon={LogOut} label="Sign Out" desc="Sign out of this device">
-              <button className="text-xs font-bold px-4 py-2 border-2 border-gray-200 rounded-xl text-gray-500 hover:border-gray-400 transition-colors">
+              <button
+                onClick={async () => { await signOut(); navigate('/login'); }}
+                className="text-xs font-bold px-4 py-2 border-2 border-gray-200 rounded-xl text-gray-500 hover:border-gray-400 transition-colors">
                 Sign Out
               </button>
             </SettingRow>
             <SettingRow icon={Trash2} label="Delete Account" desc="Permanently delete your account and all data" danger>
-              <button className="text-xs font-bold px-4 py-2 border-2 border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors">
+              <button
+                onClick={() => {
+                  if (window.confirm('Are you sure? This will permanently delete your account and all data. This cannot be undone.')) {
+                    // Flag account for deletion — actual deletion handled by admin
+                    updateProfile({ status: 'deleted' }).then(() => { signOut(); navigate('/login'); });
+                  }
+                }}
+                className="text-xs font-bold px-4 py-2 border-2 border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors">
                 Delete
               </button>
             </SettingRow>

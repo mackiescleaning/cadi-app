@@ -2,13 +2,15 @@
 // Cadi — Inventory Tab (glassmorphism redesign)
 // All logic / data unchanged — UI upgraded to dark navy glassmorphism
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
+import { listProducts, createProduct, updateProduct, deleteProduct, listOrders, createOrder } from "../lib/db/inventoryDb";
+import { getBusinessSettings } from "../lib/db/settingsDb";
 
 // ─── Default accounts ─────────────────────────────────────────────────────────
 const DEFAULT_ACCOUNTS = {
   vatRegistered: false, frsRate: 12, isLimitedCostTrader: false,
-  taxRate: 0.20, ytdIncome: 41820, ytdExpenses: 8340,
+  taxRate: 0.20, ytdIncome: 0, ytdExpenses: 0,
 };
 
 // ─── Demo product catalogue ───────────────────────────────────────────────────
@@ -39,7 +41,8 @@ const INITIAL_PRODUCTS = [
 ];
 
 const INITIAL_KITS = [];
-const KIT_STAFF_OPTIONS = ["You", "Jamie", "Sarah", "Unassigned"];
+// Default staff — overridden by DB staff in KitsSection
+const DEFAULT_KIT_STAFF_OPTIONS = ["You", "Unassigned"];
 
 const INITIAL_ORDERS = [
   { id: "o1", date: "2026-04-01", supplier: "Amazon",       items: [{name:"Microfibre cloths",qty:2,cost:6.50},{name:"Nitrile gloves M",qty:3,cost:8.90}], total: 39.70, receipt: true,  logged: true  },
@@ -288,7 +291,7 @@ function AddProductModal({ onSave, onClose }) {
 }
 
 // ─── SECTION: Stock ───────────────────────────────────────────────────────────
-function StockSection({ products, setProducts, accounts, onOrderLogged }) {
+function StockSection({ products, setProducts, accounts, onOrderLogged, onUpdateProduct, onAddProduct, onDeleteProduct }) {
   const [search,    setSearch]    = useState("");
   const [catFilter, setCatFilter] = useState("all");
   const [typeFilter,setTypeFilter]= useState("all");
@@ -316,7 +319,7 @@ function StockSection({ products, setProducts, accounts, onOrderLogged }) {
   const stockValue = products.reduce((s,p) => s + p.qty * p.unitCost, 0);
 
   const handleReorderConfirm = (product, qty, total) => {
-    setProducts(prev => prev.map(p => p.id === product.id ? { ...p, qty: p.qty + qty } : p));
+    onUpdateProduct(product.id, { qty: product.qty + qty });
     onOrderLogged({ product, qty, total, date: new Date().toISOString() });
     setReordering(null);
   };
@@ -391,6 +394,19 @@ function StockSection({ products, setProducts, accounts, onOrderLogged }) {
         </div>
       </div>
 
+      {/* Empty state */}
+      {products.length === 0 && (
+        <GCard className="p-8 text-center">
+          <span className="text-3xl mb-3 block">📦</span>
+          <p className="text-sm font-bold text-white mb-1">No products yet</p>
+          <p className="text-xs text-[rgba(153,197,255,0.5)] mb-4">Add your cleaning supplies, chemicals, and equipment to track stock levels and costs.</p>
+          <button onClick={() => setAdding(true)}
+            className="px-5 py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-bold hover:bg-[#3a5eff] transition-colors shadow-lg shadow-[#1f48ff]/30">
+            + Add your first product
+          </button>
+        </GCard>
+      )}
+
       {/* Product list grouped by category */}
       <div className="space-y-3">
         {Object.entries(grouped).map(([cat, catProducts]) => {
@@ -419,10 +435,10 @@ function StockSection({ products, setProducts, accounts, onOrderLogged }) {
                       </div>
                       {/* Qty stepper */}
                       <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={() => setProducts(prev => prev.map(x => x.id===p.id ? {...x, qty: Math.max(0,x.qty-1)} : x))}
+                        <button onClick={() => onUpdateProduct(p.id, { qty: Math.max(0, p.qty - 1) })}
                           className="w-6 h-6 rounded-lg bg-[rgba(153,197,255,0.08)] border border-[rgba(153,197,255,0.12)] text-xs font-black text-[rgba(153,197,255,0.6)] hover:bg-[rgba(153,197,255,0.15)] hover:text-white flex items-center justify-center transition-all">−</button>
                         <span className="text-sm font-black tabular-nums text-white w-8 text-center">{p.qty}</span>
-                        <button onClick={() => setProducts(prev => prev.map(x => x.id===p.id ? {...x, qty: x.qty+1} : x))}
+                        <button onClick={() => onUpdateProduct(p.id, { qty: p.qty + 1 })}
                           className="w-6 h-6 rounded-lg bg-[rgba(153,197,255,0.08)] border border-[rgba(153,197,255,0.12)] text-xs font-black text-[rgba(153,197,255,0.6)] hover:bg-[rgba(153,197,255,0.15)] hover:text-white flex items-center justify-center transition-all">+</button>
                       </div>
                       <div className="text-right shrink-0 w-16">
@@ -446,7 +462,7 @@ function StockSection({ products, setProducts, accounts, onOrderLogged }) {
       </div>
 
       {reordering && <ReorderModal product={reordering} accounts={accounts} onConfirm={(qty,total) => handleReorderConfirm(reordering,qty,total)} onClose={() => setReordering(null)} />}
-      {adding && <AddProductModal onSave={p => setProducts(prev => [...prev, p])} onClose={() => setAdding(false)} />}
+      {adding && <AddProductModal onSave={p => onAddProduct(p)} onClose={() => setAdding(false)} />}
     </div>
   );
 }
@@ -457,6 +473,19 @@ function KitsSection({ products, setProducts, accounts, kits, setKits }) {
   const [loadedKit,  setLoadedKit]  = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [draft, setDraft] = useState({ label: "", type: "residential", desc: "", assignedTo: "You", items: [] });
+
+  // Load staff from DB
+  const [kitStaffOptions, setKitStaffOptions] = useState(DEFAULT_KIT_STAFF_OPTIONS);
+  useEffect(() => {
+    import('../lib/supabase').then(({ supabase }) => {
+      supabase.from('staff_members').select('name').eq('active', true)
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            setKitStaffOptions(["You", ...data.map(s => s.name), "Unassigned"]);
+          }
+        });
+    });
+  }, []);
 
   const types    = ["all","residential","commercial","exterior"];
   const filtered = typeFilter === "all" ? kits : kits.filter(k => k.type === typeFilter);
@@ -505,7 +534,7 @@ function KitsSection({ products, setProducts, accounts, kits, setKits }) {
           <SL>Create your own kit</SL>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><SL className="mb-1.5">Kit name</SL><GInput type="text" value={draft.label} onChange={e => setDraft(p=>({...p,label:e.target.value}))} placeholder="e.g. Emma residential kit" /></div>
-            <div><SL className="mb-1.5">Assign to</SL><GSelect value={draft.assignedTo} onChange={e => setDraft(p=>({...p,assignedTo:e.target.value}))}>{KIT_STAFF_OPTIONS.map(n => <option key={n} value={n} className="bg-[#010a4f]">{n}</option>)}</GSelect></div>
+            <div><SL className="mb-1.5">Assign to</SL><GSelect value={draft.assignedTo} onChange={e => setDraft(p=>({...p,assignedTo:e.target.value}))}>{kitStaffOptions.map(n => <option key={n} value={n} className="bg-[#010a4f]">{n}</option>)}</GSelect></div>
             <div><SL className="mb-1.5">Job type</SL><GSelect value={draft.type} onChange={e => setDraft(p=>({...p,type:e.target.value,items:[]}))}>{types.filter(t=>t!=="all").map(t => <option key={t} value={t} className="bg-[#010a4f]">{t.charAt(0).toUpperCase()+t.slice(1)}</option>)}</GSelect></div>
             <div><SL className="mb-1.5">Description</SL><GInput type="text" value={draft.desc} onChange={e => setDraft(p=>({...p,desc:e.target.value}))} placeholder="Optional note" /></div>
           </div>
@@ -631,7 +660,7 @@ function KitsSection({ products, setProducts, accounts, kits, setKits }) {
                 {/* Reassign + delete */}
                 <div className="flex gap-2">
                   <GSelect value={kit.assignedTo || "Unassigned"} onChange={e => setKits(prev => prev.map(k => k.id===kit.id ? { ...k, assignedTo: e.target.value } : k))} className="flex-1 py-2 text-xs">
-                    {KIT_STAFF_OPTIONS.map(n => <option key={n} value={n} className="bg-[#010a4f]">{n}</option>)}
+                    {kitStaffOptions.map(n => <option key={n} value={n} className="bg-[#010a4f]">{n}</option>)}
                   </GSelect>
                   <button onClick={() => setKits(prev => prev.filter(k => k.id !== kit.id))}
                     className="px-3 py-2 rounded-xl border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.4)] text-xs font-black hover:border-red-500/30 hover:text-red-400 transition-all">
@@ -664,8 +693,18 @@ function KitsSection({ products, setProducts, accounts, kits, setKits }) {
 function SpendSection({ accounts, orders }) {
   const ytdSpend        = orders.filter(o => o.logged).reduce((s,o) => s+o.total, 0);
   const taxSaved        = ytdSpend * accounts.taxRate;
-  const thisMonth       = orders.filter(o => o.logged && o.date.startsWith("2026-04")).reduce((s,o) => s+o.total, 0);
-  const maxSpend        = Math.max(...MONTHLY_SPEND.map(m => m.spend));
+  const currentMonthPrefix = new Date().toISOString().slice(0, 7); // "2026-04" format
+  const thisMonth       = orders.filter(o => o.logged && o.date?.startsWith(currentMonthPrefix)).reduce((s,o) => s+o.total, 0);
+
+  // Build monthly spend from real orders (last 6 months)
+  const monthlySpend = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(); d.setMonth(d.getMonth() - (5 - i));
+    const prefix = d.toISOString().slice(0, 7);
+    const monthLabel = d.toLocaleDateString('en-GB', { month: 'short' });
+    const spend = orders.filter(o => o.logged && o.date?.startsWith(prefix)).reduce((s,o) => s+o.total, 0);
+    return { month: monthLabel, spend, isCurrent: i === 5 };
+  });
+  const maxSpend = Math.max(...monthlySpend.map(m => m.spend), 1);
   const quarterlySpend  = ytdSpend / 3;
   const quarterlyIncome = accounts.ytdIncome / 3;
   const goodsPct        = quarterlyIncome > 0 ? (quarterlySpend / (quarterlyIncome * 1.2)) * 100 : 0;
@@ -735,7 +774,7 @@ function SpendSection({ accounts, orders }) {
           <span className="text-[10px] text-[rgba(153,197,255,0.35)]">Rolling 6 months</span>
         </div>
         <div className="flex items-end gap-2 h-28">
-          {MONTHLY_SPEND.map((m) => {
+          {monthlySpend.map((m) => {
             const pct = (m.spend / maxSpend) * 100;
             return (
               <div key={m.month} className="flex-1 flex flex-col items-center gap-1 group">
@@ -897,16 +936,128 @@ function OrdersSection({ orders, setOrders, accounts }) {
 export default function InventoryTab({ accountsData, onExpenseLog }) {
   const { user }  = useAuth();
   const isLive    = Boolean(user);
-  const accounts  = { ...DEFAULT_ACCOUNTS, ...(accountsData ?? {}) };
+
+  // Fetch real settings from DB
+  const [accounts, setAccounts] = useState({ ...DEFAULT_ACCOUNTS });
+  useEffect(() => {
+    if (!user) return;
+    getBusinessSettings().then(s => {
+      if (s) setAccounts(prev => ({
+        ...prev,
+        vatRegistered: Boolean(s.vat_registered),
+        frsRate: Number(s.frs_rate) || 12,
+        taxRate: Number(s.tax_rate) || 0.20,
+      }));
+    }).catch(() => {});
+  }, [user]);
 
   const [tab,      setTab]      = useState("stock");
-  const [products, setProducts] = useState(isLive ? [] : INITIAL_PRODUCTS);
-  const [kits,     setKits]     = useState(isLive ? [] : INITIAL_KITS);
-  const [orders,   setOrders]   = useState(isLive ? [] : INITIAL_ORDERS);
+  const [products, setProducts] = useState([]);
+  const [kits,     setKits]     = useState([]);
+  const [orders,   setOrders]   = useState([]);
+  const [loading,  setLoading]  = useState(true);
 
-  const handleOrderLogged = ({ product, qty, total, date }) => {
-    const newOrder = { id: `o${Date.now()}`, date: date.split("T")[0], supplier: product.supplier, items: [{ name: product.name, qty, cost: product.unitCost }], total, receipt: false, logged: true };
-    setOrders(prev => [newOrder, ...prev]);
+  // Map DB row to component shape
+  const mapProduct = (r) => ({
+    id: r.id, name: r.name, category: r.category, type: r.type,
+    unitCost: Number(r.unit_cost) || 0, qty: Number(r.qty) || 0,
+    minQty: Number(r.min_qty) || 2, unit: r.unit || 'bottle',
+    supplier: r.supplier || '', supplierUrl: r.supplier_url || '',
+    notes: r.notes || '', icon: '📦',
+  });
+
+  const mapOrder = (r) => ({
+    id: r.id, date: r.date, supplier: r.supplier || '',
+    items: [{ name: r.product_name, qty: r.qty, cost: Number(r.unit_cost) || 0 }],
+    total: Number(r.total_cost) || 0, receipt: false, logged: true,
+  });
+
+  // Load products + orders from Supabase
+  useEffect(() => {
+    if (!user) {
+      setProducts(INITIAL_PRODUCTS);
+      setOrders(INITIAL_ORDERS);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    Promise.all([listProducts(), listOrders()])
+      .then(([prods, ords]) => {
+        setProducts(prods.map(mapProduct));
+        setOrders(ords.map(mapOrder));
+      })
+      .catch(() => {
+        // Fallback to empty
+        setProducts([]);
+        setOrders([]);
+      })
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  // Wrap setProducts to persist changes to Supabase
+  const updateProductLocal = useCallback(async (id, updates) => {
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    if (isLive) {
+      try {
+        const dbUpdates = {};
+        if ('qty' in updates) dbUpdates.qty = updates.qty;
+        if ('unitCost' in updates) dbUpdates.unit_cost = updates.unitCost;
+        if ('minQty' in updates) dbUpdates.min_qty = updates.minQty;
+        if ('name' in updates) dbUpdates.name = updates.name;
+        if ('category' in updates) dbUpdates.category = updates.category;
+        if ('type' in updates) dbUpdates.type = updates.type;
+        if ('unit' in updates) dbUpdates.unit = updates.unit;
+        if ('supplier' in updates) dbUpdates.supplier = updates.supplier;
+        if ('supplierUrl' in updates) dbUpdates.supplier_url = updates.supplierUrl;
+        if ('notes' in updates) dbUpdates.notes = updates.notes;
+        if (Object.keys(dbUpdates).length > 0) await updateProduct(id, dbUpdates);
+      } catch (err) { console.error('Failed to update product:', err); }
+    }
+  }, [isLive]);
+
+  const addProductLocal = useCallback(async (product) => {
+    if (isLive) {
+      try {
+        const saved = await createProduct(product);
+        setProducts(prev => [...prev, mapProduct(saved)]);
+        return;
+      } catch (err) { console.error('Failed to save product:', err); }
+    }
+    setProducts(prev => [...prev, { ...product, id: Date.now() }]);
+  }, [isLive]);
+
+  const deleteProductLocal = useCallback(async (id) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+    if (isLive) {
+      try { await deleteProduct(id); } catch (err) { console.error('Failed to delete product:', err); }
+    }
+  }, [isLive]);
+
+  const handleOrderLogged = async ({ product, qty, total, date }) => {
+    const orderData = {
+      productId: product.id,
+      productName: product.name,
+      qty,
+      unitCost: product.unitCost,
+      totalCost: total,
+      supplier: product.supplier,
+      date: date?.split("T")[0] || new Date().toISOString().split('T')[0],
+    };
+
+    if (isLive) {
+      try {
+        const saved = await createOrder(orderData);
+        setOrders(prev => [mapOrder(saved), ...prev]);
+      } catch (err) {
+        console.error('Failed to save order:', err);
+        setOrders(prev => [{ id: `o${Date.now()}`, date: orderData.date, supplier: product.supplier, items: [{ name: product.name, qty, cost: product.unitCost }], total, receipt: false, logged: true }, ...prev]);
+      }
+    } else {
+      setOrders(prev => [{ id: `o${Date.now()}`, date: orderData.date, supplier: product.supplier, items: [{ name: product.name, qty, cost: product.unitCost }], total, receipt: false, logged: true }, ...prev]);
+    }
+
+    // Also update product stock
+    await updateProductLocal(product.id, { qty: product.qty + qty });
     onExpenseLog?.({ category: "cleaning-materials", amount: total, description: product.name, date, sa103Box: 19 });
   };
 
@@ -965,7 +1116,7 @@ export default function InventoryTab({ accountsData, onExpenseLog }) {
         </div>
 
         {/* Section content */}
-        {tab === "stock"  && <StockSection  products={products} setProducts={setProducts} accounts={accounts} onOrderLogged={handleOrderLogged} />}
+        {tab === "stock"  && <StockSection  products={products} setProducts={setProducts} accounts={accounts} onOrderLogged={handleOrderLogged} onUpdateProduct={updateProductLocal} onAddProduct={addProductLocal} onDeleteProduct={deleteProductLocal} />}
         {tab === "kits"   && <KitsSection   products={products} setProducts={setProducts} accounts={accounts} kits={kits} setKits={setKits} />}
         {tab === "spend"  && <SpendSection  accounts={accounts} orders={orders} />}
         {tab === "orders" && <OrdersSection orders={orders} setOrders={setOrders} accounts={accounts} />}

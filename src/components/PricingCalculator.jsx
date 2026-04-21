@@ -37,7 +37,7 @@ import { useData } from "../context/DataContext";
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 const DEFAULT_ACCOUNTS = {
   vatRegistered: false, frsRate: 12, isLimitedCostTrader: false,
-  taxRate: 0.20, annualProfit: 33480, annualTarget: 65000, ytdIncome: 41820,
+  taxRate: 0.20, annualProfit: 0, annualTarget: 0, ytdIncome: 0,
 };
 
 // ─── Staff / labour rates ─────────────────────────────────────────────────────
@@ -123,10 +123,13 @@ const COMMERCIAL_JOB_TYPES = [
 ];
 
 const COMMERCIAL_FREQUENCIES = [
-  { id: "oneoff",      label: "One-off",       multiplier: 1 },
-  { id: "weekly",      label: "Weekly",        multiplier: 52 },
-  { id: "fortnightly", label: "Fortnightly",   multiplier: 26 },
-  { id: "monthly",     label: "Monthly",       multiplier: 12 },
+  { id: "oneoff",      label: "One-off",          multiplier: 1,   unit: null },
+  { id: "daily5",      label: "Daily (Mon–Fri)",  multiplier: 260, unit: null },
+  { id: "daily7",      label: "Daily (7 days)",   multiplier: 365, unit: null },
+  { id: "weekly",      label: "Weekly",           multiplier: 52,  unit: "week" },
+  { id: "fortnightly", label: "Fortnightly",      multiplier: 26,  unit: "fortnight" },
+  { id: "monthly",     label: "Monthly",          multiplier: 12,  unit: null },
+  { id: "custom",      label: "Custom weeks/year", multiplier: 0,  unit: "custom" },
 ];
 
 // ─── Commercial add-on presets ────────────────────────────────────────────────
@@ -268,27 +271,10 @@ function priceForMargin({ targetMarginPct, hrs, staffId, extraCosts = 0, account
 }
 
 // ─── AI photo analysis ─────────────────────────────────────────────────────────
-async function analysePhoto(base64, mediaType, mode) {
-  const hint = {
-    rooms:      "Identify rooms visible, their size, cleanliness and condition.",
-    commercial: "Identify sector type, estimate square footage, assess condition and required man-hours.",
-    exterior:   "Identify all exterior surfaces visible, property type, access difficulty and their condition.",
-  }[mode] ?? "Assess this property for professional cleaning pricing.";
-
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514", max_tokens: 900,
-      messages: [{ role: "user", content: [
-        { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-        { type: "text",  text: `You are a UK professional cleaning pricing expert. ${hint}\nRespond ONLY with valid JSON (no markdown):\n{"propertyType":"string","estimatedSize":"string","complexity":"light|normal|heavy|severe","complexityReason":"string","suggestedPrice":number,"priceRangeMin":number,"priceRangeMax":number,"estimatedHours":number,"observations":["string"],"confidence":"high|medium|low"}` },
-      ]}],
-    }),
-  });
-  if (!r.ok) throw new Error(`API ${r.status}`);
-  const d = await r.json();
-  return JSON.parse((d.content?.[0]?.text ?? "").replace(/```json|```/g, "").trim());
+// AI photo analysis — disabled until API key is configured server-side
+// To enable: deploy an edge function that proxies to Anthropic API with the key
+async function analysePhoto(/* base64, mediaType, mode */) {
+  throw new Error("AI photo analysis coming soon — this feature is not yet available.");
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
@@ -685,26 +671,105 @@ function StaffSelector({ staffId, setStaffId }) {
   );
 }
 
+// ─── Saved quotes list with accept/reject actions ─────────────────────────────
+function SavedQuotesList({ quotes, onAccept }) {
+  const [busyId, setBusyId] = useState(null);
+  if (!quotes || quotes.length === 0) return null;
+
+  const handleAccept = async (q) => {
+    if (!onAccept || busyId) return;
+    setBusyId(q.id || q.savedAt);
+    try { await onAccept(q); } finally { setBusyId(null); }
+  };
+
+  return (
+    <GCard>
+      <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
+        <p className="text-sm font-black text-white">Saved quotes</p>
+        <p className="text-[10px] text-[rgba(153,197,255,0.45)] mt-0.5">Drafts don't count as income. Mark one accepted to log it to your accounts.</p>
+      </div>
+      <div className="divide-y divide-[rgba(153,197,255,0.06)]">
+        {quotes.slice(0, 8).map((q) => {
+          const isAccepted = q.status === 'accepted' || q.status === 'paid';
+          const rowKey = q.id || q.savedAt;
+          const busy = busyId === rowKey;
+          return (
+            <div key={rowKey} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-white truncate">{q.customer}</p>
+                <p className="text-[10px] text-[rgba(153,197,255,0.4)] truncate">
+                  {q.savedAt ? new Date(q.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "Draft"}
+                  {q.type ? ` · ${q.type}` : ""}
+                </p>
+              </div>
+              <p className="text-sm font-black text-emerald-400 tabular-nums shrink-0">{fmt2(q.price)}</p>
+              {isAccepted ? (
+                <span className="shrink-0 text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-2 py-1">ACCEPTED</span>
+              ) : onAccept ? (
+                <button
+                  onClick={() => handleAccept(q)}
+                  disabled={busy}
+                  className="shrink-0 text-[10px] font-bold text-white bg-[#1f48ff] hover:bg-[#3a5eff] disabled:opacity-50 rounded-full px-3 py-1.5 transition-all">
+                  {busy ? "…" : "Mark accepted"}
+                </button>
+              ) : (
+                <span className="shrink-0 text-[10px] font-black text-[rgba(153,197,255,0.5)] bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.1)] rounded-full px-2 py-1">DRAFT</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </GCard>
+  );
+}
+
 // ─── Quote summary + save ─────────────────────────────────────────────────────
-function QuoteSummary({ totalPrice, totalHrs, type, onSave }) {
+function QuoteSummary({ totalPrice, totalHrs, type, onSave, customers = [] }) {
   const [customer, setCustomer] = useState("");
   const [notes,    setNotes]    = useState("");
-  const [saved,    setSaved]    = useState(false);
+  const [status,   setStatus]   = useState("idle"); // idle | saving | saved | error
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
-  const handle = () => {
-    onSave?.({ customer, notes, price: totalPrice, hrs: totalHrs, type, savedAt: new Date().toISOString() });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  const custMatches = customer.length > 1
+    ? customers.filter(c => c.name?.toLowerCase().includes(customer.toLowerCase())).slice(0, 5)
+    : [];
+
+  const handle = async () => {
+    setStatus("saving");
+    try {
+      await onSave?.({ customer, notes, price: totalPrice, hrs: totalHrs, type, savedAt: new Date().toISOString() });
+      setStatus("saved");
+      setTimeout(() => setStatus("idle"), 3000);
+    } catch {
+      setStatus("error");
+      setTimeout(() => setStatus("idle"), 5000);
+    }
   };
 
   return (
     <Card className="overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100"><SL>Quote details</SL></div>
       <div className="p-4 space-y-3">
-        <div>
+        <div className="relative">
           <label className="block text-xs font-bold tracking-widest uppercase text-gray-400 mb-1">Customer name</label>
-          <input type="text" value={customer} onChange={e => setCustomer(e.target.value)} placeholder="e.g. Mrs Johnson"
+          <input type="text" value={customer}
+            onChange={e => { setCustomer(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            placeholder="e.g. Mrs Johnson"
             className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue" />
+          {showSuggestions && custMatches.length > 0 && (
+            <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+              {custMatches.map(c => (
+                <button key={c.id} type="button"
+                  onMouseDown={() => { setCustomer(c.name); setShowSuggestions(false); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-brand-blue/5 transition-colors">
+                  <span className="font-semibold text-gray-800">{c.name}</span>
+                  {c.postcode && <span className="text-gray-400 ml-2">{c.postcode}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-xs font-bold tracking-widest uppercase text-gray-400 mb-1">Notes / access details</label>
@@ -723,13 +788,24 @@ function QuoteSummary({ totalPrice, totalHrs, type, onSave }) {
             </div>
           </div>
         )}
+        {status === "error" && (
+          <div className="flex items-center gap-2 p-2.5 bg-red-50 border border-red-200 rounded-sm">
+            <span className="text-red-500 text-sm">!</span>
+            <p className="text-xs text-red-600 font-semibold">Quote couldn't be saved. Check your connection and try again.</p>
+          </div>
+        )}
         <div className="flex gap-2">
           <button
             onClick={handle}
-            disabled={!customer || totalPrice <= 0}
-            className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide rounded-sm transition-colors ${customer && totalPrice > 0 ? "bg-brand-navy text-white hover:bg-brand-blue" : "bg-gray-100 text-gray-300 cursor-not-allowed"}`}
+            disabled={!customer || totalPrice <= 0 || status === "saving"}
+            className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide rounded-sm transition-colors ${
+              status === "saved" ? "bg-emerald-600 text-white" :
+              status === "error" ? "bg-red-600 text-white hover:bg-red-700" :
+              customer && totalPrice > 0 && status !== "saving" ? "bg-brand-navy text-white hover:bg-brand-blue" :
+              "bg-gray-100 text-gray-300 cursor-not-allowed"
+            }`}
           >
-            {saved ? "✓ Quote saved" : "Save quote →"}
+            {status === "saving" ? "Saving..." : status === "saved" ? "✓ Quote saved" : status === "error" ? "Retry save" : "Save quote →"}
           </button>
         </div>
       </div>
@@ -749,7 +825,7 @@ function QuoteSummary({ totalPrice, totalHrs, type, onSave }) {
 //                  Formula: (roomMins × cleanTypeMultiplier / 60) × hourlyRate
 //                  Condition adjusts time (not price directly).
 
-function ResidentialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
+function ResidentialTab({ accounts, userHourlyRate, onSaveQuote, onAcceptQuote, customers = [], initialQuotes = [] }) {
   const defaultRate  = userHourlyRate ?? accounts.staffHourlyRate ?? 20;
   const rateFromSync = !!(userHourlyRate ?? accounts.staffHourlyRate);
 
@@ -762,7 +838,7 @@ function ResidentialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
   const [addons,       setAddons]       = useState([]);
   const [staffId,      setStaffId]      = useState("you");
   const [targetMargin, setTargetMargin] = useState(45);
-  const [savedQuotes,  setSavedQuotes]  = useState([]);
+  const [savedQuotes,  setSavedQuotes]  = useState(initialQuotes);
 
   useEffect(() => {
     const newRate = userHourlyRate ?? accounts.staffHourlyRate;
@@ -1161,29 +1237,12 @@ function ResidentialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
           )}
 
           {/* Quote summary */}
-          <QuoteSummary totalPrice={totalPrice} totalHrs={totalHrs} type="residential"
-            onSave={q => { setSavedQuotes(prev => [q, ...prev]); onAcceptedQuote?.(q); }} />
+          <QuoteSummary totalPrice={totalPrice} totalHrs={totalHrs} type="residential" customers={customers}
+            onSave={async q => { setSavedQuotes(prev => [q, ...prev]); await onSaveQuote?.(q); }} />
 
           {/* Saved quotes */}
           {savedQuotes.length > 0 && (
-            <GCard>
-              <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
-                <p className="text-sm font-black text-white">Saved quotes</p>
-              </div>
-              <div className="divide-y divide-[rgba(153,197,255,0.06)]">
-                {savedQuotes.slice(0, 5).map((q, i) => (
-                  <div key={i} className="flex items-center justify-between px-4 py-2.5">
-                    <div>
-                      <p className="text-xs font-bold text-white">{q.customer}</p>
-                      <p className="text-[10px] text-[rgba(153,197,255,0.4)]">
-                        {new Date(q.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                      </p>
-                    </div>
-                    <p className="text-sm font-black text-emerald-400 tabular-nums">{fmt2(q.price)}</p>
-                  </div>
-                ))}
-              </div>
-            </GCard>
+            <SavedQuotesList quotes={savedQuotes} onAccept={onAcceptQuote} />
           )}
         </div>
       </div>
@@ -1194,8 +1253,10 @@ function ResidentialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
 // ─── TAB: Commercial ──────────────────────────────────────────────────────────
 
 // Glassmorphism input — shared within commercial tab
-const GInput = ({ className = "", ...props }) => (
+const GInput = ({ className = "", type, ...props }) => (
   <input
+    type={type}
+    {...(type === "number" ? { min: "0", onBlur: e => { if (parseFloat(e.target.value) < 0) e.target.value = "0"; } } : {})}
     {...props}
     className={`bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-xs text-white placeholder-[rgba(153,197,255,0.25)] focus:outline-none focus:border-[#99c5ff] transition-colors font-mono ${className}`}
   />
@@ -1225,25 +1286,32 @@ const GColHeader = ({ cols }) => (
   </div>
 );
 
-function CommercialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
+function CommercialTab({ accounts, userHourlyRate, onSaveQuote, onAcceptQuote, customers = [], initialQuotes = [] }) {
   const defaultManRate = userHourlyRate ?? 18;
   const rateFromSync   = !!userHourlyRate;
 
   const [sector,       setSector]       = useState("office");
   const [jobType,      setJobType]      = useState("regular");
   const [frequency,    setFrequency]    = useState("oneoff");
+  const [customWeeks,  setCustomWeeks]  = useState(39);
   const [sqft,         setSqft]         = useState("");
   const [accessNotes,  setAccessNotes]  = useState("");
   const [manHours,     setManHours]     = useState([{ id: uid(), role: "Cleaner", rate: defaultManRate, hrs: 4 }]);
   const [products,     setProducts]     = useState([]);
   const [equipment,    setEquipment]    = useState([]);
+  const [oneTimeEquip, setOneTimeEquip] = useState([]);
+  const [contractWeeks, setContractWeeks] = useState(26);
   const [overheads,    setOverheads]    = useState([]);
   const [addons,       setAddons]       = useState([]);
   const [manualPrice,  setManualPrice]  = useState(null);
   const [targetMargin, setTargetMargin] = useState(35);
-  const [savedQuotes,  setSavedQuotes]  = useState([]);
+  const [savedQuotes,  setSavedQuotes]  = useState(initialQuotes);
 
-  const freqObj = COMMERCIAL_FREQUENCIES.find(f => f.id === frequency) ?? COMMERCIAL_FREQUENCIES[0];
+  const freqObjRaw = COMMERCIAL_FREQUENCIES.find(f => f.id === frequency) ?? COMMERCIAL_FREQUENCIES[0];
+  // For custom frequency, use the user's custom weeks as the multiplier
+  const freqObj = freqObjRaw.unit === "custom"
+    ? { ...freqObjRaw, multiplier: Math.max(1, customWeeks), label: `${customWeeks} weeks/year` }
+    : freqObjRaw;
 
   // Insert-row helpers
   const addRow    = (setter, defaults) => setter(prev => [...prev, { id: uid(), ...defaults }]);
@@ -1254,9 +1322,11 @@ function CommercialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
   const manHoursCost  = manHours.reduce((s, r) => s + (parseFloat(r.rate) || 0) * (parseFloat(r.hrs) || 0), 0);
   const productsCost  = products.reduce((s, r) => s + (parseFloat(r.unitCost) || 0) * (parseFloat(r.qty) || 0), 0);
   const equipmentCost = equipment.reduce((s, r) => s + (parseFloat(r.costPerUse) || 0) * (parseFloat(r.qty) || 0), 0);
+  const oneTimeEquipTotal = oneTimeEquip.reduce((s, r) => s + (parseFloat(r.cost) || 0), 0);
+  const oneTimePerVisit   = contractWeeks > 0 ? oneTimeEquipTotal / contractWeeks : 0;
   const overheadsCost = overheads.reduce((s, r) => s + (parseFloat(r.cost) || 0), 0);
   const addonsCost    = addons.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
-  const totalCost     = manHoursCost + productsCost + equipmentCost + overheadsCost + addonsCost;
+  const totalCost     = manHoursCost + productsCost + equipmentCost + oneTimePerVisit + overheadsCost + addonsCost;
   const totalHrs      = manHours.reduce((s, r) => s + (parseFloat(r.hrs) || 0), 0)
                       + addons.reduce((s, a) => s + (parseFloat(a.hrs) || 0), 0);
 
@@ -1325,7 +1395,7 @@ function CommercialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
                 <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.45)] mb-2">Job type</p>
                 <GPill options={COMMERCIAL_JOB_TYPES} value={jobType} onChange={setJobType} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className={`grid gap-3 ${frequency === "custom" ? "grid-cols-3" : "grid-cols-2"}`}>
                 <div>
                   <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Frequency</p>
                   <select value={frequency} onChange={e => setFrequency(e.target.value)}
@@ -1333,9 +1403,46 @@ function CommercialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
                     {COMMERCIAL_FREQUENCIES.map(f => <option key={f.id} value={f.id} className="bg-[#010a4f]">{f.label}</option>)}
                   </select>
                 </div>
+                {frequency === "custom" && (
+                  <div>
+                    <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Weeks per year</p>
+                    <GInput
+                      type="number"
+                      value={customWeeks}
+                      onChange={e => setCustomWeeks(Math.max(1, Math.min(52, parseInt(e.target.value) || 1)))}
+                      placeholder="e.g. 39"
+                      className="w-full text-sm"
+                      min="1"
+                      max="52"
+                    />
+                    <p className="text-[9px] text-[rgba(153,197,255,0.35)] mt-1">e.g. schools = 38–39 weeks</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Approx size (sq ft)</p>
                   <GInput type="number" value={sqft} onChange={e => setSqft(e.target.value)} placeholder="e.g. 2000" className="w-full text-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Contract length</p>
+                  <div className="flex items-center gap-2">
+                    <GInput
+                      type="number"
+                      value={contractWeeks}
+                      onChange={e => setContractWeeks(Math.max(1, parseInt(e.target.value) || 1))}
+                      placeholder="26"
+                      className="w-full text-sm"
+                      min="1"
+                    />
+                    <span className="text-xs text-[rgba(153,197,255,0.4)] shrink-0">weeks</span>
+                  </div>
+                </div>
+                <div className="flex flex-col justify-end">
+                  <div className="px-3 py-2 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
+                    <p className="text-[10px] text-[rgba(153,197,255,0.4)]">Contract duration</p>
+                    <p className="text-xs font-bold text-white">{contractWeeks} weeks · {Math.round(contractWeeks / 4.33)} months</p>
+                  </div>
                 </div>
               </div>
               <div>
@@ -1448,6 +1555,59 @@ function CommercialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
               </>
             )}
 
+            {/* ── One-time Equipment (amortised over contract) ── */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-[rgba(153,197,255,0.08)]">
+              <div>
+                <p className="text-xs font-black text-white">One-time equipment</p>
+                <p className="text-[10px] text-[rgba(153,197,255,0.45)]">
+                  {oneTimeEquipTotal > 0
+                    ? `£${oneTimeEquipTotal.toFixed(2)} total ÷ ${contractWeeks} weeks = £${oneTimePerVisit.toFixed(2)}/visit`
+                    : "Buy once, cost spread across contract length"}
+                </p>
+              </div>
+              <button
+                onClick={() => addRow(setOneTimeEquip, { name: "", cost: "" })}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[rgba(153,197,255,0.15)] text-[10px] font-bold text-[rgba(153,197,255,0.6)] hover:text-white hover:border-[rgba(153,197,255,0.3)] transition-colors bg-transparent"
+              >
+                + Add item
+              </button>
+            </div>
+            {oneTimeEquip.length > 0 && (
+              <>
+                {/* Contract length input */}
+                <div className="flex items-center gap-3 px-4 py-2.5 border-t border-[rgba(153,197,255,0.06)] bg-[rgba(153,197,255,0.03)]">
+                  <span className="text-[10px] font-bold text-[rgba(153,197,255,0.5)]">Contract length</span>
+                  <GInput
+                    type="number"
+                    value={contractWeeks}
+                    onChange={e => setContractWeeks(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-16 text-center"
+                    min="1"
+                  />
+                  <span className="text-[10px] text-[rgba(153,197,255,0.4)]">weeks</span>
+                </div>
+                <GColHeader cols={[
+                  { label: "Equipment item",  w: "3fr" },
+                  { label: "Cost £",          w: "1fr" },
+                  { label: "Per visit",        w: "1fr", right: true },
+                ]} />
+                {oneTimeEquip.map(r => {
+                  const perVisit = contractWeeks > 0 ? (parseFloat(r.cost) || 0) / contractWeeks : 0;
+                  return (
+                    <div key={r.id} className="grid gap-2 px-4 py-2 border-t border-[rgba(153,197,255,0.06)] items-center"
+                      style={{ gridTemplateColumns: "3fr 1fr 1fr auto" }}>
+                      <GInput value={r.name} onChange={e => updateRow(setOneTimeEquip, r.id, "name", e.target.value)} placeholder="e.g. Henry hoover" className="text-xs font-sans" />
+                      <GInput type="number" value={r.cost} onChange={e => updateRow(setOneTimeEquip, r.id, "cost", e.target.value)} placeholder="0.00" />
+                      <span className="text-xs font-mono font-black text-[#99c5ff] text-right tabular-nums">
+                        {fmt2(perVisit)}
+                      </span>
+                      <button onClick={() => removeRow(setOneTimeEquip, r.id)} className="text-[rgba(153,197,255,0.25)] hover:text-red-400 text-sm transition-colors">✕</button>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
             {/* ── Overheads ── */}
             <GSection label="Overheads & other"
               subtotal={overheadsCost}
@@ -1477,6 +1637,7 @@ function CommercialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
                   ["Man hours",  manHoursCost],
                   ["Products",   productsCost],
                   ["Equipment",  equipmentCost],
+                  ["Equipment (amortised)", oneTimePerVisit],
                   ["Overheads",  overheadsCost],
                 ].filter(([, v]) => v > 0).map(([l, v]) => (
                   <div key={l} className="flex justify-between text-xs">
@@ -1595,31 +1756,14 @@ function CommercialTab({ accounts, userHourlyRate, onAcceptedQuote }) {
           )}
 
           {/* Quote summary */}
-          <QuoteSummary totalPrice={price} totalHrs={totalHrs} type="commercial" onSave={q => {
+          <QuoteSummary totalPrice={price} totalHrs={totalHrs} type="commercial" customers={customers} onSave={async q => {
             setSavedQuotes(prev => [q, ...prev]);
-            onAcceptedQuote?.(q);
+            await onSaveQuote?.(q);
           }} />
 
           {/* Saved quotes */}
           {savedQuotes.length > 0 && (
-            <GCard>
-              <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
-                <p className="text-sm font-black text-white">Saved quotes</p>
-              </div>
-              <div className="divide-y divide-[rgba(153,197,255,0.06)]">
-                {savedQuotes.slice(0, 5).map((q, i) => (
-                  <div key={i} className="flex items-center justify-between px-4 py-2.5">
-                    <div>
-                      <p className="text-xs font-bold text-white">{q.customer}</p>
-                      <p className="text-[10px] text-[rgba(153,197,255,0.4)]">
-                        {new Date(q.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                      </p>
-                    </div>
-                    <p className="text-sm font-black text-emerald-400 tabular-nums">{fmt2(q.price)}</p>
-                  </div>
-                ))}
-              </div>
-            </GCard>
+            <SavedQuotesList quotes={savedQuotes} onAccept={onAcceptQuote} />
           )}
         </div>
       </div>
@@ -1963,9 +2107,9 @@ function PriceInput({ label, value, onChange, avgPrice, hint }) {
   );
 }
 
-function ExteriorTab({ accounts, onAcceptedQuote }) {
+function ExteriorTab({ accounts, onSaveQuote, onAcceptQuote, customers = [], initialQuotes = [] }) {
   const navigate = useNavigate();
-  const { customers = [], addJobAndSyncCustomer } = useData();
+  const { addJobAndSyncCustomer } = useData();
 
   const [services,         setServices]         = useState([]);
   const [propSize,         setPropSize]         = useState("");
@@ -2086,7 +2230,7 @@ function ExteriorTab({ accounts, onAcceptedQuote }) {
     };
     setSavedQuotes(prev => [quote, ...prev]);
     setLastQuote(quote);
-    onAcceptedQuote?.(quote);
+    onSaveQuote?.(quote);
     // Sync to DataContext so customer history + scheduler both see it
     addJobAndSyncCustomer?.({
       id:          `ext-${Date.now()}`,
@@ -2734,31 +2878,7 @@ function ExteriorTab({ accounts, onAcceptedQuote }) {
 
           {/* Saved quotes */}
           {savedQuotes.length > 0 && (
-            <GCard className="p-4">
-              <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-3">Recent quotes this session</p>
-              <div className="space-y-2">
-                {savedQuotes.slice(0, 5).map((q, i) => (
-                  <div key={i} className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-white truncate">{q.customer}</p>
-                      <p className="text-[10px] text-[rgba(153,197,255,0.4)] truncate">{q.type}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-right">
-                        <p className="text-sm font-black text-emerald-400 tabular-nums">£{q.price}</p>
-                        <p className="text-[9px] text-emerald-600 font-bold">logged ✓</p>
-                      </div>
-                      <button
-                        onClick={() => navigate(`/scheduler?customer=${encodeURIComponent(q.customer)}`)}
-                        title="Book in Scheduler"
-                        className="w-7 h-7 rounded-lg bg-[rgba(153,197,255,0.08)] hover:bg-[#1f48ff]/30 border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.5)] hover:text-white transition-all flex items-center justify-center text-xs">
-                        📅
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </GCard>
+            <SavedQuotesList quotes={savedQuotes} onAccept={onAcceptQuote} />
           )}
         </div>
       </div>
@@ -2767,8 +2887,74 @@ function ExteriorTab({ accounts, onAcceptedQuote }) {
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
-export default function PricingCalculator({ accountsData, userHourlyRate, sectorHint, onNavigate, onAcceptedQuote }) {
+export default function PricingCalculator({ accountsData, userHourlyRate, sectorHint, onNavigate, onSaveDraft, onAcceptQuote, onAcceptedQuote }) {
+  const { customers = [] } = useData();
   const accounts = { ...DEFAULT_ACCOUNTS, ...(accountsData ?? {}) };
+
+  // Load saved quotes from Supabase on mount
+  const [dbQuotes, setDbQuotes] = useState([]);
+  const reloadQuotes = async () => {
+    const { listQuotes } = await import('../lib/db/quotesDb');
+    try {
+      const rows = await listQuotes(50);
+      setDbQuotes(rows.map(q => ({
+        id: q.id,
+        customer: q.job_label || q.payload?.customer || 'Quote',
+        price: Number(q.price) || 0,
+        hrs: Number(q.hrs) || 0,
+        type: q.type || 'residential',
+        notes: q.notes || '',
+        status: q.status || 'draft',
+        savedAt: q.created_at,
+      })));
+    } catch {}
+  };
+  useEffect(() => {
+    let mounted = true;
+    import('../lib/db/quotesDb').then(({ listQuotes }) => {
+      listQuotes(50).then(rows => {
+        if (mounted) {
+          setDbQuotes(rows.map(q => ({
+            id: q.id,
+            customer: q.job_label || q.payload?.customer || 'Quote',
+            price: Number(q.price) || 0,
+            hrs: Number(q.hrs) || 0,
+            type: q.type || 'residential',
+            notes: q.notes || '',
+            status: q.status || 'draft',
+            savedAt: q.created_at,
+          })));
+        }
+      }).catch(() => {});
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  // Unified save handler: saves draft to Supabase, then reloads list
+  const handleSaveQuote = async (quote) => {
+    if (onSaveDraft) {
+      try {
+        const saved = await onSaveDraft(quote);
+        await reloadQuotes();
+        return saved;
+      } catch (err) {
+        console.error('Failed to save quote:', err);
+      }
+    } else if (onAcceptedQuote) {
+      // Legacy fallback
+      await onAcceptedQuote(quote);
+    }
+  };
+
+  const handleAcceptQuote = async (savedQuote) => {
+    if (!onAcceptQuote) return;
+    try {
+      await onAcceptQuote(savedQuote);
+      await reloadQuotes();
+    } catch (err) {
+      console.error('Failed to accept quote:', err);
+    }
+  };
 
   // Open the tab that matches the user's sector (from onboarding)
   const sectorToTab = { residential: "residential", commercial: "commercial", exterior: "exterior" };
@@ -2792,13 +2978,20 @@ export default function PricingCalculator({ accountsData, userHourlyRate, sector
           <p className="text-xs font-bold tracking-widest uppercase text-brand-blue mb-0.5">Pricing</p>
           <h2 className="text-2xl font-bold text-brand-navy">Quote builder</h2>
         </div>
-        <div className="flex items-center gap-2 px-3 py-2 bg-brand-navy/5 border border-brand-navy/10 rounded-sm hidden sm:flex">
-          <span className={`w-2 h-2 rounded-full shrink-0 ${userHourlyRate ? "bg-emerald-400 animate-pulse" : "bg-gray-300"}`} />
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-sm hidden sm:flex ${
+          userHourlyRate ? "bg-brand-navy/5 border border-brand-navy/10" : "bg-amber-50 border border-amber-200"
+        }`}>
+          <span className={`w-2 h-2 rounded-full shrink-0 ${userHourlyRate ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
           <div>
-            <p className="text-xs font-bold text-brand-navy">
-              {userHourlyRate ? `£${userHourlyRate}/hr · synced from settings` : "Set your rate in Settings"}
+            <p className={`text-xs font-bold ${userHourlyRate ? "text-brand-navy" : "text-amber-700"}`}>
+              {userHourlyRate ? `£${userHourlyRate}/hr · synced from settings` : "⚠ No hourly rate set — using estimates"}
             </p>
-            <p className="text-xs text-gray-400">{accounts.vatRegistered ? `VAT · FRS ${accounts.frsRate}%` : "No VAT"} · {Math.round(accounts.taxRate*100)}% tax</p>
+            <p className="text-xs text-gray-400">
+              {userHourlyRate
+                ? `${accounts.vatRegistered ? `VAT · FRS ${accounts.frsRate}%` : "No VAT"} · ${Math.round(accounts.taxRate*100)}% tax`
+                : "Set your rate in Settings to get accurate quotes"
+              }
+            </p>
           </div>
         </div>
       </div>
@@ -2825,9 +3018,9 @@ export default function PricingCalculator({ accountsData, userHourlyRate, sector
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === "residential" && <ResidentialTab accounts={accounts} userHourlyRate={userHourlyRate} onAcceptedQuote={onAcceptedQuote} />}
-        {activeTab === "commercial"  && <CommercialTab  accounts={accounts} userHourlyRate={userHourlyRate} onAcceptedQuote={onAcceptedQuote} />}
-        {activeTab === "exterior"    && <ExteriorTab    accounts={accounts} onAcceptedQuote={onAcceptedQuote} />}
+        {activeTab === "residential" && <ResidentialTab accounts={accounts} userHourlyRate={userHourlyRate} onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => q.type === 'residential')} />}
+        {activeTab === "commercial"  && <CommercialTab  accounts={accounts} userHourlyRate={userHourlyRate} onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => q.type === 'commercial')} />}
+        {activeTab === "exterior"    && <ExteriorTab    accounts={accounts}                                 onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => !['residential','commercial'].includes(q.type))} />}
       </div>
     </div>
   );
