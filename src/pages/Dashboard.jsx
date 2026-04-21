@@ -360,9 +360,110 @@ function KPIStrip({ accounts, weekJobs, jobsTodayData, invoices }) {
 }
 
 // ─── Health score panel ────────────────────────────────────────────────────────
+const SCORE_DIMENSIONS = [
+  {
+    label: "Revenue",
+    max: 25,
+    color: "bg-brand-blue",
+    summary: "How close you are to your weekly and yearly income targets.",
+    rules: [
+      "Up to 12 pts for this week's earned revenue vs. the jobs on your calendar.",
+      "Up to 13 pts for year-to-date income vs. 4 months of your annual target.",
+    ],
+  },
+  {
+    label: "Operations",
+    max: 25,
+    color: "bg-emerald-500",
+    summary: "Jobs marked complete and today's schedule fully staffed.",
+    rules: [
+      "Up to 18 pts for completing today/past jobs in the week.",
+      "Up to 7 pts when no jobs today are unassigned (−2 pts per unassigned).",
+    ],
+  },
+  {
+    label: "Invoicing",
+    max: 25,
+    color: "bg-amber-400",
+    summary: "Clean invoices — no overdue, no pile-up of unpaid.",
+    rules: [
+      "Starts at 25 pts.",
+      "−12 pts per overdue invoice.",
+      "−5 pts if you have more than 3 unpaid invoices stacking up.",
+    ],
+  },
+  {
+    label: "Compliance",
+    max: 15,
+    color: "bg-emerald-500",
+    summary: "Tax reserve, mileage logged, and MTD filings on track.",
+    rules: [
+      "Up to 7 pts for saving toward your tax reserve target.",
+      "4 pts when your claimed mileage is ≥90% of logged mileage.",
+      "4 pts when your latest MTD quarter is filed.",
+    ],
+  },
+  {
+    label: "Growth",
+    max: 10,
+    color: "bg-brand-blue",
+    summary: "Running a sprint and making headway toward the annual target.",
+    rules: [
+      "4 pts when you have an active 90-day sprint.",
+      "3 pts baseline, or 6 pts once you pass 50% of your monthly target.",
+    ],
+  },
+];
+
+function ScoreExplainerModal({ score, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
+          <div>
+            <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/80">Health Score</p>
+            <h3 className="text-lg font-black text-brand-navy">How this is calculated</h3>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">✕</button>
+        </div>
+        <div className="px-6 py-5 space-y-5">
+          <p className="text-sm text-gray-600 leading-relaxed">
+            Your score is out of <span className="font-bold text-brand-navy">100</span> across five dimensions. Each updates live from your real data — jobs, invoices, income logs, and settings.
+          </p>
+          <div className="space-y-4">
+            {SCORE_DIMENSIONS.map(({ label, max, color, summary, rules }) => {
+              const actual = score.dims?.find((d) => d.label === label)?.score ?? 0;
+              return (
+                <div key={label} className="border border-gray-100 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="font-bold text-brand-navy text-sm">{label}</p>
+                    <span className="text-xs font-mono font-bold text-gray-600">{actual} / {max}</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
+                    <div className={`h-full ${color} rounded-full`} style={{ width: `${(actual / max) * 100}%` }} />
+                  </div>
+                  <p className="text-xs text-gray-500 mb-2">{summary}</p>
+                  <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+                    {rules.map((r, i) => <li key={i}>{r}</li>)}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+          <div className="text-xs text-gray-500 bg-gray-50 rounded-xl p-3 leading-relaxed">
+            <p className="font-bold text-gray-700 mb-1">Tier thresholds</p>
+            <p>0–39 Needs work · 40–59 OK · 60–74 Good · 75–89 Great · 90+ Excellent</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
   const { total, dims, tier, tierNext, tierColor } = score;
   const ptsToNext  = tierNext ? tierNext - total : 0;
+  const [showExplainer, setShowExplainer] = useState(false);
 
   return (
     <Card className="overflow-hidden">
@@ -429,12 +530,15 @@ function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
           ))}
         </div>
         <button
-          onClick={() => onNavigate?.("accounts")}
+          onClick={() => setShowExplainer(true)}
           className="mt-3 text-xs font-bold text-brand-blue hover:underline"
         >
           How is this calculated? →
         </button>
       </div>
+      {showExplainer && (
+        <ScoreExplainerModal score={score} onClose={() => setShowExplainer(false)} />
+      )}
     </Card>
   );
 }
