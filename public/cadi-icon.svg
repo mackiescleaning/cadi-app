@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" fill="none">
+  <defs>
+    <radialGradient id="bg-g" cx="50%" cy="40%" r="60%">
+      <stop offset="0%"   stop-color="#0d1a5e"/>
+      <stop offset="100%" stop-color="#040810"/>
+    </radialGradient>
+    <radialGradient id="core2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="30%"  stop-color="#d4e2ff"/>
+      <stop offset="65%"  stop-color="#4f78ff" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#1d38c4" stop-opacity="0.7"/>
+    </radialGradient>
+    <radialGradient id="bloom2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#4f78ff" stop-opacity="0.5"/>
+      <stop offset="50%"  stop-color="#1d38c4" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#040d2a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ray2" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#4f78ff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="bl2-lg" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="80" result="b1"/>
+      <feGaussianBlur stdDeviation="30" result="b2" in="SourceGraphic"/>
+      <feMerge><feMergeNode in="b1"/><feMergeNode in="b2"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="bl2-sm" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="24"/>
+    </filter>
+    <filter id="ray2-f" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <!-- Top edge highlight -->
+    <linearGradient id="top-shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="rgba(255,255,255,0.06)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="232" fill="url(#bg-g)"/>
+
+  <!-- Subtle top glow on bg -->
+  <rect width="1024" height="1024" rx="232" fill="url(#top-shine)"/>
+
+  <!-- Ambient centre glow -->
+  <circle cx="512" cy="512" r="460" fill="url(#bloom2)" filter="url(#bl2-lg)"/>
+
+  <!-- 8 rays -->
+  <g opacity="0.5" filter="url(#ray2-f)">
+    <polygon points="512,512 486,120 538,120" fill="url(#ray2)"/>
+    <polygon points="512,512 486,120 538,120" fill="url(#ray2)" transform="rotate(45 512 512)" opacity="0.7"/>
+    <polygon points="512,512 486,120 538,120" fill="url(#ray2)" transform="rotate(90 512 512)" opacity="0.85"/>
+    <polygon points="512,512 486,120 538,120" fill="url(#ray2)" transform="rotate(135 512 512)" opacity="0.6"/>
+    <polygon points="512,512 486,120 538,120" fill="url(#ray2)" transform="rotate(180 512 512)" opacity="0.75"/>
+    <polygon points="512,512 486,120 538,120" fill="url(#ray2)" transform="rotate(225 512 512)" opacity="0.55"/>
+    <polygon points="512,512 486,120 538,120" fill="url(#ray2)" transform="rotate(270 512 512)" opacity="0.8"/>
+    <polygon points="512,512 486,120 538,120" fill="url(#ray2)" transform="rotate(315 512 512)" opacity="0.65"/>
+  </g>
+
+  <!-- Ring -->
+  <circle cx="512" cy="512" r="204" fill="none" stroke="rgba(79,120,255,0.18)" stroke-width="8" filter="url(#bl2-sm)"/>
+
+  <!-- Core orb -->
+  <circle cx="512" cy="512" r="132" fill="url(#core2)" filter="url(#bl2-sm)"/>
+
+  <!-- White hot centre -->
+  <circle cx="512" cy="512" r="56" fill="white" filter="url(#bl2-sm)"/>
+  <circle cx="512" cy="512" r="26" fill="white"/>
+</svg>

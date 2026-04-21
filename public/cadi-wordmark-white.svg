@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 140" width="520" height="140" fill="none">
+  <defs>
+    <radialGradient id="dot-w" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="50%"  stop-color="#a8c4ff"/>
+      <stop offset="100%" stop-color="#4f78ff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="dg-w" x="-150%" y="-150%" width="400%" height="400%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <text x="0" y="118"
+    font-family="'Plus Jakarta Sans', sans-serif"
+    font-weight="600"
+    font-size="128"
+    fill="#ffffff"
+    letter-spacing="-6">Cadi</text>
+  <circle cx="300" cy="12" r="10" fill="url(#dot-w)" filter="url(#dg-w)"/>
+  <circle cx="300" cy="12" r="4.5" fill="white"/>
+</svg>
