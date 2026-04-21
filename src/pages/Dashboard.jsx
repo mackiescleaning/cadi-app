@@ -1269,38 +1269,125 @@ function BadgesShelf({ badges, onShare }) {
 }
 
 // ─── AI Boost Panel ────────────────────────────────────────────────────────────
-function AiBoostPanel({ score, onNavigate }) {
+// Fallback tasks shown in demo mode OR if the edge function fails — same
+// deterministic rules the old panel used, so the UX never collapses to empty.
+function fallbackBoostTasks(score) {
+  const tasks = [];
+  if (score.invoicingScore < 20) tasks.push({ emoji: "⚡", title: "Chase overdue invoices", body: "Clear any overdue invoices to protect your invoicing score.", tab: "invoices", priority: "high", impact: 12 });
+  if (score.complianceScore < 12) tasks.push({ emoji: "🛡️", title: "Top up your tax reserve", body: "Hit your reserve target to raise your compliance score.", tab: "money", priority: "medium", impact: 7 });
+  if (score.opsScore < 20) tasks.push({ emoji: "📅", title: "Fill gaps in this week's schedule", body: "Empty days drag your ops score down.", tab: "scheduler", priority: "high", impact: 7 });
+  if (score.revScore < 20) tasks.push({ emoji: "💷", title: "Log any payments received today", body: "Keeps your revenue score live.", tab: "money", priority: "medium", impact: 5 });
+  if (score.growthScore < 8) tasks.push({ emoji: "🏃", title: "Set a 90-day sprint goal", body: "Active sprints unlock growth points.", tab: "review", priority: "medium", impact: 3 });
+  if (tasks.length === 0) tasks.push({ emoji: "📊", title: "Business running smoothly", body: "Open Annual Review to plan your next quarter.", tab: "review", priority: "medium", impact: 2 });
+  return tasks.slice(0, 4);
+}
+
+function priorityStyles(priority) {
+  if (priority === "urgent") return "border-red-200 bg-red-50/40 hover:bg-red-50/70";
+  if (priority === "high")   return "border-amber-200 bg-amber-50/40 hover:bg-amber-50/70";
+  return "border-brand-blue/20 bg-brand-blue/[0.03] hover:bg-brand-blue/[0.06]";
+}
+
+function AiBoostPanel({ score, accounts, invoices, weekJobs, jobsToday, profile, onNavigate, isLive }) {
   const [dismissed, setDismissed] = useState(false);
+  const [aiTasks, setAiTasks] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const { total, tierNext } = score;
+  const ptsToNext = tierNext ? tierNext - total : 0;
+  // Bucket the score to the nearest 5 pts so we don't re-call the API for every
+  // tiny fluctuation — saves ~90% of requests once a user is actively using the app.
+  const scoreBucket = Math.floor((total ?? 0) / 5) * 5;
+
+  useEffect(() => {
+    if (!isLive) { setAiTasks(null); setError(null); return; }
+
+    const cacheKey = `cadi_ai_tasks_v1_${scoreBucket}`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, ts } = JSON.parse(cached);
+        if (Date.now() - ts < 30 * 60 * 1000) { setAiTasks(data.tasks); return; }
+      }
+    } catch {}
+
+    setLoading(true);
+    setError(null);
+    supabase.functions.invoke('ai-coach-tasks', {
+      body: {
+        snapshot: {
+          score: { total: score.total, revScore: score.revScore, opsScore: score.opsScore, invoicingScore: score.invoicingScore, complianceScore: score.complianceScore, growthScore: score.growthScore },
+          accounts: accounts ? {
+            ytdIncome: accounts.ytdIncome, annualTarget: accounts.annualTarget,
+            taxReserve: accounts.taxReserve, taxReserveTarget: accounts.taxReserveTarget,
+            mtdStatus: accounts.mtdStatus, sprintActive: accounts.sprintActive,
+          } : null,
+          weekJobs: (weekJobs || []).map(d => ({ day: d.day, revenue: d.revenue, jobs: d.jobs, done: d.done, isToday: d.isToday })),
+          invoices: (invoices || []).slice(0, 10).map(i => ({ customer: i.customer, amount: i.amount, status: i.status, daysOverdue: i.daysOverdue })),
+          jobsToday: (jobsToday || []).slice(0, 10).map(j => ({ customer: j.customer, status: j.status, price: j.price })),
+          profile: profile ? { cleaner_type: profile.cleaner_type, team_structure: profile.team_structure } : null,
+        },
+      },
+    })
+      .then(({ data, error: fnError }) => {
+        if (fnError) throw fnError;
+        if (data?.error) throw new Error(data.error);
+        setAiTasks(data.tasks);
+        try { localStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() })); } catch {}
+      })
+      .catch((err) => {
+        console.error('ai-coach-tasks failed:', err);
+        setError(err?.message || String(err));
+      })
+      .finally(() => setLoading(false));
+  }, [isLive, scoreBucket]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (dismissed) return null;
 
-  const { total, tier, tierNext } = score;
-  const ptsToNext = tierNext ? tierNext - total : 0;
-
-  const tasks = [];
-  if (score.invoicingScore < 20) tasks.push({ emoji: "⚡", text: "Chase overdue invoices — earn up to +12 pts", tab: "invoices" });
-  if (score.complianceScore < 12) tasks.push({ emoji: "🛡️", text: "Top up your tax reserve to hit your target", tab: "money" });
-  if (score.opsScore < 20) tasks.push({ emoji: "📅", text: "Fill gaps in this week's schedule", tab: "scheduler" });
-  if (score.revScore < 20) tasks.push({ emoji: "💷", text: "Log any payments received today", tab: "money" });
-  if (score.growthScore < 8) tasks.push({ emoji: "🏃", text: "Create a 90-day sprint goal in Annual Review", tab: "review" });
-  if (tasks.length === 0) tasks.push({ emoji: "🎯", text: "Business running smoothly — keep it up!", tab: null });
+  const tasks = aiTasks ?? fallbackBoostTasks(score);
+  const headerSub = !isLive
+    ? "Demo — sign up to unlock personalised AI tasks"
+    : loading && !aiTasks
+      ? "Thinking about your business…"
+      : tierNext
+        ? `${ptsToNext} pts to unlock ${tierNext === 90 ? "Excellent" : tierNext === 75 ? "Great" : "Good"} tier`
+        : null;
 
   return (
     <Card className="overflow-hidden border-t-2 border-t-brand-blue">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <div>
           <SL className="mb-0.5">🤖 Cadi AI — boost your score</SL>
-          {tierNext && <p className="text-xs text-gray-400">{ptsToNext} pts to unlock <span className="font-semibold text-brand-navy">{tierNext === 90 ? "Excellent" : tierNext === 75 ? "Great" : "Good"}</span> tier</p>}
+          {headerSub && <p className="text-xs text-gray-400">{headerSub}</p>}
         </div>
         <button onClick={() => setDismissed(true)} className="text-xs text-gray-300 hover:text-gray-500">✕</button>
       </div>
+      {error && (
+        <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-[11px] text-amber-800 leading-snug">
+          Couldn't reach Cadi AI — showing default tasks. Ask your admin to set <code className="font-mono">ANTHROPIC_API_KEY</code> in Supabase secrets.
+        </div>
+      )}
       <div className="px-4 py-3 space-y-2">
         {tasks.slice(0, 4).map((t, i) => (
-          <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${t.tab ? 'border-brand-blue/20 bg-brand-blue/[0.03] hover:bg-brand-blue/[0.06] cursor-pointer' : 'border-emerald-200 bg-emerald-50/50'}`}
+          <div
+            key={i}
+            className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${priorityStyles(t.priority)} ${t.tab ? 'cursor-pointer' : ''}`}
             onClick={() => t.tab && onNavigate?.(t.tab)}
           >
-            <span className="text-base shrink-0">{t.emoji}</span>
-            <p className="text-xs font-semibold text-gray-700 flex-1">{t.text}</p>
-            {t.tab && <span className="text-xs font-bold text-brand-blue shrink-0">Go →</span>}
+            <span className="text-base shrink-0 mt-0.5">{t.emoji}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-gray-700 leading-snug">{t.title}</p>
+              {t.body && <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{t.body}</p>}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {typeof t.impact === 'number' && (
+                <span className="text-[10px] font-bold text-brand-blue bg-brand-blue/10 rounded-full px-2 py-0.5 tabular-nums">
+                  +{t.impact}
+                </span>
+              )}
+              {t.tab && <span className="text-xs font-bold text-brand-blue">→</span>}
+            </div>
           </div>
         ))}
       </div>
@@ -2348,10 +2435,28 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                   {/* AI Boost */}
                   {demoMode ? (
                     <DemoHint label="🤖 Cadi AI — personalised tasks to boost your score">
-                      <AiBoostPanel score={score} onNavigate={onNavigate} />
+                      <AiBoostPanel
+                        score={score}
+                        accounts={accounts}
+                        invoices={invoices}
+                        weekJobs={weekJobs}
+                        jobsToday={jobsToday}
+                        profile={profile}
+                        onNavigate={onNavigate}
+                        isLive={false}
+                      />
                     </DemoHint>
                   ) : (
-                    <AiBoostPanel score={score} onNavigate={onNavigate} />
+                    <AiBoostPanel
+                      score={score}
+                      accounts={accounts}
+                      invoices={invoices}
+                      weekJobs={weekJobs}
+                      jobsToday={jobsToday}
+                      profile={profile}
+                      onNavigate={onNavigate}
+                      isLive={isLive}
+                    />
                   )}
                 </div>
               </div>
@@ -2437,10 +2542,28 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
                   {demoMode ? (
                     <DemoHint label="🤖 Cadi AI — personalised tasks to boost your score">
-                      <AiBoostPanel score={score} onNavigate={onNavigate} />
+                      <AiBoostPanel
+                        score={score}
+                        accounts={accounts}
+                        invoices={invoices}
+                        weekJobs={weekJobs}
+                        jobsToday={jobsToday}
+                        profile={profile}
+                        onNavigate={onNavigate}
+                        isLive={false}
+                      />
                     </DemoHint>
                   ) : (
-                    <AiBoostPanel score={score} onNavigate={onNavigate} />
+                    <AiBoostPanel
+                      score={score}
+                      accounts={accounts}
+                      invoices={invoices}
+                      weekJobs={weekJobs}
+                      jobsToday={jobsToday}
+                      profile={profile}
+                      onNavigate={onNavigate}
+                      isLive={isLive}
+                    />
                   )}
                 </div>
               </div>

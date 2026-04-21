@@ -19,6 +19,7 @@ import { listCustomers, upsertCustomer } from "../lib/db/customersDb";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 
 // ─── Job type taxonomy ────────────────────────────────────────────────────────
 // Used for filtering, tagging, and AI suggestion logic.
@@ -375,35 +376,25 @@ function generateMessage(customer, messageType) {
   },
 ]; END DEMO_CUSTOMERS REMOVED */
 
-// ─── AI message generation via Claude API ─────────────────────────────────────
+// ─── AI message generation via Supabase edge function ────────────────────────
+// Routes through /functions/v1/ai-customer-message so the Anthropic API key
+// stays server-side. The edge function owns the system prompt and model choice.
 async function generateAIMessage(customer, suggestionType, customInstructions = "") {
-  const daysSince = customer.lastJobDate
-    ? Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000)
-    : null;
-  const prompt = `You are writing a short, warm, professional message from a UK cleaning business owner to a customer.
-
-Customer: ${customer.name}
-Last job: ${customer.services[0]?.label ?? "general clean"} on ${new Date(customer.lastJobDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
-Days since last job: ${daysSince}
-Customer notes: ${customer.notes}
-Services they've had: ${[...new Set(customer.services.map(s => s.label))].join(", ")}
-Message purpose: ${suggestionType}
-${customInstructions ? `Additional instructions: ${customInstructions}` : ""}
-
-Write a concise, friendly, personal message (3-4 short paragraphs max). No subject line. Start with "Hi ${customer.name.split(" ")[0]}," — do not use formal language or corporate speak. Sound like a real person who knows this customer. End with "Kind regards" only — no name placeholder needed.`;
-
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 400,
-      messages: [{ role: "user", content: prompt }],
-    }),
+  const { data, error } = await supabase.functions.invoke('ai-customer-message', {
+    body: {
+      customer: {
+        name: customer.name,
+        notes: customer.notes || "",
+        lastJobDate: customer.lastJobDate || null,
+        services: (customer.services || []).map(s => ({ label: s.label, date: s.date })),
+      },
+      messageType: suggestionType,
+      customInstructions,
+    },
   });
-  if (!r.ok) throw new Error(`API ${r.status}`);
-  const d = await r.json();
-  return d.content?.[0]?.text ?? "";
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data?.text ?? "";
 }
 
 // ─── Design system components ─────────────────────────────────────────────────
