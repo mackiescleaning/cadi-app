@@ -149,20 +149,33 @@ export function DataProvider({ children }) {
     setCustomers(prev => prev.filter(c => c.id !== id));
   }, []);
 
+  const isDemo = user?.id === 'demo-user';
+
   const addCustomer = useCallback(async (customer) => {
-    try { await upsertCustomer(customer); } catch {}
+    if (!isDemo) {
+      try {
+        await upsertCustomer(customer);
+      } catch (err) {
+        console.error('Failed to save customer to Supabase:', err);
+        throw err;
+      }
+    }
     setCustomers(prev => [customer, ...prev.filter(c => c.id !== customer.id)]);
     return customer;
-  }, []);
+  }, [isDemo]);
 
   const updateCustomer = useCallback(async (id, updates) => {
     setCustomers(prev => prev.map(c => {
       if (c.id !== id) return c;
       const updated = { ...c, ...updates };
-      upsertCustomer(updated).catch(() => {});
+      if (!isDemo) {
+        upsertCustomer(updated).catch(err => {
+          console.error('Failed to update customer in Supabase:', err);
+        });
+      }
       return updated;
     }));
-  }, []);
+  }, [isDemo]);
 
   // Called by Scheduler when a job is saved — saves to Supabase + syncs customer
   const addJobAndSyncCustomer = useCallback(async (job) => {
@@ -208,10 +221,14 @@ export function DataProvider({ children }) {
           ? savedJob.date
           : match.nextJobDate,
       };
-      upsertCustomer(updated).catch(() => {});
+      if (!isDemo) {
+        upsertCustomer(updated).catch(err => {
+          console.error('Failed to sync customer from job save:', err);
+        });
+      }
       return prev.map(c => c.id === match.id ? updated : c);
     });
-  }, []);
+  }, [isDemo]);
 
   const updateJob = useCallback(async (id, updates) => {
     // Update in Supabase
