@@ -46,7 +46,10 @@ const JOB_TYPES = [
 function generateSuggestions(customer) {
   const suggestions = [];
   const services = customer.services.map(s => s.type);
-  const daysSinceLastJob = Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000);
+  const hasLastJob = Boolean(customer.lastJobDate);
+  const daysSinceLastJob = hasLastJob
+    ? Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000)
+    : null;
   const totalSpend = customer.services.reduce((s, j) => s + j.price, 0);
 
   // Upsells — same category, higher value
@@ -154,7 +157,7 @@ function generateSuggestions(customer) {
   }
 
   // One-off job reminder
-  if (customer.frequency === "one-off" && daysSinceLastJob > 30) {
+  if (hasLastJob && customer.frequency === "one-off" && daysSinceLastJob > 30) {
     suggestions.push({
       type: "reminder",
       title: "Follow up on one-off job",
@@ -166,7 +169,7 @@ function generateSuggestions(customer) {
   }
 
   // Win-back
-  if (daysSinceLastJob > 90) {
+  if (hasLastJob && daysSinceLastJob > 90) {
     suggestions.push({
       type: "winback",
       title: `Lapsed — ${daysSinceLastJob} days since last job`,
@@ -187,7 +190,9 @@ function generateSuggestions(customer) {
 function generateMessage(customer, messageType) {
   const first = customer.name.split(" ")[0];
   const lastService = customer.services[0];
-  const daysSince = Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000);
+  const daysSince = customer.lastJobDate
+    ? Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000)
+    : null;
 
   const templates = {
     winback: {
@@ -372,7 +377,9 @@ function generateMessage(customer, messageType) {
 
 // ─── AI message generation via Claude API ─────────────────────────────────────
 async function generateAIMessage(customer, suggestionType, customInstructions = "") {
-  const daysSince = Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000);
+  const daysSince = customer.lastJobDate
+    ? Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000)
+    : null;
   const prompt = `You are writing a short, warm, professional message from a UK cleaning business owner to a customer.
 
 Customer: ${customer.name}
@@ -512,7 +519,9 @@ function StarRating({ value = 0, onChange, size = "sm" }) {
 // ─── Customer card (list row) ─────────────────────────────────────────────────
 function CustomerRow({ customer, onClick, selected }) {
   const suggestions    = useMemo(() => generateSuggestions(customer), [customer]);
-  const daysSince      = Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000);
+  const daysSince      = customer.lastJobDate
+    ? Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000)
+    : null;
   const urgent         = suggestions.some(s => s.priority === "urgent" || s.priority === "high");
   const topSuggestion  = suggestions[0];
 
