@@ -15,13 +15,18 @@ function mapRow(r) {
     rating: Number(r.rating) || 0,
     serviceTypes: Array.isArray(r.service_types) ? r.service_types : [],
     tags: Array.isArray(r.tags) ? r.tags : [],
-    lastJobDate: r.last_job_date || new Date().toISOString().slice(0, 10),
+    lastJobDate: r.last_job_date || null,
     nextJobDate: r.next_job_date || null,
     lifetimeValue: Number(r.lifetime_value) || 0,
+    completedJobs: 0,
     services: [],
     notes: r.notes || "",
     source: r.source || "",
   };
+}
+
+function isCompletedJob(j, today) {
+  return j.status === 'complete' || (j.date && j.date < today);
 }
 
 function mapJobRow(r) {
@@ -106,14 +111,18 @@ export function DataProvider({ children }) {
   }, [user]);
 
   // Hydrate customer services from jobs table (runs after both load)
+  // Split completed vs scheduled so lifetime value / totals don't include future jobs
   useEffect(() => {
     if (!jobs.length || !customers.length) return;
+    const today = new Date().toISOString().slice(0, 10);
     setCustomers(prev => prev.map(c => {
       const customerJobs = jobs.filter(j =>
         j.customerId === c.id ||
         (j.customer && c.name && j.customer.toLowerCase().trim() === c.name.toLowerCase().trim())
       );
       if (customerJobs.length === 0) return c;
+      const completed = customerJobs.filter(j => isCompletedJob(j, today));
+      const scheduled = customerJobs.filter(j => !isCompletedJob(j, today));
       return {
         ...c,
         services: customerJobs.map(j => ({
@@ -123,8 +132,10 @@ export function DataProvider({ children }) {
           price: j.price || 0,
           status: j.status || 'scheduled',
         })),
-        lifetimeValue: customerJobs.reduce((s, j) => s + (j.price || 0), 0),
-        lastJobDate: customerJobs.reduce((latest, j) => j.date > latest ? j.date : latest, c.lastJobDate || ''),
+        lifetimeValue: completed.reduce((s, j) => s + (j.price || 0), 0),
+        completedJobs: completed.length,
+        lastJobDate: completed.reduce((latest, j) => (j.date && j.date > latest) ? j.date : latest, '') || null,
+        nextJobDate: scheduled.reduce((earliest, j) => (!earliest || (j.date && j.date < earliest)) ? j.date : earliest, null),
       };
     }));
   }, [jobs.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -168,7 +179,7 @@ export function DataProvider({ children }) {
 
     setJobs(prev => [...prev, savedJob]);
 
-    // Sync to matching customer
+    // Sync to matching customer — only count toward lifetime/completed if the job is done
     if (!job.customer) return;
     setCustomers(prev => {
       const jobNameLower = job.customer.toLowerCase().trim();
@@ -178,18 +189,24 @@ export function DataProvider({ children }) {
         return n === jobNameLower || first === jobNameLower || jobNameLower.startsWith(first);
       });
       if (!match) return prev;
+      const today = new Date().toISOString().slice(0, 10);
+      const isDone = isCompletedJob(savedJob, today);
       const newService = {
-        type: job.type,
-        label: job.service,
-        date: job.date || new Date().toISOString().slice(0, 10),
-        price: job.price,
-        status: job.status || 'scheduled',
+        type: savedJob.type,
+        label: savedJob.service,
+        date: savedJob.date || today,
+        price: savedJob.price,
+        status: savedJob.status || 'scheduled',
       };
       const updated = {
         ...match,
         services: [...(match.services || []), newService],
-        lifetimeValue: (match.lifetimeValue || 0) + (job.price || 0),
-        lastJobDate: job.date || match.lastJobDate,
+        lifetimeValue: (match.lifetimeValue || 0) + (isDone ? (savedJob.price || 0) : 0),
+        completedJobs: (match.completedJobs || 0) + (isDone ? 1 : 0),
+        lastJobDate: isDone && savedJob.date ? savedJob.date : match.lastJobDate,
+        nextJobDate: (!isDone && savedJob.date && (!match.nextJobDate || savedJob.date < match.nextJobDate))
+          ? savedJob.date
+          : match.nextJobDate,
       };
       upsertCustomer(updated).catch(() => {});
       return prev.map(c => c.id === match.id ? updated : c);

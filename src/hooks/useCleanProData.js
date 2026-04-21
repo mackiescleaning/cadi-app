@@ -213,7 +213,7 @@ function mapFeedData({ quotes, moneyEntries, customersById }) {
 
 export function useCleanProData() {
   const { user, profile } = useAuth();
-  const { jobs: userJobs } = useData();
+  const { jobs: userJobs, customers: liveCustomers } = useData();
   const isDemo = user?.id === 'demo-user';
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(Boolean(user) && !isDemo);
@@ -268,7 +268,7 @@ export function useCleanProData() {
     teamData: data?.teamData ?? null,
     feedData: data?.feedData ?? null,
     jobsToday: data?.jobsToday ?? null,
-    customerCount: data?.customerCount ?? 0,
+    customerCount: liveCustomers?.length ?? 0,
     isLoading,
     error,
     refresh: fetch,

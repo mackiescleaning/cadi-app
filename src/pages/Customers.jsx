@@ -1147,7 +1147,15 @@ function SecureVault({ customer, ownerId }) {
 // ─── Customer detail panel ────────────────────────────────────────────────────
 function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCustomer, onDeleteCustomer, ownerId }) {
   const suggestions  = useMemo(() => generateSuggestions(customer), [customer]);
-  const daysSince    = Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000);
+  const hasLastJob   = Boolean(customer.lastJobDate);
+  const daysSince    = hasLastJob ? Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000) : null;
+  const totalJobs    = customer.completedJobs ?? 0;
+  const lastJobLabel = hasLastJob && daysSince >= 0
+    ? `${daysSince}d ago`
+    : customer.nextJobDate
+      ? `in ${Math.max(0, Math.ceil((new Date(customer.nextJobDate) - Date.now()) / 86400000))}d`
+      : "—";
+  const lastJobAccent = hasLastJob && daysSince > 60 ? "text-amber-400" : "text-white";
   const uniqueTypes  = [...new Set(customer.services.map(s => s.type))];
 
   const [activeTab, setActiveTab] = useState("overview");
@@ -1198,8 +1206,8 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
           <div className="grid grid-cols-3 gap-2">
             {[
               { label: "Lifetime value",  value: `£${customer.lifetimeValue.toLocaleString()}`, accent: "text-emerald-400" },
-              { label: "Total jobs",      value: customer.services.length, accent: "text-white" },
-              { label: "Last job",        value: `${daysSince}d ago`, accent: daysSince > 60 ? "text-amber-400" : "text-white" },
+              { label: "Total jobs",      value: totalJobs, accent: "text-white" },
+              { label: hasLastJob && daysSince >= 0 ? "Last job" : "Next job", value: lastJobLabel, accent: lastJobAccent },
             ].map(({ label, value, accent }) => (
               <div key={label} className="bg-white/[0.08] backdrop-blur-sm rounded-xl px-2 py-2 text-center border border-white/10">
                 <p className="text-[10px] text-[rgba(153,197,255,0.5)] mb-0.5">{label}</p>
