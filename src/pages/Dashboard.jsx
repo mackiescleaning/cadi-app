@@ -61,6 +61,7 @@ import { useAuth } from "../context/AuthContext";
 import { useCleanProData } from "../hooks/useCleanProData";
 import { supabase } from "../lib/supabase";
 import { createMoneyEntry } from "../lib/db/moneyDb";
+import { listLeaderboard, upsertMyEntry, deleteMyEntry } from "../lib/db/leaderboardDb";
 import SetupWizard from "../components/SetupWizard";
 import CadiWordmark from "../components/CadiWordmark";
 import SpotlightTour from "../components/SpotlightTour";
@@ -1282,7 +1283,7 @@ function OnboardingScorecard({ steps, onNavigate, onPreview }) {
 }
 
 // ─── Leaderboard panel ────────────────────────────────────────────────────────
-function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, onOptIn, healthDelta = 0 }) {
+function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, onOptIn, healthDelta = 0, entries }) {
   const [filter, setFilter] = useState("all");
   const [showExplainer, setShowExplainer] = useState(() => {
     try { return !localStorage.getItem('cadi_lb_explained'); } catch { return true; }
@@ -1303,8 +1304,10 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
     isMe: true,
   };
 
+  const boardSource = entries && entries.length > 0 ? entries : LEADERBOARD_DEMO;
+
   // Insert user into correct ranked position
-  const allEntries = [...LEADERBOARD_DEMO, userEntry]
+  const allEntries = [...boardSource, userEntry]
     .sort((a, b) => b.score - a.score)
     .map((e, i) => ({ ...e, rank: i + 1 }));
 
@@ -1838,6 +1841,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     if (profile?.community_opt_in) return true;
     try { return localStorage.getItem('cadi_community_opt_in') === '1'; } catch { return false; }
   });
+  const [liveBoard,        setLiveBoard]        = useState([]);
 
   const score   = useMemo(() => calcHealthScore({ accounts, weekJobs, invoices, jobsToday }), [accounts, weekJobs, invoices, jobsToday]);
   const actions = useMemo(() => buildActions({ accounts, invoices, jobsToday, score }), [accounts, invoices, jobsToday, score]);
@@ -1896,6 +1900,49 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     window.location.reload();
   };
 
+  // Fetch live leaderboard on mount + whenever the user's own score changes
+  useEffect(() => {
+    let cancelled = false;
+    listLeaderboard(50)
+      .then(rows => { if (!cancelled) setLiveBoard(rows); })
+      .catch(err => {
+        console.error('Failed to fetch leaderboard:', err);
+        if (!cancelled) setLiveBoard([]);
+      });
+    return () => { cancelled = true; };
+  }, [user?.id, communityOptIn, score.total]);
+
+  // Sync own entry to the public board when opted in (real users only)
+  useEffect(() => {
+    if (!user || user.id === 'demo-user') return;
+    if (!communityOptIn) {
+      deleteMyEntry().catch(err => console.error('Failed to remove leaderboard entry:', err));
+      return;
+    }
+    upsertMyEntry({
+      business_name: profile?.business_name || displayName,
+      sector: profile?.cleaner_type || 'residential',
+      score: score.total,
+      region: (profile?.postcode || '').trim().split(' ')[0].replace(/\d.*$/, '') || null,
+    }).catch(err => console.error('Failed to sync leaderboard entry:', err));
+  }, [user?.id, communityOptIn, score.total, profile?.business_name, profile?.cleaner_type, profile?.postcode, displayName]);
+
+  // Merge live entries with demo padding so the board never looks empty
+  const leaderboardEntries = useMemo(() => {
+    const real = (liveBoard || [])
+      .filter(r => r.owner_id !== user?.id)
+      .map(r => ({
+        id: r.owner_id,
+        name: r.business_name,
+        sector: r.sector,
+        score: r.score,
+        delta: 0,
+        region: r.region || '—',
+      }));
+    const padding = LEADERBOARD_DEMO.slice(0, Math.max(0, 20 - real.length));
+    return [...real, ...padding];
+  }, [liveBoard, user?.id]);
+
   // Build leaderboard with user injected + compute rank
   const allLeaderboard = useMemo(() => {
     const userEntry = {
@@ -1903,10 +1950,10 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
       sector: profile?.cleaner_type || "residential",
       score: score.total, delta: +3, region: "You", isMe: true,
     };
-    return [...LEADERBOARD_DEMO, userEntry]
+    return [...leaderboardEntries, userEntry]
       .sort((a, b) => b.score - a.score)
       .map((e, i) => ({ ...e, rank: i + 1 }));
-  }, [score.total, profile?.business_name, profile?.cleaner_type, displayName]);
+  }, [score.total, profile?.business_name, profile?.cleaner_type, displayName, leaderboardEntries]);
 
   const userRank   = allLeaderboard.find(e => e.isMe)?.rank ?? allLeaderboard.length;
   const totalUsers = allLeaderboard.length;
@@ -2133,6 +2180,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                           userSector={profile?.cleaner_type || "residential"}
                           communityOptIn={communityOptIn}
                           onOptIn={handleCommunityOptIn}
+                          entries={leaderboardEntries}
                         />
                       </DemoHint>
                     ) : (
@@ -2143,6 +2191,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                         communityOptIn={communityOptIn}
                         onOptIn={handleCommunityOptIn}
                         healthDelta={healthDelta}
+                        entries={leaderboardEntries}
                       />
                     )
                   ) : (
@@ -2222,6 +2271,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                           userSector={profile?.cleaner_type || "residential"}
                           communityOptIn={communityOptIn}
                           onOptIn={handleCommunityOptIn}
+                          entries={leaderboardEntries}
                         />
                       </DemoHint>
                     ) : (
@@ -2232,6 +2282,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                         communityOptIn={communityOptIn}
                         onOptIn={handleCommunityOptIn}
                         healthDelta={healthDelta}
+                        entries={leaderboardEntries}
                       />
                     )
                   ) : (
