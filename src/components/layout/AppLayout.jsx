@@ -6,8 +6,10 @@ import {
   TrendingUp, MapPin, FileText,
   GraduationCap, ClipboardList, Package
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { usePlan } from '../../hooks/usePlan';
+import { MoreHorizontal, Lock } from 'lucide-react';
 
 const TAB_GUIDES = {
   '/dashboard':  "Your mission control — health score, leaderboard, badges and daily activity all in one place.",
@@ -41,16 +43,37 @@ const navItems = [
   { path: '/settings',   label: 'Settings',   icon: Settings },
 ];
 
+const BOTTOM_NAV_ITEMS = navItems.slice(0, 5); // Dashboard, Pricing, Scheduler, Customers, Inventory
+const MORE_NAV_ITEMS = navItems.slice(5);       // Money, Invoices, Accounts, Routes, etc.
+
 export default function AppLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [hoveredNav, setHoveredNav] = useState(null);
+  const moreMenuRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
+  const { isTabLocked, isPro } = usePlan();
+
+  // Close "More" menu when clicking outside or navigating
+  useEffect(() => {
+    const handler = (e) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => { setMoreMenuOpen(false); }, [location.pathname]);
 
   const currentPage = navItems.find(item =>
     location.pathname.startsWith(item.path)
   )?.label || 'Dashboard';
+
+  const isMoreActive = MORE_NAV_ITEMS.some(item => location.pathname.startsWith(item.path));
 
   const handleSignOut = async () => {
     await signOut();
@@ -79,6 +102,7 @@ export default function AppLayout() {
             const isTourActive = !profile?.dashboard_tour_complete;
             const guide = TAB_GUIDES[path];
             const isHovered = hoveredNav === path;
+            const locked = isTabLocked(path);
             return (
               <div
                 key={path}
@@ -87,10 +111,12 @@ export default function AppLayout() {
                 onMouseLeave={() => setHoveredNav(null)}
               >
                 <NavLink
-                  to={path}
+                  to={locked ? '/upgrade' : path}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${
-                      isActive
+                      locked
+                        ? 'text-[#99c5ff]/30 hover:bg-white/5'
+                        : isActive
                         ? 'bg-[#1f48ff] text-white shadow-lg shadow-blue-900/40'
                         : 'text-[#99c5ff] hover:bg-white/10 hover:text-white'
                     }`
@@ -98,7 +124,13 @@ export default function AppLayout() {
                 >
                   <Icon size={18} />
                   <span className="flex-1">{label}</span>
-                  {isTourActive && (
+                  {locked && (
+                    <span className="flex items-center gap-1">
+                      <Lock size={12} className="text-[#99c5ff]/30" />
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#1f48ff]/20 text-[#99c5ff]/50">PRO</span>
+                    </span>
+                  )}
+                  {!locked && isTourActive && (
                     <span className="w-2 h-2 rounded-full bg-brand-skyblue/60 animate-pulse shrink-0" />
                   )}
                 </NavLink>
@@ -128,32 +160,34 @@ export default function AppLayout() {
       </aside>
 
       {/* ── MAIN CONTENT ── */}
-      <div className="flex-1 flex flex-col md:ml-64">
+      <div className="flex-1 flex flex-col md:pl-64 min-w-0">
 
         {/* Top header */}
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-[#99c5ff]/30 px-4 md:px-8 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-[#99c5ff]/30 px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* Mobile menu button */}
             <button
-              className="md:hidden p-2 rounded-lg hover:bg-[#f0f4ff]"
+              className="md:hidden p-2 -ml-1 rounded-lg hover:bg-[#f0f4ff] active:bg-[#e0e8ff]"
               onClick={() => setMobileMenuOpen(true)}
             >
               <Menu size={20} className="text-[#010a4f]" />
             </button>
-            <h1 className="text-lg font-bold text-[#010a4f]">{currentPage}</h1>
+            <h1 className="text-base md:text-lg font-bold text-[#010a4f]">{currentPage}</h1>
           </div>
 
           {/* Header right */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             <span className="hidden sm:block text-xs font-semibold px-3 py-1.5 rounded-full bg-[#99c5ff]/30 text-[#1f48ff]">
               {userPlan}
             </span>
-            <button className="text-xs font-semibold px-4 py-2 rounded-lg bg-[#1f48ff] text-white hover:bg-[#010a4f] transition-colors">
-              Upgrade to Pro
-            </button>
+            {!isPro && (
+              <button onClick={() => navigate('/upgrade')} className="hidden sm:block text-xs font-semibold px-4 py-2 rounded-lg bg-[#1f48ff] text-white hover:bg-[#010a4f] transition-colors">
+                Upgrade to Pro
+              </button>
+            )}
             <button
               onClick={handleSignOut}
-              className="text-xs font-semibold px-4 py-2 rounded-lg bg-[#f0f4ff] text-[#010a4f] hover:bg-[#f0f4ff]"
+              className="text-xs font-semibold px-3 md:px-4 py-2 rounded-lg bg-[#f0f4ff] text-[#010a4f] hover:bg-[#e0e8ff] transition-colors"
             >
               Sign Out
             </button>
@@ -161,7 +195,7 @@ export default function AppLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 px-4 md:px-8 py-6">
+        <main className="flex-1 px-4 md:px-8 py-6 pb-24 md:pb-6">
           <Outlet />
         </main>
       </div>
@@ -230,29 +264,70 @@ export default function AppLayout() {
       )}
 
       {/* ── MOBILE BOTTOM NAV ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#010a4f] border-t border-white/10 flex">
-        {navItems.slice(0, 6).map(({ path, label, icon: Icon }) => (
-          <NavLink
-            key={path}
-            to={path}
-            className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-3 gap-1 text-[10px] font-medium transition-colors ${
-                isActive
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#010a4f] border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
+        <div className="flex">
+          {BOTTOM_NAV_ITEMS.map(({ path, label, icon: Icon }) => (
+            <NavLink
+              key={path}
+              to={path}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center justify-center py-3 gap-1 text-[10px] font-medium transition-colors ${
+                  isActive
+                    ? 'text-white'
+                    : 'text-[#99c5ff]/60 hover:text-[#99c5ff]'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-[#1f48ff]' : ''}`}>
+                    <Icon size={16} />
+                  </div>
+                  {label}
+                </>
+              )}
+            </NavLink>
+          ))}
+
+          {/* More button */}
+          <div className="flex-1 relative" ref={moreMenuRef}>
+            <button
+              onClick={() => setMoreMenuOpen(v => !v)}
+              className={`w-full flex flex-col items-center justify-center py-3 gap-1 text-[10px] font-medium transition-colors ${
+                isMoreActive || moreMenuOpen
                   ? 'text-white'
                   : 'text-[#99c5ff]/60 hover:text-[#99c5ff]'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-[#1f48ff]' : ''}`}>
-                  <Icon size={16} />
-                </div>
-                {label}
-              </>
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg transition-colors ${isMoreActive ? 'bg-[#1f48ff]' : ''}`}>
+                <MoreHorizontal size={16} />
+              </div>
+              More
+            </button>
+
+            {/* More menu popup */}
+            {moreMenuOpen && (
+              <div className="absolute bottom-full right-0 mb-2 mr-1 w-56 bg-[#010a4f] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
+                {MORE_NAV_ITEMS.map(({ path, label, icon: Icon }) => (
+                  <NavLink
+                    key={path}
+                    to={path}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-[#1f48ff] text-white'
+                          : 'text-[#99c5ff] hover:bg-white/10 hover:text-white'
+                      }`
+                    }
+                  >
+                    <Icon size={16} />
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
+              </div>
             )}
-          </NavLink>
-        ))}
+          </div>
+        </div>
       </nav>
     </div>
   );

@@ -170,6 +170,8 @@ function SectionDivider({ label, right }) {
 // ─── TAB: Overview ────────────────────────────────────────────────────────────
 function OverviewTab({ setActiveTab }) {
   const { invoices } = useInvoices();
+  const { user } = useAuth();
+  const isDemo = user?.id === 'demo-user';
 
   // Live figures from InvoiceContext
   const YTD_START = "2026-04-06";
@@ -180,36 +182,45 @@ function OverviewTab({ setActiveTab }) {
   const overdue     = invoices.filter(i => i.status === "overdue")
                                .reduce((s, i) => s + invTotal(i), 0);
 
-  // Demo constants (will come from MoneyTracker context once unified)
-  const ytdExpenses = 557;
+  // Expenses, tax reserve and targets: demo-only preview values until MoneyTracker context is unified
+  const ytdExpenses = isDemo ? 557 : 0;
   const taxRate     = 0.20;
   const netProfit   = Math.max(0, ytdIncome - ytdExpenses);
   const taxEst      = netProfit * taxRate;
-  const taxReserve  = 4260;
+  const taxReserve  = isDemo ? 4260 : 0;
   const annualTarget = 65000;
-  const ytdAll       = 41820; // including prior period income
-  const ytdPct       = Math.round((ytdAll / annualTarget) * 100);
+  const ytdAll       = isDemo ? 41820 : ytdIncome;
+  const ytdPct       = annualTarget > 0 ? Math.round((ytdAll / annualTarget) * 100) : 0;
 
-  const INSIGHTS = [
+  const INSIGHTS = isDemo ? [
     { emoji: "🚐", title: "Log 1,620 unlogged miles — save £729", body: "At HMRC's 45p/mile rate you have £729 of unclaimed relief sitting idle.", action: "mileage" },
     { emoji: "🎯", title: "Pension contributions save £820/yr",   body: "£4,100 into a SIPP = £820 tax relief. Money for retirement AND off your bill.", action: "tax-tools" },
     { emoji: "⚙️", title: "Claim AIA on new equipment",           body: "WFP brush head, carpet cleaner — Annual Investment Allowance = 100% first-year relief." },
     { emoji: "🏛️", title: "Q1 MTD update due 5 Aug 2026",        body: "You're 6 days into Q1 2026/27. Your submission data is ready to preview.", action: "hmrc" },
+  ] : [
+    { emoji: "🚐", title: "Log every mile — 45p/mile HMRC relief", body: "Record business journeys in the Routes tab. Every mile cuts your tax bill.", action: "mileage" },
+    { emoji: "🎯", title: "Pension contributions cut your tax",    body: "SIPP contributions get 20% tax relief on top. Save for retirement, pay less now.", action: "tax-tools" },
+    { emoji: "⚙️", title: "Claim AIA on equipment",                body: "WFP brush head, carpet cleaner, van — Annual Investment Allowance = 100% first-year relief." },
+    { emoji: "🏛️", title: "MTD ITSA quarterly updates",            body: "Cadi tracks your quarterly submission windows and maps spend to SA103 boxes.", action: "hmrc" },
   ];
+
+  const asOfLabel = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const expensesSub = isDemo ? "Demo · connect Money tab" : "Log expenses in the Money tab";
+  const headerSub = isDemo ? "Live from your invoices · demo expenses" : "Live from your invoices · connect Money tab for expenses";
 
   return (
     <div className="space-y-5">
       <div>
-        <SL className="mb-0.5">Tax year 2026/27 · As of 12 Apr 2026</SL>
+        <SL className="mb-0.5">Tax year 2026/27 · As of {asOfLabel}</SL>
         <h2 className="text-2xl font-black text-white">Tax Dashboard</h2>
-        <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">Live from your invoices · demo expenses</p>
+        <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">{headerSub}</p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
         <GStatCard label="YTD income received"  value={fmt(ytdIncome)}  valueColor="text-emerald-400" sub={`${ytdPaid.length} paid invoices · 2026/27`} />
         <GStatCard label="Outstanding"          value={fmt(outstanding)} valueColor={outstanding > 0 ? "text-amber-400" : "text-emerald-400"} sub={overdue > 0 ? `${fmt(overdue)} overdue` : "Nothing overdue"} />
-        <GStatCard label="YTD expenses"         value={fmt(ytdExpenses)} valueColor="text-red-400"    sub="Demo · connect Money tab" />
+        <GStatCard label="YTD expenses"         value={fmt(ytdExpenses)} valueColor="text-red-400"    sub={expensesSub} />
         <GStatCard label="Tax estimate"         value={fmt(taxEst)}      valueColor="text-amber-400"  sub={`${(taxRate*100).toFixed(0)}% of net profit`} />
       </div>
 
@@ -248,11 +259,15 @@ function OverviewTab({ setActiveTab }) {
         <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
           <SL>Income by type — YTD</SL>
         </div>
-        {[
+        {(isDemo ? [
           { label: "Residential",  pct: 52, color: "bg-emerald-500", val: "£21,747" },
           { label: "Commercial",   pct: 36, color: "bg-[#1f48ff]",   val: "£15,055" },
           { label: "Exterior",     pct: 12, color: "bg-amber-500",   val: "£5,018"  },
-        ].map(({ label, pct, color, val }) => (
+        ] : [
+          { label: "Residential",  pct: 0, color: "bg-emerald-500", val: fmt(0) },
+          { label: "Commercial",   pct: 0, color: "bg-[#1f48ff]",   val: fmt(0) },
+          { label: "Exterior",     pct: 0, color: "bg-amber-500",   val: fmt(0) },
+        ]).map(({ label, pct, color, val }) => (
           <div key={label} className="px-4 py-2.5 flex items-center gap-3">
             <div className={`w-2 h-2 rounded-full shrink-0 ${color}`} />
             <div className="flex-1">
@@ -358,6 +373,7 @@ function HmrcTab() {
   const { invoices } = useInvoices();
   const { user }     = useAuth();
   const isLive       = Boolean(user);
+  const isDemo       = user?.id === 'demo-user';
 
   // Real HMRC hook — no-ops when user isn't logged in or HMRC not connected
   const {
@@ -388,7 +404,7 @@ function HmrcTab() {
       const income = getQuarterIncome(invoices, start, end);
       // Demo expenses per quarter (will come from shared expense context)
       const demoExp = { Q1: 557, Q2: 980, Q3: 1040, Q4: 960 };
-      const expenses = demoExp[q.id] ?? 0;
+      const expenses = isDemo ? (demoExp[q.id] ?? 0) : 0;
       const net = income - expenses;
       const tax = Math.max(0, (net - (12570 / 4)) * 0.20); // rough estimate
       return { ...q, start, end, income, expenses, net, tax };

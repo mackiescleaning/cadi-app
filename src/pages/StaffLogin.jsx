@@ -1,19 +1,39 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStaff } from '../context/StaffContext';
-import { Delete, ArrowLeft, BookOpen } from 'lucide-react';
-
-const STAFF_MEMBERS = [
-  { id: 1, name: 'Emma Clarke', role: 'Lead Cleaner', pin: '1234', color: 'bg-[#1f48ff]', hourlyRate: 13.50 },
-  { id: 2, name: 'Tom Hughes', role: 'Cleaner', pin: '5678', color: 'bg-[#010a4f]', hourlyRate: 12.00 },
-];
+import { supabase } from '../lib/supabase';
+import { Delete, ArrowLeft, Loader2 } from 'lucide-react';
+import CadiWordmark from '../components/CadiWordmark';
 
 export default function StaffLogin() {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [shake, setShake] = useState(false);
+  const [staffMembers, setStaffMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { loginAsStaff } = useStaff();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    async function fetchStaff() {
+      const { data, error } = await supabase
+        .from('staff_members')
+        .select('id, name, role, pin_hash, hourly_rate')
+        .eq('active', true);
+
+      if (!error && data?.length > 0) {
+        setStaffMembers(data);
+      } else {
+        // Fallback to demo data if no staff in DB yet
+        setStaffMembers([
+          { id: 1, name: 'Emma Clarke', role: 'Lead Cleaner', pin_hash: '1234', hourly_rate: 13.50 },
+          { id: 2, name: 'Tom Hughes', role: 'Cleaner', pin_hash: '5678', hourly_rate: 12.00 },
+        ]);
+      }
+      setLoading(false);
+    }
+    fetchStaff();
+  }, []);
 
   const addDigit = (d) => {
     if (pin.length >= 4) return;
@@ -26,9 +46,14 @@ export default function StaffLogin() {
   };
 
   const checkPin = (enteredPin) => {
-    const match = STAFF_MEMBERS.find(m => m.pin === enteredPin);
+    const match = staffMembers.find(m => m.pin_hash === enteredPin);
     if (match) {
-      loginAsStaff(match);
+      loginAsStaff({
+        id: match.id,
+        name: match.name,
+        role: match.role,
+        hourlyRate: match.hourly_rate,
+      });
       navigate('/staff-dashboard');
     } else {
       setShake(true);
@@ -42,14 +67,20 @@ export default function StaffLogin() {
 
   const KEYS = ['1','2','3','4','5','6','7','8','9','','0','del'];
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#010a4f] flex items-center justify-center">
+        <Loader2 size={32} className="text-[#99c5ff] animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#010a4f] flex flex-col items-center justify-center px-4">
 
       {/* Logo */}
       <div className="text-center mb-8">
-        <div className="w-16 h-16 rounded-2xl bg-[#1f48ff] flex items-center justify-center mx-auto mb-4 shadow-2xl">
-          <BookOpen size={28} className="text-white" />
-        </div>
+        <div className="flex justify-center mb-4"><CadiWordmark height={32} /></div>
         <h1 className="text-2xl font-black text-white">Team Login</h1>
         <p className="text-[#99c5ff] text-sm mt-1">Enter your 4-digit PIN</p>
       </div>

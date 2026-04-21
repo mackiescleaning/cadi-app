@@ -7,6 +7,7 @@ export async function createMoneyEntry(entry) {
   const payload = {
     owner_id: ownerId,
     quote_id: entry.quoteId || null,
+    customer_id: entry.customerId || null,
     client: entry.client || null,
     amount: Number(entry.amount) || 0,
     date: entry.date,

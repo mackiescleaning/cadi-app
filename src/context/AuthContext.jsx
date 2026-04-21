@@ -3,6 +3,20 @@ import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext({});
 
+const DEMO_USER = { id: 'demo-user', email: 'demo@cadi.app' };
+const DEMO_PROFILE = {
+  id: 'demo-user',
+  first_name: 'Demo',
+  business_name: 'Demo Cleaning Co',
+  plan: 'pro',
+  phone: '07700 900000',
+  cleaner_type: 'residential',
+  biz_structure: 'sole_trader',
+  team_structure: 'solo',
+  dashboard_tour_complete: true,
+  onboarding_complete: true,
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -10,6 +24,15 @@ export function AuthProvider({ children }) {
   const [profileLoading, setProfileLoading] = useState(false);
 
   useEffect(() => {
+    // Restore demo session if active
+    const isDemo = sessionStorage.getItem('cadi_demo_session');
+    if (isDemo) {
+      setUser(DEMO_USER);
+      setProfile(DEMO_PROFILE);
+      setLoading(false);
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) fetchProfile(session.user.id);
@@ -61,11 +84,25 @@ export function AuthProvider({ children }) {
     return { data, error };
   }
 
+  function loginAsDemo() {
+    sessionStorage.setItem('cadi_demo_session', '1');
+    setUser(DEMO_USER);
+    setProfile(DEMO_PROFILE);
+  }
+
   async function signOut() {
+    sessionStorage.removeItem('cadi_demo_session');
+    setUser(null);
+    setProfile(null);
     await supabase.auth.signOut();
   }
 
   async function updateProfile(updates) {
+    // Demo user — update locally only
+    if (user?.id === 'demo-user') {
+      setProfile(prev => ({ ...prev, ...updates }));
+      return { data: { ...profile, ...updates }, error: null };
+    }
     const { data, error } = await supabase
       .from('profiles')
       .update(updates)
@@ -81,7 +118,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, loading, profileLoading, isPro,
-      signUp, signIn, signOut, updateProfile
+      signUp, signIn, signOut, loginAsDemo, updateProfile
     }}>
       {children}
     </AuthContext.Provider>

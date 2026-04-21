@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { listCustomers } from '../lib/db/customersDb';
 import { listMoneyEntries } from '../lib/db/moneyDb';
 import { listQuotes } from '../lib/db/quotesDb';
@@ -105,25 +106,63 @@ function mapAccountsData({ profile, settings, moneyEntries }) {
   };
 }
 
-function mapSchedulerData() {
+function mapSchedulerData(userJobs, moneyEntries) {
   const monday = startOfWeek();
   const today = isoToday();
 
-  return {
-    weekJobs: Array.from({ length: 7 }, (_, index) => {
-      const date = addDays(monday, index);
-      const isoDate = formatIsoDate(date);
-      return {
-        day: dayLabel(date),
-        date: date.getDate(),
-        isoDate,
-        revenue: 0,
-        jobs: 0,
-        done: false,
-        isToday: isoDate === today,
-      };
-    }),
-  };
+  // Build a revenue map from money_entries (income) by date
+  const revenueByDate = {};
+  (moneyEntries || []).forEach(entry => {
+    if (entry.kind === 'income' && entry.date) {
+      revenueByDate[entry.date] = (revenueByDate[entry.date] || 0) + parseAmount(entry.amount);
+    }
+  });
+
+  // Build a jobs-per-date map from user jobs
+  const jobsByDate = {};
+  (userJobs || []).forEach(job => {
+    if (job.date) {
+      if (!jobsByDate[job.date]) jobsByDate[job.date] = [];
+      jobsByDate[job.date].push(job);
+    }
+  });
+
+  const weekJobs = Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(monday, index);
+    const isoDate = formatIsoDate(date);
+    const dateJobs = jobsByDate[isoDate] || [];
+    const jobRevenue = dateJobs.reduce((sum, j) => sum + parseAmount(j.price), 0);
+    const entryRevenue = revenueByDate[isoDate] || 0;
+    const revenue = jobRevenue > 0 ? jobRevenue : entryRevenue;
+    const isPast = isoDate < today;
+
+    return {
+      day: dayLabel(date),
+      date: date.getDate(),
+      isoDate,
+      revenue,
+      jobs: dateJobs.length,
+      done: isPast && dateJobs.length > 0,
+      isToday: isoDate === today,
+    };
+  });
+
+  // Today's jobs — full detail for the Dashboard
+  const todayJobs = (jobsByDate[today] || []).map(job => ({
+    id: job.id,
+    customer: job.customer || 'Customer',
+    type: job.type || 'residential',
+    postcode: job.postcode || '',
+    service: job.service || 'Clean',
+    time: job.startHour != null
+      ? `${Math.floor(job.startHour) % 12 || 12}:${job.startHour % 1 === 0 ? '00' : '30'}${job.startHour < 12 ? 'am' : 'pm'}`
+      : '',
+    price: parseAmount(job.price),
+    status: job.status || 'scheduled',
+    assignee: job.assignee || 'You',
+  }));
+
+  return { weekJobs, todayJobs };
 }
 
 function mapInvoiceData(quotes, customersById) {
@@ -174,12 +213,14 @@ function mapFeedData({ quotes, moneyEntries, customersById }) {
 
 export function useCleanProData() {
   const { user, profile } = useAuth();
+  const { jobs: userJobs, customers: liveCustomers } = useData();
+  const isDemo = user?.id === 'demo-user';
   const [data, setData] = useState(null);
-  const [isLoading, setIsLoading] = useState(Boolean(user));
+  const [isLoading, setIsLoading] = useState(Boolean(user) && !isDemo);
   const [error, setError] = useState(null);
 
   const fetch = useCallback(async () => {
-    if (!user) {
+    if (!user || user.id === 'demo-user') {
       setData(null);
       setError(null);
       setIsLoading(false);
@@ -198,21 +239,23 @@ export function useCleanProData() {
       ]);
 
       const customersById = Object.fromEntries((customers || []).map(customer => [customer.id, customer]));
+      const schedulerResult = mapSchedulerData(userJobs, moneyEntries);
 
       setData({
         accounts: mapAccountsData({ profile, settings, moneyEntries }),
-        scheduler: mapSchedulerData(),
+        scheduler: { weekJobs: schedulerResult.weekJobs },
         invoiceData: mapInvoiceData(quotes, customersById),
-        jobsToday: [],
+        jobsToday: schedulerResult.todayJobs,
         teamData: [],
         feedData: mapFeedData({ quotes, moneyEntries, customersById }),
+        customerCount: (customers || []).length,
       });
     } catch (err) {
       setError(err);
     } finally {
       setIsLoading(false);
     }
-  }, [profile, user]);
+  }, [profile, user, userJobs]);
 
   useEffect(() => {
     fetch();
@@ -225,6 +268,7 @@ export function useCleanProData() {
     teamData: data?.teamData ?? null,
     feedData: data?.feedData ?? null,
     jobsToday: data?.jobsToday ?? null,
+    customerCount: liveCustomers?.length ?? 0,
     isLoading,
     error,
     refresh: fetch,

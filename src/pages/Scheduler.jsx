@@ -66,34 +66,34 @@ const STATUS_LABELS = {
   unassigned:    "Unassigned",
 };
 
-// ─── Demo data ────────────────────────────────────────────────────────────────
-const DEMO_JOBS = [
-  { id: 1,  customer: "Johnson",           type: "residential", service: "Regular clean",       postcode: "SW4", startHour: 8,    durationHrs: 2,   price: 60,  status: "complete",    assignee: "You",   day: 0 },
-  { id: 2,  customer: "Greenfield Office", type: "commercial",  service: "Weekly office clean",  postcode: "SW6", startHour: 9.5,  durationHrs: 3,   price: 120, status: "complete",    assignee: "You",   day: 0 },
-  { id: 3,  customer: "Davies",            type: "residential", service: "Deep clean",           postcode: "SW2", startHour: 10.5, durationHrs: 2.5, price: 80,  status: "in-progress", assignee: "You",   day: 0 },
-  { id: 4,  customer: "Harrington",        type: "exterior",    service: "Gutters & fascias",    postcode: "SW9", startHour: 13,   durationHrs: 2,   price: 85,  status: "unassigned",  assignee: null,    day: 0 },
-  { id: 5,  customer: "Park View Flats",   type: "commercial",  service: "Common areas",         postcode: "SE1", startHour: 15,   durationHrs: 2,   price: 95,  status: "scheduled",   assignee: "You",   day: 0 },
-  { id: 6,  customer: "Miller",            type: "residential", service: "End of tenancy",       postcode: "SW8", startHour: 9,    durationHrs: 5,   price: 280, status: "complete",    assignee: "You",   day: 0 },
-  { id: 7,  customer: "Nexus HQ",          type: "commercial",  service: "Deep commercial",      postcode: "EC1", startHour: 8,    durationHrs: 4,   price: 200, status: "complete",    assignee: "Jamie", day: 1 },
-  { id: 8,  customer: "Wilson",            type: "residential", service: "Regular clean",        postcode: "SW3", startHour: 10,   durationHrs: 2,   price: 65,  status: "scheduled",   assignee: "You",   day: 1 },
-  { id: 9,  customer: "Kensington Block",  type: "exterior",    service: "Window round",         postcode: "W8",  startHour: 8,    durationHrs: 3,   price: 180, status: "complete",    assignee: "Jamie", day: 2 },
-  { id: 10, customer: "Fletcher",          type: "residential", service: "Regular clean",        postcode: "SW7", startHour: 11,   durationHrs: 2,   price: 60,  status: "scheduled",   assignee: "You",   day: 2 },
-  { id: 11, customer: "Battersea Office",  type: "commercial",  service: "Contract clean",       postcode: "SW11",startHour: 7,    durationHrs: 3,   price: 150, status: "complete",    assignee: "Jamie", day: 3 },
-  { id: 12, customer: "Adams",             type: "residential", service: "Deep clean",           postcode: "SW4", startHour: 9,    durationHrs: 3,   price: 90,  status: "scheduled",   assignee: "You",   day: 3 },
-  { id: 13, customer: "Patel",             type: "residential", service: "Regular clean",        postcode: "SE5", startHour: 12,   durationHrs: 2,   price: 60,  status: "unassigned",  assignee: null,    day: 3 },
-  { id: 14, customer: "Riverside Retail",  type: "commercial",  service: "Retail clean",         postcode: "SE1", startHour: 6,    durationHrs: 2,   price: 110, status: "complete",    assignee: "Jamie", day: 4 },
-  { id: 15, customer: "Hughes",            type: "exterior",    service: "Driveway wash",        postcode: "SW19",startHour: 10,   durationHrs: 2,   price: 95,  status: "scheduled",   assignee: "You",   day: 4 },
-];
+// ─── Demo data — dates computed relative to current Monday ───────────────────
+function buildDemoJobs() {
+  const mon = getMonday(new Date());
+  const dateFor = (dayIdx) => {
+    const d = new Date(mon);
+    d.setDate(d.getDate() + dayIdx);
+    return d.toISOString().split('T')[0];
+  };
+  return [
+    { id: 1,  customer: "Johnson",           type: "residential", service: "Regular clean",       postcode: "SW4", startHour: 8,    durationHrs: 2,   price: 60,  status: "complete",    assignee: "You",   date: dateFor(0) },
+    { id: 2,  customer: "Greenfield Office", type: "commercial",  service: "Weekly office clean",  postcode: "SW6", startHour: 9.5,  durationHrs: 3,   price: 120, status: "complete",    assignee: "You",   date: dateFor(0) },
+    { id: 3,  customer: "Davies",            type: "residential", service: "Deep clean",           postcode: "SW2", startHour: 10.5, durationHrs: 2.5, price: 80,  status: "in-progress", assignee: "You",   date: dateFor(0) },
+    { id: 4,  customer: "Harrington",        type: "exterior",    service: "Gutters & fascias",    postcode: "SW9", startHour: 13,   durationHrs: 2,   price: 85,  status: "unassigned",  assignee: null,    date: dateFor(0) },
+    { id: 5,  customer: "Park View Flats",   type: "commercial",  service: "Common areas",         postcode: "SE1", startHour: 15,   durationHrs: 2,   price: 95,  status: "scheduled",   assignee: "You",   date: dateFor(0) },
+    { id: 6,  customer: "Miller",            type: "residential", service: "End of tenancy",       postcode: "SW8", startHour: 9,    durationHrs: 5,   price: 280, status: "complete",    assignee: "You",   date: dateFor(0) },
+    { id: 7,  customer: "Nexus HQ",          type: "commercial",  service: "Deep commercial",      postcode: "EC1", startHour: 8,    durationHrs: 4,   price: 200, status: "complete",    assignee: "Jamie", date: dateFor(1) },
+    { id: 8,  customer: "Wilson",            type: "residential", service: "Regular clean",        postcode: "SW3", startHour: 10,   durationHrs: 2,   price: 65,  status: "scheduled",   assignee: "You",   date: dateFor(1) },
+    { id: 9,  customer: "Kensington Block",  type: "exterior",    service: "Window round",         postcode: "W8",  startHour: 8,    durationHrs: 3,   price: 180, status: "complete",    assignee: "Jamie", date: dateFor(2) },
+    { id: 10, customer: "Fletcher",          type: "residential", service: "Regular clean",        postcode: "SW7", startHour: 11,   durationHrs: 2,   price: 60,  status: "scheduled",   assignee: "You",   date: dateFor(2) },
+    { id: 11, customer: "Battersea Office",  type: "commercial",  service: "Contract clean",       postcode: "SW11",startHour: 7,    durationHrs: 3,   price: 150, status: "complete",    assignee: "Jamie", date: dateFor(3) },
+    { id: 12, customer: "Adams",             type: "residential", service: "Deep clean",           postcode: "SW4", startHour: 9,    durationHrs: 3,   price: 90,  status: "scheduled",   assignee: "You",   date: dateFor(3) },
+    { id: 13, customer: "Patel",             type: "residential", service: "Regular clean",        postcode: "SE5", startHour: 12,   durationHrs: 2,   price: 60,  status: "unassigned",  assignee: null,    date: dateFor(3) },
+    { id: 14, customer: "Riverside Retail",  type: "commercial",  service: "Retail clean",         postcode: "SE1", startHour: 6,    durationHrs: 2,   price: 110, status: "complete",    assignee: "Jamie", date: dateFor(4) },
+    { id: 15, customer: "Hughes",            type: "exterior",    service: "Driveway wash",        postcode: "SW19",startHour: 10,   durationHrs: 2,   price: 95,  status: "scheduled",   assignee: "You",   date: dateFor(4) },
+  ];
+}
+const DEMO_JOBS = buildDemoJobs();
 
-// Quarter summary — 13 weeks of demo revenue + job counts
-const QUARTER_WEEKS = Array.from({ length: 13 }, (_, i) => ({
-  week:    i + 1,
-  revenue: Math.round((800 + Math.random() * 600) / 10) * 10,
-  jobs:    Math.floor(5 + Math.random() * 8),
-  complete: Math.floor(3 + Math.random() * 5),
-}));
-// Make current week (week 6) stand out
-QUARTER_WEEKS[5] = { week: 6, revenue: 1240, jobs: 9, complete: 7 };
 
 const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAYS_FULL  = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -184,24 +184,83 @@ function StatBar({ jobs }) {
   );
 }
 
+// ─── Date helpers ────────────────────────────────────────────────────────────
+function getToday() { return new Date(); }
+
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function isoDate(d) { return d.toISOString().split('T')[0]; }
+
+function getViewDate(dayOffset, view) {
+  const today = getToday();
+  if (view === "Day") {
+    const d = new Date(today);
+    d.setDate(d.getDate() + dayOffset);
+    return d;
+  } else if (view === "Week") {
+    const mon = getMonday(today);
+    mon.setDate(mon.getDate() + dayOffset * 7);
+    return mon;
+  } else if (view === "Month") {
+    const d = new Date(today);
+    d.setMonth(d.getMonth() + dayOffset);
+    d.setDate(1);
+    return d;
+  }
+  return today;
+}
+
+function getWeekDates(dayOffset) {
+  const mon = getMonday(getToday());
+  mon.setDate(mon.getDate() + dayOffset * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(mon);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+}
+
+function getCurrentQuarter() {
+  const now = getToday();
+  const q = Math.floor(now.getMonth() / 3);
+  const startMonth = q * 3;
+  return { quarter: q + 1, year: now.getFullYear(), startMonth };
+}
+
+function fmtTime(h) {
+  const hours = Math.floor(h);
+  const mins = Math.round((h - hours) * 60);
+  const ampm = hours < 12 ? "am" : "pm";
+  const display = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+  return `${display}:${mins.toString().padStart(2, '0')}${ampm}`;
+}
+
 // ─── View switcher + date nav ─────────────────────────────────────────────────
 function ViewBar({ view, setView, dayOffset, setDayOffset }) {
   const views = ["Day", "Week", "Month", "Quarter"];
 
-  const today = new Date(2026, 3, 6); // Demo: Mon 6 Apr 2026
   let dateLabel = "";
   if (view === "Day") {
-    const d = new Date(today); d.setDate(d.getDate() + dayOffset);
+    const d = getViewDate(dayOffset, "Day");
     dateLabel = d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
   } else if (view === "Week") {
-    const mon = new Date(today); mon.setDate(mon.getDate() + dayOffset * 7);
-    const sun = new Date(mon);  sun.setDate(sun.getDate() + 6);
+    const dates = getWeekDates(dayOffset);
+    const mon = dates[0]; const sun = dates[6];
     dateLabel = `${mon.getDate()} ${MONTHS[mon.getMonth()]} – ${sun.getDate()} ${MONTHS[sun.getMonth()]} ${sun.getFullYear()}`;
   } else if (view === "Month") {
-    const d = new Date(today); d.setMonth(d.getMonth() + dayOffset);
+    const d = getViewDate(dayOffset, "Month");
     dateLabel = d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   } else {
-    dateLabel = "Q2 2026 — April to June";
+    const q = getCurrentQuarter();
+    const qMonths = [MONTHS[q.startMonth], MONTHS[q.startMonth + 1], MONTHS[q.startMonth + 2]];
+    dateLabel = `Q${q.quarter} ${q.year} — ${qMonths[0]} to ${qMonths[2]}`;
   }
 
   return (
@@ -253,9 +312,27 @@ function ViewBar({ view, setView, dayOffset, setDayOffset }) {
 }
 
 // ─── Job detail drawer (slide-in panel) ──────────────────────────────────────
-function JobDrawer({ job, onClose }) {
+function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
+  const [status, setStatus] = useState(job.status);
+  const [notes, setNotes] = useState(job.notes || '');
+  const [saving, setSaving] = useState(false);
   if (!job) return null;
-  const s = TYPE_STYLES[job.type];
+
+  const hasChanges = status !== job.status || notes !== (job.notes || '');
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onUpdateJob?.(job.id, { status, notes });
+    setSaving(false);
+    onClose();
+  };
+
+  const handleDelete = () => {
+    if (window.confirm('Delete this job? This cannot be undone.')) {
+      onDeleteJob?.(job.id);
+      onClose();
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -279,15 +356,16 @@ function JobDrawer({ job, onClose }) {
         <div className="p-5 space-y-4">
           {/* Status + type */}
           <div className="flex gap-2 flex-wrap">
-            <StatusBadge status={job.status} />
+            <StatusBadge status={status} />
             <TypeBadge type={job.type} />
           </div>
 
           {/* Details grid */}
           <GlassCard className="divide-y divide-[rgba(153,197,255,0.08)]">
             {[
-              ["Postcode",  job.postcode],
-              ["Time",      `${job.startHour % 1 === 0 ? `${job.startHour}:00` : `${Math.floor(job.startHour)}:30`} — ${((job.startHour + job.durationHrs) % 1 === 0 ? `${job.startHour + job.durationHrs}:00` : `${Math.floor(job.startHour + job.durationHrs)}:30`)}`],
+              ["Date",      job.date ? new Date(job.date + 'T00:00:00').toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : "—"],
+              ["Postcode",  job.postcode || "—"],
+              ["Time",      `${fmtTime(job.startHour)} — ${fmtTime(job.startHour + job.durationHrs)}`],
               ["Duration",  `${job.durationHrs} hrs`],
               ["Price",     `£${job.price}`],
               ["Assignee",  getJobAssigneeLabel(job)],
@@ -308,8 +386,9 @@ function JobDrawer({ job, onClose }) {
               {["scheduled","in-progress","complete","unassigned"].map(st => (
                 <button
                   key={st}
+                  onClick={() => setStatus(st)}
                   className={`py-2 text-xs font-bold uppercase tracking-wide rounded-lg border transition-all ${
-                    job.status === st
+                    status === st
                       ? "bg-[#1f48ff] text-white border-[#1f48ff]"
                       : "bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.7)] border-[rgba(153,197,255,0.12)] hover:border-[rgba(153,197,255,0.35)] hover:text-white"
                   }`}
@@ -324,6 +403,8 @@ function JobDrawer({ job, onClose }) {
           <div>
             <SectionLabel>Notes</SectionLabel>
             <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
               className="mt-2 w-full bg-[#0d1e78]/60 border border-[rgba(153,197,255,0.15)] text-white placeholder-[rgba(153,197,255,0.3)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#99c5ff] resize-none transition-colors"
               rows={3}
               placeholder="Add job notes, access codes, client preferences…"
@@ -332,11 +413,22 @@ function JobDrawer({ job, onClose }) {
 
           {/* Actions */}
           <div className="flex gap-2 pt-2">
-            <button className="flex-1 py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-bold uppercase tracking-wide transition-all rounded-xl shadow-lg shadow-[#1f48ff]/30">
-              Save changes
+            <button
+              onClick={handleSave}
+              disabled={!hasChanges || saving}
+              className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wide transition-all rounded-xl ${
+                hasChanges && !saving
+                  ? "bg-[#1f48ff] hover:bg-[#3a5eff] text-white shadow-lg shadow-[#1f48ff]/30"
+                  : "bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.3)] cursor-not-allowed"
+              }`}
+            >
+              {saving ? "Saving..." : "Save changes"}
             </button>
-            <button className="px-4 py-2.5 border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.7)] text-xs font-bold uppercase tracking-wide hover:border-[rgba(153,197,255,0.35)] hover:text-white transition-all rounded-xl">
-              Cancel job
+            <button
+              onClick={handleDelete}
+              className="px-4 py-2.5 border border-red-500/30 text-red-400 text-xs font-bold uppercase tracking-wide hover:border-red-500 hover:bg-red-500/10 transition-all rounded-xl"
+            >
+              Delete
             </button>
           </div>
         </div>
@@ -350,13 +442,6 @@ function DayView({ jobs, onJobClick }) {
   const ordered   = [...jobs].sort((a, b) => a.startHour - b.startHour);
   const routeJobs = ordered.filter(j => j.status !== "unassigned");
   const unassigned = ordered.filter(j => j.status === "unassigned");
-
-  const fmt = (h) => {
-    const hh   = Math.floor(h);
-    const mm   = h % 1 === 0.5 ? "30" : "00";
-    const ampm = hh < 12 ? "am" : "pm";
-    return `${hh > 12 ? hh - 12 : hh}:${mm}${ampm}`;
-  };
 
   return (
     <div className="space-y-4">
@@ -392,7 +477,7 @@ function DayView({ jobs, onJobClick }) {
                     </p>
                     <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">{job.postcode}</p>
                     {/* Time + value */}
-                    <p className="text-xs font-mono text-[rgba(153,197,255,0.5)] mt-1">{fmt(job.startHour)}</p>
+                    <p className="text-xs font-mono text-[rgba(153,197,255,0.5)] mt-1">{fmtTime(job.startHour)}</p>
                     <p className="text-xs font-bold text-emerald-400">£{job.price}</p>
                     {/* Status dot */}
                     <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${
@@ -453,7 +538,7 @@ function DayView({ jobs, onJobClick }) {
 
                 {/* Time */}
                 <div className="w-12 shrink-0">
-                  <p className="text-xs font-mono text-[rgba(153,197,255,0.5)]">{fmt(job.startHour)}</p>
+                  <p className="text-xs font-mono text-[rgba(153,197,255,0.5)]">{fmtTime(job.startHour)}</p>
                   <p className="text-xs text-[rgba(153,197,255,0.3)]">{job.durationHrs}hr</p>
                 </div>
 
@@ -529,10 +614,11 @@ function layoutDayJobs(dayJobs) {
   return placed; // [{ job, col, colCount }, ...]
 }
 
-// ─── WEEK VIEW — 7-column time grid ──────────────────────────────────────────
+// ─── WEEK VIEW — mobile card stack + desktop time grid ──────────────────────
 function WeekView({ jobs, onJobClick }) {
   const PX_PER_HR = 52;
   const LABEL_W   = 44;
+  const [expandedDay, setExpandedDay] = useState(0); // mobile: which day is expanded
 
   const jobHeight = (hrs) => Math.max(hrs * PX_PER_HR, 24);
   const jobTop    = (h)   => (h - GRID_HOURS[0]) * PX_PER_HR;
@@ -542,144 +628,271 @@ function WeekView({ jobs, onJobClick }) {
     return `${hh}${h % 1 === 0 ? "" : ":30"}${h < 12 ? "am" : "pm"}`;
   };
 
+  const fmtTime = (h) => {
+    const hh = Math.floor(h) % 12 || 12;
+    const mm = h % 1 === 0 ? ":00" : ":30";
+    return `${hh}${mm}${h < 12 ? "am" : "pm"}`;
+  };
+
   return (
-    <GlassCard>
-      {/* Day header */}
-      <div className="flex border-b border-[rgba(153,197,255,0.08)] sticky top-0 z-10 bg-[#010a4f]/95 backdrop-blur-sm">
-        <div style={{ width: LABEL_W, minWidth: LABEL_W }} className="shrink-0" />
-        {DAYS_SHORT.map((d, i) => (
-          <div
-            key={d}
-            className={`flex-1 text-center py-2 border-l border-[rgba(153,197,255,0.06)] min-w-[80px] ${i === 0 ? "bg-[rgba(31,72,255,0.05)]" : "bg-[rgba(153,197,255,0.04)]"}`}
-          >
-            <p className={`text-xs font-bold uppercase tracking-widest ${i === 0 ? "text-[#99c5ff]" : "text-[rgba(153,197,255,0.5)]"}`}>{d}</p>
-            <p className={`text-sm font-bold ${i === 0 ? "text-[#99c5ff]" : "text-[rgba(153,197,255,0.7)]"}`}>{6 + i}</p>
-            {/* Revenue chip */}
-            <p className="text-xs text-emerald-400 font-semibold">
-              £{jobs.filter(j=>j.day===i).reduce((s,j)=>s+j.price,0)}
-            </p>
-          </div>
-        ))}
-      </div>
+    <>
+      {/* ── MOBILE: compact day-by-day cards ── */}
+      <div className="sm:hidden space-y-2">
+        {DAYS_SHORT.map((day, dayIdx) => {
+          const dayJobs = jobs.filter(j => j.day === dayIdx).sort((a,b) => a.startHour - b.startHour);
+          const dayRevenue = dayJobs.reduce((s,j) => s + j.price, 0);
+          const isToday = dayIdx === 0;
+          const isOpen = expandedDay === dayIdx;
 
-      {/* Grid body */}
-      <div className="overflow-x-auto overflow-y-auto max-h-[50vh] sm:max-h-[60vh]">
-        <div className="flex" style={{ minHeight: GRID_HOURS.length * PX_PER_HR, minWidth: LABEL_W + 7 * 80 }}>
-          {/* Hour labels */}
-          <div style={{ width: LABEL_W, minWidth: LABEL_W }} className="shrink-0 border-r border-[rgba(153,197,255,0.06)]">
-            {GRID_HOURS.map(h => (
-              <div key={h} style={{ height: PX_PER_HR }} className="flex items-start pt-1 pr-2 justify-end">
-                <span className="text-xs text-[rgba(153,197,255,0.3)] tabular-nums">{fmt12(h)}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Day columns */}
-          {DAYS_SHORT.map((_, dayIdx) => {
-            const dayJobs = jobs.filter(j => j.day === dayIdx);
-            return (
-              <div
-                key={dayIdx}
-                className={`flex-1 border-l border-[rgba(153,197,255,0.06)] relative min-w-[80px] ${dayIdx === 0 ? "bg-[rgba(31,72,255,0.05)]" : ""}`}
-                style={{ minHeight: GRID_HOURS.length * PX_PER_HR }}
+          return (
+            <GlassCard key={day} className={isToday ? "ring-1 ring-[#1f48ff]/40" : ""}>
+              {/* Day header — always visible, tap to expand */}
+              <button
+                onClick={() => setExpandedDay(isOpen ? -1 : dayIdx)}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left"
               >
-                {/* Hour lines */}
-                {GRID_HOURS.map(h => (
-                  <div key={h} style={{ height: PX_PER_HR }} className="border-t border-[rgba(153,197,255,0.06)]" />
-                ))}
+                {/* Day badge */}
+                <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 ${
+                  isToday ? "bg-[#1f48ff] text-white" : "bg-[rgba(153,197,255,0.08)] text-[rgba(153,197,255,0.6)]"
+                }`}>
+                  <span className="text-[10px] font-bold uppercase leading-none">{day}</span>
+                  <span className="text-sm font-black leading-tight">{6 + dayIdx}</span>
+                </div>
 
-                {/* Current time indicator (day 0 only) */}
-                {dayIdx === 0 && (
-                  <div
-                    className="absolute left-0 right-0 z-10"
-                    style={{ top: jobTop(10.75) }}
-                  >
-                    <div className="flex items-center">
-                      <div className="w-2 h-2 rounded-full bg-[#99c5ff] shrink-0" />
-                      <div className="flex-1 h-px bg-[#99c5ff]" />
-                    </div>
+                {/* Summary */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white">
+                      {dayJobs.length} {dayJobs.length === 1 ? "job" : "jobs"}
+                    </span>
+                    {isToday && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#1f48ff]/30 text-[#99c5ff]">Today</span>
+                    )}
                   </div>
-                )}
+                  {/* Job type dots */}
+                  {dayJobs.length > 0 && (
+                    <div className="flex items-center gap-1 mt-1">
+                      {dayJobs.map(j => (
+                        <div key={j.id} className={`w-1.5 h-1.5 rounded-full ${TYPE_STYLES[j.type].dot}`} />
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-                {/* Job blocks — collision-aware layout */}
-                {layoutDayJobs(dayJobs).map(({ job, col, colCount }) => {
-                  const s      = TYPE_STYLES[job.type];
-                  const top    = jobTop(job.startHour);
-                  const height = jobHeight(job.durationHrs);
-                  const GAP    = 2; // px gap between side-by-side jobs
-                  const pct    = 100 / colCount;
-                  const leftPct  = col * pct;
-                  const widthPct = pct;
-                  return (
-                    <button
-                      key={job.id}
-                      onClick={() => onJobClick(job)}
-                      className={`absolute rounded-lg px-1.5 py-1 text-left hover:brightness-125 hover:scale-[1.02] hover:z-20 transition-all overflow-hidden ${s.block}`}
-                      style={{
-                        top,
-                        height,
-                        left:  `calc(${leftPct}% + ${col === 0 ? GAP : GAP / 2}px)`,
-                        width: `calc(${widthPct}% - ${col === 0 || col === colCount - 1 ? GAP * 1.5 : GAP}px)`,
-                        zIndex: col + 1,
-                      }}
+                {/* Revenue */}
+                <div className="text-right shrink-0">
+                  <p className={`text-sm font-black tabular-nums ${dayRevenue > 0 ? "text-emerald-400" : "text-[rgba(153,197,255,0.3)]"}`}>
+                    £{dayRevenue}
+                  </p>
+                </div>
+
+                {/* Expand chevron */}
+                <svg
+                  className={`w-4 h-4 text-[rgba(153,197,255,0.4)] transition-transform shrink-0 ${isOpen ? "rotate-180" : ""}`}
+                  fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+
+              {/* Expanded job list */}
+              {isOpen && dayJobs.length > 0 && (
+                <div className="border-t border-[rgba(153,197,255,0.08)]">
+                  {dayJobs.map(job => {
+                    const s = TYPE_STYLES[job.type];
+                    return (
+                      <button
+                        key={job.id}
+                        onClick={() => onJobClick(job)}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[rgba(153,197,255,0.04)] transition-colors"
+                      >
+                        <div className={`w-1 self-stretch rounded-full ${s.dot}`} />
+                        <div className="w-12 shrink-0">
+                          <p className="text-xs font-mono text-[rgba(153,197,255,0.5)]">{fmtTime(job.startHour)}</p>
+                          <p className="text-xs text-[rgba(153,197,255,0.3)]">{job.durationHrs}hr</p>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{job.customer}</p>
+                          <p className="text-xs text-[rgba(153,197,255,0.5)] truncate">{job.service} · {job.postcode}</p>
+                        </div>
+                        <div className="text-right shrink-0 space-y-1">
+                          <p className="text-sm font-black tabular-nums text-emerald-400">£{job.price}</p>
+                          <StatusBadge status={job.status} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {isOpen && dayJobs.length === 0 && (
+                <div className="border-t border-[rgba(153,197,255,0.08)] px-4 py-4 text-center">
+                  <p className="text-xs text-[rgba(153,197,255,0.3)]">No jobs scheduled</p>
+                </div>
+              )}
+            </GlassCard>
+          );
+        })}
+
+        {/* Mobile legend */}
+        <div className="flex items-center justify-center gap-4 py-2 flex-wrap">
+          {[
+            { type: "residential", label: "Residential" },
+            { type: "commercial",  label: "Commercial"  },
+            { type: "exterior",    label: "Exterior"    },
+          ].map(({ type, label }) => (
+            <div key={type} className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${TYPE_STYLES[type].dot}`} />
+              <span className="text-xs text-[rgba(153,197,255,0.5)]">{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── DESKTOP: full time grid ── */}
+      <GlassCard className="hidden sm:block">
+        {/* Day header */}
+        <div className="flex border-b border-[rgba(153,197,255,0.08)] sticky top-0 z-10 bg-[#010a4f]/95 backdrop-blur-sm">
+          <div style={{ width: LABEL_W, minWidth: LABEL_W }} className="shrink-0" />
+          {DAYS_SHORT.map((d, i) => (
+            <div
+              key={d}
+              className={`flex-1 text-center py-2 border-l border-[rgba(153,197,255,0.06)] min-w-[80px] ${i === 0 ? "bg-[rgba(31,72,255,0.05)]" : "bg-[rgba(153,197,255,0.04)]"}`}
+            >
+              <p className={`text-xs font-bold uppercase tracking-widest ${i === 0 ? "text-[#99c5ff]" : "text-[rgba(153,197,255,0.5)]"}`}>{d}</p>
+              <p className={`text-sm font-bold ${i === 0 ? "text-[#99c5ff]" : "text-[rgba(153,197,255,0.7)]"}`}>{6 + i}</p>
+              <p className="text-xs text-emerald-400 font-semibold">
+                £{jobs.filter(j=>j.day===i).reduce((s,j)=>s+j.price,0)}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Grid body */}
+        <div className="overflow-x-auto overflow-y-auto max-h-[60vh]">
+          <div className="flex" style={{ minHeight: GRID_HOURS.length * PX_PER_HR, minWidth: LABEL_W + 7 * 80 }}>
+            {/* Hour labels */}
+            <div style={{ width: LABEL_W, minWidth: LABEL_W }} className="shrink-0 border-r border-[rgba(153,197,255,0.06)]">
+              {GRID_HOURS.map(h => (
+                <div key={h} style={{ height: PX_PER_HR }} className="flex items-start pt-1 pr-2 justify-end">
+                  <span className="text-xs text-[rgba(153,197,255,0.3)] tabular-nums">{fmt12(h)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Day columns */}
+            {DAYS_SHORT.map((_, dayIdx) => {
+              const dayJobs = jobs.filter(j => j.day === dayIdx);
+              return (
+                <div
+                  key={dayIdx}
+                  className={`flex-1 border-l border-[rgba(153,197,255,0.06)] relative min-w-[80px] ${dayIdx === 0 ? "bg-[rgba(31,72,255,0.05)]" : ""}`}
+                  style={{ minHeight: GRID_HOURS.length * PX_PER_HR }}
+                >
+                  {/* Hour lines */}
+                  {GRID_HOURS.map(h => (
+                    <div key={h} style={{ height: PX_PER_HR }} className="border-t border-[rgba(153,197,255,0.06)]" />
+                  ))}
+
+                  {/* Current time indicator (day 0 only) */}
+                  {dayIdx === 0 && (
+                    <div
+                      className="absolute left-0 right-0 z-10"
+                      style={{ top: jobTop(10.75) }}
                     >
-                      <p className={`text-xs font-black truncate ${s.text}`}>{job.customer}</p>
-                      {height > 36 && (
-                        <p className={`text-xs truncate opacity-90 ${s.text}`}>{job.service}</p>
-                      )}
-                      {height > 52 && (
-                        <p className={`text-xs font-mono font-bold ${s.text} mt-0.5`}>£{job.price}</p>
-                      )}
-                      {job.status === "unassigned" && (
-                        <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 rounded-full bg-[#99c5ff] shrink-0" />
+                        <div className="flex-1 h-px bg-[#99c5ff]" />
+                      </div>
+                    </div>
+                  )}
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 px-4 py-2.5 border-t border-[rgba(153,197,255,0.08)] flex-wrap">
-        {[
-          { type: "residential", label: "Residential" },
-          { type: "commercial",  label: "Commercial"  },
-          { type: "exterior",    label: "Exterior"    },
-        ].map(({ type, label }) => (
-          <div key={type} className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${TYPE_STYLES[type].dot}`} />
-            <span className="text-xs text-[rgba(153,197,255,0.5)]">{label}</span>
+                  {/* Job blocks — collision-aware layout */}
+                  {layoutDayJobs(dayJobs).map(({ job, col, colCount }) => {
+                    const s      = TYPE_STYLES[job.type];
+                    const top    = jobTop(job.startHour);
+                    const height = jobHeight(job.durationHrs);
+                    const GAP    = 2;
+                    const pct    = 100 / colCount;
+                    const leftPct  = col * pct;
+                    const widthPct = pct;
+                    return (
+                      <button
+                        key={job.id}
+                        onClick={() => onJobClick(job)}
+                        className={`absolute rounded-lg px-1.5 py-1 text-left hover:brightness-125 hover:scale-[1.02] hover:z-20 transition-all overflow-hidden ${s.block}`}
+                        style={{
+                          top,
+                          height,
+                          left:  `calc(${leftPct}% + ${col === 0 ? GAP : GAP / 2}px)`,
+                          width: `calc(${widthPct}% - ${col === 0 || col === colCount - 1 ? GAP * 1.5 : GAP}px)`,
+                          zIndex: col + 1,
+                        }}
+                      >
+                        <p className={`text-xs font-black truncate ${s.text}`}>{job.customer}</p>
+                        {height > 36 && (
+                          <p className={`text-xs truncate opacity-90 ${s.text}`}>{job.service}</p>
+                        )}
+                        {height > 52 && (
+                          <p className={`text-xs font-mono font-bold ${s.text} mt-0.5`}>£{job.price}</p>
+                        )}
+                        {job.status === "unassigned" && (
+                          <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
-        ))}
-        <div className="flex items-center gap-1.5 ml-auto">
-          <div className="w-2 h-2 rounded-full bg-amber-400" />
-          <span className="text-xs text-[rgba(153,197,255,0.5)]">Unassigned</span>
         </div>
-      </div>
-    </GlassCard>
+
+        {/* Legend */}
+        <div className="flex items-center gap-4 px-4 py-2.5 border-t border-[rgba(153,197,255,0.08)] flex-wrap">
+          {[
+            { type: "residential", label: "Residential" },
+            { type: "commercial",  label: "Commercial"  },
+            { type: "exterior",    label: "Exterior"    },
+          ].map(({ type, label }) => (
+            <div key={type} className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${TYPE_STYLES[type].dot}`} />
+              <span className="text-xs text-[rgba(153,197,255,0.5)]">{label}</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5 ml-auto">
+            <div className="w-2 h-2 rounded-full bg-amber-400" />
+            <span className="text-xs text-[rgba(153,197,255,0.5)]">Unassigned</span>
+          </div>
+        </div>
+      </GlassCard>
+    </>
   );
 }
 
 // ─── MONTH VIEW — calendar grid ───────────────────────────────────────────────
-function MonthView({ jobs, onJobClick }) {
+function MonthView({ jobs, onJobClick, viewDate }) {
   const [selectedDay, setSelectedDay] = useState(null);
 
-  const firstDOW   = 2; // Wednesday (0=Mon)
-  const daysInMonth = 30;
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const todayStr = isoDate(getToday());
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // 0=Mon convention: JS getDay() returns 0=Sun, convert
+  const firstDayJS = new Date(year, month, 1).getDay();
+  const firstDOW = firstDayJS === 0 ? 6 : firstDayJS - 1; // 0=Mon
+
   const cells = [];
   for (let i = 0; i < firstDOW; i++) cells.push({ day: null, jobCount: 0, revenue: 0, isToday: false });
   for (let d = 1; d <= daysInMonth; d++) {
-    const isCurrentWeek = d >= 6 && d <= 12;
-    const dayInWeekIdx  = isCurrentWeek ? d - 6 : null;
-    const dayJobs       = dayInWeekIdx !== null ? jobs.filter(j => j.day === dayInWeekIdx) : [];
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const dayJobs = jobs.filter(j => j.date === dateStr);
     cells.push({
       day: d,
+      dateStr,
       jobCount: dayJobs.length,
       revenue: dayJobs.reduce((s,j)=>s+j.price,0),
-      isToday: d === 6,
+      isToday: dateStr === todayStr,
       hasUnassigned: dayJobs.some(j=>j.status==="unassigned"),
       jobs: dayJobs,
     });
@@ -687,6 +900,7 @@ function MonthView({ jobs, onJobClick }) {
   while (cells.length % 7 !== 0) cells.push({ day: null, jobCount: 0, revenue: 0, isToday: false });
 
   const expandedDay = selectedDay !== null ? cells.find(c => c.day === selectedDay) : null;
+  const monthLabel = viewDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 
   return (
     <div className="space-y-3">
@@ -750,7 +964,7 @@ function MonthView({ jobs, onJobClick }) {
         <GlassCard>
           <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
             <SectionLabel>
-              {expandedDay.day} April 2026 — {expandedDay.jobCount} jobs · £{expandedDay.revenue}
+              {expandedDay.day} {monthLabel} — {expandedDay.jobCount} jobs · £{expandedDay.revenue}
             </SectionLabel>
             <button onClick={() => setSelectedDay(null)} className="text-[rgba(153,197,255,0.4)] hover:text-white text-sm transition-all">✕</button>
           </div>
@@ -797,18 +1011,46 @@ function MonthView({ jobs, onJobClick }) {
 }
 
 // ─── QUARTER VIEW — 13-week bar chart + summary ───────────────────────────────
-function QuarterView({ onJobClick }) {
-  const maxRev    = Math.max(...QUARTER_WEEKS.map(w => w.revenue));
-  const total     = QUARTER_WEEKS.reduce((s,w) => s + w.revenue, 0);
+function QuarterView({ onJobClick, jobs }) {
+  // Build 13 weeks of real data from jobs
+  const q = getCurrentQuarter();
+  const quarterStart = new Date(q.year, q.startMonth, 1);
+  const qMonday = getMonday(quarterStart);
+
+  const quarterWeeks = Array.from({ length: 13 }, (_, i) => {
+    const weekStart = new Date(qMonday);
+    weekStart.setDate(weekStart.getDate() + i * 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+
+    const weekStartStr = isoDate(weekStart);
+    const weekEndStr = isoDate(weekEnd);
+    const weekJobs = (jobs || []).filter(j => j.date >= weekStartStr && j.date <= weekEndStr);
+
+    const todayStr = isoDate(getToday());
+    const isCurrent = todayStr >= weekStartStr && todayStr <= weekEndStr;
+
+    return {
+      week: i + 1,
+      revenue: weekJobs.reduce((s, j) => s + (j.price || 0), 0),
+      jobs: weekJobs.length,
+      complete: weekJobs.filter(j => j.status === 'complete').length,
+      isCurrent,
+    };
+  });
+
+  const maxRev    = Math.max(...quarterWeeks.map(w => w.revenue), 1);
+  const total     = quarterWeeks.reduce((s,w) => s + w.revenue, 0);
   const avgRev    = Math.round(total / 13);
-  const totalJobs = QUARTER_WEEKS.reduce((s,w) => s + w.jobs, 0);
+  const totalJobs = quarterWeeks.reduce((s,w) => s + w.jobs, 0);
+  const qMonths   = [MONTHS[q.startMonth], MONTHS[q.startMonth + 1], MONTHS[q.startMonth + 2]];
 
   return (
     <div className="space-y-4">
       {/* Summary stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Q2 revenue",  value: `£${total.toLocaleString()}`, accent: "text-emerald-400" },
+          { label: `Q${q.quarter} revenue`,  value: `£${total.toLocaleString()}`, accent: "text-emerald-400" },
           { label: "Total jobs",  value: totalJobs,                     accent: "text-white"        },
           { label: "Weekly avg",  value: `£${avgRev.toLocaleString()}`, accent: "text-white"        },
           { label: "Best week",   value: `£${maxRev.toLocaleString()}`, accent: "text-[#99c5ff]"   },
@@ -828,7 +1070,7 @@ function QuarterView({ onJobClick }) {
       {/* Bar chart */}
       <GlassCard className="p-4">
         <div className="flex items-center justify-between mb-4">
-          <SectionLabel>Weekly revenue — Q2 2026</SectionLabel>
+          <SectionLabel>Weekly revenue — Q{q.quarter} {q.year}</SectionLabel>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-[#1f48ff]" />
@@ -842,9 +1084,9 @@ function QuarterView({ onJobClick }) {
         </div>
 
         <div className="flex items-end gap-1.5 h-40 sm:h-48">
-          {QUARTER_WEEKS.map(w => {
+          {quarterWeeks.map(w => {
             const pct       = (w.revenue / maxRev) * 100;
-            const isCurrent = w.week === 6;
+            const isCurrent = w.isCurrent;
             return (
               <div key={w.week} className="flex-1 flex flex-col items-center gap-1 group cursor-pointer">
                 {/* Tooltip on hover */}
@@ -871,9 +1113,9 @@ function QuarterView({ onJobClick }) {
         {/* Revenue axis labels */}
         <div className="flex justify-between mt-2">
           <span className="text-xs text-[rgba(153,197,255,0.3)]">Wk 1</span>
-          <span className="text-xs text-[rgba(153,197,255,0.5)] font-semibold">Apr</span>
-          <span className="text-xs text-[rgba(153,197,255,0.5)] font-semibold">May</span>
-          <span className="text-xs text-[rgba(153,197,255,0.5)] font-semibold">Jun</span>
+          <span className="text-xs text-[rgba(153,197,255,0.5)] font-semibold">{qMonths[0]}</span>
+          <span className="text-xs text-[rgba(153,197,255,0.5)] font-semibold">{qMonths[1]}</span>
+          <span className="text-xs text-[rgba(153,197,255,0.5)] font-semibold">{qMonths[2]}</span>
           <span className="text-xs text-[rgba(153,197,255,0.3)]">Wk 13</span>
         </div>
       </GlassCard>
@@ -884,8 +1126,8 @@ function QuarterView({ onJobClick }) {
           <SectionLabel>Week breakdown</SectionLabel>
         </div>
         <div className="divide-y divide-[rgba(153,197,255,0.08)] max-h-64 overflow-y-auto">
-          {QUARTER_WEEKS.map(w => {
-            const isCurrent   = w.week === 6;
+          {quarterWeeks.map(w => {
+            const isCurrent   = w.isCurrent;
             const completePct = Math.round((w.complete / Math.max(w.jobs,1)) * 100);
             return (
               <div key={w.week} className={`flex items-center gap-3 px-4 py-2.5 transition-all ${isCurrent ? "bg-[rgba(31,72,255,0.12)]" : "hover:bg-[rgba(153,197,255,0.04)]"}`}>
@@ -919,10 +1161,9 @@ function QuarterView({ onJobClick }) {
 }
 
 // ─── NEW JOB modal ────────────────────────────────────────────────────────────
-const STAFF_OPTIONS = [
+// Default staff — will be overridden by DB staff in NewJobModal
+const DEFAULT_STAFF_OPTIONS = [
   { id: "you",        label: "You"        },
-  { id: "jamie",      label: "Jamie"      },
-  { id: "sarah",      label: "Sarah"      },
   { id: "unassigned", label: "Unassigned" },
 ];
 
@@ -1007,9 +1248,23 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
   const { profile } = useAuth();
   const profileServices = buildProfileServiceOptions(profile);
 
+  // Load staff from DB
+  const [staffOptions, setStaffOptions] = useState(DEFAULT_STAFF_OPTIONS);
+  useEffect(() => {
+    import('../lib/supabase').then(({ supabase }) => {
+      supabase.from('staff_members').select('id, name').eq('active', true)
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            const dbStaff = data.map(s => ({ id: s.id, label: s.name }));
+            setStaffOptions([{ id: "you", label: "You" }, ...dbStaff, { id: "unassigned", label: "Unassigned" }]);
+          }
+        });
+    });
+  }, []);
+
   const [customer,    setCustomer]   = useState(preCustomer);
   const [postcode,    setPostcode]   = useState("");
-  const [date,        setDate]       = useState("2026-04-07");
+  const [date,        setDate]       = useState(() => new Date().toISOString().split('T')[0]);
   const [startTime,   setStartTime]  = useState("09:00");
   const [jobType,     setJobType]    = useState("residential");
   const [service,     setService]    = useState("");
@@ -1067,12 +1322,12 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
     if (!valid) return;
     const [h, m] = startTime.split(":").map(Number);
     const startHour = h + m / 60;
-    const selectedStaff = STAFF_OPTIONS
+    const selectedStaff = staffOptions
       .filter(s => assignees.includes(s.id) && s.id !== "unassigned")
       .map(s => s.label);
 
-    onSave?.({
-      id: Date.now(), customer, postcode, date, startHour,
+    const baseJob = {
+      customer, postcode, startHour,
       durationHrs: parseFloat(durationHrs) || 2,
       type: jobType, service,
       price: parseFloat(price),
@@ -1080,8 +1335,26 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
       assignee: selectedStaff.length > 0 ? selectedStaff.join(", ") : null,
       recurrence, notes,
       status: selectedStaff.length === 0 ? "unassigned" : "scheduled",
-      day: 0,
-    });
+    };
+
+    // Save first job
+    onSave?.({ ...baseJob, id: Date.now(), date });
+
+    // Generate recurring jobs (up to 12 occurrences)
+    if (recurrence !== "none") {
+      const dayMap = { daily: 1, weekly: 7, fortnightly: 14, monthly: 30, quarterly: 91, "6weekly": 42, "8weekly": 56, "12weekly": 84 };
+      const interval = dayMap[recurrence];
+      if (interval) {
+        let nextDate = new Date(date);
+        for (let i = 0; i < 11; i++) {
+          nextDate = new Date(nextDate);
+          nextDate.setDate(nextDate.getDate() + interval);
+          const nextDateStr = nextDate.toISOString().split('T')[0];
+          onSave?.({ ...baseJob, id: Date.now() + i + 1, date: nextDateStr });
+        }
+      }
+    }
+
     onClose();
   };
 
@@ -1249,7 +1522,7 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
           <div>
             <FL>Assign to</FL>
             <div className="grid grid-cols-4 gap-2">
-              {STAFF_OPTIONS.map(s => (
+              {staffOptions.map(s => (
                 <button key={s.id} onClick={() => toggleAssignee(s.id)}
                   className={`py-2 text-xs font-bold border rounded-lg transition-all ${assignees.includes(s.id) ? "bg-[#1f48ff] text-white border-[#1f48ff]" : "bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.7)] border-[rgba(153,197,255,0.12)] hover:border-[rgba(153,197,255,0.35)] hover:text-white"}`}>
                   {s.label}
@@ -1303,7 +1576,7 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
                 ["Service",  service],
                 ["Date",     new Date(date).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})],
                 ["Time",     startTime+" · "+durationHrs+"hrs"],
-                ["Assigned", assignees.includes("unassigned") ? "Unassigned" : STAFF_OPTIONS.filter(s=>assignees.includes(s.id) && s.id !== "unassigned").map(s=>s.label).join(", ")],
+                ["Assigned", assignees.includes("unassigned") ? "Unassigned" : staffOptions.filter(s=>assignees.includes(s.id) && s.id !== "unassigned").map(s=>s.label).join(", ")],
                 ["Repeats",  selectedRec?.label],
                 ["Price",    "£"+parseFloat(price).toFixed(2)],
               ].map(([l,v]) => (
@@ -1336,8 +1609,9 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
 export default function SchedulerTab({ onJobClick: externalJobClick }) {
   const { user } = useAuth();
   const isLive = Boolean(user);
-  const { jobs: contextJobs, setJobs: setContextJobs, addJobAndSyncCustomer, customers } = useData();
-  const jobs = contextJobs ?? (isLive ? [] : DEMO_JOBS);
+  const { jobs: contextJobs, addJobAndSyncCustomer, updateJob, deleteJob, customers } = useData();
+  // Only show demo jobs when not logged in
+  const allJobs = isLive ? (contextJobs || []) : DEMO_JOBS;
   const [searchParams, setSearchParams] = useSearchParams();
   const [view,       setView]       = useState("Day");
   const [dayOffset,  setDayOffset]  = useState(0);
@@ -1363,8 +1637,36 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
     addJobAndSyncCustomer(newJob);
   };
 
-  const todayJobs = jobs.filter(j => j.day === 0);
-  const weekJobs  = jobs;
+  const handleUpdateJob = async (id, updates) => {
+    await updateJob?.(id, updates);
+    // Refresh activeJob so drawer shows updated state
+    setActiveJob(prev => prev?.id === id ? { ...prev, ...updates } : prev);
+  };
+
+  const handleDeleteJob = async (id) => {
+    await deleteJob?.(id);
+  };
+
+  // Filter jobs by date for each view
+  const viewDate = getViewDate(dayOffset, view);
+  const todayStr = isoDate(viewDate);
+
+  const todayJobs = allJobs
+    .filter(j => j.date === todayStr && j.status !== 'cancelled');
+
+  const weekDates = getWeekDates(dayOffset);
+  const weekStartStr = isoDate(weekDates[0]);
+  const weekEndStr = isoDate(weekDates[6]);
+  const weekJobs = allJobs
+    .filter(j => j.date >= weekStartStr && j.date <= weekEndStr && j.status !== 'cancelled');
+
+  // For views that need the `day` index (0-6 for Mon-Sun within the viewed week)
+  const weekJobsWithDay = weekJobs.map(j => {
+    const jobDate = new Date(j.date + 'T00:00:00');
+    const dayOfWeek = jobDate.getDay();
+    const dayIdx = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // 0=Mon
+    return { ...j, day: dayIdx };
+  });
 
   return (
     <div className="relative flex flex-col min-h-full bg-[#010a4f] overflow-x-hidden">
@@ -1412,13 +1714,20 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
       {/* Main content */}
       <div className="relative flex-1 overflow-y-auto p-4 lg:p-6">
         {view === "Day"     && <DayView     jobs={todayJobs} onJobClick={handleJobClick} />}
-        {view === "Week"    && <WeekView    jobs={weekJobs}  onJobClick={handleJobClick} />}
-        {view === "Month"   && <MonthView   jobs={weekJobs}  onJobClick={handleJobClick} />}
-        {view === "Quarter" && <QuarterView onJobClick={handleJobClick} />}
+        {view === "Week"    && <WeekView    jobs={weekJobsWithDay}  onJobClick={handleJobClick} />}
+        {view === "Month"   && <MonthView   jobs={allJobs.filter(j => j.status !== 'cancelled')} onJobClick={handleJobClick} viewDate={viewDate} />}
+        {view === "Quarter" && <QuarterView jobs={allJobs.filter(j => j.status !== 'cancelled')} onJobClick={handleJobClick} />}
       </div>
 
       {/* Job detail drawer */}
-      {activeJob && <JobDrawer job={activeJob} onClose={() => setActiveJob(null)} />}
+      {activeJob && (
+        <JobDrawer
+          job={activeJob}
+          onClose={() => setActiveJob(null)}
+          onUpdateJob={handleUpdateJob}
+          onDeleteJob={handleDeleteJob}
+        />
+      )}
 
       {/* New job modal */}
       {showNewJob && <NewJobModal onClose={() => { setShowNewJob(false); setPreCustomer(""); }} onSave={handleSaveJob} preCustomer={preCustomer} customers={customers} />}

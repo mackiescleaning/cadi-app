@@ -56,10 +56,14 @@
 //   <DashboardTab accountsData={accountsData} onNavigate={setActiveTab} />
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCleanProData } from "../hooks/useCleanProData";
 import { supabase } from "../lib/supabase";
+import { createMoneyEntry } from "../lib/db/moneyDb";
 import SetupWizard from "../components/SetupWizard";
+import CadiWordmark from "../components/CadiWordmark";
+import SpotlightTour from "../components/SpotlightTour";
 import Onboarding from "./Onboarding";
 
 // ─── Demo data ────────────────────────────────────────────────────────────────
@@ -242,8 +246,32 @@ const fmt2  = n => `£${Math.abs(+n).toFixed(2)}`;
 const pct   = n => `${Math.round(+n)}%`;
 
 function timeGreeting() {
-  const h = new Date("2026-04-07T07:42:00").getHours();
+  const h = new Date().getHours();
   return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
+
+function getCurrentTaxYear() {
+  const now = new Date();
+  const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${year}/${(year + 1).toString().slice(2)}`;
+}
+
+function getWeekNumber() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const diff = now - start;
+  return Math.ceil((diff / 86400000 + start.getDay() + 1) / 7);
+}
+
+function getTaxYearMonth() {
+  const now = new Date();
+  const month = now.getMonth(); // 0-indexed
+  // Tax year starts April (month 3)
+  return month >= 3 ? month - 3 + 1 : month + 9 + 1; // 1-indexed month of tax year
+}
+
+function getTaxYearMonthsLeft() {
+  return 12 - getTaxYearMonth();
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
@@ -331,10 +359,9 @@ function KPIStrip({ accounts, weekJobs, jobsTodayData, invoices }) {
 }
 
 // ─── Health score panel ────────────────────────────────────────────────────────
-function HealthPanel({ score, onNavigate }) {
+function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
   const { total, dims, tier, tierNext, tierColor } = score;
   const ptsToNext  = tierNext ? tierNext - total : 0;
-  const yesterday  = total - 3; // demo delta
 
   return (
     <Card className="overflow-hidden">
@@ -345,7 +372,13 @@ function HealthPanel({ score, onNavigate }) {
           <SL className="mb-1">Business health score</SL>
           <p className={`text-2xl font-bold ${tierColor}`}>{tier}</p>
           <p className="text-xs text-gray-400 mt-1">
-            <span className="text-emerald-600 font-semibold">↑ {total - yesterday} pts</span> since yesterday
+            {scoreDelta !== 0 && (
+              <span className={`font-semibold ${scoreDelta > 0 ? "text-emerald-600" : "text-red-500"}`}>
+                {scoreDelta > 0 ? "↑" : "↓"} {Math.abs(scoreDelta)} pts
+              </span>
+            )}
+            {scoreDelta !== 0 && " since last session"}
+            {scoreDelta === 0 && <span className="text-gray-400">No change since last session</span>}
             {tierNext && <span className="ml-2">· <span className="font-semibold text-brand-navy">{ptsToNext} pts</span> to {tierNext === 90 ? "Excellent" : tierNext === 75 ? "Great" : "Good"}</span>}
           </p>
           {/* Tier ladder */}
@@ -580,6 +613,12 @@ function ActivityFeed({ feed }) {
       <div className="px-4 py-3 border-b border-gray-100">
         <SL>Recent activity</SL>
       </div>
+      {feed.length === 0 && (
+        <div className="px-4 py-8 text-center">
+          <p className="text-sm text-gray-400">No activity yet</p>
+          <p className="text-xs text-gray-300 mt-1">Payments, invoices and completed jobs will appear here.</p>
+        </div>
+      )}
       <div className="divide-y divide-gray-100">
         {feed.map(item => (
           <div key={item.id} className="flex items-start gap-3 px-4 py-3">
@@ -599,17 +638,30 @@ function ActivityFeed({ feed }) {
 }
 
 // ─── YTD target bar ────────────────────────────────────────────────────────────
-function YTDBar({ accounts, onNavigate }) {
+function YTDBar({ accounts, onNavigate, taxYear, taxMonth }) {
+  // If user hasn't set an annual target, show a setup prompt
+  if (!accounts.annualTarget || accounts.annualTarget <= 0) {
+    return (
+      <Card className="p-5 text-center">
+        <SL className="mb-2">Annual target</SL>
+        <p className="text-sm text-gray-500 mb-3">Set your annual income target to track progress.</p>
+        <button onClick={() => onNavigate?.("settings")} className="px-4 py-2 text-xs font-bold text-white bg-brand-blue rounded-lg hover:bg-brand-navy transition-colors">
+          Set target in Settings →
+        </button>
+      </Card>
+    );
+  }
+
   const pct        = Math.round((accounts.ytdIncome / accounts.annualTarget) * 100);
-  const remaining  = accounts.annualTarget - accounts.ytdIncome;
-  const monthsLeft = 11; // demo
+  const remaining  = Math.max(0, accounts.annualTarget - accounts.ytdIncome);
+  const monthsLeft = Math.max(1, 12 - (taxMonth || 1));
   const monthlyNeed = Math.round(remaining / monthsLeft);
 
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between mb-3">
         <div>
-          <SL className="mb-1">Annual target — 2025/26</SL>
+          <SL className="mb-1">Annual target — {taxYear || getCurrentTaxYear()}</SL>
           <div className="flex items-baseline gap-2">
             <p className="text-2xl font-bold tabular-nums text-brand-navy">{fmt(accounts.ytdIncome)}</p>
             <p className="text-sm text-gray-400">of {fmt(accounts.annualTarget)}</p>
@@ -632,9 +684,9 @@ function YTDBar({ accounts, onNavigate }) {
         ))}
       </div>
       <div className="flex justify-between text-xs text-gray-400 mb-3">
-        <span>Apr 2025</span>
-        <span className="text-brand-blue font-semibold">Month 4 of 12</span>
-        <span>Mar 2026</span>
+        <span>Apr {taxYear ? taxYear.split('/')[0] : new Date().getFullYear()}</span>
+        <span className="text-brand-blue font-semibold">Month {taxMonth || 1} of 12</span>
+        <span>Mar {taxYear ? `20${taxYear.split('/')[1]}` : new Date().getFullYear() + 1}</span>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-gray-50 border border-gray-100 rounded-sm p-3">
@@ -660,13 +712,15 @@ const QUICK_WINS = [
   { id: "sprint", emoji: "🏃", title: "Create a 90-day sprint goal", sub: "Set a target and build momentum from day one", tab: "review" },
 ];
 
-function QuickWinsPanel({ onNavigate, onDismiss }) {
-  const [ticked, setTicked] = useState([]);
+function QuickWinsPanel({ onNavigate, onDismiss, savedProgress = [], onProgressChange }) {
+  const [ticked, setTicked] = useState(savedProgress);
   const allDone = ticked.length === QUICK_WINS.length;
 
-  const toggle = (id) => setTicked(prev =>
-    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-  );
+  const toggle = (id) => {
+    const next = ticked.includes(id) ? ticked.filter(x => x !== id) : [...ticked, id];
+    setTicked(next);
+    onProgressChange?.(next);
+  };
 
   return (
     <Card className="overflow-hidden border-brand-blue/30">
@@ -1143,8 +1197,92 @@ function AiBoostPanel({ score, onNavigate }) {
   );
 }
 
+// ─── Onboarding scorecard — shown to new users until they've used the core tabs ──
+function OnboardingScorecard({ steps, onNavigate, onPreview }) {
+  const done = steps.filter(s => s.done).length;
+  const total = steps.length;
+  const pts = steps.filter(s => s.done).reduce((sum, s) => sum + s.pts, 0);
+  const totalPts = steps.reduce((sum, s) => sum + s.pts, 0);
+  const pct = Math.round((done / total) * 100);
+
+  return (
+    <div className="relative overflow-hidden rounded-sm shadow-2xl shadow-brand-navy/50" style={{ background: 'linear-gradient(145deg, #010a4f 0%, #05124a 50%, #0d1e78 100%)' }}>
+      {/* Grid texture */}
+      <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)', backgroundSize: '28px 28px' }} />
+      <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-brand-blue/30 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-16 -left-12 w-40 h-40 rounded-full bg-brand-skyblue/10 blur-3xl pointer-events-none" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-skyblue/60 to-transparent" />
+
+      <div className="relative p-5 sm:p-6">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-brand-skyblue/70 mb-1">Welcome to Cadi 🌱</p>
+            <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">Let's warm up your score</h2>
+            <p className="text-xs sm:text-sm text-brand-skyblue/60 mt-1">Complete these steps to unlock the community leaderboard and get an accurate health score.</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-3xl sm:text-4xl font-black text-white tabular-nums">{pts}<span className="text-base text-brand-skyblue/50">/{totalPts}</span></p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-brand-skyblue/50">pts earned</p>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mb-5">
+          <div className="flex items-center justify-between text-[11px] font-bold mb-1.5">
+            <span className="text-brand-skyblue/70">{done} of {total} complete</span>
+            <span className="text-brand-skyblue">{pct}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+            <div className="h-full rounded-full bg-gradient-to-r from-brand-skyblue to-emerald-400 transition-all duration-500" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+
+        {/* Steps */}
+        <div className="space-y-2">
+          {steps.map(step => (
+            <button
+              key={step.id}
+              onClick={() => step.done ? null : onNavigate?.(step.tab)}
+              disabled={step.done}
+              className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                step.done
+                  ? "bg-emerald-500/10 border-emerald-400/30 cursor-default"
+                  : "bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-brand-skyblue/30 active:scale-[0.99]"
+              }`}
+            >
+              <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-base ${
+                step.done ? "bg-emerald-500/20" : "bg-white/5"
+              }`}>
+                {step.done ? <span className="text-emerald-400 font-black">✓</span> : step.emoji}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-bold ${step.done ? "text-emerald-300 line-through" : "text-white"}`}>{step.title}</p>
+                <p className="text-[11px] text-brand-skyblue/50 truncate">{step.body}</p>
+              </div>
+              <span className={`shrink-0 text-xs font-black tabular-nums ${step.done ? "text-emerald-400" : "text-brand-skyblue/70"}`}>+{step.pts}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-5 pt-4 border-t border-white/10 flex items-center justify-between">
+          <p className="text-[11px] text-brand-skyblue/50">
+            🔒 Leaderboard unlocks at <strong className="text-white">3 of {total}</strong> steps
+          </p>
+          {onPreview && (
+            <button onClick={onPreview} className="text-xs font-bold text-brand-skyblue hover:text-white transition-colors">
+              Preview leaderboard →
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Leaderboard panel ────────────────────────────────────────────────────────
-function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, onOptIn }) {
+function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, onOptIn, healthDelta = 0 }) {
   const [filter, setFilter] = useState("all");
   const [showExplainer, setShowExplainer] = useState(() => {
     try { return !localStorage.getItem('cadi_lb_explained'); } catch { return true; }
@@ -1200,7 +1338,7 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
         <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
           <div>
             <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/60 mb-0.5">Cadi community leaderboard</p>
-            <p className="text-xs text-white/40">Ranked by health score · updated weekly · {totalCount} businesses competing</p>
+            <p className="text-xs text-white/40">Ranked by health score · updated weekly · preview leaderboard</p>
           </div>
           <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
             topPct <= 10 ? "bg-yellow-400/20 border-yellow-400/40 text-yellow-300"
@@ -1256,11 +1394,19 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
             </p>
           </div>
           <div className="text-right">
-            <div className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-500/20 border border-emerald-500/30 rounded-xl">
-              <span className="text-emerald-400 text-sm font-black">↑ +3</span>
-              <span className="text-emerald-400/70 text-[10px]">places</span>
-            </div>
-            <p className="text-[10px] text-white/25 mt-1.5">since last week</p>
+            {healthDelta !== 0 && (
+              <>
+                <div className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                  healthDelta > 0 ? "bg-emerald-500/20 border border-emerald-500/30" : "bg-red-500/20 border border-red-500/30"
+                }`}>
+                  <span className={`text-sm font-black ${healthDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {healthDelta > 0 ? `↑ +${healthDelta}` : `↓ ${healthDelta}`}
+                  </span>
+                  <span className={`text-[10px] ${healthDelta > 0 ? "text-emerald-400/70" : "text-red-400/70"}`}>pts</span>
+                </div>
+                <p className="text-[10px] text-white/25 mt-1.5">since last session</p>
+              </>
+            )}
           </div>
         </div>
 
@@ -1395,14 +1541,7 @@ function ShareCardModal({ onClose, businessName, sector, score, badges, rank, to
 
             {/* Top: Logo + sector */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-brand-blue flex items-center justify-center">
-                  <svg width="16" height="16" viewBox="0 0 28 28" fill="none">
-                    <path d="M7 14C7 10.134 10.134 7 14 7C16.209 7 18.18 8.014 19.5 9.6L17.4 11.35C16.56 10.34 15.35 9.7 14 9.7C11.624 9.7 9.7 11.624 9.7 14C9.7 16.376 11.624 18.3 14 18.3C15.35 18.3 16.56 17.66 17.4 16.65L19.5 18.4C18.18 19.986 16.209 21 14 21C10.134 21 7 17.866 7 14Z" fill="white"/>
-                  </svg>
-                </div>
-                <span className="text-white font-black text-base tracking-tight">cadi</span>
-              </div>
+              <CadiWordmark height={20} />
               <span className={`text-xs font-bold px-3 py-1 rounded-full border ${sc.bg} ${sc.text} bg-opacity-20 border-current/30`}>
                 {sc.label}
               </span>
@@ -1541,7 +1680,7 @@ function WelcomeModal({ businessName, firstName, onClose }) {
           {/* Community welcome pill */}
           <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/25">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-            <span className="text-[11px] font-bold text-emerald-300">You've joined 847+ cleaning businesses already on Cadi</span>
+            <span className="text-[11px] font-bold text-emerald-300">Welcome to the Cadi community of cleaning professionals</span>
           </div>
 
           {/* Intro copy */}
@@ -1627,7 +1766,9 @@ function WelcomeModal({ businessName, firstName, onClose }) {
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
-export default function DashboardTab({ accountsData, schedulerData, invoiceData, teamData: incomingTeamData, feedData: incomingFeedData, onNavigate }) {
+export default function DashboardTab({ accountsData, schedulerData, invoiceData, teamData: incomingTeamData, feedData: incomingFeedData, onNavigate: onNavigateProp }) {
+  const routerNavigate = useNavigate();
+  const onNavigate = onNavigateProp || ((tab) => routerNavigate(`/${tab}`));
   const { user, profile, updateProfile } = useAuth();
   const {
     accountsData: liveAccountsData,
@@ -1636,8 +1777,12 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     teamData: liveTeamData,
     feedData: liveFeedData,
     jobsToday: liveJobsToday,
+    customerCount: liveCustomerCount,
+    isLoading: dataLoading,
+    error: dataError,
+    refresh: refreshData,
   } = useCleanProData();
-  const isLive = Boolean(user);
+  const isLive = Boolean(user) && user?.id !== 'demo-user';
   const displayName = useMemo(() => {
     const first = profile?.first_name?.trim();
     if (first) return first;
@@ -1655,7 +1800,15 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const resolvedInvoiceData = invoiceData ?? liveInvoiceData;
   const resolvedTeamData = incomingTeamData ?? liveTeamData;
   const resolvedFeedData = incomingFeedData ?? liveFeedData;
-  const accounts = { ...DEMO_ACCOUNTS, ...(resolvedAccountsData ?? {}) };
+  // Only use demo accounts when not logged in. Live users get real data with safe zero defaults.
+  const EMPTY_ACCOUNTS = {
+    vatRegistered: false, taxRate: 0.20, annualTarget: 0, monthlyTarget: 0,
+    ytdIncome: 0, ytdExpenses: 0, taxReserve: 0, taxReserveTarget: 0,
+    ytdMileageLogged: 0, ytdMileageClaimed: 0, mtdStatus: 'filed', mtdDaysLeft: 0, sprintActive: false,
+  };
+  const accounts = isLive
+    ? { ...EMPTY_ACCOUNTS, ...(resolvedAccountsData ?? {}) }
+    : { ...DEMO_ACCOUNTS };
   const weekJobs  = resolvedSchedulerData?.weekJobs ? resolvedSchedulerData.weekJobs : (isLive ? liveWeek : DEMO_WEEK);
   const invoices  = resolvedInvoiceData ?? (isLive ? [] : DEMO_INVOICES);
   const jobsToday = liveJobsToday ?? (isLive ? [] : DEMO_JOBS_TODAY);
@@ -1666,21 +1819,82 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const [showPayModal,     setShowPayModal]     = useState(false);
   const [scoreDelta,       setScoreDelta]       = useState(0);
   const [recentPts,        setRecentPts]        = useState(null);
-  const isNewUser = !profile?.dashboard_tour_complete;
+  // Welcome popup: show first 2 dashboard visits, then auto-dismiss
+  const [dashVisitCount] = useState(() => {
+    try {
+      const count = parseInt(localStorage.getItem('cadi_dash_visits') || '0', 10) + 1;
+      localStorage.setItem('cadi_dash_visits', String(count));
+      return count;
+    } catch { return 99; }
+  });
+  const isNewUser = dashVisitCount <= 3 && !profile?.dashboard_tour_complete;
   const [showQuickWins,    setShowQuickWins]    = useState(true);
-  const [demoMode,         setDemoMode]         = useState(isNewUser);
-  const [showWelcome,      setShowWelcome]      = useState(isNewUser);
+  const [demoMode,         setDemoMode]         = useState(false);
+  const [showWelcome,      setShowWelcome]      = useState(dashVisitCount <= 2 && !profile?.dashboard_tour_complete);
+  const [showTour,         setShowTour]         = useState(false);
   const [showShareCard,    setShowShareCard]    = useState(false);
   const [milestone,        setMilestone]        = useState(null); // { emoji, title, body }
   const [communityOptIn,   setCommunityOptIn]   = useState(() => {
+    if (profile?.community_opt_in) return true;
     try { return localStorage.getItem('cadi_community_opt_in') === '1'; } catch { return false; }
   });
 
   const score   = useMemo(() => calcHealthScore({ accounts, weekJobs, invoices, jobsToday }), [accounts, weekJobs, invoices, jobsToday]);
   const actions = useMemo(() => buildActions({ accounts, invoices, jobsToday, score }), [accounts, invoices, jobsToday, score]);
 
-  // Demo streak — in production this would come from profile
-  const streak = 7;
+  // Track login streak via localStorage
+  const streak = useMemo(() => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const saved = JSON.parse(localStorage.getItem('cadi_streak') || '{}');
+      if (saved.lastDate === today) return saved.count || 1;
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const newCount = saved.lastDate === yesterday ? (saved.count || 0) + 1 : 1;
+      localStorage.setItem('cadi_streak', JSON.stringify({ lastDate: today, count: newCount }));
+      return newCount;
+    } catch { return 1; }
+  }, []);
+
+  // Track health score delta between sessions
+  const healthDelta = useMemo(() => {
+    try {
+      const prev = parseInt(localStorage.getItem('cadi_prev_health_score') || '0', 10);
+      return prev > 0 ? score.total - prev : 0;
+    } catch { return 0; }
+  }, [score.total]);
+
+  // Save current score for next session comparison
+  useEffect(() => {
+    try { localStorage.setItem('cadi_prev_health_score', String(score.total)); } catch {}
+  }, [score.total]);
+
+  // Onboarding scorecard — show for new users until they've used core tabs
+  const onboardingSteps = useMemo(() => {
+    const jobsAny = (weekJobs || []).some(d => d.jobs > 0) || (jobsToday || []).length > 0;
+    const invoicesAny = (invoices || []).length > 0;
+    const revenueAny = (accounts?.ytdIncome ?? 0) > 0;
+    const customersAny = (liveCustomerCount ?? 0) > 0;
+    return [
+      { id: "profile",   emoji: "👋", title: "Complete your profile",     body: "Name, business, type — set in signup & onboarding", pts: 10, tab: "settings",  done: Boolean(profile?.onboarding_complete) },
+      { id: "customer",  emoji: "👤", title: "Add your first customer",   body: "Log names, addresses and contact info",              pts: 10, tab: "customers", done: customersAny },
+      { id: "job",       emoji: "🧹", title: "Log your first job",        body: "Schedule a clean — customer, date, price",           pts: 10, tab: "scheduler", done: jobsAny },
+      { id: "invoice",   emoji: "📄", title: "Create your first invoice", body: "Turn a completed job into an invoice",               pts: 10, tab: "invoices",  done: invoicesAny },
+      { id: "payment",   emoji: "💷", title: "Receive your first payment",body: "Log income in the Money tab",                        pts: 10, tab: "money",     done: revenueAny },
+    ];
+  }, [profile?.onboarding_complete, liveCustomerCount, weekJobs, jobsToday, invoices, accounts?.ytdIncome]);
+
+  const leaderboardUnlocked = useMemo(() => {
+    const doneCount = onboardingSteps.filter(s => s.done).length;
+    try {
+      if (localStorage.getItem('cadi_lb_preview') === '1') return true;
+    } catch {}
+    return doneCount >= 3;
+  }, [onboardingSteps]);
+
+  const previewLeaderboard = () => {
+    try { localStorage.setItem('cadi_lb_preview', '1'); } catch {}
+    window.location.reload();
+  };
 
   // Build leaderboard with user injected + compute rank
   const allLeaderboard = useMemo(() => {
@@ -1707,9 +1921,21 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     streak,
   }), [score, invoices, weekJobs, userRank, totalUsers, streak]);
 
+  // Sync feed whenever real data changes (not just on login)
   useEffect(() => {
-    if (isLive) {
-      setFeed(resolvedFeedData ?? []);
+    if (isLive && resolvedFeedData && resolvedFeedData.length > 0) {
+      setFeed(prev => {
+        // Merge: keep any "Now" entries (locally added) at the top, then real data
+        const localEntries = prev.filter(e => e.time === "Now");
+        const merged = [...localEntries, ...resolvedFeedData];
+        // Deduplicate by id and limit to 8
+        const seen = new Set();
+        return merged.filter(e => {
+          if (seen.has(e.id)) return false;
+          seen.add(e.id);
+          return true;
+        }).slice(0, 8);
+      });
     }
   }, [isLive, resolvedFeedData]);
 
@@ -1733,6 +1959,10 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
   const handleDismissWelcome = () => {
     setShowWelcome(false);
+    // Start the spotlight tour after first welcome
+    if (dashVisitCount === 1) {
+      setTimeout(() => setShowTour(true), 500);
+    }
   };
 
   const handleDismissQuickWins = async () => {
@@ -1743,67 +1973,95 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     }
   };
 
-  const handleCommunityOptIn = () => {
+  const handleCommunityOptIn = async () => {
     setCommunityOptIn(true);
     try { localStorage.setItem('cadi_community_opt_in', '1'); } catch {}
+    // Also persist to profile in Supabase
+    if (user) {
+      try {
+        await supabase.from('profiles').update({ community_opt_in: true }).eq('id', user.id);
+      } catch {}
+    }
   };
 
-  const handlePaymentLogged = ({ customer, amount, method }) => {
-    const newEntry = {
-      id:    Date.now(),
-      icon:  "💷",
-      bg:    "bg-emerald-100",
-      title: `Payment received — ${customer}`,
-      sub:   `£${amount.toFixed(2)} · ${method}`,
-      time:  "Now",
-    };
-    setFeed(prev => [newEntry, ...prev.slice(0, 4)]);
-    // Flash score improvement
-    setRecentPts(3);
-    setTimeout(() => setRecentPts(null), 3000);
+  const [paymentError, setPaymentError] = useState(null);
+
+  const handlePaymentLogged = async ({ customer, amount, method }) => {
+    setPaymentError(null);
+    // Save to Supabase
+    try {
+      await createMoneyEntry({
+        client: customer,
+        amount,
+        date: new Date().toISOString().split('T')[0],
+        method,
+        kind: 'income',
+      });
+
+      // Only update feed on success
+      const newEntry = {
+        id:    Date.now(),
+        icon:  "💷",
+        bg:    "bg-emerald-100",
+        title: `Payment received — ${customer}`,
+        sub:   `£${amount.toFixed(2)} · ${method}`,
+        time:  "Now",
+      };
+      setFeed(prev => [newEntry, ...prev.slice(0, 4)]);
+      setRecentPts(3);
+      setTimeout(() => setRecentPts(null), 3000);
+    } catch (err) {
+      console.error('Failed to save payment:', err);
+      setPaymentError('Payment could not be saved. Please try again.');
+      setTimeout(() => setPaymentError(null), 5000);
+    }
   };
 
-  // Today
-  const todayLabel = new Date("2026-04-07").toLocaleDateString("en-GB", { weekday:"long", day:"numeric", month:"long" });
-  const weekNum    = 14;
+  // Today — live date
+  const todayLabel = new Date().toLocaleDateString("en-GB", { weekday:"long", day:"numeric", month:"long" });
+  const weekNum    = getWeekNumber();
+  const taxYear    = getCurrentTaxYear();
+  const taxMonth   = getTaxYearMonth();
 
   return (
     <div className="flex flex-col h-full bg-gray-50/50">
 
       {/* ── Header ── */}
-      <div className="bg-brand-navy text-white px-6 py-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs font-bold tracking-widest uppercase text-brand-skyblue mb-0.5">
-            {timeGreeting()}, {displayName} 👋
-          </p>
-          <h2 className="text-xl font-bold">{todayLabel}</h2>
-          <p className="text-xs text-brand-skyblue/70 mt-0.5">Week {weekNum} · 2025/26 tax year</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Score flash */}
-          {recentPts && (
-            <div className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 rounded-sm animate-pulse">
-              <span className="text-white text-xs font-bold">+{recentPts} pts</span>
-            </div>
-          )}
-          {/* Mode toggle */}
-          <div className="flex bg-white/10 rounded-sm p-0.5 gap-0.5">
-            {[{id:"solo",label:"Solo"},{id:"team",label:"Team"}].map(m => (
-              <button
-                key={m.id}
-                onClick={() => setMode(m.id)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-sm transition-colors ${
-                  mode === m.id ? "bg-white text-brand-navy" : "text-white/70 hover:text-white"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
+      <div className="bg-brand-navy text-white px-4 sm:px-6 py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold tracking-widest uppercase text-brand-skyblue mb-0.5">
+              {timeGreeting()}, {displayName} 👋
+            </p>
+            <h2 className="text-lg sm:text-xl font-bold">{todayLabel}</h2>
+            <p className="text-xs text-brand-skyblue/70 mt-0.5">Week {weekNum} · {taxYear} tax year</p>
           </div>
-          {/* Live indicator */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 rounded-sm">
-            <span className={`w-2 h-2 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-gray-400"}`} />
-            <span className="text-xs font-bold text-white">{isLive ? "Live" : "Demo"}</span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Score flash */}
+            {recentPts && (
+              <div className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 rounded-sm animate-pulse">
+                <span className="text-white text-xs font-bold">+{recentPts} pts</span>
+              </div>
+            )}
+            {/* Mode toggle */}
+            <div className="flex bg-white/10 rounded-sm p-0.5 gap-0.5">
+              {[{id:"solo",label:"Solo"},{id:"team",label:"Team"}].map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setMode(m.id)}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-sm transition-colors ${
+                    mode === m.id ? "bg-white text-brand-navy" : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            {/* Live indicator */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 rounded-sm">
+              <span className={`w-2 h-2 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-gray-400"}`} />
+              <span className="text-xs font-bold text-white">{isLive ? "Live" : "Demo"}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1826,6 +2084,35 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
         </div>
       )}
 
+      {/* ── Loading state ── */}
+      {isLive && dataLoading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-white border border-gray-200 shadow-sm">
+            <div className="w-4 h-4 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm font-semibold text-gray-600">Loading your business data...</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Error state ── */}
+      {isLive && dataError && !dataLoading && (
+        <div className="mx-4 mt-4 p-4 rounded-xl bg-red-50 border border-red-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-red-500 text-lg">!</span>
+            <div>
+              <p className="text-sm font-semibold text-red-800">Couldn't load your data</p>
+              <p className="text-xs text-red-600 mt-0.5">Check your connection and try again.</p>
+            </div>
+          </div>
+          <button
+            onClick={refreshData}
+            className="px-4 py-2 text-xs font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* ── Scrollable content ── */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 lg:p-6">
@@ -1834,27 +2121,32 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           {mode === "solo" && (
             <div className="space-y-4">
 
-              {/* ── LEADERBOARD HERO — front and centre ── */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* ── LEADERBOARD HERO — front and centre (or onboarding scorecard for new users) ── */}
+              <div id="tour-leaderboard" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="lg:col-span-2">
-                  {demoMode ? (
-                    <DemoHint label="🏆 Cadi Leaderboard — see how your business ranks nationally">
+                  {!isLive || leaderboardUnlocked ? (
+                    demoMode ? (
+                      <DemoHint label="🏆 Cadi Leaderboard — see how your business ranks nationally">
+                        <LeaderboardPanel
+                          userScore={score.total}
+                          userBizName={profile?.business_name || displayName}
+                          userSector={profile?.cleaner_type || "residential"}
+                          communityOptIn={communityOptIn}
+                          onOptIn={handleCommunityOptIn}
+                        />
+                      </DemoHint>
+                    ) : (
                       <LeaderboardPanel
                         userScore={score.total}
                         userBizName={profile?.business_name || displayName}
                         userSector={profile?.cleaner_type || "residential"}
                         communityOptIn={communityOptIn}
                         onOptIn={handleCommunityOptIn}
+                        healthDelta={healthDelta}
                       />
-                    </DemoHint>
+                    )
                   ) : (
-                    <LeaderboardPanel
-                      userScore={score.total}
-                      userBizName={profile?.business_name || displayName}
-                      userSector={profile?.cleaner_type || "residential"}
-                      communityOptIn={communityOptIn}
-                      onOptIn={handleCommunityOptIn}
-                    />
+                    <OnboardingScorecard steps={onboardingSteps} onNavigate={onNavigate} onPreview={previewLeaderboard} />
                   )}
                 </div>
 
@@ -1864,10 +2156,10 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                   {profile?.dashboard_tour_complete ? (
                     demoMode ? (
                       <DemoHint label="📊 Business health score — tracks 5 dimensions of your business">
-                        <HealthPanel score={score} onNavigate={onNavigate} />
+                        <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
                       </DemoHint>
                     ) : (
-                      <HealthPanel score={score} onNavigate={onNavigate} />
+                      <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
                     )
                   ) : (
                     <Card className="overflow-hidden flex items-center justify-center min-h-[180px] border-dashed">
@@ -1892,48 +2184,24 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
               {/* ── Badges + actions ── */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {demoMode ? (
-                  <DemoHint label="🎖️ Achievement badges — earn them by running a great business">
-                    <BadgesShelf badges={badges} onShare={() => setShowShareCard(true)} />
-                  </DemoHint>
-                ) : (
+                <div id="tour-badges">
                   <BadgesShelf badges={badges} onShare={() => setShowShareCard(true)} />
-                )}
-                {demoMode ? (
-                  <DemoHint label="⚡ Priority actions — your most urgent tasks, colour-coded by impact">
-                    <ActionsPanel actions={actions} onNavigate={onNavigate} />
-                  </DemoHint>
-                ) : (
+                </div>
+                <div id="tour-actions">
                   <ActionsPanel actions={actions} onNavigate={onNavigate} />
-                )}
+                </div>
               </div>
 
               {/* ── Week + Today's jobs ── */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {demoMode ? (
-                  <DemoHint label="📆 This week at a glance — revenue bars and job count per day">
-                    <WeekGrid weekJobs={weekJobs} />
-                  </DemoHint>
-                ) : (
-                  <WeekGrid weekJobs={weekJobs} />
-                )}
-                {demoMode ? (
-                  <DemoHint label="🧹 Today's jobs — status, time, customer and price at a glance">
-                    <TodaysJobs jobs={jobsToday} onNavigate={onNavigate} />
-                  </DemoHint>
-                ) : (
-                  <TodaysJobs jobs={jobsToday} onNavigate={onNavigate} />
-                )}
+                <div id="tour-week"><WeekGrid weekJobs={weekJobs} /></div>
+                <div id="tour-jobs"><TodaysJobs jobs={jobsToday} onNavigate={onNavigate} /></div>
               </div>
 
               {/* ── Activity feed ── */}
-              {demoMode ? (
-                <DemoHint label="🔔 Activity feed — every payment, invoice and completed job logged automatically">
-                  <ActivityFeed feed={feed} />
-                </DemoHint>
-              ) : (
+              <div id="tour-activity">
                 <ActivityFeed feed={feed} />
-              )}
+              </div>
 
             </div>
           )}
@@ -1941,32 +2209,90 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           {/* ── TEAM MODE ── */}
           {mode === "team" && (
             <div className="space-y-4">
-              {/* Top row: health score + team + actions */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <HealthPanel score={score} onNavigate={onNavigate} />
-                <TeamPanel team={teamData} jobsToday={jobsToday} onNavigate={onNavigate} />
-                <ActionsPanel actions={actions} onNavigate={onNavigate} />
+
+              {/* ── LEADERBOARD HERO — front and centre (or onboarding scorecard for new users) ── */}
+              <div id="tour-leaderboard" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="lg:col-span-2">
+                  {!isLive || leaderboardUnlocked ? (
+                    demoMode ? (
+                      <DemoHint label="🏆 Cadi Leaderboard — see how your business ranks nationally">
+                        <LeaderboardPanel
+                          userScore={score.total}
+                          userBizName={profile?.business_name || displayName}
+                          userSector={profile?.cleaner_type || "residential"}
+                          communityOptIn={communityOptIn}
+                          onOptIn={handleCommunityOptIn}
+                        />
+                      </DemoHint>
+                    ) : (
+                      <LeaderboardPanel
+                        userScore={score.total}
+                        userBizName={profile?.business_name || displayName}
+                        userSector={profile?.cleaner_type || "residential"}
+                        communityOptIn={communityOptIn}
+                        onOptIn={handleCommunityOptIn}
+                        healthDelta={healthDelta}
+                      />
+                    )
+                  ) : (
+                    <OnboardingScorecard steps={onboardingSteps} onNavigate={onNavigate} onPreview={previewLeaderboard} />
+                  )}
+                </div>
+
+                {/* Right column: Score + AI boost */}
+                <div className="space-y-4">
+                  {profile?.dashboard_tour_complete ? (
+                    demoMode ? (
+                      <DemoHint label="📊 Business health score — tracks 5 dimensions of your business">
+                        <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
+                      </DemoHint>
+                    ) : (
+                      <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
+                    )
+                  ) : (
+                    <Card className="overflow-hidden flex items-center justify-center min-h-[180px] border-dashed">
+                      <div className="text-center px-6 py-8">
+                        <div className="text-3xl mb-3">📊</div>
+                        <p className="text-sm font-bold text-gray-700 mb-1">Business Health Score</p>
+                        <p className="text-xs text-gray-400 mb-4">Complete your setup guide to unlock your live health score.</p>
+                      </div>
+                    </Card>
+                  )}
+
+                  {demoMode ? (
+                    <DemoHint label="🤖 Cadi AI — personalised tasks to boost your score">
+                      <AiBoostPanel score={score} onNavigate={onNavigate} />
+                    </DemoHint>
+                  ) : (
+                    <AiBoostPanel score={score} onNavigate={onNavigate} />
+                  )}
+                </div>
               </div>
 
-              {/* Week grid full width */}
-              <WeekGrid weekJobs={weekJobs} />
-
-              {/* Three column: today's jobs + activity + YTD */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2">
-                  <TodaysJobs jobs={jobsToday} onNavigate={onNavigate} />
+              {/* ── Team + Actions ── */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <TeamPanel team={teamData} jobsToday={jobsToday} onNavigate={onNavigate} />
+                <div id="tour-actions">
+                  <ActionsPanel actions={actions} onNavigate={onNavigate} />
                 </div>
+              </div>
+
+              {/* ── Badges ── */}
+              <div id="tour-badges">
+                <BadgesShelf badges={badges} onShare={() => setShowShareCard(true)} />
+              </div>
+
+              {/* ── Week + Today's jobs ── */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div id="tour-week"><WeekGrid weekJobs={weekJobs} /></div>
+                <div id="tour-jobs"><TodaysJobs jobs={jobsToday} onNavigate={onNavigate} /></div>
+              </div>
+
+              {/* ── Activity feed ── */}
+              <div id="tour-activity">
                 <ActivityFeed feed={feed} />
               </div>
 
-              {/* Bottom: YTD + quick actions */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <YTDBar accounts={accounts} onNavigate={onNavigate} />
-                <QuickActions onNavigate={(tab) => {
-                  if (tab === "money") setShowPayModal(true);
-                  else onNavigate?.(tab);
-                }} />
-              </div>
             </div>
           )}
 
@@ -1982,6 +2308,13 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
         </div>
       </div>
 
+      {/* ── Error toast ── */}
+      {paymentError && (
+        <div className="fixed top-4 right-4 z-[400] px-5 py-3 rounded-xl bg-red-600 text-white text-sm font-semibold shadow-2xl flex items-center gap-2 animate-bounce">
+          <span>!</span> {paymentError}
+        </div>
+      )}
+
       {/* ── Log payment modal ── */}
       {showPayModal && (
         <LogPaymentModal
@@ -1996,6 +2329,27 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           businessName={profile?.business_name}
           firstName={displayName}
           onClose={handleDismissWelcome}
+        />
+      )}
+
+      {/* ── Spotlight tour (after welcome dismissed on first visit) ── */}
+      {showTour && (
+        <SpotlightTour
+          steps={[
+            { selector: '#tour-leaderboard', emoji: '🏆', title: 'Community Leaderboard', body: 'See how your business ranks against other Cadi users. Your health score determines your position. Climb the ranks by running a great business.' },
+            { selector: '#tour-badges', emoji: '🎖️', title: 'Achievement Badges', body: 'Earn badges for hitting milestones — health score targets, login streaks, fully booked weeks, and more. Share your achievements on social media.' },
+            { selector: '#tour-actions', emoji: '⚡', title: 'Priority Actions', body: 'Your most urgent tasks, colour-coded by impact. Each one shows how many health score points you\'ll gain by completing it. Tap to jump straight to the right tab.' },
+            { selector: '#tour-week', emoji: '📆', title: 'This Week at a Glance', body: 'Revenue bars and job count for each day. Today is highlighted. Green days are done. Tap any day to see its jobs in the Scheduler.' },
+            { selector: '#tour-jobs', emoji: '🧹', title: 'Today\'s Jobs', body: 'Every job scheduled for today — customer, time, price, and status. Complete, in-progress, scheduled, or unassigned. Tap "Full schedule" to manage them.' },
+            { selector: '#tour-activity', emoji: '🔔', title: 'Activity Feed', body: 'A live log of everything happening in your business — payments received, invoices sent, jobs completed. Updates automatically as you work.' },
+          ]}
+          onComplete={async () => {
+            setShowTour(false);
+            if (user && user.id !== 'demo-user') {
+              await supabase.from('profiles').update({ dashboard_tour_complete: true }).eq('id', user.id);
+            }
+            await updateProfile({ dashboard_tour_complete: true });
+          }}
         />
       )}
 
@@ -2020,7 +2374,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
       {/* ── Milestone celebration ── */}
       {milestone && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] px-6 py-4 rounded-2xl bg-gradient-to-r from-brand-navy to-brand-blue border border-brand-skyblue/30 shadow-2xl flex items-center gap-4 animate-bounce">
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[300] px-6 py-4 rounded-2xl bg-gradient-to-r from-brand-navy to-brand-blue border border-brand-skyblue/30 shadow-2xl flex items-center gap-4 animate-bounce">
           <span className="text-3xl">{milestone.emoji}</span>
           <div>
             <p className="text-white font-black text-sm">{milestone.title}</p>

@@ -154,43 +154,46 @@ const fmtK = n => n >= 1000 ? `£${(n/1000).toFixed(1)}k` : `£${Math.round(n)}`
 const pct  = n => `${Math.round(+n)}%`;
 const sign = n => n >= 0 ? `+${Math.round(n)}%` : `${Math.round(n)}%`;
 
-// ─── Shared UI ─────────────────────────────────────────────────────────────────
+// ─── Shared UI (dark glassmorphism) ───────────────────────────────────────────
 const Card = ({ children, className = "" }) =>
-  <div className={`bg-white border border-gray-200 rounded-sm ${className}`}>{children}</div>;
+  <div className={`relative overflow-hidden rounded-xl border border-[rgba(153,197,255,0.12)] ${className}`}
+    style={{ background: 'linear-gradient(145deg, #010a4f 0%, #05124a 50%, #0d1e78 100%)' }}>
+    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/40 to-transparent" />
+    <div className="relative">{children}</div>
+  </div>;
 
 const SL = ({ children, className = "" }) =>
-  <p className={`text-xs font-bold tracking-widest uppercase text-gray-400 ${className}`}>{children}</p>;
+  <p className={`text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.5)] ${className}`}>{children}</p>;
 
 function Chip({ children, color = "blue" }) {
   const s = {
-    blue:   "bg-blue-50 text-brand-blue border-blue-200",
-    green:  "bg-emerald-50 text-emerald-700 border-emerald-200",
-    warn:   "bg-amber-50 text-amber-700 border-amber-200",
-    red:    "bg-red-50 text-red-700 border-red-200",
-    navy:   "bg-brand-navy text-white border-brand-navy",
-    sky:    "bg-brand-skyblue/20 text-brand-navy border-brand-skyblue",
-    gray:   "bg-gray-100 text-gray-500 border-gray-200",
-    orange: "bg-orange-50 text-orange-700 border-orange-200",
-    gold:   "bg-yellow-50 text-yellow-700 border-yellow-200",
+    blue:   "bg-[#1f48ff]/20 text-[#99c5ff] border-[#1f48ff]/30",
+    green:  "bg-emerald-500/100/15 text-emerald-400 border-emerald-500/25",
+    warn:   "bg-amber-500/100/15 text-amber-400 border-amber-500/25",
+    red:    "bg-red-500/100/15 text-red-400 border-red-500/25",
+    navy:   "bg-[#1f48ff] text-white border-[#1f48ff]",
+    sky:    "bg-[#99c5ff]/10 text-[#99c5ff] border-[#99c5ff]/20",
+    gray:   "bg-[rgba(255,255,255,0.03)]/5 text-[rgba(153,197,255,0.5)] border-white/10",
+    orange: "bg-orange-500/15 text-orange-400 border-orange-500/25",
+    gold:   "bg-yellow-500/15 text-yellow-400 border-yellow-500/25",
   };
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-bold border ${s[color]}`}>{children}</span>;
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold border ${s[color]}`}>{children}</span>;
 }
 
 function Alert({ type = "blue", children }) {
-  const s = { warn:"bg-amber-50 border-amber-200 text-amber-800", green:"bg-emerald-50 border-emerald-200 text-emerald-800", blue:"bg-blue-50 border-blue-200 text-blue-800", gold:"bg-yellow-50 border-yellow-200 text-yellow-800", red:"bg-red-50 border-red-200 text-red-800" };
+  const s = { warn:"bg-amber-500/100/10 border-amber-500/25 text-amber-300", green:"bg-emerald-500/100/10 border-emerald-500/25 text-emerald-300", blue:"bg-[#1f48ff]/10 border-[#1f48ff]/25 text-[#99c5ff]", gold:"bg-yellow-500/10 border-yellow-500/25 text-yellow-300", red:"bg-red-500/100/10 border-red-500/25 text-red-300" };
   const icons = { warn:"⚠️", green:"✅", blue:"ℹ️", gold:"💡", red:"🚨" };
-  return <div className={`flex gap-3 p-3 border text-sm leading-relaxed rounded-sm ${s[type]}`}><span className="shrink-0 mt-0.5">{icons[type]}</span><div>{children}</div></div>;
+  return <div className={`flex gap-3 p-3 border text-sm leading-relaxed rounded-xl ${s[type]}`}><span className="shrink-0 mt-0.5">{icons[type]}</span><div>{children}</div></div>;
 }
 
-// Big stat card (like ScalingTab RStat)
-function RStat({ label, value, accent = "text-brand-navy", sub, change }) {
+function RStat({ label, value, accent = "text-white", sub, change }) {
   return (
-    <div className="bg-gray-50 border border-gray-100 rounded-sm p-4">
+    <div className="rounded-xl border border-[rgba(153,197,255,0.1)] p-4" style={{ background: 'linear-gradient(135deg, #05124a 0%, #0d1e78 100%)' }}>
       <SL className="mb-1">{label}</SL>
-      <p className={`text-2xl font-bold tabular-nums ${accent}`}>{value}</p>
-      {sub    && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+      <p className={`text-2xl font-black tabular-nums ${accent}`}>{value}</p>
+      {sub    && <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">{sub}</p>}
       {change !== undefined && (
-        <p className={`text-xs font-bold mt-1 ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+        <p className={`text-xs font-bold mt-1 ${change >= 0 ? "text-emerald-400" : "text-red-400"}`}>
           {change >= 0 ? "↑" : "↓"} {Math.abs(Math.round(change))}% vs last year
         </p>
       )}
@@ -198,11 +201,10 @@ function RStat({ label, value, accent = "text-brand-navy", sub, change }) {
   );
 }
 
-// Star rating row (from existing component)
 function StarRow({ label, value, onChange, readonly = false }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-      <p className="text-sm text-gray-700">{label}</p>
+    <div className="flex items-center justify-between py-3 border-b border-[rgba(153,197,255,0.08)] last:border-0">
+      <p className="text-sm text-[rgba(153,197,255,0.7)]">{label}</p>
       <div className="flex gap-1">
         {[1,2,3,4,5].map(s => (
           <button
@@ -211,7 +213,7 @@ function StarRow({ label, value, onChange, readonly = false }) {
             className={`text-lg leading-none transition-transform ${readonly ? "" : "hover:scale-110 cursor-pointer"}`}
             style={{ fontSize: 18 }}
           >
-            <span className={s <= value ? "text-yellow-400" : "text-gray-200"}>★</span>
+            <span className={s <= value ? "text-yellow-400" : "text-[rgba(153,197,255,0.15)]"}>★</span>
           </button>
         ))}
       </div>
@@ -219,7 +221,6 @@ function StarRow({ label, value, onChange, readonly = false }) {
   );
 }
 
-// List editor (from existing component, re-skinned)
 function ListEditor({ items, onChange, placeholder, color = "blue" }) {
   const [newItem, setNewItem] = useState("");
   const add = () => {
@@ -229,26 +230,26 @@ function ListEditor({ items, onChange, placeholder, color = "blue" }) {
   };
   const remove = i => onChange(items.filter((_, idx) => idx !== i));
   const colorMap = {
-    blue:   "bg-blue-50 border-blue-100",
-    green:  "bg-emerald-50 border-emerald-100",
-    red:    "bg-red-50 border-red-100",
-    amber:  "bg-amber-50 border-amber-100",
-    gray:   "bg-gray-50 border-gray-100",
+    blue:   "bg-[#1f48ff]/10 border-[#1f48ff]/20",
+    green:  "bg-emerald-500/100/10 border-emerald-500/20",
+    red:    "bg-red-500/100/10 border-red-500/20",
+    amber:  "bg-amber-500/100/10 border-amber-500/20",
+    gray:   "bg-[rgba(255,255,255,0.03)]/5 border-white/10",
   };
   const dotColor = {
-    blue:   "text-brand-blue",
-    green:  "text-emerald-600",
-    red:    "text-red-500",
-    amber:  "text-amber-600",
-    gray:   "text-gray-400",
+    blue:   "text-[#99c5ff]",
+    green:  "text-emerald-400",
+    red:    "text-red-400",
+    amber:  "text-amber-400",
+    gray:   "text-[rgba(153,197,255,0.4)]",
   };
   return (
     <div className="space-y-2">
       {items.map((item, i) => (
         <div key={i} className={`flex items-center gap-3 px-3 py-2.5 border rounded-sm ${colorMap[color]}`}>
           <span className={`text-sm font-bold shrink-0 ${dotColor[color]}`}>✓</span>
-          <span className="text-sm text-gray-800 flex-1">{item}</span>
-          <button onClick={() => remove(i)} className="text-gray-300 hover:text-red-400 transition-colors text-sm shrink-0">✕</button>
+          <span className="text-sm text-white flex-1">{item}</span>
+          <button onClick={() => remove(i)} className="text-[rgba(153,197,255,0.25)] hover:text-red-400 transition-colors text-sm shrink-0">✕</button>
         </div>
       ))}
       <div className="flex gap-2">
@@ -258,7 +259,7 @@ function ListEditor({ items, onChange, placeholder, color = "blue" }) {
           onChange={e => setNewItem(e.target.value)}
           onKeyDown={e => e.key === "Enter" && add()}
           placeholder={placeholder}
-          className="flex-1 border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue"
+          className="flex-1 border border-[rgba(153,197,255,0.12)] rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue"
         />
         <button
           onClick={add}
@@ -277,8 +278,8 @@ function MonthlyChart({ data, year }) {
   return (
     <div>
       <div className="flex items-center gap-4 text-xs mb-3">
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-brand-blue rounded-sm" /><span className="text-gray-500">Income</span></div>
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-brand-skyblue/60 rounded-sm" /><span className="text-gray-500">Expenses</span></div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-brand-blue rounded-sm" /><span className="text-[rgba(153,197,255,0.6)]">Income</span></div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-brand-skyblue/60 rounded-sm" /><span className="text-[rgba(153,197,255,0.6)]">Expenses</span></div>
       </div>
       <div className="flex items-end gap-1.5 h-36 group">
         {data.map(({ m, income, exp }) => (
@@ -290,7 +291,7 @@ function MonthlyChart({ data, year }) {
               <div className="flex-1 bg-brand-blue rounded-sm transition-all" style={{ height:`${(income/maxVal)*100}%` }} />
               <div className="flex-1 bg-brand-skyblue/50 rounded-sm transition-all" style={{ height:`${(exp/maxVal)*100}%` }} />
             </div>
-            <span className="text-xs text-gray-400">{m}</span>
+            <span className="text-xs text-[rgba(153,197,255,0.4)]">{m}</span>
           </div>
         ))}
       </div>
@@ -302,10 +303,10 @@ function MonthlyChart({ data, year }) {
 function PrintView({ data, year, ratings, goalsHit, goalsMissed, highlights, improvements, onClose }) {
   const avgRating = Object.values(ratings).reduce((a,b)=>a+b,0) / Object.keys(ratings).length;
   return (
-    <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-[rgba(255,255,255,0.03)] overflow-y-auto">
       <div className="max-w-3xl mx-auto p-8">
         <div className="flex items-center justify-between mb-8 print:hidden">
-          <button onClick={onClose} className="px-4 py-2 border border-gray-200 text-sm font-bold text-gray-500 rounded-sm hover:border-gray-300 transition-colors">← Back</button>
+          <button onClick={onClose} className="px-4 py-2 border border-[rgba(153,197,255,0.12)] text-sm font-bold text-[rgba(153,197,255,0.6)] rounded-sm hover:border-gray-300 transition-colors">← Back</button>
           <button onClick={() => window.print()} className="flex items-center gap-2 px-5 py-2.5 bg-brand-navy text-white text-sm font-bold rounded-sm hover:bg-brand-blue transition-colors">
             🖨️ Print / Save PDF
           </button>
@@ -335,16 +336,16 @@ function PrintView({ data, year, ratings, goalsHit, goalsMissed, highlights, imp
             { label:"Net profit",    val:fmt(data.profit),   border:"border-l-brand-blue"  },
             { label:"Tax estimate",  val:fmt(data.taxEst),   border:"border-l-amber-400"   },
           ].map(({ label, val, border }) => (
-            <div key={label} className={`bg-white border-l-4 ${border} border border-gray-100 p-4 rounded-sm`}>
-              <p className="text-xl font-bold text-brand-navy tabular-nums">{val}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+            <div key={label} className={`bg-[rgba(255,255,255,0.03)] border-l-4 ${border} border border-[rgba(153,197,255,0.08)] p-4 rounded-sm`}>
+              <p className="text-xl font-bold text-white tabular-nums">{val}</p>
+              <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">{label}</p>
             </div>
           ))}
         </div>
 
         {/* Monthly chart */}
-        <div className="bg-white border border-gray-100 rounded-sm p-5 mb-6">
-          <h3 className="font-bold text-brand-navy mb-4">Monthly income vs expenses</h3>
+        <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(153,197,255,0.08)] rounded-sm p-5 mb-6">
+          <h3 className="font-bold text-white mb-4">Monthly income vs expenses</h3>
           <MonthlyChart data={data.monthlyData} year={year} />
         </div>
 
@@ -356,36 +357,36 @@ function PrintView({ data, year, ratings, goalsHit, goalsMissed, highlights, imp
             { label:"Net growth",        val:`+${data.clientsEnd-data.clientsStart}` },
             { label:"Jobs completed",    val:data.jobsCompleted },
           ].map(({ label, val }) => (
-            <div key={label} className="bg-gray-50 rounded-sm p-4 text-center">
-              <p className="text-2xl font-bold text-brand-navy">{val}</p>
-              <p className="text-xs text-gray-400 mt-1">{label}</p>
+            <div key={label} className="bg-[rgba(153,197,255,0.04)] rounded-sm p-4 text-center">
+              <p className="text-2xl font-bold text-white">{val}</p>
+              <p className="text-xs text-[rgba(153,197,255,0.4)] mt-1">{label}</p>
             </div>
           ))}
         </div>
 
         {/* Goals */}
         <div className="grid grid-cols-2 gap-5 mb-6">
-          <div className="bg-white border border-gray-100 rounded-sm p-5">
-            <h3 className="font-bold text-brand-navy mb-3 flex items-center gap-2"><span className="text-emerald-500">✓</span> Goals hit</h3>
-            {goalsHit.map((g,i) => <div key={i} className="text-sm text-gray-700 mb-1.5 flex gap-2"><span className="text-emerald-500 shrink-0">✓</span>{g}</div>)}
+          <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(153,197,255,0.08)] rounded-sm p-5">
+            <h3 className="font-bold text-white mb-3 flex items-center gap-2"><span className="text-emerald-500">✓</span> Goals hit</h3>
+            {goalsHit.map((g,i) => <div key={i} className="text-sm text-[rgba(153,197,255,0.7)] mb-1.5 flex gap-2"><span className="text-emerald-500 shrink-0">✓</span>{g}</div>)}
           </div>
-          <div className="bg-white border border-gray-100 rounded-sm p-5">
-            <h3 className="font-bold text-brand-navy mb-3 flex items-center gap-2"><span className="text-red-400">✕</span> Goals missed</h3>
-            {goalsMissed.map((g,i) => <div key={i} className="text-sm text-gray-700 mb-1.5 flex gap-2"><span className="text-red-400 shrink-0">✕</span>{g}</div>)}
+          <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(153,197,255,0.08)] rounded-sm p-5">
+            <h3 className="font-bold text-white mb-3 flex items-center gap-2"><span className="text-red-400">✕</span> Goals missed</h3>
+            {goalsMissed.map((g,i) => <div key={i} className="text-sm text-[rgba(153,197,255,0.7)] mb-1.5 flex gap-2"><span className="text-red-400 shrink-0">✕</span>{g}</div>)}
           </div>
         </div>
 
         {/* Self assessment */}
-        <div className="bg-white border border-gray-100 rounded-sm p-5 mb-6">
-          <h3 className="font-bold text-brand-navy mb-4">Self assessment</h3>
+        <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(153,197,255,0.08)] rounded-sm p-5 mb-6">
+          <h3 className="font-bold text-white mb-4">Self assessment</h3>
           <div className="grid grid-cols-2 gap-x-8">
             {Object.entries(ratings).map(([label, value]) => (
               <StarRow key={label} label={label} value={value} readonly />
             ))}
           </div>
-          <div className="mt-4 text-center border-t border-gray-100 pt-4">
-            <p className="text-xs text-gray-400 mb-1">Overall score</p>
-            <p className="text-3xl font-bold text-brand-navy">{avgRating.toFixed(1)} / 5.0</p>
+          <div className="mt-4 text-center border-t border-[rgba(153,197,255,0.08)] pt-4">
+            <p className="text-xs text-[rgba(153,197,255,0.4)] mb-1">Overall score</p>
+            <p className="text-3xl font-bold text-white">{avgRating.toFixed(1)} / 5.0</p>
           </div>
         </div>
 
@@ -397,7 +398,7 @@ function PrintView({ data, year, ratings, goalsHit, goalsMissed, highlights, imp
             Focus on retention, pricing confidence, and one new service.
           </p>
         </div>
-        <p className="text-xs text-gray-400 text-center mt-4">Generated by Cadi · {new Date().toLocaleDateString("en-GB")}</p>
+        <p className="text-xs text-[rgba(153,197,255,0.4)] text-center mt-4">Generated by Cadi · {new Date().toLocaleDateString("en-GB")}</p>
       </div>
     </div>
   );
@@ -417,7 +418,7 @@ function NumbersSection({ data }) {
             { label:"Tax estimate",  val:fmt(data.taxEst),   sub: "Income tax + Class 4 NI"            },
             { label:"Take-home",     val:fmt(data.netAfterTax), sub: sign(data.yoyProfit)+" vs last year" },
           ].map(({ label, val, sub }) => (
-            <div key={label} className="bg-white/10 rounded-sm p-4">
+            <div key={label} className="bg-[rgba(255,255,255,0.03)]/10 rounded-sm p-4">
               <p className="text-xs text-brand-skyblue font-bold uppercase tracking-widest mb-1">{label}</p>
               <p className="text-2xl font-bold text-white tabular-nums">{val}</p>
               <p className="text-xs text-brand-skyblue/70 mt-0.5">{sub}</p>
@@ -428,33 +429,33 @@ function NumbersSection({ data }) {
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <RStat label="Gross income"    value={fmt(data.income)}        accent="text-brand-navy"   change={data.yoyIncome} sub={`Target achieved: ${data.income>=54000?"✓ Yes":"Missed"}`} />
+        <RStat label="Gross income"    value={fmt(data.income)}        accent="text-white"   change={data.yoyIncome} sub={`Target achieved: ${data.income>=54000?"✓ Yes":"Missed"}`} />
         <RStat label="Net profit"      value={fmt(data.profit)}        accent="text-emerald-600"  change={data.yoyProfit} />
         <RStat label="Profit margin"   value={pct(data.margin)}        accent={data.margin>=70?"text-emerald-600":"text-amber-600"} sub="Industry avg: 65%" />
         <RStat label="Total expenses"  value={fmt(data.expenses)}      accent="text-red-500"      sub={`${pct((data.expenses/data.income)*100)} of income`} />
         <RStat label="Tax estimate"    value={fmt(data.taxEst)}        accent="text-amber-600"    sub="Guide only — ask your accountant" />
-        <RStat label="Net take-home"   value={fmt(data.netAfterTax)}   accent="text-brand-navy"   sub="After all estimated tax" />
+        <RStat label="Net take-home"   value={fmt(data.netAfterTax)}   accent="text-white"   sub="After all estimated tax" />
       </div>
 
       {/* Monthly chart */}
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
           <SL>Monthly income vs expenses</SL>
-          <div className="flex gap-4 text-xs text-gray-400">
-            <span>Peak: <strong className="text-brand-navy">{fmt(data.bestMonth.value)}</strong> ({data.bestMonth.name})</span>
-            <span>Avg: <strong className="text-brand-navy">{fmt(data.income/12)}</strong></span>
+          <div className="flex gap-4 text-xs text-[rgba(153,197,255,0.4)]">
+            <span>Peak: <strong className="text-white">{fmt(data.bestMonth.value)}</strong> ({data.bestMonth.name})</span>
+            <span>Avg: <strong className="text-white">{fmt(data.income/12)}</strong></span>
           </div>
         </div>
         <div className="p-5">
           <MonthlyChart data={data.monthlyData} year={data.yr} />
         </div>
-        <div className="grid grid-cols-3 gap-px bg-gray-200 border-t border-gray-200">
+        <div className="grid grid-cols-3 gap-px bg-gray-200 border-t border-[rgba(153,197,255,0.12)]">
           {[
-            { label:"This year",  val:fmt(data.income),      accent:"text-brand-navy" },
-            { label:"Last year",  val:fmt(data.prevIncome),  accent:"text-gray-400"   },
+            { label:"This year",  val:fmt(data.income),      accent:"text-white" },
+            { label:"Last year",  val:fmt(data.prevIncome),  accent:"text-[rgba(153,197,255,0.4)]"   },
             { label:"Growth",     val:`+${fmt(data.income-data.prevIncome)}`, accent:"text-emerald-600" },
           ].map(({ label, val, accent }) => (
-            <div key={label} className="bg-white px-4 py-3 text-center">
+            <div key={label} className="bg-[rgba(255,255,255,0.03)] px-4 py-3 text-center">
               <SL className="mb-0.5">{label}</SL>
               <p className={`text-sm font-bold tabular-nums ${accent}`}>{val}</p>
             </div>
@@ -464,12 +465,12 @@ function NumbersSection({ data }) {
 
       {/* Best / worst month */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-emerald-50 border border-emerald-200 rounded-sm p-5">
+        <div className="bg-emerald-500/10 border border-emerald-200 rounded-sm p-5">
           <SL className="text-emerald-600 mb-1">Best month</SL>
           <p className="text-xl font-bold text-emerald-800">{data.bestMonth.name}</p>
           <p className="text-2xl font-bold text-emerald-600 tabular-nums mt-1">{fmt(data.bestMonth.value)}</p>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-sm p-5">
+        <div className="bg-red-500/10 border border-red-200 rounded-sm p-5">
           <SL className="text-red-500 mb-1">Quietest month</SL>
           <p className="text-xl font-bold text-red-700">{data.worstMonth.name}</p>
           <p className="text-2xl font-bold text-red-500 tabular-nums mt-1">{fmt(data.worstMonth.value)}</p>
@@ -478,19 +479,19 @@ function NumbersSection({ data }) {
 
       {/* Expense breakdown */}
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
           <SL>Expenses — {fmt(data.expenses)} total</SL>
           <Chip color="green">SA103 mapped</Chip>
         </div>
         <div className="divide-y divide-gray-100">
           {data.expenseBreakdown.map(({ label, amount, pct: p }) => (
             <div key={label} className="flex items-center gap-3 px-4 py-2.5">
-              <span className="text-xs text-gray-500 w-36 shrink-0">{label}</span>
-              <div className="flex-1 h-3 bg-gray-100 rounded-sm overflow-hidden">
+              <span className="text-xs text-[rgba(153,197,255,0.6)] w-36 shrink-0">{label}</span>
+              <div className="flex-1 h-3 bg-[rgba(153,197,255,0.06)] rounded-sm overflow-hidden">
                 <div className="h-full bg-brand-blue/50 rounded-sm" style={{ width:`${p}%` }} />
               </div>
-              <span className="text-xs font-mono font-semibold text-gray-700 w-12 text-right">{fmt(amount)}</span>
-              <span className="text-xs text-gray-400 w-8 text-right">{p}%</span>
+              <span className="text-xs font-mono font-semibold text-[rgba(153,197,255,0.7)] w-12 text-right">{fmt(amount)}</span>
+              <span className="text-xs text-[rgba(153,197,255,0.4)] w-8 text-right">{p}%</span>
             </div>
           ))}
         </div>
@@ -509,13 +510,13 @@ function NumbersSection({ data }) {
                 strokeDashoffset={`${2*Math.PI*32*(1-Math.min(data.margin/100,1))}`} />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-sm font-bold text-brand-navy">{Math.round(data.margin)}%</span>
+              <span className="text-sm font-bold text-white">{Math.round(data.margin)}%</span>
             </div>
           </div>
           <div>
             <SL className="mb-1">Profit margin analysis</SL>
-            <p className="text-lg font-bold text-brand-navy">{pct(data.margin)} net profit margin</p>
-            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+            <p className="text-lg font-bold text-white">{pct(data.margin)} net profit margin</p>
+            <p className="text-xs text-[rgba(153,197,255,0.6)] mt-1 leading-relaxed">
               Industry average for cleaning businesses is <strong>55–65%</strong>.
               Your {Math.round(data.margin)}% margin puts you <strong className={data.margin>=65?"text-emerald-600":"text-amber-600"}>{data.margin>=65?"above":"at"} industry average</strong>.
               Every 1% margin improvement at your revenue is worth <strong>{fmt(data.income*0.01)}/year</strong>.
@@ -529,41 +530,41 @@ function NumbersSection({ data }) {
 
 // ─── SECTION: Clients ──────────────────────────────────────────────────────────
 function ClientsSection({ data, highlights, setHighlights }) {
-  const TYPE_DOT = { residential:"bg-emerald-500", commercial:"bg-brand-blue", exterior:"bg-orange-500" };
+  const TYPE_DOT = { residential:"bg-emerald-500/100", commercial:"bg-brand-blue", exterior:"bg-orange-500" };
   const netGrowth = data.clientsEnd - data.clientsStart;
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <RStat label="Clients at start"  value={data.clientsStart}              accent="text-brand-navy" />
-        <RStat label="Clients at end"    value={data.clientsEnd}                accent="text-brand-navy" />
+        <RStat label="Clients at start"  value={data.clientsStart}              accent="text-white" />
+        <RStat label="Clients at end"    value={data.clientsEnd}                accent="text-white" />
         <RStat label="Net growth"        value={`+${netGrowth}`}               accent="text-emerald-600" sub={`+${Math.round((netGrowth/Math.max(data.clientsStart,1))*100)}% growth`} />
         <RStat label="Clients lost"      value={data.clientsLost}               accent={data.clientsLost>3?"text-red-500":"text-amber-600"} sub={data.clientsLost===0?"Perfect retention":""} />
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <RStat label="Jobs completed"   value={data.jobsCompleted.toLocaleString()} accent="text-brand-navy" />
+        <RStat label="Jobs completed"   value={data.jobsCompleted.toLocaleString()} accent="text-white" />
         <RStat label="Avg job value"    value={fmt(data.avgJobValue)}               accent="text-brand-blue" />
-        <RStat label="Jobs per month"   value={Math.round(data.jobsCompleted/12)}   accent="text-brand-navy" sub="average" />
+        <RStat label="Jobs per month"   value={Math.round(data.jobsCompleted/12)}   accent="text-white" sub="average" />
       </div>
 
       {/* Top clients */}
       {data.topClients?.length > 0 && (
         <Card className="overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100"><SL>Top clients by revenue</SL></div>
+          <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Top clients by revenue</SL></div>
           <div className="divide-y divide-gray-100">
             {data.topClients.map((c, i) => (
               <div key={c.name} className="flex items-center gap-3 px-4 py-3">
                 <div className="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-bold shrink-0">{i+1}</div>
                 <div className={`w-2 h-2 rounded-full shrink-0 ${TYPE_DOT[c.type]}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800">{c.name}</p>
-                  <p className="text-xs text-gray-400">{c.visits} visits · {c.type}</p>
+                  <p className="text-sm font-semibold text-white">{c.name}</p>
+                  <p className="text-xs text-[rgba(153,197,255,0.4)]">{c.visits} visits · {c.type}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-bold tabular-nums text-brand-navy">{fmt(c.revenue)}</p>
-                  <p className="text-xs text-gray-400">{pct((c.revenue/data.income)*100)} of income</p>
+                  <p className="text-sm font-bold tabular-nums text-white">{fmt(c.revenue)}</p>
+                  <p className="text-xs text-[rgba(153,197,255,0.4)]">{pct((c.revenue/data.income)*100)} of income</p>
                 </div>
-                <div className="w-20 h-2 bg-gray-100 rounded-sm overflow-hidden">
+                <div className="w-20 h-2 bg-[rgba(153,197,255,0.06)] rounded-sm overflow-hidden">
                   <div className="h-full bg-brand-blue/50 rounded-sm" style={{ width:`${(c.revenue/data.topClients[0].revenue)*100}%` }} />
                 </div>
               </div>
@@ -573,7 +574,7 @@ function ClientsSection({ data, highlights, setHighlights }) {
       )}
 
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100"><SL>Year highlights</SL></div>
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Year highlights</SL></div>
         <div className="p-4">
           <ListEditor items={highlights} onChange={setHighlights} placeholder="Add a highlight from the year…" color="blue" />
         </div>
@@ -588,9 +589,9 @@ function GoalsSection({ wins, setWins, goalsHit, setGoalsHit, goalsMissed, setGo
     <div className="space-y-5">
       {/* Wins */}
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 bg-emerald-50/50">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] bg-emerald-500/10/50">
           <SL className="text-emerald-700">Your wins this year 🏆</SL>
-          <p className="text-xs text-gray-400 mt-0.5">These are auto-generated from your accounts — add your own too</p>
+          <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">These are auto-generated from your accounts — add your own too</p>
         </div>
         <div className="p-4">
           <ListEditor items={wins} onChange={setWins} placeholder="Add another win…" color="green" />
@@ -598,9 +599,9 @@ function GoalsSection({ wins, setWins, goalsHit, setGoalsHit, goalsMissed, setGo
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
           <SL>Goals we hit ✅</SL>
-          <p className="text-xs text-gray-400 mt-0.5">Be honest — what did you actually achieve?</p>
+          <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">Be honest — what did you actually achieve?</p>
         </div>
         <div className="p-4">
           <ListEditor items={goalsHit} onChange={setGoalsHit} placeholder="Add a goal you hit…" color="green" />
@@ -608,9 +609,9 @@ function GoalsSection({ wins, setWins, goalsHit, setGoalsHit, goalsMissed, setGo
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
           <SL>Goals we missed ❌</SL>
-          <p className="text-xs text-gray-400 mt-0.5">No shame — missing a goal is useful information</p>
+          <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">No shame — missing a goal is useful information</p>
         </div>
         <div className="p-4">
           <ListEditor items={goalsMissed} onChange={setGoalsMissed} placeholder="Add a goal that wasn't reached…" color="red" />
@@ -618,7 +619,7 @@ function GoalsSection({ wins, setWins, goalsHit, setGoalsHit, goalsMissed, setGo
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
           <SL>What to improve next year</SL>
         </div>
         <div className="p-4">
@@ -650,7 +651,7 @@ function SelfReview({ ratings, setRatings }) {
       </Alert>
 
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
           <SL>Rate your year — 1 to 5</SL>
         </div>
         <div className="px-5 py-2">
@@ -682,8 +683,8 @@ function SelfReview({ ratings, setRatings }) {
             {lowestAreas.map(area => (
               <div key={area} className="flex items-center gap-2 text-sm">
                 <span className="text-amber-500 font-bold">→</span>
-                <span className="text-gray-800 font-medium">{area}</span>
-                <span className="text-xs text-gray-400">— rated {ratings[area]}/5</span>
+                <span className="text-white font-medium">{area}</span>
+                <span className="text-xs text-[rgba(153,197,255,0.4)]">— rated {ratings[area]}/5</span>
               </div>
             ))}
           </div>
@@ -723,27 +724,27 @@ function NextYearSection({ data, nextYearGoals, setNextYearGoals, vision, setVis
     <div className="space-y-5">
       {/* Income target slider */}
       <Card className="overflow-hidden border-t-2 border-t-brand-blue">
-        <div className="px-4 py-3 border-b border-gray-100"><SL>Income target</SL></div>
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Income target</SL></div>
         <div className="p-5">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <p className="text-4xl font-bold tabular-nums text-brand-navy">{fmt(incomeTarget)}</p>
-              <p className="text-sm text-gray-400 mt-1">
+              <p className="text-4xl font-bold tabular-nums text-white">{fmt(incomeTarget)}</p>
+              <p className="text-sm text-[rgba(153,197,255,0.4)] mt-1">
                 {growth > 0 ? `↑ ${growthPct}% growth on this year` : "Same as this year"} · {fmt(Math.round(incomeTarget/12))}/month
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-gray-400 mb-0.5">This year</p>
-              <p className="text-lg font-bold text-gray-400 tabular-nums">{fmt(data.income)}</p>
+              <p className="text-xs text-[rgba(153,197,255,0.4)] mb-0.5">This year</p>
+              <p className="text-lg font-bold text-[rgba(153,197,255,0.4)] tabular-nums">{fmt(data.income)}</p>
             </div>
           </div>
           <input type="range" min={data.income*0.9} max={data.income*3} step={500}
             value={incomeTarget} onChange={e => setIncomeTarget(+e.target.value)}
             className="w-full accent-brand-blue mb-3" />
-          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-2">
+          <div className="h-2.5 bg-[rgba(153,197,255,0.06)] rounded-full overflow-hidden mb-2">
             <div className="h-full bg-brand-blue rounded-full" style={{ width:`${Math.min((data.income/incomeTarget)*100,100)}%` }} />
           </div>
-          <div className="flex justify-between text-xs text-gray-400 mb-4">
+          <div className="flex justify-between text-xs text-[rgba(153,197,255,0.4)] mb-4">
             <span>This year: {fmt(data.income)}</span>
             <span className="text-brand-blue font-bold">{fmt(incomeTarget)} target</span>
           </div>
@@ -761,10 +762,10 @@ function NextYearSection({ data, nextYearGoals, setNextYearGoals, vision, setVis
                   const multiplier = label.includes("10") ? 1.1 : label.includes("20") ? 1.2 : 1.35;
                   setIncomeTarget(Math.round(data.income*multiplier/500)*500);
                 }}
-                className={`text-center p-3 border rounded-sm transition-colors ${active ? "bg-brand-navy text-white border-brand-navy" : "bg-gray-50 border-gray-200 hover:border-brand-blue"}`}
+                className={`text-center p-3 border rounded-sm transition-colors ${active ? "bg-brand-navy text-white border-brand-navy" : "bg-[rgba(153,197,255,0.04)] border-[rgba(153,197,255,0.12)] hover:border-brand-blue"}`}
               >
-                <p className={`text-sm font-bold tabular-nums ${active?"text-white":"text-brand-navy"}`}>{val}</p>
-                <p className={`text-xs mt-0.5 ${active?"text-brand-skyblue":"text-gray-400"}`}>{label}</p>
+                <p className={`text-sm font-bold tabular-nums ${active?"text-white":"text-white"}`}>{val}</p>
+                <p className={`text-xs mt-0.5 ${active?"text-brand-skyblue":"text-[rgba(153,197,255,0.4)]"}`}>{label}</p>
               </button>
             ))}
           </div>
@@ -773,15 +774,15 @@ function NextYearSection({ data, nextYearGoals, setNextYearGoals, vision, setVis
 
       {/* Data-driven insights (from existing component) */}
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 bg-brand-skyblue/10">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] bg-brand-skyblue/10">
           <SL>Based on your {data.yr} numbers</SL>
-          <p className="text-xs text-gray-400 mt-0.5">These are calculated from your actual data — not generic advice</p>
+          <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">These are calculated from your actual data — not generic advice</p>
         </div>
         <div className="divide-y divide-gray-100">
           {insights.map(({ icon, text }, i) => (
             <div key={i} className="flex items-start gap-3 px-4 py-3.5">
               <span className="text-lg shrink-0 mt-0.5">{icon}</span>
-              <p className="text-sm text-gray-700 leading-relaxed">{text}</p>
+              <p className="text-sm text-[rgba(153,197,255,0.7)] leading-relaxed">{text}</p>
             </div>
           ))}
         </div>
@@ -789,7 +790,7 @@ function NextYearSection({ data, nextYearGoals, setNextYearGoals, vision, setVis
 
       {/* Goals for next year */}
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100"><SL>Goals for next year</SL></div>
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Goals for next year</SL></div>
         <div className="p-4">
           <ListEditor items={nextYearGoals} onChange={setNextYearGoals} placeholder="Add a goal for next year…" color="blue" />
         </div>
@@ -797,9 +798,9 @@ function NextYearSection({ data, nextYearGoals, setNextYearGoals, vision, setVis
 
       {/* Vision */}
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
           <SL>Vision statement</SL>
-          <p className="text-xs text-gray-400 mt-0.5">One sentence: where will your business be in 12 months?</p>
+          <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">One sentence: where will your business be in 12 months?</p>
         </div>
         <div className="p-4">
           <textarea
@@ -807,12 +808,12 @@ function NextYearSection({ data, nextYearGoals, setNextYearGoals, vision, setVis
             onChange={e => setVision(e.target.value)}
             rows={3}
             placeholder="e.g. By April 2027, I'll be running a team of two cleaners, earning £60k, and taking every Friday off…"
-            className="w-full border border-gray-200 rounded-sm px-3 py-2.5 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:border-brand-blue resize-none"
+            className="w-full border border-[rgba(153,197,255,0.12)] rounded-sm px-3 py-2.5 text-sm text-white placeholder-gray-300 focus:outline-none focus:border-brand-blue resize-none"
           />
           {vision && (
             <div className="mt-3 bg-brand-navy/5 border border-brand-navy/10 rounded-sm p-3">
-              <p className="text-xs text-gray-400 mb-1">Your vision</p>
-              <p className="text-sm text-brand-navy font-medium italic">"{vision}"</p>
+              <p className="text-xs text-[rgba(153,197,255,0.4)] mb-1">Your vision</p>
+              <p className="text-sm text-white font-medium italic">"{vision}"</p>
             </div>
           )}
         </div>
@@ -882,19 +883,8 @@ Respond ONLY with valid JSON (no markdown, no extra text):
   "motivatingClose": "string max 20 words"
 }`;
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 700,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
-      if (!response.ok) throw new Error(`API ${response.status}`);
-      const res  = await response.json();
-      const text = res.content?.[0]?.text ?? "";
-      setAudit(JSON.parse(text.replace(/```json|```/g,"").trim()));
+      // AI audit — disabled until API key is configured server-side
+      throw new Error("AI sprint audit coming soon — this feature is not yet available.");
     } catch (err) {
       console.error(err);
       setAuditError("Couldn't generate the audit. Check your connection and try again.");
@@ -907,8 +897,8 @@ Respond ONLY with valid JSON (no markdown, no extra text):
     return (
       <div className="space-y-5">
         <div className="flex items-center gap-3">
-          <button onClick={() => { setShowAudit(false); setAudit(null); }} className="text-gray-400 hover:text-brand-navy text-sm transition-colors">← Sprint</button>
-          <h3 className="text-lg font-bold text-brand-navy">Sprint audit</h3>
+          <button onClick={() => { setShowAudit(false); setAudit(null); }} className="text-[rgba(153,197,255,0.4)] hover:text-white text-sm transition-colors">← Sprint</button>
+          <h3 className="text-lg font-bold text-white">Sprint audit</h3>
         </div>
 
         {/* Sprint summary */}
@@ -916,11 +906,11 @@ Respond ONLY with valid JSON (no markdown, no extra text):
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-gray-200">
             {[
               { label:"Habit score",      val:`${habitScore}%`,    accent:habitScore>=70?"text-emerald-600":"text-amber-600" },
-              { label:"Goals set",        val:`${sprintGoals.filter(g=>g.text).length}/4`, accent:"text-brand-navy" },
-              { label:"Habits checked",   val:`${completedChecks}/${totalPossibleChecks}`, accent:"text-brand-navy" },
-              { label:"Check-ins done",   val:`${milestones.filter(m=>m.done).length}/3`,  accent:"text-brand-navy" },
+              { label:"Goals set",        val:`${sprintGoals.filter(g=>g.text).length}/4`, accent:"text-white" },
+              { label:"Habits checked",   val:`${completedChecks}/${totalPossibleChecks}`, accent:"text-white" },
+              { label:"Check-ins done",   val:`${milestones.filter(m=>m.done).length}/3`,  accent:"text-white" },
             ].map(({ label, val, accent }) => (
-              <div key={label} className="bg-white px-4 py-3">
+              <div key={label} className="bg-[rgba(255,255,255,0.03)] px-4 py-3">
                 <SL className="mb-0.5">{label}</SL>
                 <p className={`text-xl font-bold tabular-nums ${accent}`}>{val}</p>
               </div>
@@ -931,8 +921,8 @@ Respond ONLY with valid JSON (no markdown, no extra text):
         {!audit && !auditLoading && (
           <div className="text-center py-10">
             <p className="text-4xl mb-3">🤖</p>
-            <p className="text-base font-bold text-brand-navy mb-2">Ready to run your AI audit</p>
-            <p className="text-sm text-gray-400 mb-6 max-w-sm mx-auto">Cadi analyses your habit data, goal completion, and check-in notes to give you a personalised sprint report.</p>
+            <p className="text-base font-bold text-white mb-2">Ready to run your AI audit</p>
+            <p className="text-sm text-[rgba(153,197,255,0.4)] mb-6 max-w-sm mx-auto">Cadi analyses your habit data, goal completion, and check-in notes to give you a personalised sprint report.</p>
             <button onClick={generateAudit} className="px-8 py-3 bg-brand-navy text-white text-xs font-bold uppercase tracking-widest hover:bg-brand-blue transition-colors rounded-sm">
               🤖 Generate sprint audit
             </button>
@@ -943,8 +933,8 @@ Respond ONLY with valid JSON (no markdown, no extra text):
           <Card className="p-8 text-center">
             <div className="flex flex-col items-center gap-4">
               <div className="w-10 h-10 border-[3px] border-brand-blue border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm font-semibold text-brand-navy">Analysing your sprint…</p>
-              <p className="text-xs text-gray-400">Reading habit data, goals, and milestone notes</p>
+              <p className="text-sm font-semibold text-white">Analysing your sprint…</p>
+              <p className="text-xs text-[rgba(153,197,255,0.4)]">Reading habit data, goals, and milestone notes</p>
             </div>
           </Card>
         )}
@@ -957,9 +947,9 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <div className="bg-brand-navy px-5 py-5 text-white">
                 <div className="flex items-start gap-5">
                   <div className={`w-20 h-20 rounded-sm flex items-center justify-center text-4xl font-bold shrink-0 ${
-                    audit.grade?.startsWith("A") ? "bg-emerald-500 text-white" :
+                    audit.grade?.startsWith("A") ? "bg-emerald-500/100 text-white" :
                     audit.grade?.startsWith("B") ? "bg-brand-blue text-white" :
-                    "bg-amber-500 text-white"
+                    "bg-amber-500/100 text-white"
                   }`}>{audit.grade}</div>
                   <div>
                     <p className="text-xs font-bold uppercase tracking-widest text-brand-skyblue mb-2">AI audit · {audit.overallScore}/100</p>
@@ -970,24 +960,24 @@ Respond ONLY with valid JSON (no markdown, no extra text):
             </Card>
 
             <Card className="overflow-hidden border-t-2 border-t-emerald-500">
-              <div className="px-4 py-3 border-b border-gray-100 bg-emerald-50/50"><SL className="text-emerald-700">What worked</SL></div>
+              <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] bg-emerald-500/10/50"><SL className="text-emerald-700">What worked</SL></div>
               <div className="divide-y divide-gray-100">
                 {audit.whatWorked?.map((item,i) => (
                   <div key={i} className="flex items-start gap-3 px-4 py-3">
                     <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">✓</div>
-                    <p className="text-sm text-gray-800">{item}</p>
+                    <p className="text-sm text-white">{item}</p>
                   </div>
                 ))}
               </div>
             </Card>
 
             <Card className="overflow-hidden border-t-2 border-t-amber-400">
-              <div className="px-4 py-3 border-b border-gray-100 bg-amber-50/50"><SL className="text-amber-700">What to improve</SL></div>
+              <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] bg-amber-500/10/50"><SL className="text-amber-700">What to improve</SL></div>
               <div className="divide-y divide-gray-100">
                 {audit.whatToImprove?.map((item,i) => (
                   <div key={i} className="flex items-start gap-3 px-4 py-3">
                     <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">→</div>
-                    <p className="text-sm text-gray-800">{item}</p>
+                    <p className="text-sm text-white">{item}</p>
                   </div>
                 ))}
               </div>
@@ -995,16 +985,16 @@ Respond ONLY with valid JSON (no markdown, no extra text):
 
             <Card className="p-4 border-l-4 border-l-brand-blue">
               <SL className="mb-2">Habit insight</SL>
-              <p className="text-sm text-gray-700 leading-relaxed">{audit.habitInsight}</p>
+              <p className="text-sm text-[rgba(153,197,255,0.7)] leading-relaxed">{audit.habitInsight}</p>
             </Card>
 
             <Card className="overflow-hidden border-t-2 border-t-brand-navy">
-              <div className="px-4 py-3 border-b border-gray-100 bg-brand-navy/5"><SL>Next sprint — focus areas</SL></div>
+              <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] bg-brand-navy/5"><SL>Next sprint — focus areas</SL></div>
               <div className="divide-y divide-gray-100">
                 {audit.nextSprintFocus?.map((item,i) => (
                   <div key={i} className="flex items-start gap-3 px-4 py-3">
                     <div className="w-6 h-6 rounded-sm bg-brand-navy text-white flex items-center justify-center text-xs font-bold shrink-0">{i+1}</div>
-                    <p className="text-sm text-gray-800">{item}</p>
+                    <p className="text-sm text-white">{item}</p>
                   </div>
                 ))}
               </div>
@@ -1015,7 +1005,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
                 <p className="text-lg font-bold text-white">{audit.motivatingClose}</p>
               </div>
             )}
-            <button onClick={() => { setAudit(null); }} className="w-full py-2.5 border border-gray-200 text-gray-500 text-xs font-bold uppercase rounded-sm hover:border-brand-blue hover:text-brand-blue transition-colors">Re-run audit</button>
+            <button onClick={() => { setAudit(null); }} className="w-full py-2.5 border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.6)] text-xs font-bold uppercase rounded-sm hover:border-brand-blue hover:text-brand-blue transition-colors">Re-run audit</button>
           </div>
         )}
       </div>
@@ -1028,22 +1018,22 @@ Respond ONLY with valid JSON (no markdown, no extra text):
         <Card className="overflow-hidden border-t-2 border-t-brand-blue">
           <div className="p-8 text-center">
             <p className="text-5xl mb-4">🚀</p>
-            <h3 className="text-xl font-bold text-brand-navy mb-2">Start a 90-day sprint</h3>
-            <p className="text-sm text-gray-500 leading-relaxed max-w-md mx-auto mb-6">
+            <h3 className="text-xl font-bold text-white mb-2">Start a 90-day sprint</h3>
+            <p className="text-sm text-[rgba(153,197,255,0.6)] leading-relaxed max-w-md mx-auto mb-6">
               A focused 13-week push with weekly habits, milestone check-ins, and an AI audit at the end. Used by the fastest-growing cleaning businesses to break through plateaus.
             </p>
             <div className="grid grid-cols-3 gap-3 max-w-md mx-auto mb-6">
               {[["🎯","Set 4 sprint goals"],["📋","Track 6 weekly habits"],["🤖","AI audit at the end"]].map(([icon,label]) => (
-                <div key={label} className="bg-gray-50 border border-gray-100 rounded-sm p-3">
+                <div key={label} className="bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)] rounded-sm p-3">
                   <p className="text-2xl mb-1">{icon}</p>
                   <p className="text-xs font-semibold text-gray-600">{label}</p>
                 </div>
               ))}
             </div>
             <div className="mb-5">
-              <label className="block text-xs font-bold tracking-widest uppercase text-gray-400 mb-1">Sprint start date</label>
+              <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">Sprint start date</label>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                className="border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue" />
+                className="border border-[rgba(153,197,255,0.12)] rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue" />
             </div>
             <button onClick={() => setSprintActive(true)} className="px-8 py-3 bg-brand-navy text-white text-sm font-bold uppercase tracking-widest hover:bg-brand-blue transition-colors rounded-sm">
               🚀 Start sprint
@@ -1069,21 +1059,21 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <p className="text-xs text-brand-skyblue/60">{habitScore}% habit score</p>
             </div>
             <div className="flex gap-1">
-              <button onClick={() => setCurrentWeek(w=>Math.max(1,w-1))} className="w-7 h-7 rounded-sm bg-white/10 hover:bg-white/20 text-white text-sm flex items-center justify-center">‹</button>
-              <button onClick={() => setCurrentWeek(w=>Math.min(13,w+1))} className="w-7 h-7 rounded-sm bg-white/10 hover:bg-white/20 text-white text-sm flex items-center justify-center">›</button>
+              <button onClick={() => setCurrentWeek(w=>Math.max(1,w-1))} className="w-7 h-7 rounded-sm bg-[rgba(255,255,255,0.03)]/10 hover:bg-[rgba(255,255,255,0.03)]/20 text-white text-sm flex items-center justify-center">‹</button>
+              <button onClick={() => setCurrentWeek(w=>Math.min(13,w+1))} className="w-7 h-7 rounded-sm bg-[rgba(255,255,255,0.03)]/10 hover:bg-[rgba(255,255,255,0.03)]/20 text-white text-sm flex items-center justify-center">›</button>
             </div>
           </div>
         </div>
-        <div className="h-2 bg-gray-100">
+        <div className="h-2 bg-[rgba(153,197,255,0.06)]">
           <div className="h-full bg-brand-blue transition-all duration-500" style={{ width:`${sprintPct}%` }} />
         </div>
         <div className="grid grid-cols-3 gap-px bg-gray-200">
           {[
             { label:"Habit score",    val:`${habitScore}%`, accent:habitScore>=70?"text-emerald-600":"text-amber-600" },
-            { label:"Goals set",      val:`${sprintGoals.filter(g=>g.text).length}/4`, accent:"text-brand-navy" },
-            { label:"Weeks tracked",  val:currentWeek, accent:"text-brand-navy" },
+            { label:"Goals set",      val:`${sprintGoals.filter(g=>g.text).length}/4`, accent:"text-white" },
+            { label:"Weeks tracked",  val:currentWeek, accent:"text-white" },
           ].map(({ label, val, accent }) => (
-            <div key={label} className="bg-white px-4 py-3 text-center">
+            <div key={label} className="bg-[rgba(255,255,255,0.03)] px-4 py-3 text-center">
               <SL className="mb-0.5">{label}</SL>
               <p className={`text-xl font-bold tabular-nums ${accent}`}>{val}</p>
             </div>
@@ -1093,20 +1083,20 @@ Respond ONLY with valid JSON (no markdown, no extra text):
 
       {/* Goals */}
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100"><SL>Sprint goals</SL></div>
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Sprint goals</SL></div>
         <div className="divide-y divide-gray-100">
           {sprintGoals.map(g => (
             <div key={g.id} className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-base">{g.icon}</span>
-                <span className="text-xs font-bold tracking-widest uppercase text-gray-400">{g.category}</span>
+                <span className="text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)]">{g.category}</span>
               </div>
               <input type="text" value={g.text} onChange={e => updateGoal(g.id,"text",e.target.value)} placeholder={g.placeholder}
-                className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue mb-2" />
+                className="w-full border border-[rgba(153,197,255,0.12)] rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue mb-2" />
               <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-400 shrink-0">Measure it:</label>
+                <label className="text-xs text-[rgba(153,197,255,0.4)] shrink-0">Measure it:</label>
                 <input type="text" value={g.target} onChange={e => updateGoal(g.id,"target",e.target.value)} placeholder="e.g. £6,000 on the money dashboard"
-                  className="flex-1 border border-gray-200 rounded-sm px-2 py-1 text-xs focus:outline-none focus:border-brand-blue" />
+                  className="flex-1 border border-[rgba(153,197,255,0.12)] rounded-sm px-2 py-1 text-xs focus:outline-none focus:border-brand-blue" />
               </div>
             </div>
           ))}
@@ -1115,20 +1105,20 @@ Respond ONLY with valid JSON (no markdown, no extra text):
 
       {/* Habit tracker */}
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
           <SL>Week {currentWeek} habits</SL>
           <Chip color={habitScore>=70?"green":habitScore>=40?"warn":"red"}>{completedChecks}/{totalPossibleChecks} checked</Chip>
         </div>
         {/* Week strip */}
-        <div className="flex overflow-x-auto border-b border-gray-100">
+        <div className="flex overflow-x-auto border-b border-[rgba(153,197,255,0.08)]">
           {Array.from({length:Math.min(currentWeek,13)},(_,i)=>{
             const w = i+1;
             const wChecked = HABITS.filter(h=>isChecked(w,h.id)).length;
             return (
               <button key={w} onClick={()=>setCurrentWeek(w)}
-                className={`flex-shrink-0 flex flex-col items-center px-4 py-2 border-b-2 transition-all text-xs ${currentWeek===w?"border-brand-blue text-brand-blue":"border-transparent text-gray-400 hover:text-gray-700"}`}>
+                className={`flex-shrink-0 flex flex-col items-center px-4 py-2 border-b-2 transition-all text-xs ${currentWeek===w?"border-brand-blue text-brand-blue":"border-transparent text-[rgba(153,197,255,0.4)] hover:text-[rgba(153,197,255,0.7)]"}`}>
                 <span className="font-bold">W{w}</span>
-                <span className={`text-xs mt-0.5 ${wChecked===HABITS.length?"text-emerald-500":"text-gray-300"}`}>{wChecked}/{HABITS.length}</span>
+                <span className={`text-xs mt-0.5 ${wChecked===HABITS.length?"text-emerald-500":"text-[rgba(153,197,255,0.25)]"}`}>{wChecked}/{HABITS.length}</span>
               </button>
             );
           })}
@@ -1137,19 +1127,19 @@ Respond ONLY with valid JSON (no markdown, no extra text):
           {HABITS.map(h => {
             const checked = isChecked(currentWeek, h.id);
             return (
-              <label key={h.id} className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${checked?"bg-emerald-50/50":""}`}>
+              <label key={h.id} className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[rgba(153,197,255,0.04)] transition-colors ${checked?"bg-emerald-500/10/50":""}`}>
                 <div onClick={()=>toggleCheck(currentWeek,h.id)}
-                  className={`w-5 h-5 rounded-sm border-2 flex items-center justify-center shrink-0 transition-colors ${checked?"bg-emerald-500 border-emerald-500":"border-gray-300 hover:border-brand-blue"}`}>
+                  className={`w-5 h-5 rounded-sm border-2 flex items-center justify-center shrink-0 transition-colors ${checked?"bg-emerald-500/100 border-emerald-500":"border-gray-300 hover:border-brand-blue"}`}>
                   {checked && <span className="text-white text-xs font-bold">✓</span>}
                 </div>
                 <span className="text-base shrink-0">{h.icon}</span>
-                <span className={`text-sm ${checked?"text-emerald-800 line-through decoration-emerald-400":"text-gray-700"}`}>{h.label}</span>
+                <span className={`text-sm ${checked?"text-emerald-800 line-through decoration-emerald-400":"text-[rgba(153,197,255,0.7)]"}`}>{h.label}</span>
               </label>
             );
           })}
         </div>
-        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
-          <div className="flex justify-between text-xs text-gray-400 mb-1">
+        <div className="px-4 py-3 border-t border-[rgba(153,197,255,0.08)] bg-[rgba(153,197,255,0.04)]">
+          <div className="flex justify-between text-xs text-[rgba(153,197,255,0.4)] mb-1">
             <span>Week {currentWeek} progress</span>
             <span className="font-bold">{HABITS.filter(h=>isChecked(currentWeek,h.id)).length}/{HABITS.length}</span>
           </div>
@@ -1162,24 +1152,24 @@ Respond ONLY with valid JSON (no markdown, no extra text):
 
       {/* Milestone check-ins */}
       <Card className="overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100"><SL>Milestone check-ins</SL></div>
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Milestone check-ins</SL></div>
         <div className="divide-y divide-gray-100">
           {milestones.map(m => {
             const unlocked = currentWeek >= m.week;
             return (
               <div key={m.week} className={`p-4 ${!unlocked?"opacity-40":""}`}>
                 <div className="flex items-center gap-3 mb-2">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${m.done?"bg-emerald-500 text-white":unlocked?"bg-brand-blue text-white":"bg-gray-200 text-gray-400"}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${m.done?"bg-emerald-500/100 text-white":unlocked?"bg-brand-blue text-white":"bg-gray-200 text-[rgba(153,197,255,0.4)]"}`}>
                     {m.done?"✓":`W${m.week}`}
                   </div>
-                  <p className={`text-sm font-semibold ${m.done?"text-emerald-800":"text-gray-800"}`}>{m.label}</p>
+                  <p className={`text-sm font-semibold ${m.done?"text-emerald-800":"text-white"}`}>{m.label}</p>
                   {m.done && <Chip color="green">Complete</Chip>}
                 </div>
                 {unlocked && (
                   <div className="flex gap-2">
                     <textarea value={m.note} onChange={e=>setMilestones(prev=>prev.map(x=>x.week===m.week?{...x,note:e.target.value}:x))}
                       rows={2} placeholder={`How's the sprint going at week ${m.week}?`}
-                      className="flex-1 border border-gray-200 rounded-sm px-3 py-2 text-xs text-gray-700 focus:outline-none focus:border-brand-blue resize-none" />
+                      className="flex-1 border border-[rgba(153,197,255,0.12)] rounded-sm px-3 py-2 text-xs text-[rgba(153,197,255,0.7)] focus:outline-none focus:border-brand-blue resize-none" />
                     {!m.done && (
                       <button onClick={()=>setMilestones(prev=>prev.map(x=>x.week===m.week?{...x,done:true}:x))}
                         className="px-3 py-2 bg-brand-navy text-white text-xs font-bold rounded-sm hover:bg-brand-blue transition-colors shrink-0">
@@ -1272,7 +1262,7 @@ export default function AnnualReviewTab({ accountsData, onNavigate }) {
   }
 
   return (
-    <div className="flex h-full bg-gray-50/50">
+    <div className="flex h-full min-h-screen bg-gradient-to-br from-[#010a4f] via-[#05124a] to-[#0d1e78]">
 
       {/* Sidebar */}
       <aside className="w-56 shrink-0 bg-brand-navy border-r border-brand-navy/20 flex flex-col py-4 overflow-y-auto">
@@ -1282,7 +1272,7 @@ export default function AnnualReviewTab({ accountsData, onNavigate }) {
           <select
             value={selectedYear}
             onChange={e => setSelectedYear(e.target.value)}
-            className="w-full bg-white/10 text-white text-sm font-bold rounded-sm px-3 py-2 border-0 focus:outline-none focus:ring-1 focus:ring-brand-skyblue"
+            className="w-full bg-[rgba(255,255,255,0.03)]/10 text-white text-sm font-bold rounded-sm px-3 py-2 border-0 focus:outline-none focus:ring-1 focus:ring-brand-skyblue"
           >
             {availableYears.map(y => <option key={y} value={y} className="bg-brand-navy">{y}</option>)}
           </select>
@@ -1293,8 +1283,8 @@ export default function AnnualReviewTab({ accountsData, onNavigate }) {
           <button key={n.id} onClick={() => setSection(n.id)}
             className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-all border-l-2 ${
               section===n.id
-                ? "border-brand-skyblue bg-white/10 text-white"
-                : "border-transparent text-brand-skyblue/60 hover:text-white hover:bg-white/5 hover:border-white/20"
+                ? "border-brand-skyblue bg-[rgba(255,255,255,0.03)]/10 text-white"
+                : "border-transparent text-brand-skyblue/60 hover:text-white hover:bg-[rgba(255,255,255,0.03)]/5 hover:border-white/20"
             }`}>
             <span className="text-lg shrink-0 mt-0.5">{n.icon}</span>
             <div>
@@ -1307,10 +1297,10 @@ export default function AnnualReviewTab({ accountsData, onNavigate }) {
         {/* Print button */}
         <div className="mt-auto mx-4 space-y-2">
           <button onClick={() => setShowPrint(true)}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-sm transition-colors">
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[rgba(255,255,255,0.03)]/10 hover:bg-[rgba(255,255,255,0.03)]/20 text-white text-xs font-bold rounded-sm transition-colors">
             🖨️ Generate report
           </button>
-          <div className="flex items-center gap-2 px-3 py-2 bg-white/10 rounded-sm">
+          <div className="flex items-center gap-2 px-3 py-2 bg-[rgba(255,255,255,0.03)]/10 rounded-sm">
             <span className={`w-2 h-2 rounded-full shrink-0 ${accountsData?"bg-emerald-400 animate-pulse":"bg-gray-400"}`} />
             <span className="text-xs text-white font-semibold">{accountsData?"Accounts live":"Demo data"}</span>
           </div>

@@ -1,5 +1,5 @@
 import { createMoneyEntry, listMoneyEntries } from './db/moneyDb';
-import { createQuote } from './db/quotesDb';
+import { createQuote, updateQuoteStatus } from './db/quotesDb';
 
 const QUOTES_STORAGE_KEY = 'cleaning-blueprints.pricing-quotes';
 const INCOME_STORAGE_KEY = 'cleaning-blueprints.pricing-income';
@@ -70,36 +70,48 @@ export function quoteToIncomeEntry(quote) {
   };
 }
 
-export async function addAcceptedQuoteIncome(quote) {
-  const entry = quoteToIncomeEntry(quote);
+export async function saveDraftQuote(quote) {
+  return await createQuote({
+    type: quote.type,
+    customer: quote.customer,
+    jobLabel: quote.jobLabel || quote.customer || quote.type,
+    price: quote.price,
+    hrs: quote.hrs,
+    notes: quote.notes,
+    payload: quote,
+    status: quote.status || 'draft',
+  });
+}
 
-  try {
-    const savedQuote = await createQuote({
-      type: quote.type,
-      customer: quote.customer,
-      jobLabel: quote.jobLabel || quote.customer || quote.type,
-      price: quote.price,
-      hrs: quote.hrs,
-      notes: quote.notes,
-      payload: quote,
-      status: 'accepted',
-    });
+export async function acceptSavedQuote(savedQuote) {
+  const entry = quoteToIncomeEntry(savedQuote);
 
-    await createMoneyEntry({
-      quoteId: savedQuote.id,
-      client: entry.client,
-      amount: entry.amount,
-      date: entry.date,
-      method: entry.method,
-      notes: entry.notes,
-      kind: 'income',
-    });
+  // Always save to localStorage as backup first
+  const existing = readArray(INCOME_STORAGE_KEY);
+  const next = [entry, ...existing.filter((item) => item.id !== entry.id)];
+  writeArray(INCOME_STORAGE_KEY, next);
 
-    return await getStoredPricingIncome();
-  } catch {
-    const existing = readArray(INCOME_STORAGE_KEY);
-    const next = [entry, ...existing.filter((item) => item.id !== entry.id)];
-    writeArray(INCOME_STORAGE_KEY, next);
-    return next;
+  // Upgrade the quote's status in Supabase
+  if (savedQuote.id) {
+    await updateQuoteStatus(savedQuote.id, 'accepted');
   }
+
+  // Create the income entry
+  await createMoneyEntry({
+    quoteId: savedQuote.id ?? null,
+    client: entry.client,
+    amount: entry.amount,
+    date: entry.date,
+    method: entry.method,
+    notes: entry.notes,
+    kind: 'income',
+  });
+
+  return await getStoredPricingIncome();
+}
+
+// Legacy: creates an accepted quote in one step. Prefer saveDraftQuote + acceptSavedQuote.
+export async function addAcceptedQuoteIncome(quote) {
+  const saved = await saveDraftQuote({ ...quote, status: 'accepted' });
+  return await acceptSavedQuote({ ...quote, id: saved.id });
 }

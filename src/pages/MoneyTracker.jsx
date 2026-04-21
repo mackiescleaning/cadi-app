@@ -3,6 +3,7 @@
 // AI money coach · bulk expense sorter · P&L by period · open banking ready
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { createMoneyEntry, listMoneyEntries } from "../lib/db/moneyDb";
 import { listQuotes, updateQuoteStatus } from "../lib/db/quotesDb";
 import { useAuth } from "../context/AuthContext";
@@ -24,9 +25,9 @@ const catById = (id) => EXPENSE_CATS.find(c => c.id === id) ?? EXPENSE_CATS[EXPE
 // ─── Demo / default data ──────────────────────────────────────────────────────
 const DEFAULT_ACCOUNTS = {
   vatRegistered: false, frsRate: 12, isLimitedCostTrader: false,
-  taxRate: 0.20, annualTarget: 65000, ytdIncome: 41820,
-  ytdExpenses: 8340, estimatedTaxBill: 5118,
-  taxReserve: 4260, taxReserveTarget: 5118,
+  taxRate: 0.20, annualTarget: 0, ytdIncome: 0,
+  ytdExpenses: 0, estimatedTaxBill: 0,
+  taxReserve: 0, taxReserveTarget: 0,
 };
 
 const DEMO_WEEK = [
@@ -112,7 +113,7 @@ function buildInsights(accounts, monthlyData, expenses) {
   if (taxShort > 500) insights.push({
     id: "tax", type: "warn", emoji: "🏦",
     title: `Tax pot needs a top-up — £${Math.round(taxShort)} short`,
-    body:  `You're ${fmtPct((accounts.taxReserve / Math.max(accounts.taxReserveTarget, 1)) * 100)} funded. Set aside 25p from every £1 you collect until you're covered. Next tax bill won't be a surprise.`,
+    body:  `You're ${fmtPct((accounts.taxReserve / Math.max(accounts.taxReserveTarget, 1)) * 100)} funded. Set aside ${Math.round((accounts.taxRate || 0.2) * 100)}p from every £1 you collect until you're covered. Next tax bill won't be a surprise.`,
     cta:   "Log a transfer",
   });
 
@@ -175,15 +176,15 @@ function OpenBankingBanner() {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-[#1f48ff]/30 bg-gradient-to-r from-[#1f48ff]/10 via-[#1f48ff]/5 to-transparent p-4">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-[#1f48ff]/60 via-[#99c5ff]/40 to-transparent" />
-      <div className="flex items-center gap-4">
+      <div className="flex items-start gap-3 sm:items-center sm:gap-4">
         <div className="shrink-0 w-10 h-10 rounded-xl bg-[#1f48ff]/20 border border-[#1f48ff]/30 flex items-center justify-center text-xl">🏦</div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-black text-white">Open banking — coming soon</p>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-black text-white">Open banking — coming soon</p>
+            <button onClick={() => setDismissed(true)} className="shrink-0 text-[rgba(153,197,255,0.35)] hover:text-white text-lg leading-none -mt-1">×</button>
+          </div>
           <p className="text-xs text-[rgba(153,197,255,0.6)] mt-0.5">Auto-import transactions · zero manual entry · instant expense categorisation · real-time cash flow</p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-[#1f48ff]/20 border border-[#1f48ff]/40 text-[#99c5ff]">Notify me</span>
-          <button onClick={() => setDismissed(true)} className="text-[rgba(153,197,255,0.35)] hover:text-white text-lg leading-none">×</button>
+          <span className="inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold bg-[#1f48ff]/20 border border-[#1f48ff]/40 text-[#99c5ff]">Notify me</span>
         </div>
       </div>
     </div>
@@ -201,15 +202,21 @@ function PeriodHero({ period, setPeriod, weekRevenue, monthIncome, monthlyData, 
   const qIncome   = monthlyData.slice(-3).reduce((s,m) => s + m.income, 0);
   const qExpenses = monthlyData.slice(-3).reduce((s,m) => s + m.expenses, 0);
 
+  // Dynamic labels
+  const todayDate = new Date();
+  const todayLabel = todayDate.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const qNum = Math.floor(todayDate.getMonth() / 3) + 1;
+  const qMonthNames = monthlyData.slice(-3).map(m => m.month).join(" · ");
+
   const heroMap = {
-    Day:     { value: 460, label: "earned today", vs: "+£60 vs yesterday", vsUp: true, sub: "3 jobs · Tue 7 Apr" },
-    Week:    { value: weekRevenue, label: "earned this week", vs: weekRevenue > 800 ? `+${fmt(weekRevenue - 800)} vs last week 🔥` : `${fmt(Math.abs(weekRevenue - 800))} behind last week`, vsUp: weekRevenue > 800, sub: `${DEMO_WEEK.reduce((s,d)=>s+d.jobs,0)} jobs scheduled` },
-    Month:   { value: curr.income, label: `earned this month`, vs: curr.income > prev.income ? `+${fmt(curr.income - prev.income)} vs ${prev.month}` : `${fmt(Math.abs(curr.income - prev.income))} vs ${prev.month}`, vsUp: curr.income >= prev.income, sub: `${fmtPct(curr.income / Math.max(accounts.annualTarget / 12, 1) * 100)} of monthly target` },
-    Quarter: { value: qIncome, label: "Q1 income", vs: `${fmt(qExpenses)} expenses · ${fmtPct((1 - qExpenses / Math.max(qIncome, 1)) * 100)} retained`, vsUp: true, sub: "Jan · Feb · Mar" },
+    Day:     { value: curr.income > 0 ? Math.round(curr.income / todayDate.getDate()) : 0, label: "daily average", vs: "", vsUp: true, sub: todayLabel },
+    Week:    { value: weekRevenue, label: "earned this week", vs: weekRevenue > 0 ? `${fmt(weekRevenue)} logged` : "No income this week yet", vsUp: weekRevenue > 0, sub: `Week of ${todayDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` },
+    Month:   { value: curr.income, label: `earned this month`, vs: curr.income > prev.income ? `+${fmt(curr.income - prev.income)} vs ${prev.month}` : prev.income > 0 ? `${fmt(Math.abs(curr.income - prev.income))} vs ${prev.month}` : "", vsUp: curr.income >= prev.income, sub: accounts.annualTarget > 0 ? `${fmtPct(curr.income / Math.max(accounts.annualTarget / 12, 1) * 100)} of monthly target` : "" },
+    Quarter: { value: qIncome, label: `Q${qNum} income`, vs: qExpenses > 0 ? `${fmt(qExpenses)} expenses · ${fmtPct((1 - qExpenses / Math.max(qIncome, 1)) * 100)} retained` : "", vsUp: true, sub: qMonthNames },
   };
 
   const hero = heroMap[period];
-  const taxAside = hero.value * 0.25;
+  const taxAside = hero.value * (accounts.taxRate || 0.20);
 
   return (
     <GCard className="p-5">
@@ -277,7 +284,7 @@ function PeriodHero({ period, setPeriod, weekRevenue, monthIncome, monthlyData, 
 }
 
 // ─── AI Coach Panel ───────────────────────────────────────────────────────────
-function AiCoachPanel({ insights }) {
+function AiCoachPanel({ insights, onNavigate }) {
   const [idx, setIdx] = useState(0);
   const tip = insights[idx] ?? insights[0];
   if (!tip) return null;
@@ -317,7 +324,13 @@ function AiCoachPanel({ insights }) {
             <p className="text-sm font-black text-white leading-snug mb-1.5">{tip.title}</p>
             <p className="text-xs text-[rgba(153,197,255,0.65)] leading-relaxed">{tip.body}</p>
             {tip.cta && (
-              <button className="mt-3 px-3 py-1.5 rounded-lg text-xs font-black border border-[rgba(153,197,255,0.2)] text-[rgba(153,197,255,0.7)] hover:text-white hover:border-[rgba(153,197,255,0.4)] transition-all">
+              <button
+                onClick={() => {
+                  const ctaRoutes = { "Log a transfer": "money", "See saving tips": "inventory", "Open Routes": "routes" };
+                  const route = ctaRoutes[tip.cta];
+                  if (route) onNavigate?.(route);
+                }}
+                className="mt-3 px-3 py-1.5 rounded-lg text-xs font-black border border-[rgba(153,197,255,0.2)] text-[rgba(153,197,255,0.7)] hover:text-white hover:border-[rgba(153,197,255,0.4)] transition-all">
                 {tip.cta} →
               </button>
             )}
@@ -339,21 +352,22 @@ function AiCoachPanel({ insights }) {
 }
 
 // ─── P&L Waterfall ────────────────────────────────────────────────────────────
-function PnLWaterfall({ period, monthlyData }) {
+function PnLWaterfall({ period, monthlyData, weekRevenue, weekExpenses, dayIncome, dayExpenses }) {
   const curr     = monthlyData.find(m => m.isCurrent) ?? { income: 0, expenses: 0 };
   const qMonths  = monthlyData.slice(-3);
   const qIncome  = qMonths.reduce((s,m) => s + m.income, 0);
   const qExp     = qMonths.reduce((s,m) => s + m.expenses, 0);
 
   const dataMap = {
-    Day:     { income: 460,  expenses: 88,   label: "Today"      },
-    Week:    { income: 1240, expenses: 220,  label: "This week"  },
+    Day:     { income: dayIncome || 0,    expenses: dayExpenses || 0,  label: "Today"        },
+    Week:    { income: weekRevenue || 0,  expenses: weekExpenses || 0, label: "This week"    },
     Month:   { income: curr.income, expenses: curr.expenses, label: `${curr.month}` },
     Quarter: { income: qIncome, expenses: qExp, label: "This quarter" },
   };
 
   const d       = dataMap[period] ?? dataMap.Month;
-  const tax     = Math.round(d.income * 0.25);
+  const taxRate = 0.20; // default — will be overridden by accounts when passed
+  const tax     = Math.round(d.income * taxRate);
   const profit  = Math.max(d.income - d.expenses - tax, 0);
   const retPct  = d.income > 0 ? Math.round((profit / d.income) * 100) : 0;
   const maxBar  = d.income;
@@ -786,16 +800,47 @@ function IncomeStream({ transactions, invoices, onLogPayment, onReminder }) {
 }
 
 // ─── Money Goals & Gamification ───────────────────────────────────────────────
-function MoneyGoals({ accounts, weekRevenue, monthlyData }) {
+function MoneyGoals({ accounts, weekRevenue, monthlyData, transactions = [], onNavigate }) {
   const curr       = monthlyData.find(m => m.isCurrent) ?? { income: 0 };
   const prev       = monthlyData.filter(m => !m.isCurrent).at(-1) ?? { income: 1 };
   const monthPct   = Math.round((curr.income / Math.max(accounts.annualTarget / 12, 1)) * 100);
   const ytdPct     = Math.round((accounts.ytdIncome / Math.max(accounts.annualTarget, 1)) * 100);
   const remaining  = Math.max(accounts.annualTarget - accounts.ytdIncome, 0);
-  const monthsLeft = 12 - 4;
-  const needed     = Math.round(remaining / Math.max(monthsLeft, 1));
+  const taxMonth   = (() => { const m = new Date().getMonth(); return m >= 3 ? m - 3 + 1 : m + 9 + 1; })();
+  const monthsLeft = Math.max(1, 12 - taxMonth);
+  const needed     = Math.round(remaining / monthsLeft);
   const beatingMonth = curr.income > prev.income;
-  const streak     = 3; // demo — days worked in a row
+  // Streak from transactions this week
+  const streak = (() => {
+    const today = new Date();
+    let count = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      if (transactions.some(t => t.date === dateStr)) count++;
+      else if (i > 0) break;
+    }
+    return count;
+  })();
+
+  // If no annual target set, show setup prompt
+  if (!accounts.annualTarget || accounts.annualTarget <= 0) {
+    return (
+      <GCard className="overflow-hidden">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
+          <SectionLabel>Goals & milestones</SectionLabel>
+        </div>
+        <div className="p-6 text-center">
+          <span className="text-3xl mb-3 block">🎯</span>
+          <p className="text-sm font-bold text-white mb-1">Set your annual target</p>
+          <p className="text-xs text-[rgba(153,197,255,0.5)] mb-4">Add an income target in Settings to track progress and unlock milestones.</p>
+          <button onClick={() => onNavigate?.("settings")} className="px-4 py-2 text-xs font-bold text-white bg-[#1f48ff] rounded-xl hover:bg-[#3a5eff] transition-colors">
+            Go to Settings →
+          </button>
+        </div>
+      </GCard>
+    );
+  }
 
   return (
     <GCard className="overflow-hidden">
@@ -808,7 +853,7 @@ function MoneyGoals({ accounts, weekRevenue, monthlyData }) {
         <div>
           <div className="flex justify-between items-end mb-2">
             <div>
-              <p className="text-[10px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.35)] mb-0.5">Annual target 2025/26</p>
+              <p className="text-[10px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.35)] mb-0.5">Annual target {(() => { const now = new Date(); const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; return `${y}/${(y+1).toString().slice(2)}`; })()}</p>
               <div className="flex items-baseline gap-1.5">
                 <p className="text-xl font-black text-white tabular-nums">{fmt(accounts.ytdIncome)}</p>
                 <p className="text-xs text-[rgba(153,197,255,0.4)]">of {fmt(accounts.annualTarget)}</p>
@@ -824,7 +869,7 @@ function MoneyGoals({ accounts, weekRevenue, monthlyData }) {
               style={{ width: `${Math.min(ytdPct, 100)}%` }} />
           </div>
           <div className="flex justify-between text-[9px] text-[rgba(153,197,255,0.3)] mt-1.5">
-            <span>Apr 2025</span><span>Q2 now</span><span>Mar 2026</span>
+            {(() => { const now = new Date(); const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; const q = Math.floor(now.getMonth() / 3) + 1; return <><span>Apr {y}</span><span>Q{q} now</span><span>Mar {y + 1}</span></>; })()}
           </div>
         </div>
 
@@ -856,10 +901,12 @@ function MoneyGoals({ accounts, weekRevenue, monthlyData }) {
                 <span className="text-[10px] font-black text-[#99c5ff]">Halfway to target</span>
               </div>
             )}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20">
-              <span className="text-xs">⚡</span>
-              <span className="text-[10px] font-black text-amber-400">{streak}-day active streak</span>
-            </div>
+            {streak > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <span className="text-xs">⚡</span>
+                <span className="text-[10px] font-black text-amber-400">{streak}-day active streak</span>
+              </div>
+            )}
             {accounts.taxReserve >= accounts.taxReserveTarget && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20">
                 <span className="text-xs">🏦</span>
@@ -1021,22 +1068,50 @@ function ReminderModal({ invoice, onClose }) {
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
-export default function MoneyTab({ accountsData, schedulerData, onNavigate }) {
+export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNavigateProp }) {
+  const routerNavigate = useNavigate();
+  const onNavigate = onNavigateProp || ((tab) => routerNavigate(`/${tab}`));
   const { user } = useAuth();
   const isLive = Boolean(user);
   const accounts = { ...DEFAULT_ACCOUNTS, ...(accountsData ?? {}) };
 
-  const emptyWeek = useMemo(() => DEMO_WEEK.map(d => ({ ...d, revenue: 0, jobs: 0 })), []);
-  const weekData  = useMemo(() => {
-    if (schedulerData?.weekJobs) {
-      return DEMO_WEEK.map((d, i) => ({
-        ...d,
-        revenue: schedulerData.weekJobs.filter(j => j.day === i).reduce((s,j) => s+j.price, 0),
-        jobs:    schedulerData.weekJobs.filter(j => j.day === i).length,
-      }));
-    }
-    return isLive ? emptyWeek : DEMO_WEEK;
-  }, [emptyWeek, isLive, schedulerData]);
+  // Build dynamic week grid from real dates
+  const weekData = useMemo(() => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const dayOfWeek = today.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayOffset);
+
+    const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    return DAYS.map((day, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+      const isPast = dateStr < todayStr;
+
+      // Get revenue from scheduler data if available
+      let revenue = 0;
+      let jobs = 0;
+      if (schedulerData?.weekJobs) {
+        const dayJobs = schedulerData.weekJobs.filter(j =>
+          j.isoDate === dateStr || j.day === i
+        );
+        revenue = dayJobs.reduce((s, j) => s + (j.revenue || j.price || 0), 0);
+        jobs = dayJobs.length || dayJobs.reduce((s, j) => s + (j.jobs || 0), 0);
+      }
+
+      return {
+        day,
+        date: d.getDate(),
+        revenue,
+        jobs,
+        done: isPast && revenue > 0,
+        isToday: dateStr === todayStr,
+      };
+    });
+  }, [schedulerData]);
 
   // ── Invoice state — demo uses shared context; live uses DB-fetched quotes ─────
   const { simpleInvoices, patchInvoice } = useInvoices();
@@ -1086,39 +1161,59 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate }) {
   const unpaidInvoices = invoices.filter(i => i.status !== "paid");
   const insights       = useMemo(() => buildInsights(accounts, monthlyData, expenses), [accounts, monthlyData, expenses]);
 
+  const [saveError, setSaveError] = useState(null);
+
   const handlePaymentConfirm = async ({ invoiceId, amount }) => {
+    setSaveError(null);
     const invoice = invoices.find(i => i.id === invoiceId);
-    // Update invoice status — in demo mode this propagates to InvoiceGenerator & AccountsTab
-    if (isLive) {
-      setLiveInvoices(prev => prev.map(i => i.id === invoiceId ? { ...i, status: "paid" } : i));
-    } else {
-      patchInvoice(invoiceId, { status: "paid", paidAt: new Date().toISOString() });
-    }
-    setTransactions(prev => [{ id: `t${Date.now()}`, date: new Date().toISOString().slice(0,10), customer: invoice?.customer ?? "Payment received", amount, type: invoice?.type ?? "residential", status: "paid" }, ...prev]);
-    const curr = monthlyData.find(m => m.isCurrent);
-    if (curr) setMonthlyData(prev => prev.map(m => m.isCurrent ? { ...m, income: m.income + amount } : m));
+    const today = new Date().toISOString().slice(0, 10);
+
     try {
-      await createMoneyEntry({ quoteId: invoiceId !== "other" ? invoiceId : null, client: invoice?.customer || "Payment received", amount, date: new Date().toISOString().slice(0,10), method: "bank", kind: "income" });
+      // Save to DB first
+      await createMoneyEntry({ quoteId: invoiceId !== "other" ? invoiceId : null, client: invoice?.customer || "Payment received", amount, date: today, method: "bank", kind: "income" });
       if (invoiceId && invoiceId !== "other") await updateQuoteStatus(invoiceId, "paid");
-    } catch {}
+
+      // Only update UI after DB success
+      if (isLive) {
+        setLiveInvoices(prev => prev.map(i => i.id === invoiceId ? { ...i, status: "paid" } : i));
+      } else {
+        patchInvoice(invoiceId, { status: "paid", paidAt: new Date().toISOString() });
+      }
+      setTransactions(prev => [{ id: `t${Date.now()}`, date: today, customer: invoice?.customer ?? "Payment received", amount, type: invoice?.type ?? "residential", status: "paid" }, ...prev]);
+      const curr = monthlyData.find(m => m.isCurrent);
+      if (curr) setMonthlyData(prev => prev.map(m => m.isCurrent ? { ...m, income: m.income + amount } : m));
+    } catch (err) {
+      console.error('Failed to save payment:', err);
+      setSaveError('Payment could not be saved. Please try again.');
+      setTimeout(() => setSaveError(null), 5000);
+    }
   };
 
   const handleAddExpense = async (exp) => {
-    const newExp = { id: `e${Date.now()}`, ...exp };
-    setExpenses(prev => [newExp, ...prev]);
-    const curr = monthlyData.find(m => m.isCurrent);
-    if (curr) setMonthlyData(prev => prev.map(m => m.isCurrent ? { ...m, expenses: m.expenses + exp.amount } : m));
+    setSaveError(null);
     try {
-      await createMoneyEntry({ description: exp.label, amount: exp.amount, date: exp.date, category: exp.category, kind: "expense" });
-    } catch {}
+      await createMoneyEntry({ client: exp.label, amount: exp.amount, date: exp.date, category: exp.category, kind: "expense" });
+
+      // Only update UI after DB success
+      const newExp = { id: `e${Date.now()}`, ...exp };
+      setExpenses(prev => [newExp, ...prev]);
+      const curr = monthlyData.find(m => m.isCurrent);
+      if (curr) setMonthlyData(prev => prev.map(m => m.isCurrent ? { ...m, expenses: m.expenses + exp.amount } : m));
+    } catch (err) {
+      console.error('Failed to save expense:', err);
+      setSaveError('Expense could not be saved. Please try again.');
+      setTimeout(() => setSaveError(null), 5000);
+    }
   };
 
-  const handleBulkCategorize = (ids, newCat) => {
+  const handleBulkCategorize = async (ids, newCat) => {
     setExpenses(prev => prev.map(e => ids.includes(e.id) ? { ...e, category: newCat } : e));
+    // TODO: persist category changes to money_entries when update endpoint is added
   };
 
-  const handleBulkDelete = (ids) => {
+  const handleBulkDelete = async (ids) => {
     setExpenses(prev => prev.filter(e => !ids.includes(e.id)));
+    // TODO: delete from money_entries when delete endpoint is added
   };
 
   return (
@@ -1128,6 +1223,14 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate }) {
         style={{ backgroundImage: "linear-gradient(rgba(153,197,255,0.5) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,0.5) 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
 
       <div className="relative max-w-3xl mx-auto px-4 py-6 space-y-4">
+
+        {/* Error toast */}
+        {saveError && (
+          <div className="px-4 py-3 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center gap-2">
+            <span className="text-red-400 text-sm font-bold">!</span>
+            <p className="text-xs text-red-300 font-semibold flex-1">{saveError}</p>
+          </div>
+        )}
 
         {/* Open banking banner */}
         <OpenBankingBanner />
@@ -1143,15 +1246,20 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate }) {
         />
 
         {/* AI coach */}
-        <AiCoachPanel insights={insights} />
+        <AiCoachPanel insights={insights} onNavigate={onNavigate} />
 
         {/* P&L waterfall */}
-        <PnLWaterfall period={period} monthlyData={monthlyData} />
+        <PnLWaterfall period={period} monthlyData={monthlyData}
+          weekRevenue={weekRevenue}
+          weekExpenses={expenses.filter(e => { const d = new Date(); const mon = new Date(d); mon.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1)); return e.date >= mon.toISOString().split('T')[0]; }).reduce((s,e) => s + e.amount, 0)}
+          dayIncome={transactions.filter(t => t.date === new Date().toISOString().split('T')[0]).reduce((s,t) => s + t.amount, 0)}
+          dayExpenses={expenses.filter(e => e.date === new Date().toISOString().split('T')[0]).reduce((s,e) => s + e.amount, 0)}
+        />
 
         {/* Two-col on wider screens */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <WeekGrid weekData={weekData} />
-          <MoneyGoals accounts={accounts} weekRevenue={weekRevenue} monthlyData={monthlyData} />
+          <MoneyGoals accounts={accounts} weekRevenue={weekRevenue} monthlyData={monthlyData} transactions={transactions} onNavigate={onNavigate} />
         </div>
 
         {/* Expense sorter */}

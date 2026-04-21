@@ -219,11 +219,8 @@ function generateMessage(customer, messageType) {
   return templates[messageType] ?? templates.reminder;
 }
 
-// ─── Demo customer data ───────────────────────────────────────────────────────
-// Realistic dataset — 12 customers covering all job types and states.
-// Production: replace with API fetch + pagination.
-const DEMO_CUSTOMERS = [
-  {
+// Demo customer data removed — live users load from Supabase via DataContext.
+/* DEMO_CUSTOMERS REMOVED — was {
     id: 1, name: "Margaret Johnson", postcode: "SW4 8AS", phone: "07700 900001", email: "m.johnson@email.com",
     frequency: "fortnightly", status: "active", tags: ["vip", "regular"],
     lastJobDate: "2026-03-28", nextJobDate: "2026-04-11", lifetimeValue: 1440,
@@ -371,7 +368,7 @@ const DEMO_CUSTOMERS = [
     notes: "Large detached — significant moss build-up on north-facing roof. Happy with work. Mentioned wanting annual treatment.",
     source: "Checkatrade",
   },
-];
+]; END DEMO_CUSTOMERS REMOVED */
 
 // ─── AI message generation via Claude API ─────────────────────────────────────
 async function generateAIMessage(customer, suggestionType, customInstructions = "") {
@@ -788,9 +785,16 @@ function MessageComposer({ customer, suggestion, onClose }) {
 
         {/* Footer actions */}
         <div className="relative px-5 py-4 border-t border-[rgba(153,197,255,0.08)] bg-[#010a4f]/90 flex gap-2 shrink-0">
-          <button className="flex-1 py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-bold uppercase tracking-wide transition-all rounded-xl shadow-lg shadow-[#1f48ff]/25">
-            Send email
-          </button>
+          <a
+            href={`mailto:${customer.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`}
+            className={`flex-1 py-2.5 text-center text-xs font-bold uppercase tracking-wide transition-all rounded-xl shadow-lg shadow-[#1f48ff]/25 ${
+              customer.email
+                ? "bg-[#1f48ff] hover:bg-[#3a5eff] text-white"
+                : "bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.3)] cursor-not-allowed pointer-events-none"
+            }`}
+          >
+            {customer.email ? "Send email" : "No email on file"}
+          </a>
           <button
             onClick={copy}
             className="flex-1 py-2.5 bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.7)] hover:border-[rgba(153,197,255,0.35)] hover:text-white text-xs font-bold uppercase tracking-wide transition-all rounded-xl"
@@ -1141,9 +1145,17 @@ function SecureVault({ customer, ownerId }) {
 }
 
 // ─── Customer detail panel ────────────────────────────────────────────────────
-function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCustomer, ownerId }) {
+function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCustomer, onDeleteCustomer, ownerId }) {
   const suggestions  = useMemo(() => generateSuggestions(customer), [customer]);
-  const daysSince    = Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000);
+  const hasLastJob   = Boolean(customer.lastJobDate);
+  const daysSince    = hasLastJob ? Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000) : null;
+  const totalJobs    = customer.completedJobs ?? 0;
+  const lastJobLabel = hasLastJob && daysSince >= 0
+    ? `${daysSince}d ago`
+    : customer.nextJobDate
+      ? `in ${Math.max(0, Math.ceil((new Date(customer.nextJobDate) - Date.now()) / 86400000))}d`
+      : "—";
+  const lastJobAccent = hasLastJob && daysSince > 60 ? "text-amber-400" : "text-white";
   const uniqueTypes  = [...new Set(customer.services.map(s => s.type))];
 
   const [activeTab, setActiveTab] = useState("overview");
@@ -1194,8 +1206,8 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
           <div className="grid grid-cols-3 gap-2">
             {[
               { label: "Lifetime value",  value: `£${customer.lifetimeValue.toLocaleString()}`, accent: "text-emerald-400" },
-              { label: "Total jobs",      value: customer.services.length, accent: "text-white" },
-              { label: "Last job",        value: `${daysSince}d ago`, accent: daysSince > 60 ? "text-amber-400" : "text-white" },
+              { label: "Total jobs",      value: totalJobs, accent: "text-white" },
+              { label: hasLastJob && daysSince >= 0 ? "Last job" : "Next job", value: lastJobLabel, accent: lastJobAccent },
             ].map(({ label, value, accent }) => (
               <div key={label} className="bg-white/[0.08] backdrop-blur-sm rounded-xl px-2 py-2 text-center border border-white/10">
                 <p className="text-[10px] text-[rgba(153,197,255,0.5)] mb-0.5">{label}</p>
@@ -1465,6 +1477,20 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
         {activeTab === "secure" && (
           <SecureVault customer={customer} ownerId={ownerId} />
         )}
+
+        {/* Danger zone — archive customer */}
+        <div className="px-5 py-4 border-t border-[rgba(153,197,255,0.08)]">
+          <button
+            onClick={() => {
+              if (window.confirm(`Archive ${customer.name}? They'll be hidden from your customer list but data will be kept.`)) {
+                onDeleteCustomer?.(customer.id);
+              }
+            }}
+            className="w-full py-2.5 text-xs font-bold uppercase tracking-wide text-red-400/70 border border-red-500/20 rounded-xl hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/40 transition-all"
+          >
+            Archive customer
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1663,7 +1689,7 @@ function AddCustomerModal({ onClose, onSave }) {
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function CustomerTab() {
-  const { customers, addCustomer, updateCustomer } = useData();
+  const { customers, addCustomer, updateCustomer, deleteCustomer } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
   const ownerId = user?.id || "demo";
@@ -1755,29 +1781,35 @@ export default function CustomerTab() {
       <div className="pointer-events-none fixed -bottom-32 -left-16 w-[300px] h-[300px] rounded-full bg-[rgba(153,197,255,0.05)] blur-[70px]" />
 
       {/* ── Left panel: list ── */}
-      <div className={`relative flex flex-col ${showDetail ? "hidden lg:flex lg:w-[400px]" : "flex-1"} border-r border-[rgba(153,197,255,0.08)] bg-[#010a4f]`}>
+      <div className={`relative flex flex-col min-w-0 ${showDetail ? "hidden lg:flex lg:w-[400px]" : "flex-1"} border-r border-[rgba(153,197,255,0.08)] bg-[#010a4f]`}>
 
         {/* Header */}
-        <div className="relative bg-[#010a4f]/80 backdrop-blur-sm border-b border-[rgba(153,197,255,0.1)] px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-0.5">Cadi</p>
-            <h2 className="text-2xl font-black text-white">Customers</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:flex gap-1.5">
-              {["Active","Lapsed","At risk"].map((label, i) => (
-                <button key={label} onClick={() => setStatusFilter(["active","lapsed","at-risk"][i])}
-                  className={`px-2.5 py-1 text-xs font-bold border rounded-lg transition-all ${
-                    statusFilter === ["active","lapsed","at-risk"][i]
-                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                      : "bg-[rgba(153,197,255,0.05)] text-[rgba(153,197,255,0.5)] border-[rgba(153,197,255,0.12)]"
-                  }`}>{label}</button>
-              ))}
+        <div className="relative bg-[#010a4f]/80 backdrop-blur-sm border-b border-[rgba(153,197,255,0.1)] px-4 sm:px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-0.5">Cadi</p>
+              <h2 className="text-2xl font-black text-white">Customers</h2>
             </div>
             <button onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-bold transition-all rounded-lg shadow-lg shadow-[#1f48ff]/30">
-              <span className="text-base leading-none">+</span> Add customer
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-bold transition-all rounded-xl shadow-lg shadow-[#1f48ff]/30 active:scale-95">
+              <span className="text-lg leading-none">+</span> Add
             </button>
+          </div>
+          {/* Status filter chips — below header on all screens */}
+          <div className="flex gap-1.5 mt-3 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+            {[
+              { label: "All", value: "all" },
+              { label: "Active", value: "active" },
+              { label: "Lapsed", value: "lapsed" },
+              { label: "At risk", value: "at-risk" },
+            ].map(({ label, value }) => (
+              <button key={value} onClick={() => setStatusFilter(value)}
+                className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition-all whitespace-nowrap shrink-0 ${
+                  statusFilter === value
+                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                    : "bg-[rgba(153,197,255,0.05)] text-[rgba(153,197,255,0.5)] border-[rgba(153,197,255,0.12)]"
+                }`}>{label}</button>
+            ))}
           </div>
         </div>
 
@@ -1913,6 +1945,7 @@ export default function CustomerTab() {
             onClose={() => { setShowDetail(false); setSelected(null); }}
             onBookJob={handleBookJob}
             onUpdateCustomer={updateCustomer}
+            onDeleteCustomer={(id) => { deleteCustomer(id); setShowDetail(false); setSelected(null); }}
             ownerId={ownerId}
           />
         </div>
@@ -1931,7 +1964,7 @@ export default function CustomerTab() {
       {/* ── Floating Add button — visible on mobile even in detail view ── */}
       <button
         onClick={() => setShowAddModal(true)}
-        className="lg:hidden fixed bottom-6 right-5 z-40 w-14 h-14 rounded-2xl bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-2xl font-bold shadow-2xl shadow-[#1f48ff]/40 flex items-center justify-center transition-all active:scale-95"
+        className="lg:hidden fixed bottom-20 right-5 z-40 w-14 h-14 rounded-2xl bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-2xl font-bold shadow-2xl shadow-[#1f48ff]/40 flex items-center justify-center transition-all active:scale-95"
         aria-label="Add customer"
       >
         +

@@ -21,6 +21,7 @@
 //   onNavigate(tab)        — deep-link to another tab
 
 import { useState, useMemo, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 // ─── Demo staff data ───────────────────────────────────────────────────────────
@@ -1304,7 +1305,9 @@ function AddStaffModal({ onClose, onAdd }) {
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
-export default function StaffingTab({ onStaffUpdate, onNavigate }) {
+export default function StaffingTab({ onStaffUpdate, onNavigate: onNavigateProp }) {
+  const routerNavigate = useNavigate();
+  const onNavigate = onNavigateProp || ((tab) => routerNavigate(`/${tab}`));
   const { user } = useAuth();
   const isLive = Boolean(user);
   const [staff,        setStaff]        = useState(isLive ? [] : DEMO_STAFF);
@@ -1414,7 +1417,7 @@ export default function StaffingTab({ onStaffUpdate, onNavigate }) {
       {/* Footer */}
       <div className="bg-white border-t border-gray-100 px-6 py-2.5 flex items-center justify-between">
         <p className="text-xs text-gray-400">UK employment law guidance only — not legal advice. Consult an employment solicitor for complex situations.</p>
-        <button onClick={() => onNavigate?.("businesslab")} className="text-xs text-brand-blue font-semibold hover:underline">Business Lab →</button>
+        <button onClick={() => onNavigate?.("scaling")} className="text-xs text-brand-blue font-semibold hover:underline">Business Lab →</button>
       </div>
 
       {/* Add staff modal */}

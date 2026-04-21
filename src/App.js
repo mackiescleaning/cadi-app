@@ -28,12 +28,12 @@ import AccountsTab from './components/AccountsTab';
 import Onboarding from './pages/Onboarding';
 import { DataProvider } from './context/DataContext';
 import { InvoiceProvider } from './context/InvoiceContext';
-
-
+import ErrorBoundary from './components/ErrorBoundary';
 
 
 function App() {
   return (
+    <ErrorBoundary>
     <DataProvider>
     <InvoiceProvider>
     <Router>
@@ -77,6 +77,7 @@ function App() {
     </Router>
     </InvoiceProvider>
     </DataProvider>
+    </ErrorBoundary>
   );
 }
 
