@@ -44,3 +44,14 @@ export async function upsertCustomer(customer) {
   if (error) throw error;
   return data;
 }
+
+export async function archiveCustomer(id) {
+  const ownerId = await getCurrentUserId();
+  const { error } = await supabase
+    .from('customers')
+    .update({ status: 'archived' })
+    .eq('id', id)
+    .eq('owner_id', ownerId);
+
+  if (error) throw error;
+}

@@ -6,6 +6,7 @@ export async function createQuote(quote) {
 
   const payload = {
     owner_id: ownerId,
+    customer_id: quote.customerId || null,
     type: quote.type,
     job_label: quote.jobLabel || quote.customer || 'Quote',
     price: Number(quote.price) || 0,

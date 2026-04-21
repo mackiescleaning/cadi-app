@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { listCustomers, upsertCustomer } from '../lib/db/customersDb';
+import { listCustomers, upsertCustomer, archiveCustomer } from '../lib/db/customersDb';
+import { createJob, listJobs, updateJob as updateJobDb, deleteJob as deleteJobDb } from '../lib/db/jobsDb';
 import { useAuth } from './AuthContext';
 
 function mapRow(r) {
@@ -23,12 +24,34 @@ function mapRow(r) {
   };
 }
 
+function mapJobRow(r) {
+  return {
+    id: r.id,
+    customer: r.customer || '',
+    customerId: r.customer_id || null,
+    postcode: r.postcode || '',
+    date: r.date,
+    startHour: Number(r.start_hour) || 9,
+    durationHrs: Number(r.duration_hrs) || 2,
+    type: r.type || 'residential',
+    service: r.service || '',
+    price: Number(r.price) || 0,
+    status: r.status || 'scheduled',
+    assignee: r.assignee || null,
+    assignees: r.assignees || [],
+    recurrence: r.recurrence || 'one-off',
+    notes: r.notes || '',
+    day: 0, // will be computed by consumers
+  };
+}
+
 const DataContext = createContext({});
 
 export function DataProvider({ children }) {
   const { user } = useAuth();
   const [customers, setCustomers] = useState([]);
-  const [jobs, setJobs] = useState(null); // null = not initialised yet
+  const [jobs, setJobs] = useState([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
 
   // Load customers from Supabase
   useEffect(() => {
@@ -38,22 +61,82 @@ export function DataProvider({ children }) {
       .catch(() => setCustomers([]));
   }, [user]);
 
-  // Load jobs from localStorage
+  // Load jobs from Supabase
   useEffect(() => {
     if (!user) { setJobs([]); return; }
-    try {
-      const stored = localStorage.getItem(`cadi_jobs_${user.id}`);
-      setJobs(stored ? JSON.parse(stored) : []);
-    } catch {
-      setJobs([]);
-    }
+    setJobsLoading(true);
+
+    // Try Supabase first
+    listJobs()
+      .then(rows => {
+        if (rows.length > 0) {
+          setJobs(rows.map(mapJobRow));
+        } else {
+          // Migrate any legacy localStorage jobs
+          try {
+            const stored = localStorage.getItem(`cadi_jobs_${user.id}`);
+            if (stored) {
+              const legacyJobs = JSON.parse(stored);
+              if (Array.isArray(legacyJobs) && legacyJobs.length > 0) {
+                // Save each to Supabase, then clear localStorage
+                Promise.all(legacyJobs.map(j => createJob(j).catch(() => null)))
+                  .then(() => {
+                    localStorage.removeItem(`cadi_jobs_${user.id}`);
+                    return listJobs();
+                  })
+                  .then(fresh => setJobs(fresh.map(mapJobRow)))
+                  .catch(() => setJobs(legacyJobs)); // fallback to legacy if migration fails
+              }
+            }
+          } catch {
+            // localStorage unavailable or corrupt — fine, start empty
+          }
+        }
+      })
+      .catch(() => {
+        // Supabase failed — try localStorage as readonly fallback
+        try {
+          const stored = localStorage.getItem(`cadi_jobs_${user.id}`);
+          setJobs(stored ? JSON.parse(stored) : []);
+        } catch {
+          setJobs([]);
+        }
+      })
+      .finally(() => setJobsLoading(false));
   }, [user]);
 
-  // Persist jobs to localStorage whenever they change
+  // Hydrate customer services from jobs table (runs after both load)
   useEffect(() => {
-    if (!user || jobs === null) return;
-    try { localStorage.setItem(`cadi_jobs_${user.id}`, JSON.stringify(jobs)); } catch {}
-  }, [jobs, user]);
+    if (!jobs.length || !customers.length) return;
+    setCustomers(prev => prev.map(c => {
+      const customerJobs = jobs.filter(j =>
+        j.customerId === c.id ||
+        (j.customer && c.name && j.customer.toLowerCase().trim() === c.name.toLowerCase().trim())
+      );
+      if (customerJobs.length === 0) return c;
+      return {
+        ...c,
+        services: customerJobs.map(j => ({
+          type: j.type || 'residential',
+          label: j.service || 'Clean',
+          date: j.date || '',
+          price: j.price || 0,
+          status: j.status || 'scheduled',
+        })),
+        lifetimeValue: customerJobs.reduce((s, j) => s + (j.price || 0), 0),
+        lastJobDate: customerJobs.reduce((latest, j) => j.date > latest ? j.date : latest, c.lastJobDate || ''),
+      };
+    }));
+  }, [jobs.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const deleteCustomer = useCallback(async (id) => {
+    try {
+      await archiveCustomer(id);
+    } catch (err) {
+      console.error('Failed to archive customer:', err);
+    }
+    setCustomers(prev => prev.filter(c => c.id !== id));
+  }, []);
 
   const addCustomer = useCallback(async (customer) => {
     try { await upsertCustomer(customer); } catch {}
@@ -70,9 +153,22 @@ export function DataProvider({ children }) {
     }));
   }, []);
 
-  // Called by Scheduler when a job is saved — syncs to matching customer
-  const addJobAndSyncCustomer = useCallback((job) => {
-    setJobs(prev => [...(prev ?? []), job]);
+  // Called by Scheduler when a job is saved — saves to Supabase + syncs customer
+  const addJobAndSyncCustomer = useCallback(async (job) => {
+    // Save to Supabase
+    let savedJob = job;
+    try {
+      const result = await createJob(job);
+      savedJob = mapJobRow(result);
+    } catch (err) {
+      console.error('Failed to save job to Supabase:', err);
+      // Still add locally so UI updates
+      savedJob = { ...job, id: job.id || Date.now() };
+    }
+
+    setJobs(prev => [...prev, savedJob]);
+
+    // Sync to matching customer
     if (!job.customer) return;
     setCustomers(prev => {
       const jobNameLower = job.customer.toLowerCase().trim();
@@ -100,10 +196,48 @@ export function DataProvider({ children }) {
     });
   }, []);
 
+  const updateJob = useCallback(async (id, updates) => {
+    // Update in Supabase
+    try {
+      await updateJobDb(id, updates);
+    } catch (err) {
+      console.error('Failed to update job:', err);
+    }
+    // Update locally
+    setJobs(prev => prev.map(j => j.id === id ? { ...j, ...updates } : j));
+  }, []);
+
+  const deleteJob = useCallback(async (id) => {
+    try {
+      await deleteJobDb(id);
+    } catch (err) {
+      console.error('Failed to delete job:', err);
+    }
+    setJobs(prev => prev.filter(j => j.id !== id));
+  }, []);
+
+  const refreshJobs = useCallback(async () => {
+    try {
+      const rows = await listJobs();
+      setJobs(rows.map(mapJobRow));
+    } catch {}
+  }, []);
+
+  // Customer counts for plan limit enforcement
+  const resComCount = customers.filter(c => {
+    const types = c.serviceTypes || [];
+    return !types.includes('exterior') || types.length > 1 || types.length === 0;
+  }).length;
+  const exteriorCount = customers.filter(c => {
+    const types = c.serviceTypes || [];
+    return types.length === 1 && types.includes('exterior');
+  }).length;
+
   return (
     <DataContext.Provider value={{
-      customers, setCustomers, addCustomer, updateCustomer,
-      jobs, setJobs, addJobAndSyncCustomer,
+      customers, setCustomers, addCustomer, updateCustomer, deleteCustomer,
+      resComCount, exteriorCount,
+      jobs, setJobs, addJobAndSyncCustomer, updateJob, deleteJob, refreshJobs, jobsLoading,
     }}>
       {children}
     </DataContext.Provider>
