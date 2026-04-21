@@ -968,7 +968,10 @@ const ALL_BADGES = [
     desc: "No overdue invoices for a full week",
     color: "from-sky-400 to-blue-500",
     border: "border-sky-300",
-    check: ({ invoices }) => invoices?.filter(i => i.status === "overdue").length === 0,
+    check: ({ invoices }) =>
+      Array.isArray(invoices)
+      && invoices.length > 0
+      && invoices.every(i => i.status !== "overdue"),
   },
   {
     id: "schedule_full",
@@ -977,7 +980,10 @@ const ALL_BADGES = [
     desc: "Every day this week has at least one job",
     color: "from-emerald-400 to-teal-500",
     border: "border-emerald-300",
-    check: ({ weekJobs }) => weekJobs?.every(d => d.jobs > 0 || d.revenue > 0),
+    check: ({ weekJobs }) =>
+      Array.isArray(weekJobs)
+      && weekJobs.length > 0
+      && weekJobs.every(d => d.jobs > 0 || d.revenue > 0),
   },
   {
     id: "streak_7",
@@ -1004,15 +1010,15 @@ const ALL_BADGES = [
     desc: "One of the first 1,000 businesses on Cadi — part of the original crew",
     color: "from-yellow-300 via-amber-400 to-orange-400",
     border: "border-yellow-300",
-    check: () => true, // All early users earn this automatically
+    check: ({ foundingMember }) => foundingMember === true,
     founding: true,
   },
 ];
 
-function computeBadges({ score, invoices, weekJobs, rank, totalUsers, streak }) {
+function computeBadges({ score, invoices, weekJobs, rank, totalUsers, streak, foundingMember }) {
   return ALL_BADGES.map(b => ({
     ...b,
-    earned: b.check({ score, invoices, weekJobs, rank, total: totalUsers, streak }),
+    earned: b.check({ score, invoices, weekJobs, rank, total: totalUsers, streak, foundingMember }),
   }));
 }
 
@@ -1949,6 +1955,10 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
         delta: 0,
         region: r.region || '—',
       }));
+    // Once we have enough real opted-in users, drop the seeded demo rows
+    // entirely so the board reflects genuine community state.
+    const REAL_ENTRIES_THRESHOLD = 5;
+    if (real.length >= REAL_ENTRIES_THRESHOLD) return real;
     const padding = LEADERBOARD_DEMO.slice(0, Math.max(0, 20 - real.length));
     return [...real, ...padding];
   }, [liveBoard, user?.id]);
@@ -1976,7 +1986,8 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     rank: userRank,
     totalUsers,
     streak,
-  }), [score, invoices, weekJobs, userRank, totalUsers, streak]);
+    foundingMember: profile?.founding_member === true,
+  }), [score, invoices, weekJobs, userRank, totalUsers, streak, profile?.founding_member]);
 
   // Sync feed whenever real data changes (not just on login)
   useEffect(() => {
