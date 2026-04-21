@@ -425,6 +425,11 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
   async function saveCurrentStep() {
     if (!user) return;
 
+    // Demo user — skip all DB calls, just advance step
+    if (user.id === 'demo-user') {
+      return;
+    }
+
     if (current === 1) {
       const { error } = await supabase
         .from('profiles')
@@ -604,6 +609,14 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
 
     setSaving(true);
     try {
+      // Demo user — skip direct Supabase call, just update profile locally
+      if (user.id === 'demo-user') {
+        await updateProfile({ onboarding_complete: true, onboarding_step: TOTAL });
+        if (isModal) { onComplete?.(); }
+        else { navigate('/dashboard', { replace: true }); }
+        return;
+      }
+
       const { error } = await supabase
         .from('profiles')
         .update({ onboarding_complete: true, onboarding_step: TOTAL })

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import CadiWordmark from '../../components/CadiWordmark';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export default function Login() {
@@ -9,7 +10,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { signIn } = useAuth();
+  const { signIn, loginAsDemo } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -29,13 +30,7 @@ export default function Login() {
     <div className="min-h-screen bg-[#010a4f] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="mx-auto mb-4 inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-[#1f48ff] shadow-2xl shadow-[#1f48ff]/40">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="28" height="28" rx="8" fill="white" fillOpacity="0.15"/>
-              <path d="M7 14C7 10.134 10.134 7 14 7C16.209 7 18.18 8.014 19.5 9.6L17.4 11.35C16.56 10.34 15.35 9.7 14 9.7C11.624 9.7 9.7 11.624 9.7 14C9.7 16.376 11.624 18.3 14 18.3C15.35 18.3 16.56 17.66 17.4 16.65L19.5 18.4C18.18 19.986 16.209 21 14 21C10.134 21 7 17.866 7 14Z" fill="white"/>
-            </svg>
-            <span className="text-white font-black text-2xl tracking-tight">cadi</span>
-          </div>
+          <div className="flex justify-center mb-3"><CadiWordmark height={36} /></div>
           <p className="text-[#99c5ff] font-semibold text-sm">Your Cleaning Business OS</p>
         </div>
 
@@ -74,6 +69,17 @@ export default function Login() {
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
+
+          {/* Demo login */}
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => { loginAsDemo(); navigate('/dashboard'); }}
+              className="w-full py-3 bg-[#010a4f]/5 border-2 border-dashed border-[#1f48ff]/30 text-[#1f48ff] font-bold rounded-xl hover:bg-[#1f48ff]/10 hover:border-[#1f48ff]/50 transition-all text-sm"
+            >
+              Try Demo — no account needed
+            </button>
+          </div>
 
           <p className="text-center text-sm text-gray-500 mt-6">
             Don't have an account?{' '}
