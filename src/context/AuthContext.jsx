@@ -15,6 +15,7 @@ const DEMO_PROFILE = {
   team_structure: 'solo',
   dashboard_tour_complete: true,
   onboarding_complete: true,
+  founding_member: true,
 };
 
 export function AuthProvider({ children }) {
