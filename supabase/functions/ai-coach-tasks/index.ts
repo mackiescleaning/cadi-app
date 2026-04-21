@@ -65,13 +65,17 @@ Rules:
 - Keep titles under ~60 chars and bodies under ~140 chars. Sound like a coach, not a textbook.
 - If everything looks healthy (all dimensions at or near max), celebrate and suggest one growth move.`;
 
+// NOTE: Anthropic's json_schema output mode rejects these constraints:
+//   - array minItems / maxItems (other than 0/1)
+//   - number minimum / maximum / multipleOf
+//   - string minLength / maxLength
+// So task-count range (3–4) and impact range (1–20) are enforced in the
+// prompt, not in the schema.
 const TASK_SCHEMA = {
   type: "object",
   properties: {
     tasks: {
       type: "array",
-      minItems: 3,
-      maxItems: 4,
       items: {
         type: "object",
         properties: {
@@ -93,7 +97,7 @@ const TASK_SCHEMA = {
             ],
           },
           priority: { type: "string", enum: ["urgent", "high", "medium"] },
-          impact: { type: "integer", minimum: 1, maximum: 20 },
+          impact: { type: "integer" },
         },
         required: ["emoji", "title", "body", "tab", "priority", "impact"],
         additionalProperties: false,
