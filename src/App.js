@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import InventoryPage from './pages/Inventory';
 import Calculator from './pages/Calculator';
 import Scheduler from './pages/Scheduler';
+import SchedulerPreview from './pages/SchedulerPreview';
 import Customers from './pages/Customers';
 import MoneyTracker from './pages/MoneyTracker';
 import Settings from './pages/Settings';
@@ -49,6 +50,9 @@ function App() {
 
         {/* HMRC OAuth callback — outside ProtectedRoute so the redirect lands correctly */}
         <Route path="/hmrc/callback" element={<HmrcCallback />} />
+
+        {/* Scheduler redesign preview — static mock, no auth required */}
+        <Route path="/scheduler-preview" element={<SchedulerPreview />} />
 
         {/* Manager app */}
         <Route path="/" element={
