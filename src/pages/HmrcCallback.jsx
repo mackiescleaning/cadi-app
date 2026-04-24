@@ -96,16 +96,23 @@ export default function HmrcCallback() {
       return;
     }
 
-    // ── Wait for session to be restored, then exchange code ──────────────────
-    // The page loads fresh after OAuth redirect. Supabase restores the session
-    // from localStorage asynchronously — we must wait before invoking the edge
-    // function, otherwise no JWT is sent and the function returns 401.
+    // ── Exchange code for tokens ──────────────────────────────────────────────
+    // The page loads fresh after an OAuth redirect. We must get the session
+    // first AND pass the access_token explicitly in the Authorization header —
+    // relying on functions.invoke to pick it up internally is unreliable on a
+    // fresh page load because the Supabase auth state may not be fully hydrated.
     supabase.auth.getSession()
-      .then(({ data: { session } }) => {
+      .then(async ({ data: { session } }) => {
         if (!session) {
-          throw new Error('Session not found — please sign in again and reconnect.');
+          throw new Error('Your session expired — please sign in and try connecting again.');
         }
-        return exchangeHmrcCode(code, state);
+        const { data, error } = await supabase.functions.invoke('hmrc-auth', {
+          body: { action: 'callback', code, state },
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (error) throw new Error(error.message ?? 'hmrc-auth error');
+        if (data?.error) throw new Error(data.error);
+        return data;
       })
       .then(() => {
         setPhase(STATES.success);
