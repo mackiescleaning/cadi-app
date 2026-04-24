@@ -97,15 +97,22 @@ export default function HmrcCallback() {
     }
 
     // ── Exchange code for tokens ──────────────────────────────────────────────
-    // The page loads fresh after an OAuth redirect. We must get the session
-    // first AND pass the access_token explicitly in the Authorization header —
-    // relying on functions.invoke to pick it up internally is unreliable on a
-    // fresh page load because the Supabase auth state may not be fully hydrated.
-    supabase.auth.getSession()
-      .then(async ({ data: { session } }) => {
+    // Fresh page load after OAuth redirect — session is in localStorage but the
+    // access token may be expired. refreshSession() gets a guaranteed-fresh token.
+    // We also pass it explicitly in Authorization so functions.invoke can't miss it.
+    supabase.auth.refreshSession()
+      .then(async ({ data: { session }, error: refreshError }) => {
+        // Fall back to stored session if refresh fails (e.g. no refresh token)
         if (!session) {
-          throw new Error('Your session expired — please sign in and try connecting again.');
+          const { data: stored } = await supabase.auth.getSession();
+          if (!stored.session) {
+            throw new Error('Your session expired — please sign in and try connecting again.');
+          }
+          return stored.session;
         }
+        return session;
+      })
+      .then(async (session) => {
         const { data, error } = await supabase.functions.invoke('hmrc-auth', {
           body: { action: 'callback', code, state },
           headers: { Authorization: `Bearer ${session.access_token}` },

@@ -58,8 +58,11 @@ async function getUser(req: Request) {
   const SUPABASE_URL         = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const sb    = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-  const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const token = authHeader.replace("Bearer ", "");
+  console.log("[getUser] auth header present:", !!authHeader, "token length:", token.length, "prefix:", token.substring(0, 12));
   const { data: { user }, error } = await sb.auth.getUser(token);
+  console.log("[getUser] user:", user?.id ?? "null", "error:", error?.message ?? "none");
   if (error || !user) throw new Error("Unauthorized");
   return { user, sb };
 }
