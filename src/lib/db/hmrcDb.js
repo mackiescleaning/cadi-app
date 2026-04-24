@@ -16,6 +16,7 @@
  */
 
 import { supabase } from '../supabase';
+import { collectDeviceInfo } from '../hmrcFraudHeaders';
 
 // ─── Low-level invoke helpers ─────────────────────────────────────────────────
 
@@ -34,16 +35,47 @@ export async function hmrcAuth(action, payload = {}) {
 }
 
 /**
+ * Actions that hit HMRC (vs. actions that only touch our DB). We attach fraud
+ * prevention headers only for these — no point paying the ipify round-trip on
+ * save_nino, which never leaves Supabase.
+ */
+const HMRC_NETWORK_ACTIONS = new Set([
+  'businesses',
+  'obligations',
+  'submit_quarter',
+  'trigger_calculation',
+  'get_calculation',
+]);
+
+/**
  * Call the hmrc-api Edge Function.
+ *
+ * For actions that actually hit HMRC, we collect device info client-side and
+ * pass it through so the edge function can build the Gov-Client-* headers
+ * HMRC mandates for MTD fraud prevention.
+ *
  * @param {string} action  — see hmrc-api/index.ts for all actions
  * @param {object} payload — action-specific fields
  */
 export async function hmrcApi(action, payload = {}) {
-  const { data, error } = await supabase.functions.invoke('hmrc-api', {
-    body: { action, ...payload },
-  });
+  const body = { action, ...payload };
+
+  if (HMRC_NETWORK_ACTIONS.has(action)) {
+    const { data: { user } } = await supabase.auth.getUser();
+    body.deviceInfo = await collectDeviceInfo({ userId: user?.id });
+  }
+
+  const { data, error } = await supabase.functions.invoke('hmrc-api', { body });
   if (error) throw new Error(error.message ?? 'hmrc-api error');
-  if (data?.error) throw new Error(data.error);
+  if (data?.error) {
+    const e = new Error(data.error);
+    // Attach HMRC's actual response so the UI / console can inspect it
+    e.hmrcStatus = data.hmrcStatus;
+    e.hmrcBody   = data.hmrcBody;
+    e.path       = data.path;
+    console.error('[hmrc-api]', data.error, { hmrcStatus: data.hmrcStatus, hmrcBody: data.hmrcBody, path: data.path });
+    throw e;
+  }
   return data;
 }
 

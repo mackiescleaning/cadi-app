@@ -3,7 +3,7 @@
  * Cadi — HMRC OAuth 2.0 redirect landing page
  *
  * HMRC redirects here after the user grants permission:
- *   https://app.cadi.co.uk/hmrc/callback?code=XXXX&state=YYYY
+ *   https://app.cadi.cleaning/hmrc/callback?code=XXXX&state=YYYY
  *
  * This page:
  *   1. Reads ?code and ?state from the URL
@@ -21,6 +21,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { exchangeHmrcCode } from '../lib/db/hmrcDb';
+import { supabase } from '../lib/supabase';
 
 // ─── Glassmorphism tokens (matches the rest of the app) ───────────────────────
 const BG   = 'min-h-screen bg-gradient-to-br from-[#0a0f1e] via-[#0d1530] to-[#0a1628] flex items-center justify-center p-4';
@@ -95,8 +96,17 @@ export default function HmrcCallback() {
       return;
     }
 
-    // ── Exchange code for tokens ──────────────────────────────────────────────
-    exchangeHmrcCode(code, state)
+    // ── Wait for session to be restored, then exchange code ──────────────────
+    // The page loads fresh after OAuth redirect. Supabase restores the session
+    // from localStorage asynchronously — we must wait before invoking the edge
+    // function, otherwise no JWT is sent and the function returns 401.
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (!session) {
+          throw new Error('Session not found — please sign in again and reconnect.');
+        }
+        return exchangeHmrcCode(code, state);
+      })
       .then(() => {
         setPhase(STATES.success);
         setTimeout(() => navigate('/accounts', { replace: true }), 2000);

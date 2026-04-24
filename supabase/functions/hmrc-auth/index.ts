@@ -11,7 +11,7 @@
  * Environment variables required (set in Supabase Dashboard → Settings → Edge Functions):
  *   HMRC_CLIENT_ID        — from HMRC Developer Hub application
  *   HMRC_CLIENT_SECRET    — from HMRC Developer Hub application
- *   HMRC_REDIRECT_URI     — e.g. https://app.cadi.co.uk/hmrc/callback
+ *   HMRC_REDIRECT_URI     — e.g. https://app.cadi.cleaning/hmrc/callback
  *   HMRC_SANDBOX          — "true" for testing, "false" for production
  *   SUPABASE_URL          — auto-injected by Supabase
  *   SUPABASE_SERVICE_ROLE_KEY — auto-injected by Supabase (service role, not anon)
