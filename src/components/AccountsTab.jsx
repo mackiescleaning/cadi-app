@@ -415,18 +415,28 @@ function HmrcTab() {
     nino,
     obligations,
     lastCalculation,
+    bsasData,
     error:          hmrcError,
     connectHmrc,
     disconnectHmrc,
     saveNino,
     submitAndCalculate,
     fetchObligations,
+    triggerBsas,
+    getBsas,
+    submitFinalDeclaration,
   } = useHmrc();
 
   const [expandedQ,    setExpandedQ]    = useState("Q1");
   const [submitModal,  setSubmitModal]  = useState(null);  // quarter object | null
   const [submitBusy,   setSubmitBusy]   = useState(false);
   const [submitResult, setSubmitResult] = useState(null);  // { success, message }
+
+  // End-of-year flow state
+  const [bsasCalcId,   setBsasCalcId]   = useState(null);  // calculationId from triggerBsas
+  const [eoyBusy,      setEoyBusy]      = useState(false);
+  const [eoyResult,    setEoyResult]    = useState(null);   // { success, message }
+  const [declared,     setDeclared]     = useState(false);  // final declaration done
 
   const TAX_YEAR = 2026; // 2026/27
 
@@ -763,24 +773,147 @@ function HmrcTab() {
         />
       )}
 
-      {/* Final Declaration */}
+      {/* ── End of Year · BSAS + Final Declaration ─────────────────────────── */}
+      <SectionDivider label="End of year · 2026/27" right={<GChip color="ghost">Due 31 Jan 2028</GChip>} />
+
+      {/* EOY result toast */}
+      {eoyResult && (
+        <GAlert type={eoyResult.success ? "green" : "red"}>
+          {eoyResult.message}
+          <button onClick={() => setEoyResult(null)} className="ml-2 opacity-50 hover:opacity-100">×</button>
+        </GAlert>
+      )}
+
+      {/* Step 1 — BSAS */}
       <GCard className="p-4">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-3 mb-3">
           <div>
-            <SL className="mb-1">Final declaration · replaces self assessment</SL>
-            <p className="text-sm font-black text-white">Due 31 January 2028</p>
+            <SL className="mb-1">Step 1 · Business Source Adjustable Summary</SL>
+            <p className="text-sm font-black text-white">Trigger your year-end BSAS</p>
             <p className="text-[11px] text-[rgba(153,197,255,0.45)] mt-1 leading-relaxed max-w-sm">
-              After Q4, submit your End of Period Statement (EOPS) — claim capital allowances, AIA on equipment, pension contributions.
-              The Final Declaration consolidates everything. Cadi auto-populates from your full-year records.
+              After all 4 quarters are submitted, HMRC produces a cumulative summary of your income and expenses.
+              Review it before the Final Declaration — this is where you can claim capital allowances and AIA.
             </p>
           </div>
-          <GChip color="ghost">295 days</GChip>
+          {bsasCalcId
+            ? <GChip color="green">✓ Triggered</GChip>
+            : <GChip color="ghost">Pending</GChip>
+          }
         </div>
-        <div className="flex flex-wrap gap-2 mt-3">
-          <GChip color="green">✓ Digital records kept</GChip>
-          <GChip color="amber">⚠ Capital allowances to review</GChip>
-          <GChip color="blue">ℹ Pension contributions to add</GChip>
+
+        {/* BSAS data summary when loaded */}
+        {bsasData && (
+          <div className="mb-3 p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] space-y-1">
+            <SL className="mb-2">BSAS summary · from HMRC</SL>
+            {[
+              { label: "Total income",   val: bsasData?.inputs?.incomeSourceData?.turnover },
+              { label: "Total expenses", val: bsasData?.inputs?.expensesData?.totalExpenses },
+              { label: "Net profit",     val: bsasData?.inputs?.netProfit },
+            ].map(({ label, val }) => val != null && (
+              <div key={label} className="flex justify-between text-xs">
+                <span className="text-[rgba(153,197,255,0.55)]">{label}</span>
+                <span className="font-black text-white tabular-nums">{fmt(val)}</span>
+              </div>
+            ))}
+            <p className="text-[10px] text-[rgba(153,197,255,0.3)] pt-1">Calculation ID: {bsasCalcId}</p>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          {isLive && connected && nino ? (
+            <>
+              <button
+                onClick={async () => {
+                  setEoyBusy(true);
+                  setEoyResult(null);
+                  try {
+                    const res = await triggerBsas({
+                      periodStart: `${TAX_YEAR}-04-06`,
+                      periodEnd:   `${TAX_YEAR + 1}-04-05`,
+                    });
+                    const calcId = res?.calculationId;
+                    setBsasCalcId(calcId);
+                    if (calcId) {
+                      const detail = await getBsas("2026-27", calcId);
+                      setEoyResult({ success: true, message: "BSAS triggered successfully." });
+                    }
+                  } catch (ex) {
+                    setEoyResult({ success: false, message: `BSAS failed: ${ex.message}` });
+                  } finally {
+                    setEoyBusy(false);
+                  }
+                }}
+                disabled={eoyBusy || connecting}
+                className="flex-1 py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors disabled:opacity-50">
+                {eoyBusy ? "Triggering…" : bsasCalcId ? "↻ Re-trigger BSAS" : "Trigger BSAS →"}
+              </button>
+              {bsasCalcId && (
+                <button
+                  onClick={async () => {
+                    setEoyBusy(true);
+                    try {
+                      await getBsas("2026-27", bsasCalcId);
+                    } catch (ex) {
+                      setEoyResult({ success: false, message: `Get BSAS failed: ${ex.message}` });
+                    } finally {
+                      setEoyBusy(false);
+                    }
+                  }}
+                  disabled={eoyBusy}
+                  className="px-4 py-2.5 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] text-xs font-black text-white hover:border-[rgba(153,197,255,0.3)] transition-colors disabled:opacity-50">
+                  View
+                </button>
+              )}
+            </>
+          ) : (
+            <button disabled className="flex-1 py-2.5 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)] text-xs font-black text-[rgba(153,197,255,0.25)] cursor-not-allowed">
+              Trigger BSAS →
+            </button>
+          )}
         </div>
+      </GCard>
+
+      {/* Step 2 — Final Declaration */}
+      <GCard className="p-4">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <SL className="mb-1">Step 2 · Final declaration · replaces self assessment</SL>
+            <p className="text-sm font-black text-white">Due 31 January 2028</p>
+            <p className="text-[11px] text-[rgba(153,197,255,0.45)] mt-1 leading-relaxed max-w-sm">
+              Once you're happy with the BSAS figures, Cadi triggers an intent-to-finalise calculation
+              then submits the Final Declaration — completing your tax year with HMRC.
+            </p>
+          </div>
+          {declared
+            ? <GChip color="green">✓ Declared</GChip>
+            : <GChip color="ghost">Pending</GChip>
+          }
+        </div>
+
+        {isLive && connected && nino ? (
+          <button
+            onClick={async () => {
+              setEoyBusy(true);
+              setEoyResult(null);
+              try {
+                await submitFinalDeclaration("2026-27");
+                setDeclared(true);
+                setEoyResult({ success: true, message: "Final Declaration submitted to HMRC. Tax year 2026/27 complete." });
+              } catch (ex) {
+                setEoyResult({ success: false, message: `Final Declaration failed: ${ex.message}` });
+              } finally {
+                setEoyBusy(false);
+              }
+            }}
+            disabled={eoyBusy || connecting || declared}
+            className="w-full py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors disabled:opacity-50">
+            {eoyBusy ? "Submitting…" : declared ? "✓ Declared" : "Submit Final Declaration →"}
+          </button>
+        ) : (
+          <button disabled className="w-full py-2.5 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)] text-xs font-black text-[rgba(153,197,255,0.25)] cursor-not-allowed">
+            Submit Final Declaration →
+          </button>
+        )}
       </GCard>
 
       {/* Prior year */}

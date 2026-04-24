@@ -45,6 +45,10 @@ const HMRC_NETWORK_ACTIONS = new Set([
   'submit_quarter',
   'trigger_calculation',
   'get_calculation',
+  'trigger_bsas',
+  'get_bsas',
+  'list_bsas',
+  'final_declaration',
 ]);
 
 /**
@@ -140,12 +144,13 @@ export const getObligations = (fromDate, toDate, businessId) =>
 export const submitQuarter = (params) => hmrcApi('submit_quarter', params);
 
 /**
- * Ask HMRC to produce an in-year tax estimate after submitting a quarter.
- * @param {string} taxYear — "2025-26"
+ * Ask HMRC to produce a calculation.
+ * @param {string} taxYear         — "2025-26"
+ * @param {string} calculationType — "in-year" (default) | "intent-to-finalise"
  * Returns { calculationId }
  */
-export const triggerCalculation = (taxYear) =>
-  hmrcApi('trigger_calculation', { taxYear });
+export const triggerCalculation = (taxYear, calculationType = 'in-year') =>
+  hmrcApi('trigger_calculation', { taxYear, calculationType });
 
 /**
  * Fetch a specific tax calculation from HMRC.
@@ -154,6 +159,43 @@ export const triggerCalculation = (taxYear) =>
  */
 export const getCalculation = (taxYear, calculationId) =>
   hmrcApi('get_calculation', { taxYear, calculationId });
+
+// ─── End of Year helpers ──────────────────────────────────────────────────────
+
+/**
+ * Trigger a Business Source Adjustable Summary for the full tax year.
+ * Must subscribe to "Self Assessment BSAS (MTD)" in HMRC Developer Hub first.
+ * @param {string} businessId  — from getHmrcBusinesses()
+ * @param {string} periodStart — "2026-04-06"
+ * @param {string} periodEnd   — "2027-04-05"
+ * Returns { calculationId }
+ */
+export const triggerBsas = ({ businessId, periodStart, periodEnd }) =>
+  hmrcApi('trigger_bsas', { businessId, periodStart, periodEnd });
+
+/**
+ * Get the BSAS detail for a specific calculationId.
+ * @param {string} taxYear       — "2026-27"
+ * @param {string} calculationId — from triggerBsas()
+ */
+export const getBsas = (taxYear, calculationId) =>
+  hmrcApi('get_bsas', { taxYear, calculationId });
+
+/**
+ * List all BSAS summaries for a tax year.
+ * @param {string} taxYear — "2026-27"
+ */
+export const listBsas = (taxYear) =>
+  hmrcApi('list_bsas', { taxYear });
+
+/**
+ * Submit the Final Declaration for the tax year.
+ * Requires a prior triggerCalculation({ taxYear, calculationType: "intent-to-finalise" }).
+ * @param {string} taxYear       — "2026-27"
+ * @param {string} calculationId — from triggerCalculation()
+ */
+export const finalDeclaration = (taxYear, calculationId) =>
+  hmrcApi('final_declaration', { taxYear, calculationId });
 
 // ─── Compound helpers ─────────────────────────────────────────────────────────
 

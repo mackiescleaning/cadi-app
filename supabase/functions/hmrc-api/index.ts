@@ -30,14 +30,33 @@
  *     → GET /individuals/calculations/{nino}/self-assessment/{taxYear}/{calculationId}
  *     → Returns HMRC's tax calculation (estimated bill, allowances, etc.)
  *
+ *   { action: "trigger_bsas", businessId, periodStart, periodEnd }
+ *     → POST /individuals/self-assessment/adjustable-summary/{nino}/trigger
+ *     → Triggers a Business Source Adjustable Summary for the full tax year
+ *     → Returns { calculationId }
+ *
+ *   { action: "get_bsas", taxYear, calculationId }
+ *     → GET /individuals/self-assessment/adjustable-summary/{nino}/self-employment/{calculationId}/{taxYear}
+ *     → Returns the BSAS detail (income/expense totals, adjustable fields)
+ *
+ *   { action: "list_bsas", taxYear }
+ *     → GET /individuals/self-assessment/adjustable-summary/{nino}/{taxYear}
+ *     → Lists all BSAS summaries for the tax year
+ *
+ *   { action: "final_declaration", taxYear, calculationId }
+ *     → POST /individuals/calculations/{nino}/self-assessment/{taxYear}/{calculationId}/final-declaration
+ *     → Submits the Final Declaration (replaces Self Assessment return). Returns 204 → { success: true }
+ *     → Requires a prior trigger_calculation with calculationType="intent-to-finalise"
+ *
  *   { action: "save_nino", nino }
  *     → Saves the user's NINO to their profile (needed for all API calls)
  *
  * HMRC API versioning — Accept headers required:
- *   business-details:  application/vnd.hmrc.3.0+json
- *   obligations:       application/vnd.hmrc.2.0+json
- *   self-assessment:   application/vnd.hmrc.3.0+json
- *   calculations:      application/vnd.hmrc.6.0+json
+ *   business-details:  application/vnd.hmrc.2.0+json
+ *   obligations:       application/vnd.hmrc.3.0+json
+ *   self-employment:   application/vnd.hmrc.5.0+json
+ *   calculations:      application/vnd.hmrc.8.0+json
+ *   bsas:              application/vnd.hmrc.7.0+json
  */
 
 import { serve }       from "https://deno.land/std@0.168.0/http/server.ts";
@@ -356,12 +375,9 @@ serve(async (req: Request) => {
       const qs = new URLSearchParams();
       if (from)   qs.set("fromDate",  from);
       if (to)     qs.set("toDate",    to);
-      if (biz)    qs.set("businessId", biz);
+      if (biz) { qs.set("businessId", biz); qs.set("typeOfBusiness", "self-employment"); }
       if (status) qs.set("status",    status);
       const query = qs.toString() ? `?${qs}` : "";
-
-      // Sandbox-only: "OPEN" returns open quarterly obligations (valid scenario for v3).
-      const extraHeaders = SANDBOX ? { "Gov-Test-Scenario": "OPEN" } : undefined;
 
       const result = await hmrcFetch(
         `/obligations/details/${nino}/income-and-expenditure${query}`,
@@ -369,8 +385,6 @@ serve(async (req: Request) => {
         token,
         "application/vnd.hmrc.3.0+json",
         fraud,
-        undefined,
-        extraHeaders,
       );
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json(result.data);
@@ -396,25 +410,25 @@ serve(async (req: Request) => {
         return json({ error: "businessId and taxYear are required" }, 400);
       }
 
-      const expenses: Record<string, { amount: number }> = {};
+      const expenses: Record<string, number> = {};
       const EXPENSE_MAP: Record<keyof SubmitExpenses, string> = {
-        costOfGoods:           "costOfGoodsAllowable",
-        travelCosts:           "travelCostsAllowable",
-        premisesRunningCosts:  "premisesRunningCostsAllowable",
-        maintenanceCosts:      "maintenanceCostsAllowable",
-        adminCosts:            "adminCostsAllowable",
-        advertisingCosts:      "advertisingCostsAllowable",
-        businessEntertainment: "businessEntertainmentCostsAllowable",
-        interest:              "interestOnBankOtherLoansAllowable",
-        financialCharges:      "financeChargesAllowable",
-        badDebt:               "irrecoverableDebtsAllowable",
-        professionalFees:      "professionalFeesAllowable",
-        depreciation:          "depreciationAllowable",
-        other:                 "otherExpensesAllowable",
+        costOfGoods:           "costOfGoods",
+        travelCosts:           "travelCosts",
+        premisesRunningCosts:  "premisesRunningCosts",
+        maintenanceCosts:      "maintenanceCosts",
+        adminCosts:            "adminCosts",
+        advertisingCosts:      "advertisingCosts",
+        businessEntertainment: "businessEntertainmentCosts",
+        interest:              "interestOnBankOtherLoans",
+        financialCharges:      "financeCharges",
+        badDebt:               "irrecoverableDebts",
+        professionalFees:      "professionalFees",
+        depreciation:          "depreciation",
+        other:                 "other",
       };
       for (const [key, hmrcKey] of Object.entries(EXPENSE_MAP)) {
         const val = expenseData?.[key as keyof SubmitExpenses];
-        if (val && val > 0) expenses[hmrcKey] = { amount: val };
+        if (val && val > 0) expenses[hmrcKey] = val;
       }
 
       const hmrcBody = {
@@ -445,10 +459,10 @@ serve(async (req: Request) => {
           period_start:  periodStart,
           period_end:    periodEnd,
           income:        incomeData.turnover,
-          expenses:      Object.values(expenseData ?? {}).reduce((s, v) => s + (v || 0), 0),
+          expenses:      Object.values(expenseData ?? {}).reduce((s: number, v: unknown) => s + (Number(v) || 0), 0),
           submitted_at:  new Date().toISOString(),
           hmrc_response: result.data,
-        }).catch(() => {});
+        }).then(null, () => {});
       }
 
       if (!result.ok) return hmrcError(result.status, result.data, action);
@@ -467,7 +481,7 @@ serve(async (req: Request) => {
         `/individuals/calculations/${nino}/self-assessment/${taxYear}/trigger/${calculationType}`,
         "POST",
         token,
-        "application/vnd.hmrc.7.0+json",
+        "application/vnd.hmrc.8.0+json",
         fraud,
         {},
         SANDBOX ? { "Gov-Test-Scenario": "DEFAULT" } : undefined,
@@ -484,7 +498,7 @@ serve(async (req: Request) => {
         `/individuals/calculations/${nino}/self-assessment/${taxYear}/${calculationId}`,
         "GET",
         token,
-        "application/vnd.hmrc.7.0+json",
+        "application/vnd.hmrc.8.0+json",
         fraud,
         undefined,
         SANDBOX ? { "Gov-Test-Scenario": "DEFAULT" } : undefined,
@@ -493,11 +507,104 @@ serve(async (req: Request) => {
       return json(result.data);
     }
 
+    // ── Trigger a BSAS (Business Source Adjustable Summary) ──────────────────
+    // Self Assessment BSAS (MTD) v7.0
+    // Must subscribe to "Self Assessment BSAS (MTD)" in HMRC Developer Hub
+    if (action === "trigger_bsas") {
+      const businessId  = body.businessId  as string;
+      const periodStart = body.periodStart as string; // "2026-04-06"
+      const periodEnd   = body.periodEnd   as string; // "2027-04-05"
+
+      if (!businessId || !periodStart || !periodEnd) {
+        return json({ error: "businessId, periodStart and periodEnd are required" }, 400);
+      }
+
+      const result = await hmrcFetch(
+        `/individuals/self-assessment/adjustable-summary/${nino}/trigger`,
+        "POST",
+        token,
+        "application/vnd.hmrc.7.0+json",
+        fraud,
+        {
+          typeOfBusiness:   "self-employment",
+          businessId,
+          accountingPeriod: { startDate: periodStart, endDate: periodEnd },
+        },
+        SANDBOX ? { "Gov-Test-Scenario": "STATEFUL" } : undefined,
+      );
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── List BSAS summaries for a tax year ───────────────────────────────────
+    if (action === "list_bsas") {
+      const taxYear = body.taxYear as string; // "2026-27"
+      if (!taxYear) return json({ error: "taxYear is required" }, 400);
+
+      const result = await hmrcFetch(
+        `/individuals/self-assessment/adjustable-summary/${nino}/${taxYear}`,
+        "GET",
+        token,
+        "application/vnd.hmrc.7.0+json",
+        fraud,
+        undefined,
+        SANDBOX ? { "Gov-Test-Scenario": "STATEFUL" } : undefined,
+      );
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Get a specific BSAS ───────────────────────────────────────────────────
+    if (action === "get_bsas") {
+      const taxYear       = body.taxYear       as string; // "2026-27"
+      const calculationId = body.calculationId as string;
+      if (!taxYear || !calculationId) {
+        return json({ error: "taxYear and calculationId are required" }, 400);
+      }
+
+      const result = await hmrcFetch(
+        `/individuals/self-assessment/adjustable-summary/${nino}/self-employment/${calculationId}/${taxYear}`,
+        "GET",
+        token,
+        "application/vnd.hmrc.7.0+json",
+        fraud,
+        undefined,
+        SANDBOX ? { "Gov-Test-Scenario": "STATEFUL" } : undefined,
+      );
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Submit Final Declaration ──────────────────────────────────────────────
+    // Individual Calculations (MTD) v8.0
+    // Step 1: call trigger_calculation with calculationType="intent-to-finalise"
+    // Step 2: call this action with the calculationId from step 1
+    // Returns 204 No Content on success → we return { success: true, declared: true }
+    if (action === "final_declaration") {
+      const taxYear       = body.taxYear       as string; // "2026-27"
+      const calculationId = body.calculationId as string;
+      if (!taxYear || !calculationId) {
+        return json({ error: "taxYear and calculationId are required" }, 400);
+      }
+
+      const result = await hmrcFetch(
+        `/individuals/calculations/${nino}/self-assessment/${taxYear}/${calculationId}/final-declaration`,
+        "POST",
+        token,
+        "application/vnd.hmrc.8.0+json",
+        fraud,
+        {},
+        SANDBOX ? { "Gov-Test-Scenario": "DEFAULT" } : undefined,
+      );
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json({ success: true, declared: true });
+    }
+
     return json({ error: `Unknown action: ${action}` }, 400);
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("hmrc-api error:", msg);
-    return json({ error: msg }, msg.includes("Unauthorized") ? 401 : 500);
+    return json({ error: msg }, 200);
   }
 });

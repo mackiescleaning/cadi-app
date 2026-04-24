@@ -38,6 +38,10 @@ import {
   getCalculation      as _getCalc,
   submitQuarterAndCalculate as _submitAndCalc,
   getCurrentTaxYearObligations,
+  triggerBsas         as _triggerBsas,
+  getBsas             as _getBsas,
+  listBsas            as _listBsas,
+  finalDeclaration    as _finalDeclaration,
 } from '../lib/db/hmrcDb';
 
 // ─── Status polling interval (ms) when a connection is active ────────────────
@@ -53,6 +57,7 @@ export function useHmrc() {
   const [obligations,     setObligations]     = useState([]);
   const [businessId,      setBusinessId]      = useState(null);
   const [lastCalculation, setLastCalculation] = useState(null);
+  const [bsasData,        setBsasData]        = useState(null);   // most recent BSAS result
   const [connecting,      setConnecting]      = useState(false);
   const [loading,         setLoading]         = useState(!isDemo); // no load in demo
   const [error,           setError]           = useState(null);
@@ -234,6 +239,72 @@ export function useHmrc() {
     }
   }, []);
 
+  /** Trigger a Business Source Adjustable Summary for the full tax year */
+  const triggerBsas = useCallback(async ({ businessId: bizOverride, periodStart, periodEnd }) => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const biz = await resolveBizId(bizOverride);
+      const result = await _triggerBsas({ businessId: biz, periodStart, periodEnd });
+      return result;
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    } finally {
+      setConnecting(false);
+    }
+  }, [resolveBizId]);
+
+  /** Fetch a BSAS by calculationId */
+  const getBsas = useCallback(async (taxYear, calculationId) => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const result = await _getBsas(taxYear, calculationId);
+      setBsasData(result);
+      return result;
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    } finally {
+      setConnecting(false);
+    }
+  }, []);
+
+  /** List all BSAS summaries for a tax year */
+  const listBsas = useCallback(async (taxYear) => {
+    setConnecting(true);
+    setError(null);
+    try {
+      return await _listBsas(taxYear);
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    } finally {
+      setConnecting(false);
+    }
+  }, []);
+
+  /**
+   * Submit the Final Declaration.
+   * Wraps the two-step flow: trigger intent-to-finalise → POST final-declaration.
+   * @param {string} taxYear
+   */
+  const submitFinalDeclaration = useCallback(async (taxYear) => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const { calculationId } = await _triggerCalc(taxYear, 'intent-to-finalise');
+      const result = await _finalDeclaration(taxYear, calculationId);
+      return result;
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    } finally {
+      setConnecting(false);
+    }
+  }, []);
+
   /** Submit a quarter and immediately trigger + fetch a calculation */
   const submitAndCalculate = useCallback(async (params) => {
     setConnecting(true);
@@ -262,6 +333,7 @@ export function useHmrc() {
     obligations,
     businessId,
     lastCalculation,
+    bsasData,
     error,
 
     // Actions
@@ -273,6 +345,10 @@ export function useHmrc() {
     triggerCalculation,
     getCalculation,
     submitAndCalculate,
+    triggerBsas,
+    getBsas,
+    listBsas,
+    submitFinalDeclaration,
 
     // Refresh
     refreshStatus,
