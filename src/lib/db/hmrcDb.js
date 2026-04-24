@@ -173,6 +173,7 @@ export async function submitQuarterAndCalculate({
     periodEnd,
     income,
     expenses,
+    taxYear,
   });
 
   const { calculationId } = await triggerCalculation(taxYear);
