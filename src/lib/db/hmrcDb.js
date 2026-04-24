@@ -68,8 +68,10 @@ export async function hmrcApi(action, payload = {}) {
   const { data, error } = await supabase.functions.invoke('hmrc-api', { body });
   if (error) throw new Error(error.message ?? 'hmrc-api error');
   if (data?.error) {
-    const e = new Error(data.error);
-    // Attach HMRC's actual response so the UI / console can inspect it
+    const detail = data.hmrcBody
+      ? ' | ' + (typeof data.hmrcBody === 'object' ? JSON.stringify(data.hmrcBody) : String(data.hmrcBody))
+      : '';
+    const e = new Error(data.error + detail);
     e.hmrcStatus = data.hmrcStatus;
     e.hmrcBody   = data.hmrcBody;
     e.path       = data.path;
