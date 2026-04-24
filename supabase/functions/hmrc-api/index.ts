@@ -324,8 +324,9 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   try {
-    const body   = await req.json() as Record<string, unknown>;
-    const action = body.action as string;
+    const body            = await req.json() as Record<string, unknown>;
+    const action          = body.action as string;
+    const govTestScenario = (body.govTestScenario as string | undefined) ?? "DEFAULT";
     const { user, sb } = await getUser(req);
 
     // ── Save NINO (user enters this once — it's their tax reference) ──────────
@@ -450,7 +451,7 @@ serve(async (req: Request) => {
         "application/vnd.hmrc.5.0+json",
         fraud,
         hmrcBody,
-        SANDBOX ? { "Gov-Test-Scenario": "DEFAULT" } : undefined,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
 
       if (result.ok) {
@@ -484,7 +485,7 @@ serve(async (req: Request) => {
         "application/vnd.hmrc.8.0+json",
         fraud,
         {},
-        SANDBOX ? { "Gov-Test-Scenario": "DEFAULT" } : undefined,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json(result.data);
@@ -501,7 +502,7 @@ serve(async (req: Request) => {
         "application/vnd.hmrc.8.0+json",
         fraud,
         undefined,
-        SANDBOX ? { "Gov-Test-Scenario": "DEFAULT" } : undefined,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json(result.data);
@@ -530,7 +531,7 @@ serve(async (req: Request) => {
           businessId,
           accountingPeriod: { startDate: periodStart, endDate: periodEnd },
         },
-        SANDBOX ? { "Gov-Test-Scenario": "STATEFUL" } : undefined,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json(result.data);
@@ -548,7 +549,7 @@ serve(async (req: Request) => {
         "application/vnd.hmrc.7.0+json",
         fraud,
         undefined,
-        SANDBOX ? { "Gov-Test-Scenario": "STATEFUL" } : undefined,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json(result.data);
@@ -563,13 +564,13 @@ serve(async (req: Request) => {
       }
 
       const result = await hmrcFetch(
-        `/individuals/self-assessment/adjustable-summary/${nino}/self-employment/${calculationId}/${taxYear}`,
+        `/individuals/self-assessment/adjustable-summary/${nino}/self-employment/${calculationId}`,
         "GET",
         token,
         "application/vnd.hmrc.7.0+json",
         fraud,
         undefined,
-        SANDBOX ? { "Gov-Test-Scenario": "STATEFUL" } : undefined,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json(result.data);
@@ -594,7 +595,7 @@ serve(async (req: Request) => {
         "application/vnd.hmrc.8.0+json",
         fraud,
         {},
-        SANDBOX ? { "Gov-Test-Scenario": "DEFAULT" } : undefined,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json({ success: true, declared: true });
