@@ -156,7 +156,7 @@ export function useHmrc() {
       let biz = bizId ?? businessId;
       if (!biz) {
         const bizData = await getHmrcBusinesses();
-        const businesses = bizData?.listOfBusinessDetails ?? bizData?.list ?? bizData?.businesses ?? [];
+        const businesses = bizData?.listOfBusinesses ?? bizData?.listOfBusinessDetails ?? bizData?.list ?? [];
         biz = businesses[0]?.businessId ?? businesses[0]?.id ?? null;
         if (biz) setBusinessId(biz);
       }
@@ -179,11 +179,10 @@ export function useHmrc() {
     if (override) return override;
     if (businessId) return businessId;
     const bizData = await getHmrcBusinesses();
-    console.log('[resolveBizId] raw response:', JSON.stringify(bizData));
-    const businesses = bizData?.listOfBusinessDetails ?? bizData?.list ?? bizData?.businesses ?? [];
+    const businesses = bizData?.listOfBusinesses ?? bizData?.listOfBusinessDetails ?? bizData?.list ?? [];
     const biz = businesses[0]?.businessId ?? businesses[0]?.id ?? null;
     if (biz) setBusinessId(biz);
-    if (!biz) throw new Error(`No HMRC business found. Keys: ${Object.keys(bizData ?? {}).join(', ')} | raw: ${JSON.stringify(bizData)}`);
+    if (!biz) throw new Error('No HMRC business found for this account');
     return biz;
   }, [businessId]);
 
