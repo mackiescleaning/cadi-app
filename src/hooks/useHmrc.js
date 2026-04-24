@@ -25,6 +25,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useAuth } from '../context/AuthContext';
 import {
   getHmrcStatus,
   getHmrcOAuthUrl,
@@ -43,12 +44,17 @@ import {
 const STATUS_POLL_MS = 5 * 60 * 1000; // 5 minutes
 
 export function useHmrc() {
+  const { user } = useAuth();
+  // Demo mode has no real Supabase session — every HMRC call would 401. Short-
+  // circuit so we don't poll, don't error, and the UI can render a demo state.
+  const isDemo = user?.id === 'demo-user';
+
   const [status,          setStatus]          = useState(null);   // raw status object
   const [obligations,     setObligations]     = useState([]);
   const [businessId,      setBusinessId]      = useState(null);
   const [lastCalculation, setLastCalculation] = useState(null);
   const [connecting,      setConnecting]      = useState(false);
-  const [loading,         setLoading]         = useState(true);   // initial status load
+  const [loading,         setLoading]         = useState(!isDemo); // no load in demo
   const [error,           setError]           = useState(null);
 
   const pollRef = useRef(null);
@@ -59,6 +65,7 @@ export function useHmrc() {
 
   // ── Load status on mount + poll ───────────────────────────────────────────────
   const refreshStatus = useCallback(async () => {
+    if (isDemo) return;
     try {
       const s = await getHmrcStatus();
       setStatus(s);
@@ -71,13 +78,14 @@ export function useHmrc() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isDemo]);
 
   useEffect(() => {
+    if (isDemo) return undefined;
     refreshStatus();
     pollRef.current = setInterval(refreshStatus, STATUS_POLL_MS);
     return () => clearInterval(pollRef.current);
-  }, [refreshStatus]);
+  }, [refreshStatus, isDemo]);
 
   // ── Auto-load obligations when connected + has NINO ──────────────────────────
   useEffect(() => {
@@ -91,6 +99,7 @@ export function useHmrc() {
 
   /** Redirect the user to HMRC's OAuth consent screen */
   const connectHmrc = useCallback(async () => {
+    if (isDemo) { setError('Sign in to connect HMRC'); return; }
     setConnecting(true);
     setError(null);
     try {
@@ -103,7 +112,7 @@ export function useHmrc() {
     }
     // Note: setConnecting(false) is NOT called here — the page will navigate away.
     // If the user cancels and comes back, refreshStatus() will reset the UI.
-  }, []);
+  }, [isDemo]);
 
   /** Revoke HMRC connection and clear stored tokens */
   const disconnectHmrc = useCallback(async () => {

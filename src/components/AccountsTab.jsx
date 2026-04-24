@@ -368,21 +368,54 @@ function SubmitModal({ quarter, onConfirm, onCancel, loading }) {
   );
 }
 
+// ─── HMRC calculation result display ─────────────────────────────────────────
+function CalcResult({ calc }) {
+  const tax = calc?.calculation?.taxCalculation;
+  if (!tax) {
+    return (
+      <p className="text-xs text-[rgba(153,197,255,0.4)]">
+        Calculation received — HMRC is processing. Check back shortly.
+      </p>
+    );
+  }
+  const itDue    = tax.incomeTax?.incomeTaxDue ?? tax.incomeTaxAndNicsCharged ?? 0;
+  const nicDue   = tax.nics?.class4Nics?.class4NicsDue ?? 0;
+  const total    = tax.totalIncomeTaxAndNicsDue ?? (itDue + nicDue);
+  return (
+    <div className="space-y-2">
+      {[
+        ["Income tax due",       fmt(itDue),  "text-amber-400"],
+        ["Class 4 NIC due",      fmt(nicDue), "text-amber-400"],
+        ["Total estimated bill", fmt(total),  "text-white"],
+      ].map(([label, val, cls]) => (
+        <div key={label} className="flex justify-between text-xs">
+          <span className="text-[rgba(153,197,255,0.5)]">{label}</span>
+          <span className={`font-black tabular-nums ${cls}`}>{val}</span>
+        </div>
+      ))}
+      <p className="text-[10px] text-[rgba(153,197,255,0.3)] pt-1">
+        In-year estimate from HMRC — final bill set after Final Declaration.
+      </p>
+    </div>
+  );
+}
+
 // ─── TAB: HMRC Connect ────────────────────────────────────────────────────────
 function HmrcTab() {
   const { invoices } = useInvoices();
   const { user }     = useAuth();
-  const isLive       = Boolean(user);
   const isDemo       = user?.id === 'demo-user';
+  const isLive       = Boolean(user) && !isDemo;
 
   // Real HMRC hook — no-ops when user isn't logged in or HMRC not connected
   const {
     connected,
     connecting,
-    loading:   hmrcLoading,
+    loading:        hmrcLoading,
     nino,
     obligations,
-    error:     hmrcError,
+    lastCalculation,
+    error:          hmrcError,
     connectHmrc,
     disconnectHmrc,
     saveNino,
@@ -413,18 +446,32 @@ function HmrcTab() {
 
   // MTD ITSA SA103 expense field mapping
   const SA103_FIELDS = [
-    { field: "turnover",              box: "Box 15", label: "Turnover (gross receipts)",   demo: "£3,820"  },
-    { field: "costOfGoods",           box: "Box 16", label: "Cost of goods / materials",   demo: "−£112"   },
-    { field: "travelCosts",           box: "Box 17", label: "Motor & travel costs",         demo: "−£220"   },
-    { field: "premisesRunningCosts",  box: "Box 20", label: "Premises running costs",        demo: "—"       },
-    { field: "adminCosts",            box: "Box 21", label: "Phone, software & admin",       demo: "−£60"    },
-    { field: "advertisingCosts",      box: "Box 22", label: "Advertising & marketing",       demo: "−£60"    },
-    { field: "interest",              box: "Box 23", label: "Finance charges & interest",    demo: "—"       },
-    { field: "professionalFees",      box: "Box 24", label: "Legal & professional fees",     demo: "—"       },
-    { field: "other",                 box: "Box 27", label: "Other allowable expenses",      demo: "−£105"   },
+    { field: "turnover",             box: "Box 15", label: "Turnover (gross receipts)"  },
+    { field: "costOfGoods",          box: "Box 16", label: "Cost of goods / materials"  },
+    { field: "travelCosts",          box: "Box 17", label: "Motor & travel costs"        },
+    { field: "premisesRunningCosts", box: "Box 20", label: "Premises running costs"      },
+    { field: "adminCosts",           box: "Box 21", label: "Phone, software & admin"     },
+    { field: "advertisingCosts",     box: "Box 22", label: "Advertising & marketing"     },
+    { field: "interest",             box: "Box 23", label: "Finance charges & interest"  },
+    { field: "professionalFees",     box: "Box 24", label: "Legal & professional fees"   },
+    { field: "other",                box: "Box 27", label: "Other allowable expenses"    },
   ];
 
-  const QUARTERLY_STATUS = { Q1: "active", Q2: "future", Q3: "future", Q4: "future" };
+  // Map HMRC obligation periods to quarter IDs by matching periodStartDate
+  const obligationMap = useMemo(() => {
+    const map = {};
+    for (const ob of obligations) {
+      const match = qData.find(q => q.start === ob.periodStartDate);
+      if (match) map[match.id] = ob.status === 'Fulfilled' ? 'fulfilled' : 'open';
+    }
+    return map;
+  }, [obligations, qData]);
+
+  // Quarter status: from HMRC if loaded, else infer (Q1 = current, rest = future)
+  const getQStatus = (qId) => {
+    if (obligations.length > 0) return obligationMap[qId] ?? 'future';
+    return qId === 'Q1' ? 'active' : 'future';
+  };
 
   return (
     <div className="space-y-5">
@@ -530,6 +577,17 @@ function HmrcTab() {
         </GAlert>
       )}
 
+      {/* HMRC tax calculation result */}
+      {lastCalculation && (
+        <GCard className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <SL>HMRC in-year tax estimate</SL>
+            <GChip color="green">✓ From HMRC</GChip>
+          </div>
+          <CalcResult calc={lastCalculation} />
+        </GCard>
+      )}
+
       {/* MTD Mandation info */}
       <GAlert type="blue">
         <strong>Your MTD ITSA mandation date:</strong> April 2027 (income above £30,000 threshold).
@@ -542,8 +600,9 @@ function HmrcTab() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {qData.map(q => {
-          const status = QUARTERLY_STATUS[q.id];
-          const isActive = status === "active";
+          const status      = getQStatus(q.id);
+          const isActive    = status === "active" || status === "open";
+          const isFulfilled = status === "fulfilled";
           return (
             <button
               key={q.id}
@@ -551,6 +610,8 @@ function HmrcTab() {
               className={`rounded-xl border p-3 text-left transition-all ${
                 expandedQ === q.id
                   ? "bg-[#1f48ff]/15 border-[#1f48ff]/40"
+                  : isFulfilled
+                  ? "bg-emerald-500/05 border-emerald-500/20 hover:border-emerald-500/35"
                   : isActive
                   ? "bg-[rgba(153,197,255,0.06)] border-[rgba(153,197,255,0.2)] hover:border-[rgba(153,197,255,0.35)]"
                   : "bg-[rgba(153,197,255,0.02)] border-[rgba(153,197,255,0.08)] hover:border-[rgba(153,197,255,0.2)]"
@@ -558,12 +619,14 @@ function HmrcTab() {
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-black text-white">{q.label}</span>
                 <span className={`w-2 h-2 rounded-full ${
-                  isActive ? "bg-amber-400 animate-pulse" : "bg-[rgba(153,197,255,0.2)]"
+                  isFulfilled ? "bg-emerald-400" : isActive ? "bg-amber-400 animate-pulse" : "bg-[rgba(153,197,255,0.2)]"
                 }`} />
               </div>
               <p className="text-[10px] text-[rgba(153,197,255,0.4)] mb-1">{q.start.slice(5).replace("-", " ")} – {q.end.slice(5).replace("-", " ")}</p>
               <p className="text-[10px] font-bold text-[rgba(153,197,255,0.55)]">Due {q.due} {Number(q.end.slice(0,4)) + (q.id === "Q4" ? 1 : 0)}</p>
-              {q.income > 0
+              {isFulfilled
+                ? <div className="mt-1.5"><GChip color="green">✓ Submitted</GChip></div>
+                : q.income > 0
                 ? <p className="text-xs font-black text-emerald-400 tabular-nums mt-1.5">{fmt(q.income)}</p>
                 : <p className="text-[10px] text-[rgba(153,197,255,0.25)] mt-1.5">{isActive ? "In progress" : "Not yet"}</p>
               }
@@ -576,7 +639,9 @@ function HmrcTab() {
       {expandedQ && (() => {
         const q = qData.find(x => x.id === expandedQ);
         if (!q) return null;
-        const isActive = QUARTERLY_STATUS[q.id] === "active";
+        const status      = getQStatus(q.id);
+        const isActive    = status === "active" || status === "open";
+        const isFulfilled = status === "fulfilled";
         return (
           <GCard className="overflow-hidden">
             <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
@@ -584,9 +649,12 @@ function HmrcTab() {
                 <SL className="mb-0">{q.label} · {q.start} to {q.end}</SL>
                 <p className="text-sm font-black text-white">Submission Preview — SA103 fields</p>
               </div>
-              {isActive && (
-                <GChip color="amber">⏳ Due {q.due} 2026</GChip>
-              )}
+              {isFulfilled
+                ? <GChip color="green">✓ Submitted</GChip>
+                : isActive
+                ? <GChip color="amber">⏳ Due {q.due} 2026</GChip>
+                : null
+              }
             </div>
 
             {/* Income/expense summary */}
@@ -614,17 +682,30 @@ function HmrcTab() {
             <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.06)]">
               <SL className="mb-3">MTD ITSA API fields → SA103 boxes</SL>
               <div className="space-y-1">
-                {SA103_FIELDS.map(({ box, label, demo }) => (
-                  <div key={box} className="flex items-center gap-3 text-xs">
-                    <span className="w-14 font-black text-[rgba(153,197,255,0.35)] shrink-0 font-mono text-[10px]">{box}</span>
-                    <span className="flex-1 text-[rgba(153,197,255,0.55)]">{label}</span>
-                    <span className={`font-black tabular-nums ${demo.startsWith("−") ? "text-red-400" : demo === "—" ? "text-[rgba(153,197,255,0.2)]" : "text-emerald-400"}`}>{demo}</span>
-                  </div>
-                ))}
+                {SA103_FIELDS.map(({ box, label, field }) => {
+                  let val, cls;
+                  if (field === "turnover") {
+                    val = q.income > 0 ? fmt(q.income) : "—";
+                    cls = q.income > 0 ? "text-emerald-400" : "text-[rgba(153,197,255,0.2)]";
+                  } else if (field === "other" && q.expenses > 0) {
+                    val = `−${fmt(q.expenses)}`;
+                    cls = "text-red-400";
+                  } else {
+                    val = "—";
+                    cls = "text-[rgba(153,197,255,0.2)]";
+                  }
+                  return (
+                    <div key={box} className="flex items-center gap-3 text-xs">
+                      <span className="w-14 font-black text-[rgba(153,197,255,0.35)] shrink-0 font-mono text-[10px]">{box}</span>
+                      <span className="flex-1 text-[rgba(153,197,255,0.55)]">{label}</span>
+                      <span className={`font-black tabular-nums ${cls}`}>{val}</span>
+                    </div>
+                  );
+                })}
                 <div className="flex items-center gap-3 text-xs pt-2 border-t border-[rgba(153,197,255,0.06)] mt-2">
                   <span className="w-14 shrink-0" />
-                  <span className="flex-1 font-black text-white">Net profit submitted</span>
-                  <span className="font-black text-white tabular-nums">{fmt(q.net > 0 ? q.net : 3263)}</span>
+                  <span className="flex-1 font-black text-white">Net profit</span>
+                  <span className={`font-black tabular-nums ${q.net >= 0 ? "text-white" : "text-red-400"}`}>{fmt(q.net)}</span>
                 </div>
               </div>
             </div>
@@ -638,7 +719,7 @@ function HmrcTab() {
               {isLive && connected && nino ? (
                 <button
                   onClick={() => setSubmitModal(q)}
-                  disabled={connecting || submitBusy || q.income <= 0}
+                  disabled={connecting || submitBusy}
                   className="flex-1 py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors disabled:opacity-50">
                   Submit to HMRC →
                 </button>
@@ -704,26 +785,11 @@ function HmrcTab() {
 
       {/* Prior year */}
       <SectionDivider label="2025/26 · Completed year" />
-      <GCard className="overflow-hidden divide-y divide-[rgba(153,197,255,0.05)]">
-        {[
-          { q: "Q1 2025/26", dates: "6 Apr – 5 Jul 2025", income: "£14,210", exp: "£2,840", status: "submitted" },
-          { q: "Q2 2025/26", dates: "6 Jul – 5 Oct 2025", income: "£13,940", exp: "£2,780", status: "submitted" },
-          { q: "Q3 2025/26", dates: "6 Oct – 5 Jan 2026", income: "£13,670", exp: "£2,720", status: "submitted" },
-          { q: "Q4 2025/26", dates: "6 Jan – 5 Apr 2026", income: "£14,000", exp: "£2,800", status: "submitted" },
-        ].map(({ q, dates, income, exp, status }) => (
-          <div key={q} className="flex items-center gap-3 px-4 py-3">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-black text-white">{q}</p>
-              <p className="text-[10px] text-[rgba(153,197,255,0.35)]">{dates}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-black text-emerald-400 tabular-nums">{income}</p>
-              <p className="text-[10px] text-red-400">{exp}</p>
-            </div>
-            <GChip color="green">✓ Submitted</GChip>
-          </div>
-        ))}
+      <GCard className="p-4 text-center">
+        <p className="text-xs text-[rgba(153,197,255,0.4)]">
+          Prior year HMRC submissions will appear here once loaded.
+          Connect HMRC and use the obligations API with a prior-year date range to populate this view.
+        </p>
       </GCard>
     </div>
   );

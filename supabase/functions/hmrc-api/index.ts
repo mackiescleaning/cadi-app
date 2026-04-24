@@ -51,6 +51,19 @@ interface HmrcTokens {
   hmrc_nino:             string | null;
 }
 
+interface DeviceInfo {
+  deviceId:          string;
+  userAgent:         string;
+  browserPlugins:    string;
+  doNotTrack:        string;
+  screens:           string;
+  windowSize:        string;
+  timezone:          string;
+  publicIp:          string | null;
+  publicIpTimestamp: string;
+  userId:            string | null;
+}
+
 interface SubmitExpenses {
   costOfGoods?:            number;
   travelCosts?:            number;
@@ -72,6 +85,8 @@ const HMRC_CLIENT_ID     = Deno.env.get("HMRC_CLIENT_ID") ?? "";
 const HMRC_CLIENT_SECRET = Deno.env.get("HMRC_CLIENT_SECRET") ?? "";
 const HMRC_REDIRECT_URI  = Deno.env.get("HMRC_REDIRECT_URI") ?? "";
 const SANDBOX            = Deno.env.get("HMRC_SANDBOX") !== "false";
+const VENDOR_VERSION     = Deno.env.get("HMRC_VENDOR_VERSION") ?? "1.0.0";
+const VENDOR_PRODUCT     = "Cadi";
 
 const HMRC_BASE = SANDBOX
   ? "https://test-api.service.hmrc.gov.uk"
@@ -87,6 +102,20 @@ const json = (data: unknown, status = 200) =>
     status,
     headers: { ...CORS, "Content-Type": "application/json" },
   });
+
+/**
+ * When an HMRC call fails, wrap the error in a 200 response so the Supabase
+ * `functions.invoke` wrapper doesn't swallow the response body. The client
+ * surfaces `data.error` as a thrown Error with the full HMRC status + body.
+ */
+function hmrcError(hmrcStatus: number, hmrcBody: unknown, path: string) {
+  return json({
+    error:      `HMRC ${hmrcStatus} on ${path}`,
+    hmrcStatus,
+    hmrcBody,
+    path,
+  }, 200);
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -167,15 +196,84 @@ async function getAccessToken(userId: string, sb: ReturnType<typeof createClient
   return { token: refreshed.access_token, nino: profile.hmrc_nino };
 }
 
-/** Make an authenticated HMRC API call */
+/**
+ * Cached outbound public IP of this edge-function instance. HMRC wants
+ * Gov-Vendor-Public-IP to be the IP the vendor's server actually used for
+ * the call. Supabase Edge Functions don't have a fixed egress IP, so we
+ * detect it at runtime and cache it for the lifetime of this container.
+ */
+let cachedVendorIp: string | null = null;
+async function getVendorPublicIp(): Promise<string> {
+  if (cachedVendorIp) return cachedVendorIp;
+  try {
+    const res = await fetch("https://api.ipify.org?format=json");
+    const { ip } = await res.json() as { ip: string };
+    cachedVendorIp = ip;
+    return ip;
+  } catch {
+    return "0.0.0.0";
+  }
+}
+
+/**
+ * Build HMRC MTD Fraud Prevention headers for a WEB_APP_VIA_SERVER call.
+ * The device fields come from the browser; the vendor fields come from us.
+ *
+ * Spec: https://developer.service.hmrc.gov.uk/guides/fraud-prevention/
+ */
+async function buildFraudHeaders(
+  device: DeviceInfo | undefined,
+  req:    Request,
+): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    "Gov-Client-Connection-Method": "WEB_APP_VIA_SERVER",
+    "Gov-Vendor-Product-Name":      encodeURIComponent(VENDOR_PRODUCT),
+    "Gov-Vendor-Version":           `${VENDOR_PRODUCT}=${VENDOR_VERSION}`,
+    "Gov-Vendor-Public-IP":         await getVendorPublicIp(),
+  };
+
+  if (!device) return headers;
+
+  // Forward the chain of proxies HMRC might care about (browser → Supabase → us)
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    // Take the first hop (original client IP) if it differs from the one
+    // the browser reported — this is the "Gov-Vendor-Forwarded" chain.
+    headers["Gov-Vendor-Forwarded"] = `by=${await getVendorPublicIp()}&for=${xff.split(",")[0].trim()}`;
+  }
+
+  headers["Gov-Client-Device-ID"]            = device.deviceId;
+  headers["Gov-Client-Browser-JS-User-Agent"] = device.userAgent;
+  headers["Gov-Client-Browser-Plugins"]       = device.browserPlugins;
+  headers["Gov-Client-Browser-Do-Not-Track"]  = device.doNotTrack;
+  headers["Gov-Client-Screens"]               = device.screens;
+  headers["Gov-Client-Window-Size"]           = device.windowSize;
+  headers["Gov-Client-Timezone"]              = device.timezone;
+
+  if (device.publicIp) {
+    headers["Gov-Client-Public-IP"]           = device.publicIp;
+    headers["Gov-Client-Public-IP-Timestamp"] = device.publicIpTimestamp;
+  }
+  if (device.userId) {
+    headers["Gov-Client-User-IDs"] = `cadi=${encodeURIComponent(device.userId)}`;
+  }
+
+  return headers;
+}
+
+/** Make an authenticated HMRC API call with fraud prevention headers */
 async function hmrcFetch(
   path:    string,
   method:  string,
   token:   string,
   accept:  string,
+  fraud:   Record<string, string>,
   body?:   unknown,
+  extraHeaders?: Record<string, string>,
 ): Promise<{ ok: boolean; status: number; data: unknown }> {
   const headers: Record<string, string> = {
+    ...fraud,
+    ...(extraHeaders ?? {}),
     "Authorization": `Bearer ${token}`,
     "Accept":        accept,
   };
@@ -192,6 +290,11 @@ async function hmrcFetch(
     data = await res.json();
   } catch {
     data = { raw: await res.text() };
+  }
+
+  // Diagnostic: surface HMRC's actual error payload in logs on non-2xx
+  if (!res.ok) {
+    console.error("HMRC non-2xx:", method, path, res.status, JSON.stringify(data));
   }
 
   return { ok: res.ok, status: res.status, data };
@@ -223,94 +326,119 @@ serve(async (req: Request) => {
       return json({ error: "NINO not set. Call save_nino first." }, 400);
     }
 
+    // Fraud-prevention headers — required by HMRC on every MTD call.
+    const device = body.deviceInfo as DeviceInfo | undefined;
+    const fraud  = await buildFraudHeaders(device, req);
+
     // ── List self-employment businesses ───────────────────────────────────────
+    // Business Details (MTD) API is v2.0 — sending v3.0 returns 404.
     if (action === "businesses") {
       const result = await hmrcFetch(
         `/individuals/business/details/${nino}/list`,
         "GET",
         token,
-        "application/vnd.hmrc.3.0+json",
+        "application/vnd.hmrc.2.0+json",
+        fraud,
       );
-      return json(result.data, result.ok ? 200 : result.status);
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
     }
 
-    // ── Get MTD ITSA obligations ───────────────────────────────────────────────
-    // Returns which quarterly periods are: Open, Fulfilled, or Overdue
+    // ── Get MTD ITSA Income & Expenditure obligations ─────────────────────────
+    // Obligations (MTD) v3 — path is /income-and-expenditure (not /income-tax),
+    // all query params are optional, scenario values are a different set.
     if (action === "obligations") {
-      const from = (body.fromDate as string) ?? `${new Date().getFullYear() - 1}-04-06`;
-      const to   = (body.toDate   as string) ?? `${new Date().getFullYear() + 1}-04-05`;
-      const biz  = body.businessId as string | undefined;
+      const from    = body.fromDate   as string | undefined;
+      const to      = body.toDate     as string | undefined;
+      const biz     = body.businessId as string | undefined;
+      const status  = body.status     as string | undefined; // "Open" | "Fulfilled"
 
-      const params = new URLSearchParams({
-        typeOfBusiness: "self-employment",
-        fromDate:       from,
-        toDate:         to,
-        ...(biz ? { businessId: biz } : {}),
-      });
+      const qs = new URLSearchParams();
+      if (from)   qs.set("fromDate",  from);
+      if (to)     qs.set("toDate",    to);
+      if (biz)    qs.set("businessId", biz);
+      if (status) qs.set("status",    status);
+      const query = qs.toString() ? `?${qs}` : "";
+
+      // Sandbox-only: "OPEN" returns open quarterly obligations (valid scenario for v3).
+      const extraHeaders = SANDBOX ? { "Gov-Test-Scenario": "OPEN" } : undefined;
 
       const result = await hmrcFetch(
-        `/obligations/details/${nino}/income-tax?${params}`,
+        `/obligations/details/${nino}/income-and-expenditure${query}`,
         "GET",
         token,
-        "application/vnd.hmrc.2.0+json",
+        "application/vnd.hmrc.3.0+json",
+        fraud,
+        undefined,
+        extraHeaders,
       );
-      return json(result.data, result.ok ? 200 : result.status);
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
     }
 
-    // ── Submit a quarterly period summary ─────────────────────────────────────
-    // This is the core MTD ITSA action — sends income + expenses for a quarter
+    // ── Submit/amend cumulative self-employment summary ───────────────────────
+    // Self-Employment Business (MTD) v5.0 uses cumulative PUT for 2025-26+ tax
+    // years. The legacy POST .../periods endpoint (v3) was removed.
+    //
+    // NOTE: Request body below follows HMRC's general cumulative pattern, but
+    // the v5 OAS detail page is incomplete. On first real submit (Aug 2026 for
+    // Q1 2026-27), expect possible 400s — adjust field names per HMRC's error
+    // response, which the hmrcError wrapper will surface.
     if (action === "submit_quarter") {
       const businessId   = body.businessId   as string;
-      const periodStart  = body.periodStart  as string; // "2026-04-06"
-      const periodEnd    = body.periodEnd    as string; // "2026-07-05"
+      const taxYear      = body.taxYear      as string; // "2026-27"
+      const periodStart  = body.periodStart  as string; // for our audit log
+      const periodEnd    = body.periodEnd    as string;
       const incomeData   = body.income       as { turnover: number; other?: number };
       const expenseData  = body.expenses     as SubmitExpenses;
 
-      if (!businessId || !periodStart || !periodEnd) {
-        return json({ error: "businessId, periodStart, periodEnd are required" }, 400);
+      if (!businessId || !taxYear) {
+        return json({ error: "businessId and taxYear are required" }, 400);
       }
 
-      // Build HMRC request body — only include non-zero expense fields
-      const deductions: Record<string, { amount: number }> = {};
+      const expenses: Record<string, { amount: number }> = {};
       const EXPENSE_MAP: Record<keyof SubmitExpenses, string> = {
-        costOfGoods:           "costOfGoods",
-        travelCosts:           "travelCosts",
-        premisesRunningCosts:  "premisesRunningCosts",
-        maintenanceCosts:      "maintenanceCosts",
-        adminCosts:            "adminCosts",
-        advertisingCosts:      "advertisingCosts",
-        businessEntertainment: "businessEntertainmentCosts",
-        interest:              "interest",
-        financialCharges:      "financialCharges",
-        badDebt:               "badDebt",
-        professionalFees:      "professionalFees",
-        depreciation:          "depreciation",
-        other:                 "other",
+        costOfGoods:           "costOfGoodsAllowable",
+        travelCosts:           "travelCostsAllowable",
+        premisesRunningCosts:  "premisesRunningCostsAllowable",
+        maintenanceCosts:      "maintenanceCostsAllowable",
+        adminCosts:            "adminCostsAllowable",
+        advertisingCosts:      "advertisingCostsAllowable",
+        businessEntertainment: "businessEntertainmentCostsAllowable",
+        interest:              "interestOnBankOtherLoansAllowable",
+        financialCharges:      "financeChargesAllowable",
+        badDebt:               "irrecoverableDebtsAllowable",
+        professionalFees:      "professionalFeesAllowable",
+        depreciation:          "depreciationAllowable",
+        other:                 "otherExpensesAllowable",
       };
       for (const [key, hmrcKey] of Object.entries(EXPENSE_MAP)) {
         const val = expenseData?.[key as keyof SubmitExpenses];
-        if (val && val > 0) deductions[hmrcKey] = { amount: val };
+        if (val && val > 0) expenses[hmrcKey] = { amount: val };
       }
 
       const hmrcBody = {
-        periodStartDate: periodStart,
-        periodEndDate:   periodEnd,
-        incomes: {
-          turnover: { amount: incomeData.turnover },
-          ...(incomeData.other ? { other: { amount: incomeData.other } } : {}),
+        periodDates: {
+          periodStartDate: periodStart,
+          periodEndDate:   periodEnd,
         },
-        deductions,
+        periodIncome: {
+          turnover: incomeData.turnover,
+          ...(incomeData.other ? { other: incomeData.other } : {}),
+        },
+        periodExpenses: expenses,
       };
 
       const result = await hmrcFetch(
-        `/individuals/self-assessment/${nino}/self-employments/${businessId}/periods`,
-        "POST",
+        `/individuals/business/self-employment/${nino}/${businessId}/cumulative/${taxYear}`,
+        "PUT",
         token,
-        "application/vnd.hmrc.3.0+json",
+        "application/vnd.hmrc.5.0+json",
+        fraud,
         hmrcBody,
+        SANDBOX ? { "Gov-Test-Scenario": "DEFAULT" } : undefined,
       );
 
-      // Log submission to DB for audit trail
       if (result.ok) {
         await sb.from("hmrc_submissions").insert({
           owner_id:      user.id,
@@ -320,24 +448,32 @@ serve(async (req: Request) => {
           expenses:      Object.values(expenseData ?? {}).reduce((s, v) => s + (v || 0), 0),
           submitted_at:  new Date().toISOString(),
           hmrc_response: result.data,
-        }).catch(() => {}); // non-fatal — table may not exist yet
+        }).catch(() => {});
       }
 
-      return json(result.data, result.ok ? 200 : result.status);
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
     }
 
     // ── Trigger an in-year tax calculation ────────────────────────────────────
     // Call this after submitting a quarter to get HMRC's estimated tax bill
+    // Individual Calculations (MTD) v7.0 — required for tax year 2026-27+.
+    // Trigger path now includes /trigger/{calculationType} segment.
+    // calculationType: "in-year" (default), "intent-to-finalise", "intent-to-amend".
     if (action === "trigger_calculation") {
-      const taxYear = (body.taxYear as string) ?? "2026-27"; // HMRC format: "2026-27"
-      const result  = await hmrcFetch(
-        `/individuals/calculations/${nino}/self-assessment/${taxYear}`,
+      const taxYear         = (body.taxYear         as string) ?? "2026-27";
+      const calculationType = (body.calculationType as string) ?? "in-year";
+      const result = await hmrcFetch(
+        `/individuals/calculations/${nino}/self-assessment/${taxYear}/trigger/${calculationType}`,
         "POST",
         token,
-        "application/vnd.hmrc.6.0+json",
+        "application/vnd.hmrc.7.0+json",
+        fraud,
         {},
+        SANDBOX ? { "Gov-Test-Scenario": "DEFAULT" } : undefined,
       );
-      return json(result.data, result.ok ? 200 : result.status);
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
     }
 
     // ── Get a specific tax calculation ────────────────────────────────────────
@@ -348,9 +484,13 @@ serve(async (req: Request) => {
         `/individuals/calculations/${nino}/self-assessment/${taxYear}/${calculationId}`,
         "GET",
         token,
-        "application/vnd.hmrc.6.0+json",
+        "application/vnd.hmrc.7.0+json",
+        fraud,
+        undefined,
+        SANDBOX ? { "Gov-Test-Scenario": "DEFAULT" } : undefined,
       );
-      return json(result.data, result.ok ? 200 : result.status);
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);
