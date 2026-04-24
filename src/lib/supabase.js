@@ -5,4 +5,4 @@ const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJI
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-if (process.env.NODE_ENV !== 'production') window._supabase = supabase;
+window._supabase = supabase;
