@@ -19,8 +19,8 @@ export default function Terms() {
         </div>
 
         <Section title="About Cadi">
-          <p>Cadi is a business management and Making Tax Digital (MTD) software service operated by Mackie's Cleaning. These terms govern your use of Cadi. By creating an account you agree to them.</p>
-          <p>Contact us at <a href="mailto:hello@cadi.cleaning" className="text-white hover:underline">hello@cadi.cleaning</a> with any questions.</p>
+          <p>Cadi is a business management and Making Tax Digital (MTD) software service operated by Cadi Software Ltd (company number 17174156). These terms govern your use of Cadi. By creating an account you agree to them.</p>
+          <p>Contact us at <a href="mailto:support@cadi.cleaning" className="text-white hover:underline">support@cadi.cleaning</a> with any questions.</p>
         </Section>
 
         <Section title="The service">
@@ -66,7 +66,7 @@ export default function Terms() {
         </Section>
 
         <Section title="Limitation of liability">
-          <p>To the fullest extent permitted by law, Cadi and Mackie's Cleaning are not liable for any indirect, incidental, or consequential loss arising from your use of the service, including penalties or interest charged by HMRC as a result of late or inaccurate submissions.</p>
+          <p>To the fullest extent permitted by law, Cadi and Cadi Software Ltd (company number 17174156) are not liable for any indirect, incidental, or consequential loss arising from your use of the service, including penalties or interest charged by HMRC as a result of late or inaccurate submissions.</p>
           <p>Our total liability to you in any 12-month period is limited to the subscription fees you paid in that period.</p>
         </Section>
 
@@ -80,7 +80,7 @@ export default function Terms() {
 
         <div className="pt-4 border-t border-[rgba(153,197,255,0.08)]">
           <p className="text-xs text-[rgba(153,197,255,0.3)]">
-            Questions? Email <a href="mailto:hello@cadi.cleaning" className="text-[rgba(153,197,255,0.5)] hover:text-white transition-colors">hello@cadi.cleaning</a>
+            Questions? Email <a href="mailto:support@cadi.cleaning" className="text-[rgba(153,197,255,0.5)] hover:text-white transition-colors">support@cadi.cleaning</a>
             {' · '}
             <Link to="/privacy" className="text-[rgba(153,197,255,0.5)] hover:text-white transition-colors">Privacy Policy</Link>
           </p>

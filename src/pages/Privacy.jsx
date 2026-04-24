@@ -19,7 +19,7 @@ export default function Privacy() {
         </div>
 
         <Section title="Who we are">
-          <p>Cadi is a software service operated by Mackie's Cleaning ("we", "us", "our"). Our registered address is available on request. You can contact us at <a href="mailto:hello@cadi.cleaning" className="text-white hover:underline">hello@cadi.cleaning</a>.</p>
+          <p>Cadi is a software service operated by Cadi Software Ltd (company number 17174156) ("we", "us", "our"). Our registered address is available on request. You can contact us at <a href="mailto:support@cadi.cleaning" className="text-white hover:underline">support@cadi.cleaning</a>.</p>
           <p>We are the data controller for the personal data you provide when using Cadi.</p>
         </Section>
 
@@ -77,7 +77,7 @@ export default function Privacy() {
             <li>Data portability</li>
             <li>Lodge a complaint with the ICO (ico.org.uk)</li>
           </ul>
-          <p>To exercise any of these rights, contact us at <a href="mailto:hello@cadi.cleaning" className="text-white hover:underline">hello@cadi.cleaning</a>.</p>
+          <p>To exercise any of these rights, contact us at <a href="mailto:support@cadi.cleaning" className="text-white hover:underline">support@cadi.cleaning</a>.</p>
         </Section>
 
         <Section title="Cookies">
@@ -90,7 +90,7 @@ export default function Privacy() {
 
         <div className="pt-4 border-t border-[rgba(153,197,255,0.08)]">
           <p className="text-xs text-[rgba(153,197,255,0.3)]">
-            Questions? Email <a href="mailto:hello@cadi.cleaning" className="text-[rgba(153,197,255,0.5)] hover:text-white transition-colors">hello@cadi.cleaning</a>
+            Questions? Email <a href="mailto:support@cadi.cleaning" className="text-[rgba(153,197,255,0.5)] hover:text-white transition-colors">support@cadi.cleaning</a>
             {' · '}
             <Link to="/terms" className="text-[rgba(153,197,255,0.5)] hover:text-white transition-colors">Terms & Conditions</Link>
           </p>
