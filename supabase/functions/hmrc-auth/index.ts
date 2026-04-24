@@ -105,11 +105,10 @@ serve(async (req: Request) => {
       // Generate a random state value (CSRF protection)
       const state = crypto.randomUUID();
 
-      // Persist state so callback can verify it
+      // Upsert state — works even if profile row doesn't exist yet
       await sb
         .from("profiles")
-        .update({ hmrc_oauth_state: state })
-        .eq("id", user.id);
+        .upsert({ id: user.id, hmrc_oauth_state: state }, { onConflict: "id" });
 
       const params = new URLSearchParams({
         response_type: "code",
@@ -130,16 +129,21 @@ serve(async (req: Request) => {
       const { user, sb } = await getUser(req);
       const { code, state } = body;
 
+      console.log("[callback] user:", user.id, "code present:", !!code, "state:", state?.substring(0, 8));
+
       if (!code || !state) return json({ error: "Missing code or state" }, 400);
 
       // Verify state matches what we stored (CSRF check)
-      const { data: profile } = await sb
+      const { data: profile, error: profileErr } = await sb
         .from("profiles")
         .select("hmrc_oauth_state")
         .eq("id", user.id)
         .single();
 
+      console.log("[callback] profile found:", !!profile, "stored_state:", profile?.hmrc_oauth_state?.substring(0, 8) ?? "null", "profileErr:", profileErr?.message ?? "none");
+
       if (profile?.hmrc_oauth_state !== state) {
+        console.error("[callback] state mismatch: stored=", profile?.hmrc_oauth_state, "received=", state);
         return json({ error: "State mismatch — possible CSRF" }, 400);
       }
 
@@ -164,8 +168,9 @@ serve(async (req: Request) => {
         token_type:    string;
       };
 
+      console.log("[callback] HMRC token res status:", tokenRes.status);
       if (!tokenRes.ok) {
-        console.error("HMRC token exchange failed:", tokens);
+        console.error("[callback] HMRC token exchange failed:", JSON.stringify(tokens));
         return json({ error: "Token exchange failed", detail: tokens }, 400);
       }
 

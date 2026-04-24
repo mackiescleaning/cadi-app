@@ -174,13 +174,24 @@ export function useHmrc() {
     }
   }, [businessId]);
 
+  /** Resolve businessId, fetching from HMRC if not yet cached */
+  const resolveBizId = useCallback(async (override) => {
+    if (override) return override;
+    if (businessId) return businessId;
+    const bizData = await getHmrcBusinesses();
+    const businesses = bizData?.list ?? bizData?.businesses ?? [];
+    const biz = businesses[0]?.businessId ?? businesses[0]?.id ?? null;
+    if (biz) setBusinessId(biz);
+    if (!biz) throw new Error('No HMRC business found for this account');
+    return biz;
+  }, [businessId]);
+
   /** Submit a quarterly period to HMRC */
   const submitQuarter = useCallback(async (params) => {
     setConnecting(true);
     setError(null);
     try {
-      const biz = params.businessId ?? businessId;
-      if (!biz) throw new Error('Business ID unknown — call fetchObligations first');
+      const biz = await resolveBizId(params.businessId);
       const result = await _submitQuarter({ ...params, businessId: biz });
       // Refresh obligations so the submitted period shows as "Fulfilled"
       await fetchObligations(biz);
@@ -191,7 +202,7 @@ export function useHmrc() {
     } finally {
       setConnecting(false);
     }
-  }, [businessId, fetchObligations]);
+  }, [resolveBizId, fetchObligations]);
 
   /** Ask HMRC to produce an in-year tax estimate */
   const triggerCalculation = useCallback(async (taxYear) => {
@@ -228,8 +239,7 @@ export function useHmrc() {
     setConnecting(true);
     setError(null);
     try {
-      const biz = params.businessId ?? businessId;
-      if (!biz) throw new Error('Business ID unknown — call fetchObligations first');
+      const biz = await resolveBizId(params.businessId);
       const result = await _submitAndCalc({ ...params, businessId: biz });
       setLastCalculation(result.calculation);
       await fetchObligations(biz);
@@ -240,7 +250,7 @@ export function useHmrc() {
     } finally {
       setConnecting(false);
     }
-  }, [businessId, fetchObligations]);
+  }, [resolveBizId, fetchObligations]);
 
   return {
     // State
