@@ -833,9 +833,9 @@ function HmrcTab() {
                     });
                     const calcId = res?.calculationId;
                     setBsasCalcId(calcId);
+                    setEoyResult({ success: true, message: "BSAS triggered successfully." });
                     if (calcId) {
-                      const detail = await getBsas("2026-27", calcId);
-                      setEoyResult({ success: true, message: "BSAS triggered successfully." });
+                      try { await getBsas("2026-27", calcId); } catch (_) { /* detail fetch is best-effort */ }
                     }
                   } catch (ex) {
                     setEoyResult({ success: false, message: `BSAS failed: ${ex.message}` });
