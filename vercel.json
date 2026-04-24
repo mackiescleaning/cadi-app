@@ -4,9 +4,8 @@
       "CI": "false"
     }
   },
+  "cleanUrls": true,
   "rewrites": [
-    { "source": "/privacy", "destination": "/privacy/index.html" },
-    { "source": "/terms",   "destination": "/terms/index.html" },
-    { "source": "/:path*",  "destination": "/index.html" }
+    { "source": "/:path*", "destination": "/index.html" }
   ]
 }
