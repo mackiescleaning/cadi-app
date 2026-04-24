@@ -18,6 +18,8 @@ import StaffDashboard from './pages/StaffDashboard';
 
 import InvoiceGenerator from './pages/InvoiceGenerator';
 import HmrcCallback from './pages/HmrcCallback';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
 
 
 import AppLayout from './components/layout/AppLayout';
@@ -50,6 +52,10 @@ function App() {
 
         {/* HMRC OAuth callback — outside ProtectedRoute so the redirect lands correctly */}
         <Route path="/hmrc/callback" element={<HmrcCallback />} />
+
+        {/* Legal — public, no auth required */}
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
 
         {/* Scheduler redesign preview — static mock, no auth required */}
         <Route path="/scheduler-preview" element={<SchedulerPreview />} />
