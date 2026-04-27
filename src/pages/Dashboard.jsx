@@ -1268,6 +1268,214 @@ function BadgesShelf({ badges, onShare }) {
   );
 }
 
+// ─── Cadi Setup Journey ────────────────────────────────────────────────────────
+function CadiSetupJourney({ customerCount = 0, hasJobs = false, hasInvoices = false, onNavigate }) {
+  const [importPath, setImportPath] = useState(null); // null | 'switch' | 'fresh'
+
+  const steps = [
+    {
+      id: 'customers',
+      emoji: '👥',
+      title: 'Build your customer base',
+      done: customerCount >= 1,
+      detail: customerCount >= 5
+        ? `${customerCount} customers in Cadi`
+        : customerCount > 0
+          ? `${customerCount} added — keep going, aim for 5+`
+          : null,
+    },
+    {
+      id: 'scheduler',
+      emoji: '📅',
+      title: 'Organise your schedule',
+      done: hasJobs,
+    },
+    {
+      id: 'banking',
+      emoji: '🏦',
+      title: 'Connect your bank account',
+      done: false,
+      tab: 'money',
+    },
+    {
+      id: 'invoices',
+      emoji: '📄',
+      title: 'Send your first invoice',
+      done: hasInvoices,
+      tab: 'invoices',
+    },
+    {
+      id: 'payments',
+      emoji: '💳',
+      title: 'Set up how you get paid',
+      done: false,
+      tab: 'settings',
+    },
+  ];
+
+  const doneCount = steps.filter(s => s.done).length;
+  const pct = Math.round((doneCount / steps.length) * 100);
+  const currentStep = steps.find(s => !s.done);
+  const allDone = !currentStep;
+
+  if (allDone) return null; // hand off to AiBoostPanel
+
+  const upcoming = steps.filter(s => !s.done && s.id !== currentStep.id).slice(0, 3);
+
+  // Content for each step
+  const stepContent = {
+    customers: {
+      heading: importPath === 'switch'
+        ? 'Import your customer list'
+        : importPath === 'fresh'
+          ? 'Add your first customer'
+          : 'Bring your customers into Cadi',
+      body: importPath === 'switch'
+        ? 'Export a CSV from your current software and upload it, or add customers one by one.'
+        : importPath === 'fresh'
+          ? 'Start with your first customer — name, address, contact details. You can add more as you go.'
+          : 'Are you switching from another tool, or starting fresh?',
+      actions: importPath === null ? null : (
+        <button
+          onClick={() => onNavigate?.('customers')}
+          className="w-full mt-3 py-2.5 rounded-xl bg-brand-blue text-white text-xs font-black hover:bg-blue-700 transition-colors"
+        >
+          {importPath === 'switch' ? 'Go to Customers →' : 'Add first customer →'}
+        </button>
+      ),
+      extra: importPath === null ? (
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={() => setImportPath('switch')}
+            className="flex-1 py-2.5 px-3 rounded-xl border border-brand-blue/30 bg-brand-blue/5 text-xs font-bold text-brand-blue hover:bg-brand-blue/10 transition-colors text-center"
+          >
+            🔄 Switching tools
+          </button>
+          <button
+            onClick={() => setImportPath('fresh')}
+            className="flex-1 py-2.5 px-3 rounded-xl border border-brand-blue/30 bg-brand-blue/5 text-xs font-bold text-brand-blue hover:bg-brand-blue/10 transition-colors text-center"
+          >
+            ✨ Starting fresh
+          </button>
+        </div>
+      ) : (
+        <button onClick={() => setImportPath(null)} className="mt-2 text-[10px] text-gray-400 hover:text-gray-600">← Back</button>
+      ),
+    },
+    scheduler: {
+      heading: 'Get your schedule into Cadi',
+      body: 'Add your upcoming jobs — assign customers, set dates and prices. Cadi tracks your workload and flags gaps automatically.',
+      actions: (
+        <button
+          onClick={() => onNavigate?.('scheduler')}
+          className="w-full mt-3 py-2.5 rounded-xl bg-brand-blue text-white text-xs font-black hover:bg-blue-700 transition-colors"
+        >
+          Open Scheduler →
+        </button>
+      ),
+    },
+    banking: {
+      heading: 'Connect your bank account',
+      body: 'Open banking pulls in your transactions automatically — no more manual income logging or chasing statements.',
+      actions: (
+        <button
+          onClick={() => onNavigate?.('money')}
+          className="w-full mt-3 py-2.5 rounded-xl bg-brand-blue text-white text-xs font-black hover:bg-blue-700 transition-colors"
+        >
+          Connect bank →
+        </button>
+      ),
+    },
+    invoices: {
+      heading: 'Send your first invoice',
+      body: 'Turn a completed job into a professional invoice in seconds — sent straight to your customer with your logo and bank details.',
+      actions: (
+        <button
+          onClick={() => onNavigate?.('invoices')}
+          className="w-full mt-3 py-2.5 rounded-xl bg-brand-blue text-white text-xs font-black hover:bg-blue-700 transition-colors"
+        >
+          Create invoice →
+        </button>
+      ),
+    },
+    payments: {
+      heading: 'Set up how you get paid',
+      body: 'GoCardless lets customers pay by direct debit on a recurring schedule. You can also take card payments on the day via Stripe.',
+      actions: (
+        <button
+          onClick={() => onNavigate?.('settings')}
+          className="w-full mt-3 py-2.5 rounded-xl bg-brand-blue text-white text-xs font-black hover:bg-blue-700 transition-colors"
+        >
+          Set up payments →
+        </button>
+      ),
+    },
+  };
+
+  const content = stepContent[currentStep.id];
+
+  return (
+    <Card className="overflow-hidden border-t-2 border-t-brand-blue">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-gray-100">
+        <div className="flex items-center justify-between mb-2">
+          <SL>🤖 Cadi AI — setting up your business</SL>
+          <span className="text-[10px] font-bold text-gray-400">{doneCount}/{steps.length} done</span>
+        </div>
+        {/* Progress bar */}
+        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-brand-blue rounded-full transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Current step */}
+      <div className="px-4 pt-4 pb-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">{currentStep.emoji}</span>
+          <p className="text-sm font-black text-gray-800">{content.heading}</p>
+        </div>
+        <p className="text-xs text-gray-500 leading-relaxed">{content.body}</p>
+        {content.actions}
+        {content.extra}
+        {currentStep.detail && (
+          <p className="mt-2 text-[10px] text-emerald-600 font-semibold">✓ {currentStep.detail}</p>
+        )}
+      </div>
+
+      {/* Upcoming steps */}
+      {upcoming.length > 0 && (
+        <div className="border-t border-gray-100 px-4 py-3">
+          <p className="text-[10px] font-bold tracking-widest uppercase text-gray-300 mb-2">Up next</p>
+          <div className="space-y-1.5">
+            {upcoming.map(s => (
+              <div key={s.id} className="flex items-center gap-2">
+                <span className="text-sm opacity-40">{s.emoji}</span>
+                <p className="text-xs text-gray-400">{s.title}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Completed steps */}
+      {doneCount > 0 && (
+        <div className="border-t border-gray-50 px-4 py-2">
+          <div className="flex flex-wrap gap-2">
+            {steps.filter(s => s.done).map(s => (
+              <span key={s.id} className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                <span>✓</span>{s.title}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ─── AI Boost Panel ────────────────────────────────────────────────────────────
 function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
   const [dismissed, setDismissed] = useState(false);
@@ -2003,6 +2211,9 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     } catch { return 99; }
   });
   const isNewUser = dashVisitCount <= 3 && !profile?.dashboard_tour_complete;
+  const hasJobs     = (weekJobs || []).some(d => d.jobs > 0) || (jobsToday || []).length > 0;
+  const hasInvoices = (invoices || []).length > 0;
+  const hasBusinessData = hasJobs || hasInvoices || (accounts?.ytdIncome ?? 0) > 0;
   const [showQuickWins,    setShowQuickWins]    = useState(true);
   const [demoMode,         setDemoMode]         = useState(false);
   const [showWelcome,      setShowWelcome]      = useState(dashVisitCount <= 2 && !profile?.dashboard_tour_complete);
@@ -2415,11 +2626,18 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                     </Card>
                   )}
 
-                  {/* AI Boost */}
+                  {/* AI panel — journey for new users, data-driven tips once set up */}
                   {demoMode ? (
                     <DemoHint label="🤖 Cadi AI — personalised tasks to boost your score">
                       <AiBoostPanel score={score} onNavigate={onNavigate} setupSteps={onboardingSteps} />
                     </DemoHint>
+                  ) : !hasBusinessData ? (
+                    <CadiSetupJourney
+                      customerCount={liveCustomerCount ?? 0}
+                      hasJobs={hasJobs}
+                      hasInvoices={hasInvoices}
+                      onNavigate={onNavigate}
+                    />
                   ) : (
                     <AiBoostPanel score={score} onNavigate={onNavigate} setupSteps={onboardingSteps} />
                   )}
