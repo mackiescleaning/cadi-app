@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePlan } from '../hooks/usePlan';
 import { supabase } from '../lib/supabase';
@@ -11,6 +11,42 @@ import {
   MapPin, Globe, Clock, PoundSterling, ToggleLeft,
   ToggleRight, AlertCircle, CheckCircle
 } from 'lucide-react';
+
+// ─── Billing portal button ────────────────────────────────────────────────────
+
+function BillingPortalButton() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleOpen = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('create-portal', {
+        body: { returnUrl: window.location.origin + '/settings' },
+      });
+      if (fnError) throw fnError;
+      if (data?.url) window.location.href = data.url;
+      else throw new Error('No portal URL returned');
+    } catch {
+      setError('Could not open billing portal. Please try again.');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
+      <button
+        onClick={handleOpen}
+        disabled={loading}
+        className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-colors disabled:opacity-50 text-sm"
+      >
+        {loading ? 'Opening…' : 'Manage subscription · Cancel · Update card'}
+      </button>
+    </div>
+  );
+}
 
 // ─── TOGGLE ───────────────────────────────────────────────────────────────────
 
@@ -107,11 +143,21 @@ const TABS = [
 
 export default function Settings() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile: authProfile, updateProfile, signOut } = useAuth();
   const { isPro, priceMonthly } = usePlan();
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState(() =>
+    searchParams.get('upgraded') === '1' ? 'subscription' : 'profile'
+  );
+  const [upgradeSuccess, setUpgradeSuccess] = useState(searchParams.get('upgraded') === '1');
   const [saved, setSaved] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('upgraded') === '1') {
+      setSearchParams({}, { replace: true });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Profile state — no hardcoded defaults; populated from Supabase in useEffect
   const [profile, setProfile] = useState({
@@ -517,86 +563,55 @@ export default function Settings() {
       {activeTab === 'subscription' && (
         <div className="space-y-5">
 
-          {/* Current plan */}
-          <div className="bg-[#010a4f] rounded-2xl p-6 text-white">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-xs font-bold text-[#99c5ff] uppercase tracking-wide mb-1">Current Plan</p>
-                <p className="text-2xl font-black">Free Plan</p>
-              </div>
-              <div className="w-12 h-12 bg-[#1f48ff] rounded-xl flex items-center justify-center">
-                <CreditCard size={22} className="text-white" />
-              </div>
+          {upgradeSuccess && (
+            <div className="flex items-center gap-3 p-4 rounded-2xl bg-green-500/15 border border-green-500/25 text-green-300 text-sm font-medium">
+              <CheckCircle size={18} className="shrink-0" />
+              Welcome to Cadi Pro! Your subscription is active.
             </div>
-            <div className="flex flex-wrap gap-2 mb-5">
-              {['Pricing Calculator', 'Up to 20 Clients', 'Basic Scheduler', '15 Jobs Max'].map(f => (
-                <span key={f} className="text-xs px-3 py-1.5 bg-white/10 rounded-full text-white/70">{f}</span>
-              ))}
-            </div>
-            <button onClick={() => navigate('/upgrade')} className="w-full py-3 bg-[#1f48ff] text-white font-bold rounded-xl hover:bg-white hover:text-[#010a4f] transition-colors">
-              Upgrade to Pro — £{priceMonthly}/month
-            </button>
-          </div>
+          )}
 
-          {/* Pro plan */}
-          <div className="bg-white rounded-2xl shadow-sm border-2 border-[#1f48ff] overflow-hidden">
-            <div className="px-6 py-3 bg-[#1f48ff]">
-              <div className="flex items-center gap-2">
-                <Sparkles size={14} className="text-white" />
-                <p className="text-xs font-bold text-white uppercase tracking-wide">Recommended</p>
-              </div>
-            </div>
-            <div className="p-6">
-              <div className="flex items-end gap-2 mb-1">
-                <p className="text-3xl font-black text-[#010a4f]">£59</p>
-                <p className="text-gray-400 mb-1">/month</p>
-              </div>
-              <p className="text-sm text-gray-500 mb-5">Save 30% with annual billing — £590/year (save £118)</p>
-              <div className="space-y-2 mb-6">
-                {[
-                  'Unlimited clients & jobs',
-                  'Route planner & optimisation',
-                  'Invoice generator & tracker',
-                  'Full money tracker & P&L',
-                  'Business Lab tools',
-                  'Team & staff management',
-                  'Training plan builder',
-                  'Annual accounts summary',
-                  'SMS reminders',
-                  'Priority support',
-                ].map(f => (
-                  <div key={f} className="flex items-center gap-2">
-                    <CheckCircle size={14} className="text-[#1f48ff] flex-shrink-0" />
-                    <span className="text-sm text-gray-600">{f}</span>
-                  </div>
-                ))}
-              </div>
-              <button className="w-full py-3 bg-[#1f48ff] text-white font-bold rounded-xl hover:bg-[#010a4f] transition-colors">
-                Upgrade to Pro
-              </button>
-            </div>
-          </div>
-
-          {/* Bundle */}
-          <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-[#f0f4ff] rounded-xl flex items-center justify-center flex-shrink-0">
-                <PoundSterling size={20} className="text-[#1f48ff]" />
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-[#010a4f]">Planner + Pro Bundle</p>
-                <p className="text-sm text-gray-500 mt-0.5 mb-3">Physical hardback planner + 12 months Pro access. Best value.</p>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl font-black text-[#1f48ff]">£79</span>
-                  <span className="text-sm text-gray-400 line-through">£108</span>
-                  <span className="text-xs font-bold px-2.5 py-1 bg-green-100 text-green-700 rounded-full">Save £29</span>
+          {isPro ? (
+            /* Active subscription */
+            <div className="bg-[#010a4f] rounded-2xl p-6 text-white">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-xs font-bold text-[#99c5ff] uppercase tracking-wide mb-1">Current Plan</p>
+                  <p className="text-2xl font-black">Cadi Pro · £{priceMonthly}/month</p>
+                </div>
+                <div className="w-12 h-12 bg-[#1f48ff] rounded-xl flex items-center justify-center">
+                  <CreditCard size={22} className="text-white" />
                 </div>
               </div>
+              <div className="flex flex-wrap gap-2 mb-5">
+                {['Unlimited customers', 'HMRC MTD', 'Invoicing', 'Staff management', 'Business Lab'].map(f => (
+                  <span key={f} className="text-xs px-3 py-1.5 bg-white/10 rounded-full text-white/70">{f}</span>
+                ))}
+              </div>
+              <BillingPortalButton />
             </div>
-            <button className="w-full mt-4 py-3 border-2 border-[#1f48ff] text-[#1f48ff] font-bold rounded-xl hover:bg-[#1f48ff] hover:text-white transition-colors">
-              Get the Bundle
-            </button>
-          </div>
+          ) : (
+            /* Free user — prompt to upgrade */
+            <div className="bg-[#010a4f] rounded-2xl p-6 text-white">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-xs font-bold text-[#99c5ff] uppercase tracking-wide mb-1">Current Plan</p>
+                  <p className="text-2xl font-black">Free</p>
+                </div>
+                <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
+                  <CreditCard size={22} className="text-white/50" />
+                </div>
+              </div>
+              <p className="text-[rgba(153,197,255,0.6)] text-sm mb-5">
+                Upgrade to Cadi Pro to unlock all features for £{priceMonthly}/month.
+              </p>
+              <button
+                onClick={() => navigate('/upgrade')}
+                className="w-full py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-bold text-sm rounded-xl transition-colors"
+              >
+                Subscribe — £{priceMonthly}/month
+              </button>
+            </div>
+          )}
         </div>
       )}
 
