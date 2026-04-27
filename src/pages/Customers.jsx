@@ -19,6 +19,7 @@ import { listCustomers, upsertCustomer } from "../lib/db/customersDb";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 
 // ─── Job type taxonomy ────────────────────────────────────────────────────────
 // Used for filtering, tagging, and AI suggestion logic.
@@ -392,18 +393,11 @@ ${customInstructions ? `Additional instructions: ${customInstructions}` : ""}
 
 Write a concise, friendly, personal message (3-4 short paragraphs max). No subject line. Start with "Hi ${customer.name.split(" ")[0]}," — do not use formal language or corporate speak. Sound like a real person who knows this customer. End with "Kind regards" only — no name placeholder needed.`;
 
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 400,
-      messages: [{ role: "user", content: prompt }],
-    }),
+  const { data, error } = await supabase.functions.invoke("ai-generate", {
+    body: { messages: [{ role: "user", content: prompt }], max_tokens: 400 },
   });
-  if (!r.ok) throw new Error(`API ${r.status}`);
-  const d = await r.json();
-  return d.content?.[0]?.text ?? "";
+  if (error) throw error;
+  return data?.content?.[0]?.text ?? "";
 }
 
 // ─── Design system components ─────────────────────────────────────────────────
@@ -1511,6 +1505,10 @@ function AddCustomerModal({ onClose, onSave }) {
     name: "",
     email: "",
     phone: "",
+    addressLine1: "",
+    addressLine2: "",
+    town: "",
+    county: "",
     postcode: "",
     frequency: "one-off",
     status: "active",
@@ -1534,6 +1532,10 @@ function AddCustomerModal({ onClose, onSave }) {
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
+        addressLine1: form.addressLine1.trim(),
+        addressLine2: form.addressLine2.trim(),
+        town: form.town.trim(),
+        county: form.county.trim(),
         postcode: form.postcode.trim().toUpperCase(),
         frequency: form.frequency,
         status: form.status,
@@ -1624,13 +1626,32 @@ function AddCustomerModal({ onClose, onSave }) {
             </div>
           </div>
 
-          {/* Postcode + Frequency row */}
+          {/* Address */}
+          <div>
+            <label className={labelCls}>Address Line 1</label>
+            <input type="text" value={form.addressLine1} onChange={e => set("addressLine1", e.target.value)}
+              placeholder="12 High Street" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Address Line 2 <span className="normal-case font-normal opacity-60">(optional)</span></label>
+            <input type="text" value={form.addressLine2} onChange={e => set("addressLine2", e.target.value)}
+              placeholder="Flat 3" className={inputCls} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className={labelCls}>Town / City</label>
+              <input type="text" value={form.town} onChange={e => set("town", e.target.value)}
+                placeholder="London" className={inputCls} />
+            </div>
+            <div>
               <label className={labelCls}>Postcode</label>
-              <input type="text" value={form.postcode} onChange={e => set("postcode", e.target.value)}
+              <input type="text" value={form.postcode} onChange={e => set("postcode", e.target.value.toUpperCase())}
                 placeholder="SW1A 1AA" className={inputCls} />
             </div>
+          </div>
+
+          {/* Frequency row */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Frequency</label>
               <select value={form.frequency} onChange={e => set("frequency", e.target.value)}

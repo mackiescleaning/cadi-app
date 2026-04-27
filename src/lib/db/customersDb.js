@@ -1,14 +1,23 @@
 import { supabase } from '../supabase';
 import { getCurrentUserId } from './authDb';
 
-export async function listCustomers(limit = 500) {
+// options: { page, pageSize } — default loads first 200.
+// Legacy: pass a number as first arg for a plain limit (backward compat).
+export async function listCustomers(optionsOrLimit = {}) {
   const ownerId = await getCurrentUserId();
+
+  const opts = typeof optionsOrLimit === 'number'
+    ? { pageSize: optionsOrLimit, page: 0 }
+    : optionsOrLimit;
+
+  const { page = 0, pageSize = 200 } = opts;
+
   const { data, error } = await supabase
     .from('customers')
     .select('*')
     .eq('owner_id', ownerId)
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(page * pageSize, (page + 1) * pageSize - 1);
 
   if (error) throw error;
   return data ?? [];
@@ -22,6 +31,10 @@ export async function upsertCustomer(customer) {
     name: customer.name,
     email: customer.email || null,
     phone: customer.phone || null,
+    address_line1: customer.addressLine1 || null,
+    address_line2: customer.addressLine2 || null,
+    town: customer.town || null,
+    county: customer.county || null,
     postcode: customer.postcode || null,
     frequency: customer.frequency || null,
     status: customer.status || 'active',

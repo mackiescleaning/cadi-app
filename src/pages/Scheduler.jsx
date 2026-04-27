@@ -1033,20 +1033,31 @@ function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
   const [status, setStatus] = useState(job.status);
   const [notes, setNotes] = useState(job.notes || '');
   const [saving, setSaving] = useState(false);
+  const [drawerError, setDrawerError] = useState(null);
 
   const hasChanges = status !== job.status || notes !== (job.notes || '');
 
   const handleSave = async () => {
     setSaving(true);
-    await onUpdateJob?.(job.id, { status, notes });
-    setSaving(false);
-    onClose();
+    setDrawerError(null);
+    try {
+      await onUpdateJob?.(job.id, { status, notes });
+      setSaving(false);
+      onClose();
+    } catch {
+      setDrawerError('Could not save changes. Please try again.');
+      setSaving(false);
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (window.confirm('Delete this job? This cannot be undone.')) {
-      onDeleteJob?.(job.id);
-      onClose();
+      try {
+        await onDeleteJob?.(job.id);
+        onClose();
+      } catch {
+        setDrawerError('Could not delete job. Please try again.');
+      }
     }
   };
 
@@ -1077,7 +1088,7 @@ function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
           <div className="rounded-xl border border-slate-200 divide-y divide-slate-100">
             {[
               ["Date",      job.date ? new Date(job.date + 'T00:00:00').toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : "—"],
-              ["Postcode",  job.postcode || "—"],
+              ["Address",   [job.address_line1, job.address_line2, job.town, job.postcode].filter(Boolean).join(', ') || job.postcode || "—"],
               ["Time",      `${fmtTime(job.startHour)} — ${fmtTime(job.startHour + job.durationHrs)}`],
               ["Duration",  `${job.durationHrs} hrs`],
               ["Price",     `£${job.price}`],
@@ -1122,6 +1133,9 @@ function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
             />
           </div>
 
+          {drawerError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{drawerError}</div>
+          )}
           <div className="flex gap-2 pt-2">
             <button
               onClick={handleSave}
@@ -1231,11 +1245,14 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
             const dbStaff = data.map(s => ({ id: s.id, label: s.name }));
             setStaffOptions([{ id: "you", label: "You" }, ...dbStaff, { id: "unassigned", label: "Unassigned" }]);
           }
-        });
-    });
+        }).catch(() => {});
+    }).catch(() => {});
   }, []);
 
   const [customer,     setCustomer]     = useState(preCustomer);
+  const [addressLine1, setAddressLine1] = useState("");
+  const [addressLine2, setAddressLine2] = useState("");
+  const [town,         setTown]         = useState("");
   const [postcode,     setPostcode]     = useState("");
   const [date,         setDate]         = useState(() => new Date().toISOString().split('T')[0]);
   const [startTime,    setStartTime]    = useState("09:00");
@@ -1300,7 +1317,7 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
       .map(s => s.label);
 
     const baseJob = {
-      customer, postcode, startHour,
+      customer, addressLine1, addressLine2, town, postcode, startHour,
       durationHrs: parseFloat(durationHrs) || 2,
       type: jobType, service,
       price: parseFloat(price),
@@ -1409,28 +1426,42 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <FL>Customer name</FL>
-              <div className="relative">
-                <input type="text" value={customer} onChange={e=>setCustomer(e.target.value)} placeholder="e.g. Mrs Davies" className={inp} />
-                {customer.length > 0 && customers.filter(c => c.name.toLowerCase().includes(customer.toLowerCase())).length > 0 && (
-                  <div className="absolute z-10 top-full left-0 right-0 mt-1 rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xl">
-                    {customers.filter(c => c.name.toLowerCase().includes(customer.toLowerCase())).slice(0, 5).map(c => (
-                      <button key={c.id} type="button"
-                        onClick={() => { setCustomer(c.name); setPostcode(c.postcode || postcode); }}
-                        className="w-full text-left px-3 py-2 text-sm text-slate-900 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0">
-                        <span className="font-semibold">{c.name}</span>
-                        {c.postcode && <span className="ml-2 text-slate-500 text-xs">{c.postcode}</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+          <div>
+            <FL>Customer name</FL>
+            <div className="relative">
+              <input type="text" value={customer} onChange={e=>setCustomer(e.target.value)} placeholder="e.g. Mrs Davies" className={inp} />
+              {customer.length > 0 && customers.filter(c => c.name.toLowerCase().includes(customer.toLowerCase())).length > 0 && (
+                <div className="absolute z-10 top-full left-0 right-0 mt-1 rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xl">
+                  {customers.filter(c => c.name.toLowerCase().includes(customer.toLowerCase())).slice(0, 5).map(c => (
+                    <button key={c.id} type="button"
+                      onClick={() => {
+                        setCustomer(c.name);
+                        setAddressLine1(c.address_line1 || "");
+                        setAddressLine2(c.address_line2 || "");
+                        setTown(c.town || "");
+                        setPostcode(c.postcode || "");
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-slate-900 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0">
+                      <span className="font-semibold">{c.name}</span>
+                      {(c.address_line1 || c.postcode) && <span className="ml-2 text-slate-500 text-xs">{[c.address_line1, c.town, c.postcode].filter(Boolean).join(', ')}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <div>
-              <FL>Postcode</FL>
-              <input type="text" value={postcode} onChange={e=>setPostcode(e.target.value.toUpperCase())} placeholder="e.g. SW4" className={inp} />
+          </div>
+
+          <div>
+            <FL>Address</FL>
+            <input type="text" value={addressLine1} onChange={e=>setAddressLine1(e.target.value)}
+              placeholder="12 High Street" className={`${inp} mb-2`} />
+            <input type="text" value={addressLine2} onChange={e=>setAddressLine2(e.target.value)}
+              placeholder="Flat / building (optional)" className={`${inp} mb-2`} />
+            <div className="grid grid-cols-2 gap-2">
+              <input type="text" value={town} onChange={e=>setTown(e.target.value)}
+                placeholder="Town / City" className={inp} />
+              <input type="text" value={postcode} onChange={e=>setPostcode(e.target.value.toUpperCase())}
+                placeholder="Postcode" className={inp} />
             </div>
           </div>
 
