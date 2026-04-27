@@ -111,6 +111,68 @@ function GAlert({ type = "blue", children }) {
   );
 }
 
+function CustomerSearch({ customers, value, onChange, placeholder = "Search existing customers or type a name…" }) {
+  const [query, setQuery] = useState(value?.name || '');
+  const [open, setOpen] = useState(false);
+
+  const matches = useMemo(() => {
+    if (!query || query.length < 1) return [];
+    const q = query.toLowerCase();
+    return customers
+      .filter(c => c.status !== 'archived')
+      .filter(c =>
+        c.name.toLowerCase().includes(q) ||
+        (c.email && c.email.toLowerCase().includes(q)) ||
+        (c.postcode && c.postcode.toLowerCase().includes(q))
+      )
+      .slice(0, 6);
+  }, [customers, query]);
+
+  const buildAddress = (c) =>
+    [c.address_line1, c.address_line2, c.town, c.county, c.postcode].filter(Boolean).join(', ');
+
+  return (
+    <div className="relative">
+      <GInput
+        value={query}
+        onChange={e => {
+          setQuery(e.target.value);
+          setOpen(true);
+          onChange({ ...value, name: e.target.value });
+        }}
+        placeholder={placeholder}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 180)}
+      />
+      {open && matches.length > 0 && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-[rgba(153,197,255,0.2)] bg-[#0a1545] shadow-2xl overflow-hidden">
+          {matches.map(c => (
+            <button
+              key={c.id}
+              onMouseDown={() => {
+                onChange({ name: c.name, email: c.email || '', phone: c.phone || '', address: buildAddress(c) });
+                setQuery(c.name);
+                setOpen(false);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[rgba(153,197,255,0.08)] text-left transition-colors"
+            >
+              <div className="w-7 h-7 rounded-full bg-[#1f48ff]/30 flex items-center justify-center text-xs font-black text-[#99c5ff] shrink-0">
+                {c.name[0]?.toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-white truncate">{c.name}</p>
+                <p className="text-[10px] text-[rgba(153,197,255,0.45)] truncate">
+                  {[c.email, c.phone, buildAddress(c)].filter(Boolean).join(' · ')}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StatusBadge({ inv }) {
   const { label, cls } = statusMeta(inv);
   return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[10px] font-black border ${cls}`}>{label}</span>;
@@ -134,16 +196,21 @@ function TypeBadge({ type }) {
 const TYPE_DOT = { residential: "#10b981", commercial: "#1f48ff", exterior: "#f59e0b" };
 
 // ─── Email send modal ─────────────────────────────────────────────────────────
-function EmailModal({ invoice, business, onSent, onClose }) {
-  const calc = calcInvoice(invoice.lines, false, 12);
-  const [to,      setTo]      = useState(invoice.customer.email);
-  const [subject, setSubject] = useState(`Invoice ${invoice.num} from ${business.name}`);
-  const [body,    setBody]    = useState(
-    `Hi ${(invoice.customer?.name || "").split(" ")[0] || "there"},\n\nPlease find attached invoice ${invoice.num} for ${fmt2(calc.total)}.\n\n${invoice.terms === 0 ? "Payment is due on receipt." : `Payment is due by ${fmtDate(invoice.dueDate)}.`}\n\nBank details:\n${invoice.bankName || business.bankName}\nSort code: ${invoice.sortCode || business.sortCode}\nAccount: ${invoice.accountNum || business.accountNum}\nReference: ${invoice.num}\n\n${business.defaultNotes}\n\nMany thanks,\n${business.ownerName}\n${business.name}`
-  );
+function EmailModal({ invoice, business, onSent, onClose, chaseMode = false }) {
+  const calc      = calcInvoice(invoice.lines, false, 12);
+  const firstName = (invoice.customer?.name || "").split(" ")[0] || "there";
+
+  const defaultMsg  = `Hi ${firstName},\n\nHere's your invoice! We appreciate your prompt payment.`;
+  const chaseMsg    = `Hi ${firstName},\n\nI hope you're well. I'm just following up on invoice ${invoice.num} for ${fmt2(calc.total)}, which was due on ${fmtDate(invoice.dueDate)}.\n\nIf you've already sent payment, please disregard this message. If not, please arrange payment at your earliest convenience.`;
+
+  const [to,      setTo]      = useState(invoice.customer?.email || '');
+  const [subject, setSubject] = useState(chaseMode ? `Payment reminder — ${invoice.num} from ${business.name}` : `Invoice ${invoice.num} from ${business.name}`);
+  const [message, setMessage] = useState(chaseMode ? chaseMsg : defaultMsg);
   const [sending, setSending] = useState(false);
   const [sent,    setSent]    = useState(false);
   const [error,   setError]   = useState(null);
+
+  const termsLabel = invoice.terms === 0 ? "Due on receipt" : invoice.terms === "custom" ? "Custom" : `Net ${invoice.terms}`;
 
   const handleSend = async () => {
     setSending(true);
@@ -151,27 +218,44 @@ function EmailModal({ invoice, business, onSent, onClose }) {
     try {
       const { error: fnError } = await supabase.functions.invoke('send-invoice', {
         body: {
-          invoiceId: invoice.id,
+          invoiceId:       invoice.id,
           to,
           subject,
-          body,
-          invoiceNum: invoice.num,
-          amount: fmt2(calc.total),
-          dueDate: invoice.dueDate,
-          businessName: business.name,
-          replyTo: business.email,
+          personalMessage: message,
+          invoiceNum:      invoice.num,
+          customer: {
+            name:    invoice.customer?.name    || '',
+            address: invoice.customer?.address || '',
+            email:   invoice.customer?.email   || '',
+          },
+          lines: (invoice.lines || []).map(l => ({
+            desc:        l.desc        || '',
+            qty:         parseFloat(l.qty)  || 1,
+            rate:        parseFloat(l.rate) || 0,
+            serviceDate: l.serviceDate || null,
+          })),
+          subtotal:        calc.subtotal,
+          vatAmount:       calc.vatAmount,
+          total:           calc.total,
+          terms:           termsLabel,
+          dueDate:         invoice.dueDate || '',
+          businessName:    business.name   || '',
+          businessAddress: business.address || '',
+          replyTo:         business.email  || '',
+          bankName:        invoice.bankName  || business.bankName  || '',
+          sortCode:        invoice.sortCode  || business.sortCode  || '',
+          accountNum:      invoice.accountNum || business.accountNum || '',
         },
       });
       if (fnError) throw fnError;
       setSending(false); setSent(true);
-      setTimeout(() => { onSent(); onClose(); }, 1800);
-    } catch (err) {
-      console.error('Failed to send invoice:', err);
-      // Fallback: open mailto link so user can still send
-      const mailtoUrl = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      setTimeout(() => { onSent(); onClose(); }, 2000);
+    } catch {
+      const fallbackBody = `${message}\n\nInvoice ${invoice.num} — ${fmt2(calc.total)}\nDue: ${invoice.dueDate ? fmtDate(invoice.dueDate) : 'on receipt'}`;
+      const mailtoUrl = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(fallbackBody)}`;
       window.open(mailtoUrl, '_blank');
-      setSending(false); setSent(true);
-      setTimeout(() => { onSent(); onClose(); }, 1800);
+      setError('Automatic email failed — your email app has been opened as a fallback. Send from there and mark this invoice as sent manually.');
+      setSending(false);
     }
   };
 
@@ -181,6 +265,7 @@ function EmailModal({ invoice, business, onSent, onClose }) {
         <p className="text-5xl mb-4">✅</p>
         <p className="text-lg font-black text-white mb-1">Invoice sent</p>
         <p className="text-sm text-[rgba(153,197,255,0.5)]">Delivered to {to}</p>
+        <p className="text-xs text-[rgba(153,197,255,0.35)] mt-1">Customer can reply directly to {business.email || 'your business email'}</p>
       </div>
     </div>
   );
@@ -191,7 +276,7 @@ function EmailModal({ invoice, business, onSent, onClose }) {
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/50 to-transparent" />
         <div className="px-5 py-4 border-b border-[rgba(153,197,255,0.1)] flex items-center justify-between">
           <div>
-            <p className="text-sm font-black text-white">📤 Send invoice</p>
+            <p className="text-sm font-black text-white">{chaseMode ? '🔔 Chase payment' : '📤 Send invoice'}</p>
             <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">{invoice.num} · {fmt2(calc.total)}</p>
           </div>
           <button onClick={onClose} className="text-[rgba(153,197,255,0.4)] hover:text-white text-xl leading-none">×</button>
@@ -199,13 +284,42 @@ function EmailModal({ invoice, business, onSent, onClose }) {
         <div className="p-5 space-y-3">
           <div><SL className="mb-1.5">To</SL><GInput type="email" value={to} onChange={e => setTo(e.target.value)} /></div>
           <div><SL className="mb-1.5">Subject</SL><GInput type="text" value={subject} onChange={e => setSubject(e.target.value)} /></div>
-          <div><SL className="mb-1.5">Message</SL><GTextarea value={body} onChange={e => setBody(e.target.value)} rows={9} className="font-mono text-xs leading-relaxed" /></div>
-          {error && <GAlert type="red">{error}</GAlert>}
-          <GAlert type="blue">Invoice details and bank information are included in the email. Customer can reply directly to your business email.</GAlert>
+          <div>
+            <SL className="mb-1.5">Personal message</SL>
+            <GTextarea value={message} onChange={e => setMessage(e.target.value)} rows={4} placeholder="Add a personal note to your customer…" />
+            <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-1.5">The full invoice — line items, totals, and your bank details — is automatically included below your message.</p>
+          </div>
+
+          {/* Email preview summary */}
+          <div className="rounded-xl border border-[rgba(153,197,255,0.1)] bg-[rgba(153,197,255,0.03)] p-3 space-y-1.5">
+            <SL className="mb-1">What your customer will see</SL>
+            <div className="flex justify-between text-xs">
+              <span className="text-[rgba(153,197,255,0.45)]">Invoice</span>
+              <span className="text-white font-bold">{invoice.num}</span>
+            </div>
+            {(invoice.lines || []).filter(l => l.desc && l.rate).map((l, i) => (
+              <div key={i} className="flex justify-between text-xs">
+                <span className="text-[rgba(153,197,255,0.6)] truncate max-w-[200px]">{l.serviceDate ? `${fmtShort(l.serviceDate)} · ` : ''}{l.desc}</span>
+                <span className="text-[rgba(153,197,255,0.6)] font-mono shrink-0 ml-2">{fmt2((parseFloat(l.qty)||1)*(parseFloat(l.rate)||0))}</span>
+              </div>
+            ))}
+            <div className="flex justify-between text-xs border-t border-[rgba(153,197,255,0.08)] pt-1.5 mt-1">
+              <span className="text-white font-black">Balance due</span>
+              <span className="text-white font-black font-mono">{fmt2(calc.total)}</span>
+            </div>
+            {business.email && (
+              <p className="text-[10px] text-[rgba(153,197,255,0.35)] pt-0.5">Reply-to: {business.email}</p>
+            )}
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/25 text-xs text-red-300">{error}</div>
+          )}
+
           <div className="flex gap-2">
             <button onClick={handleSend} disabled={sending || !to}
               className={`flex-1 py-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${sending || !to ? "bg-[rgba(153,197,255,0.05)] text-[rgba(153,197,255,0.25)] cursor-not-allowed" : "bg-[#1f48ff] text-white hover:bg-[#3a5eff]"}`}>
-              {sending ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Sending…</> : "📤 Send invoice"}
+              {sending ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Sending…</> : chaseMode ? '🔔 Send chase email' : '📤 Send invoice'}
             </button>
             <button onClick={onClose} className="px-5 py-3 rounded-xl border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.5)] text-xs font-black hover:text-white hover:border-[rgba(153,197,255,0.3)] transition-all">
               Cancel
@@ -271,9 +385,10 @@ function MarkPaidModal({ invoice, onConfirm, onClose }) {
 }
 
 // ─── SCREEN: Invoice list ─────────────────────────────────────────────────────
-function InvoiceList({ invoices, accounts, onSelect, onCreate }) {
+function InvoiceList({ invoices, accounts, onSelect, onCreate, onQuickSend, onQuickPaid }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [showAging, setShowAging] = useState(false);
 
   const FILTERS = [
     { id: "all",     label: "All"     },
@@ -295,6 +410,14 @@ function InvoiceList({ invoices, accounts, onSelect, onCreate }) {
   const paidMonth    = invoices.filter(i => i.status === "paid" && i.paidAt?.startsWith(currentMonthPrefix)).reduce((s,i) => s + calcInvoice(i.lines,false,12).total, 0);
   const ytdTotal     = invoices.reduce((s,i) => s + calcInvoice(i.lines,false,12).total, 0);
   const overdueCount = invoices.filter(i => i.status === "overdue").length;
+
+  const unpaid = invoices.filter(i => i.status !== "paid" && i.status !== "draft" && i.dueDate);
+  const agingBuckets = useMemo(() => [
+    { label: "Current",    color: "text-emerald-400", invs: unpaid.filter(i => daysOverdue(i.dueDate) <= 0) },
+    { label: "1–30 days",  color: "text-amber-400",   invs: unpaid.filter(i => daysOverdue(i.dueDate) >= 1  && daysOverdue(i.dueDate) <= 30) },
+    { label: "31–60 days", color: "text-orange-400",  invs: unpaid.filter(i => daysOverdue(i.dueDate) >= 31 && daysOverdue(i.dueDate) <= 60) },
+    { label: "60+ days",   color: "text-red-400",     invs: unpaid.filter(i => daysOverdue(i.dueDate) > 60) },
+  ], [unpaid]);
 
   return (
     <div className="space-y-4">
@@ -321,6 +444,32 @@ function InvoiceList({ invoices, accounts, onSelect, onCreate }) {
             <strong className="text-white">{overdueCount} invoice{overdueCount>1?"s":""} overdue</strong> — {fmt(overdue)} outstanding past due date.{" "}
             <button onClick={() => setFilter("overdue")} className="font-black underline underline-offset-2 hover:no-underline">View overdue →</button>
           </p>
+        </div>
+      )}
+
+      {/* Aging report */}
+      {unpaid.length > 0 && (
+        <div>
+          <button
+            onClick={() => setShowAging(v => !v)}
+            className="flex items-center gap-2 text-xs font-black text-[rgba(153,197,255,0.5)] hover:text-white transition-colors mb-2"
+          >
+            <span>{showAging ? "▾" : "▸"}</span> Aging report
+          </button>
+          {showAging && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {agingBuckets.map(({ label, color, invs }) => {
+                const total = invs.reduce((s,i) => s + calcInvoice(i.lines,false,12).total, 0);
+                return (
+                  <GCard key={label} className="px-3 py-3">
+                    <SL className="mb-1">{label}</SL>
+                    <p className={`text-base font-black tabular-nums ${color}`}>{fmt(total)}</p>
+                    <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-0.5">{invs.length} invoice{invs.length !== 1 ? "s" : ""}</p>
+                  </GCard>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -366,47 +515,66 @@ function InvoiceList({ invoices, accounts, onSelect, onCreate }) {
           {filtered.map(inv => {
             const calc = calcInvoice(inv.lines, accounts.vatRegistered, accounts.frsRate);
             return (
-              <button key={inv.id} onClick={() => onSelect(inv)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[rgba(153,197,255,0.04)] text-left group transition-colors">
-                {/* Type stripe */}
-                <div className="w-1 self-stretch rounded-full shrink-0" style={{ backgroundColor: TYPE_DOT[inv.type] ?? "#6b7280" }} />
+              <div key={inv.id} className="flex items-center group hover:bg-[rgba(153,197,255,0.04)] transition-colors">
+                <button onClick={() => onSelect(inv)} className="flex flex-1 items-center gap-3 px-4 py-3.5 text-left min-w-0">
+                  {/* Type stripe */}
+                  <div className="w-1 self-stretch rounded-full shrink-0" style={{ backgroundColor: TYPE_DOT[inv.type] ?? "#6b7280" }} />
 
-                {/* Invoice num + date */}
-                <div className="w-20 shrink-0">
-                  <p className="text-xs font-mono font-black text-[#99c5ff]">{inv.num}</p>
-                  <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-0.5">{fmtShort(inv.date)}</p>
-                </div>
-
-                {/* Customer */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white group-hover:text-[#99c5ff] truncate transition-colors">{inv.customer.name}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    <TypeBadge type={inv.type} />
-                    {inv.lines.length > 0 && (
-                      <span className="text-[10px] text-[rgba(153,197,255,0.35)] truncate">
-                        {inv.lines[0].desc}{inv.lines.length > 1 ? ` +${inv.lines.length-1}` : ""}
-                      </span>
-                    )}
+                  {/* Invoice num + date */}
+                  <div className="w-20 shrink-0">
+                    <p className="text-xs font-mono font-black text-[#99c5ff]">{inv.num}</p>
+                    <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-0.5">{fmtShort(inv.date)}</p>
                   </div>
-                </div>
 
-                {/* Due */}
-                <div className="hidden sm:block text-right shrink-0 w-20">
-                  <p className="text-[10px] text-[rgba(153,197,255,0.35)]">Due</p>
-                  <p className={`text-xs font-bold ${inv.status==="overdue" ? "text-red-400" : "text-[rgba(153,197,255,0.55)]"}`}>{fmtShort(inv.dueDate)}</p>
-                </div>
+                  {/* Customer */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-white group-hover:text-[#99c5ff] truncate transition-colors">{inv.customer.name}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <TypeBadge type={inv.type} />
+                      {inv.lines.length > 0 && (
+                        <span className="text-[10px] text-[rgba(153,197,255,0.35)] truncate">
+                          {inv.lines[0].desc}{inv.lines.length > 1 ? ` +${inv.lines.length-1}` : ""}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                {/* Amount */}
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-black tabular-nums text-white">{fmt2(calc.total)}</p>
-                  {accounts.vatRegistered && <p className="text-[10px] text-[rgba(153,197,255,0.35)]">inc. VAT</p>}
-                </div>
+                  {/* Due */}
+                  <div className="hidden sm:block text-right shrink-0 w-20">
+                    <p className="text-[10px] text-[rgba(153,197,255,0.35)]">Due</p>
+                    <p className={`text-xs font-bold ${inv.status==="overdue" ? "text-red-400" : "text-[rgba(153,197,255,0.55)]"}`}>{fmtShort(inv.dueDate)}</p>
+                  </div>
 
-                {/* Status */}
-                <StatusBadge inv={inv} />
+                  {/* Amount */}
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-black tabular-nums text-white">{fmt2(calc.total)}</p>
+                    {accounts.vatRegistered && <p className="text-[10px] text-[rgba(153,197,255,0.35)]">inc. VAT</p>}
+                  </div>
 
-                <span className="text-[rgba(153,197,255,0.2)] group-hover:text-[rgba(153,197,255,0.5)] transition-colors shrink-0">›</span>
-              </button>
+                  {/* Status */}
+                  <StatusBadge inv={inv} />
+                </button>
+
+                {/* Inline quick actions */}
+                {inv.status !== "paid" && (
+                  <div className="flex items-center gap-1.5 pr-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      onClick={e => { e.stopPropagation(); onQuickSend?.(inv); }}
+                      className="px-2.5 py-1.5 rounded-lg border border-[rgba(153,197,255,0.2)] text-[rgba(153,197,255,0.6)] text-[10px] font-black hover:text-white hover:border-[rgba(153,197,255,0.4)] transition-all"
+                      title="Send invoice"
+                    >
+                      {inv.status === "overdue" ? "Chase" : "Send"}
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); onQuickPaid?.(inv); }}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[10px] font-black hover:bg-emerald-500/25 transition-colors"
+                      title="Mark as paid"
+                    >
+                      ✓ Paid
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
         </GCard>
@@ -416,7 +584,7 @@ function InvoiceList({ invoices, accounts, onSelect, onCreate }) {
 }
 
 // ─── SCREEN: Create / edit invoice ────────────────────────────────────────────
-function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBack, business = DEFAULT_BUSINESS }) {
+function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBack, business = DEFAULT_BUSINESS, customers = [] }) {
   const isEdit = !!draftInvoice;
   const [customer, setCustomer] = useState(draftInvoice?.customer ?? { name: "", email: "", address: "", phone: "" });
   const [type,     setType]     = useState(draftInvoice?.type     ?? "residential");
@@ -472,13 +640,22 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
           <GCard className="overflow-hidden">
             <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Customer</SL></div>
             <div className="p-4 space-y-3">
+              <div>
+                <SL className="mb-1.5">Name</SL>
+                {customers.length > 0
+                  ? <CustomerSearch customers={customers} value={customer} onChange={setCustomer} placeholder="e.g. Mrs Johnson" />
+                  : <GInput type="text" value={customer.name || ''} onChange={e => setC('name', e.target.value)} placeholder="e.g. Mrs Johnson" />
+                }
+              </div>
               {[
-                { label: "Name",    field: "name",    type: "text",  ph: "e.g. Mrs Johnson"            },
-                { label: "Email",   field: "email",   type: "email", ph: "client@email.com"             },
-                { label: "Phone",   field: "phone",   type: "tel",   ph: "07700 000 000"                },
-                { label: "Address", field: "address", type: "text",  ph: "1 High Street, London SW1"    },
+                { label: "Email",   field: "email",   type: "email", ph: "client@email.com"          },
+                { label: "Phone",   field: "phone",   type: "tel",   ph: "07700 000 000"             },
+                { label: "Address", field: "address", type: "text",  ph: "1 High Street, London SW1" },
               ].map(({ label, field, type: t, ph }) => (
-                <div key={field}><SL className="mb-1.5">{label}</SL><GInput type={t} value={customer[field]} onChange={e => setC(field, e.target.value)} placeholder={ph} /></div>
+                <div key={field}>
+                  <SL className="mb-1.5">{label}</SL>
+                  <GInput type={t} value={customer[field] || ''} onChange={e => setC(field, e.target.value)} placeholder={ph} />
+                </div>
               ))}
             </div>
           </GCard>
@@ -856,9 +1033,10 @@ function InvoicePreview({ draft, accounts, business, onEdit, onSaveAndSend, onBa
 }
 
 // ─── SCREEN: Invoice detail ───────────────────────────────────────────────────
-function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack }) {
-  const [showEmail, setShowEmail] = useState(false);
-  const [showPaid,  setShowPaid]  = useState(false);
+function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack, onDuplicate }) {
+  const [showEmail,  setShowEmail]  = useState(false);
+  const [showPaid,   setShowPaid]   = useState(false);
+  const [chaseMode,  setChaseMode]  = useState(false);
   const calc = calcInvoice(invoice.lines, accounts.vatRegistered, accounts.frsRate);
 
   const timeline = [
@@ -882,9 +1060,15 @@ function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack }) {
           </div>
           <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">{invoice.customer.name} · {fmtDate(invoice.date)} · Due {fmtDate(invoice.dueDate)}</p>
         </div>
-        {invoice.status !== "paid" && (
-          <div className="flex gap-2 shrink-0">
-            <button onClick={() => setShowEmail(true)}
+        <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+          {invoice.status !== "paid" && (<>
+            {invoice.status === "overdue" && (
+              <button onClick={() => { setChaseMode(true); setShowEmail(true); }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/15 border border-red-500/25 text-red-300 text-xs font-black hover:bg-red-500/25 transition-colors">
+                🔔 Chase
+              </button>
+            )}
+            <button onClick={() => { setChaseMode(false); setShowEmail(true); }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.5)] text-xs font-black hover:text-white hover:border-[rgba(153,197,255,0.3)] transition-all">
               📤 {invoice.sentAt ? "Re-send" : "Send"}
             </button>
@@ -892,8 +1076,12 @@ function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack }) {
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-black hover:bg-emerald-500/30 transition-colors">
               ✓ Mark paid
             </button>
-          </div>
-        )}
+          </>)}
+          <button onClick={() => onDuplicate?.(invoice)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.4)] text-xs font-black hover:text-white hover:border-[rgba(153,197,255,0.3)] transition-all">
+            ⧉ Duplicate
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1020,7 +1208,7 @@ function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack }) {
       </div>
 
       {showEmail && (
-        <EmailModal invoice={invoice} business={business}
+        <EmailModal invoice={invoice} business={business} chaseMode={chaseMode}
           onSent={() => { onUpdate({ ...invoice, sentAt: new Date().toISOString(), reminders: [...(invoice.reminders??[]), new Date().toISOString()] }); setShowEmail(false); }}
           onClose={() => setShowEmail(false)} />
       )}
@@ -1077,6 +1265,7 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
   const [draftInv,     setDraftInv]     = useState(null);
   const [previewDraft, setPreviewDraft] = useState(null);
   const [pendingNum,   setPendingNum]   = useState(null);
+  const [quickAction,  setQuickAction]  = useState(null); // { inv, type: 'send'|'paid' }
 
   const openCreate = async () => {
     setDraftInv(null);
@@ -1086,6 +1275,13 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
   };
 
   const handleSelect = (inv) => { setActiveInv(inv); setScreen("detail"); };
+
+  const handleDuplicate = async (inv) => {
+    const num = await nextNum();
+    setDraftInv({ ...inv, id: null, num, status: "draft", sentAt: null, viewedAt: null, paidAt: null, reminders: [] });
+    setPendingNum(num);
+    setScreen("create");
+  };
 
   const handleSaveDraft = async (draft, status = "draft") => {
     addInvoice({ ...draft, id: draft.id || draft.num, status });
@@ -1180,10 +1376,57 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
         </div>
 
         {/* Screen router */}
-        {screen === "list"    && <InvoiceList invoices={invoices} accounts={accounts} onSelect={handleSelect} onCreate={openCreate} />}
-        {screen === "create"  && <CreateInvoice accounts={accounts} draftInvoice={draftInv} invNum={pendingNum} onSave={handleSaveDraft} onPreview={handlePreview} onBack={goBack} business={BUSINESS} />}
-        {screen === "preview" && previewDraft && <InvoicePreview draft={previewDraft} accounts={accounts} business={BUSINESS} onEdit={() => { setPendingNum(previewDraft.num); setDraftInv(previewDraft); setScreen("create"); }} onSaveAndSend={handleSaveAndSend} onBack={() => setScreen("create")} />}
-        {screen === "detail"  && activeInv && <InvoiceDetail invoice={activeInv} accounts={accounts} business={BUSINESS} onUpdate={handleUpdate} onBack={goBack} />}
+        {screen === "list"    && (
+          <InvoiceList
+            invoices={invoices} accounts={accounts}
+            onSelect={handleSelect} onCreate={openCreate}
+            onQuickSend={inv => setQuickAction({ inv, type: 'send' })}
+            onQuickPaid={inv => setQuickAction({ inv, type: 'paid' })}
+          />
+        )}
+        {screen === "create"  && (
+          <CreateInvoice
+            accounts={accounts} draftInvoice={draftInv} invNum={pendingNum}
+            onSave={handleSaveDraft} onPreview={handlePreview} onBack={goBack}
+            business={BUSINESS} customers={customers}
+          />
+        )}
+        {screen === "preview" && previewDraft && (
+          <InvoicePreview
+            draft={previewDraft} accounts={accounts} business={BUSINESS}
+            onEdit={() => { setPendingNum(previewDraft.num); setDraftInv(previewDraft); setScreen("create"); }}
+            onSaveAndSend={handleSaveAndSend} onBack={() => setScreen("create")}
+          />
+        )}
+        {screen === "detail"  && activeInv && (
+          <InvoiceDetail
+            invoice={activeInv} accounts={accounts} business={BUSINESS}
+            onUpdate={handleUpdate} onBack={goBack} onDuplicate={handleDuplicate}
+          />
+        )}
+
+        {/* Inline quick-action modals (triggered from list row buttons) */}
+        {quickAction?.type === 'send' && (
+          <EmailModal
+            invoice={quickAction.inv} business={BUSINESS}
+            chaseMode={quickAction.inv.status === 'overdue'}
+            onSent={() => {
+              updateInvoice({ ...quickAction.inv, sentAt: new Date().toISOString(), reminders: [...(quickAction.inv.reminders ?? []), new Date().toISOString()] });
+              setQuickAction(null);
+            }}
+            onClose={() => setQuickAction(null)}
+          />
+        )}
+        {quickAction?.type === 'paid' && (
+          <MarkPaidModal
+            invoice={quickAction.inv}
+            onConfirm={({ method, date }) => {
+              handleUpdate({ ...quickAction.inv, status: 'paid', paidAt: new Date(date).toISOString(), paymentMethod: method });
+              setQuickAction(null);
+            }}
+            onClose={() => setQuickAction(null)}
+          />
+        )}
       </div>
     </div>
   );
