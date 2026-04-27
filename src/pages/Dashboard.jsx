@@ -1392,6 +1392,40 @@ function OnboardingScorecard({ steps, onNavigate, onPreview }) {
   );
 }
 
+// ─── Remaining tasks banner (shown above leaderboard when 3–4/5 done) ────────
+function RemainingTasksBanner({ steps, onNavigate }) {
+  const remaining = steps.filter(s => !s.done);
+  if (remaining.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl border border-[rgba(153,197,255,0.15)] mb-3 overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #010a4f 0%, #05124a 100%)' }}>
+      <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">🚀</span>
+          <p className="text-xs font-bold text-white">
+            {remaining.length} task{remaining.length > 1 ? 's' : ''} left to complete your setup
+          </p>
+        </div>
+        <p className="text-[10px] text-[rgba(153,197,255,0.4)] font-semibold">+{remaining.reduce((a, s) => a + s.pts, 0)} pts available</p>
+      </div>
+      <div className="flex flex-wrap gap-2 p-3">
+        {remaining.map(step => (
+          <button
+            key={step.id}
+            onClick={() => onNavigate?.(step.tab)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-[rgba(153,197,255,0.3)] transition-all text-xs font-semibold text-white/80"
+          >
+            <span>{step.emoji}</span>
+            {step.title}
+            <span className="text-[rgba(153,197,255,0.5)] font-bold ml-1">+{step.pts}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Leaderboard panel ────────────────────────────────────────────────────────
 function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, onOptIn, healthDelta = 0, entries }) {
   const [filter, setFilter] = useState("all");
@@ -1622,6 +1656,9 @@ function ShareCardModal({ onClose, businessName, sector, score, badges, rank, to
 
   const handleCopy = () => {
     navigator.clipboard?.writeText("Check out my Cadi Business Health Score! 🚀 getcadi.co.uk").then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -2141,7 +2178,9 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     setShowQuickWins(false);
     setDemoMode(false);
     if (user) {
-      await supabase.from('profiles').update({ dashboard_tour_complete: true }).eq('id', user.id);
+      try {
+        await supabase.from('profiles').update({ dashboard_tour_complete: true }).eq('id', user.id);
+      } catch {}
     }
   };
 
@@ -2309,15 +2348,18 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                         />
                       </DemoHint>
                     ) : (
-                      <LeaderboardPanel
-                        userScore={score.total}
-                        userBizName={profile?.business_name || displayName}
-                        userSector={profile?.cleaner_type || "residential"}
-                        communityOptIn={communityOptIn}
-                        onOptIn={handleCommunityOptIn}
-                        healthDelta={healthDelta}
-                        entries={leaderboardEntries}
-                      />
+                      <>
+                        <RemainingTasksBanner steps={onboardingSteps} onNavigate={onNavigate} />
+                        <LeaderboardPanel
+                          userScore={score.total}
+                          userBizName={profile?.business_name || displayName}
+                          userSector={profile?.cleaner_type || "residential"}
+                          communityOptIn={communityOptIn}
+                          onOptIn={handleCommunityOptIn}
+                          healthDelta={healthDelta}
+                          entries={leaderboardEntries}
+                        />
+                      </>
                     )
                   ) : (
                     <OnboardingScorecard steps={onboardingSteps} onNavigate={onNavigate} onPreview={previewLeaderboard} />
@@ -2400,15 +2442,18 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                         />
                       </DemoHint>
                     ) : (
-                      <LeaderboardPanel
-                        userScore={score.total}
-                        userBizName={profile?.business_name || displayName}
-                        userSector={profile?.cleaner_type || "residential"}
-                        communityOptIn={communityOptIn}
-                        onOptIn={handleCommunityOptIn}
-                        healthDelta={healthDelta}
-                        entries={leaderboardEntries}
-                      />
+                      <>
+                        <RemainingTasksBanner steps={onboardingSteps} onNavigate={onNavigate} />
+                        <LeaderboardPanel
+                          userScore={score.total}
+                          userBizName={profile?.business_name || displayName}
+                          userSector={profile?.cleaner_type || "residential"}
+                          communityOptIn={communityOptIn}
+                          onOptIn={handleCommunityOptIn}
+                          healthDelta={healthDelta}
+                          entries={leaderboardEntries}
+                        />
+                      </>
                     )
                   ) : (
                     <OnboardingScorecard steps={onboardingSteps} onNavigate={onNavigate} onPreview={previewLeaderboard} />
