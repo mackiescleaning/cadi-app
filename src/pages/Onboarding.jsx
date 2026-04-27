@@ -878,29 +878,13 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
             <>
               <StepTag>👥 Team Structure</StepTag>
               <StepTitle>Do you work <span className="text-[#99c5ff]">solo or with a team?</span></StepTitle>
-              <StepSubtitle mobileText="We'll tailor staff, scheduling, and payroll tools to this choice.">Determines your scheduling, job assignment, payroll tracking, and team features. All plans include a 14-day free trial — no card required.</StepSubtitle>
+              <StepSubtitle mobileText="We'll tailor staff, scheduling, and payroll tools to this choice.">Determines your scheduling, job assignment, payroll tracking, and team features.</StepSubtitle>
               <div className="grid grid-cols-2 gap-[11px] max-[600px]:grid-cols-1">
                 {[
-                  {
-                    value: 'solo', icon: '🧑', title: 'Solo Operator',
-                    description: 'Just me — I run everything myself.',
-                    plan: 'Free', planDetail: 'Up to 15 customers · all core tools', planColor: 'text-[#34d399]', planBg: 'bg-[rgba(52,211,153,0.12)] border-[rgba(52,211,153,0.25)]',
-                  },
-                  {
-                    value: 'small', icon: '👥', title: 'Small Team (2–5)',
-                    description: 'A small mix of employees or subcontractors.',
-                    plan: 'Pro · £19/mo', planDetail: 'Up to 100 customers · 5 team members', planColor: 'text-[#99c5ff]', planBg: 'bg-[rgba(153,197,255,0.1)] border-[rgba(153,197,255,0.25)]',
-                  },
-                  {
-                    value: 'growing', icon: '📈', title: 'Growing Business (6–15)',
-                    description: 'Multiple staff — scheduling, job assignment, payroll.',
-                    plan: 'Business · £39/mo', planDetail: 'Unlimited customers · 20 team members', planColor: 'text-[#fb923c]', planBg: 'bg-[rgba(251,146,60,0.1)] border-[rgba(251,146,60,0.25)]',
-                  },
-                  {
-                    value: 'enterprise', icon: '🏢', title: 'Enterprise (15+)',
-                    description: 'Multiple locations, managers, advanced reporting.',
-                    plan: 'Enterprise · Custom', planDetail: 'Unlimited everything · priority support', planColor: 'text-[#a78bfa]', planBg: 'bg-[rgba(167,139,250,0.1)] border-[rgba(167,139,250,0.25)]',
-                  },
+                  { value: 'solo',       icon: '🧑', title: 'Solo Operator',          description: 'Just me — I run everything myself.' },
+                  { value: 'small',      icon: '👥', title: 'Small Team (2–5)',         description: 'A small mix of employees or subcontractors.' },
+                  { value: 'growing',    icon: '📈', title: 'Growing Business (6–15)', description: 'Multiple staff — scheduling, job assignment, payroll.' },
+                  { value: 'enterprise', icon: '🏢', title: 'Enterprise (15+)',         description: 'Multiple locations, managers, advanced reporting.' },
                 ].map(option => (
                   <ChoiceCard
                     key={option.value}
@@ -909,18 +893,14 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
                   >
                     <div className="mb-2 text-2xl">{option.icon}</div>
                     <div className="mb-1 text-sm font-bold text-white">{option.title}</div>
-                    <div className="mb-3 text-xs leading-[1.4] text-[rgba(153,197,255,0.6)]">{option.description}</div>
-                    <div className={`rounded-lg border px-3 py-2 ${option.planBg}`}>
-                      <div className={`text-xs font-bold ${option.planColor}`}>{option.plan}</div>
-                      <div className="text-[11px] text-[rgba(153,197,255,0.55)] mt-0.5">{option.planDetail}</div>
-                    </div>
+                    <div className="text-xs leading-[1.4] text-[rgba(153,197,255,0.6)]">{option.description}</div>
                   </ChoiceCard>
                 ))}
               </div>
 
               <InfoBox>
-                <span>🎁</span>
-                <span>All paid plans come with a <strong>14-day free trial</strong> — no credit card required. You can upgrade, downgrade or cancel at any time from your account settings.</span>
+                <span>ℹ️</span>
+                <span>Your subscription gives you full access to all features. You can manage or cancel at any time from Settings.</span>
               </InfoBox>
 
               {form.teamStructure && form.teamStructure !== 'solo' && (
