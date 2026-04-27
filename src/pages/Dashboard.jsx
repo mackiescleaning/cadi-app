@@ -2187,10 +2187,9 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const handleCommunityOptIn = async () => {
     setCommunityOptIn(true);
     try { localStorage.setItem('cadi_community_opt_in', '1'); } catch {}
-    // Also persist to profile in Supabase
     if (user) {
       try {
-        await supabase.from('profiles').update({ community_opt_in: true }).eq('id', user.id);
+        await updateProfile({ community_opt_in: true });
       } catch {}
     }
   };
