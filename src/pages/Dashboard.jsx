@@ -1269,27 +1269,39 @@ function BadgesShelf({ badges, onShare }) {
 }
 
 // ─── AI Boost Panel ────────────────────────────────────────────────────────────
-function AiBoostPanel({ score, onNavigate }) {
+function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
 
-  const { total, tier, tierNext } = score;
+  const { total, tierNext } = score;
   const ptsToNext = tierNext ? tierNext - total : 0;
 
-  const tasks = [];
-  if (score.invoicingScore < 20) tasks.push({ emoji: "⚡", text: "Chase overdue invoices — earn up to +12 pts", tab: "invoices" });
-  if (score.complianceScore < 12) tasks.push({ emoji: "🛡️", text: "Top up your tax reserve to hit your target", tab: "money" });
-  if (score.opsScore < 20) tasks.push({ emoji: "📅", text: "Fill gaps in this week's schedule", tab: "scheduler" });
-  if (score.revScore < 20) tasks.push({ emoji: "💷", text: "Log any payments received today", tab: "money" });
-  if (score.growthScore < 8) tasks.push({ emoji: "🏃", text: "Create a 90-day sprint goal in Annual Review", tab: "review" });
-  if (tasks.length === 0) tasks.push({ emoji: "🎯", text: "Business running smoothly — keep it up!", tab: null });
+  const incompleteSetup = setupSteps.filter(s => !s.done);
+  const hasBusinessData = setupSteps.some(s => ['job', 'payment', 'invoice'].includes(s.id) && s.done);
+
+  let tasks = [];
+  let panelTitle = "🤖 Cadi AI — boost your score";
+  let panelSubtitle = tierNext ? `${ptsToNext} pts to unlock ${tierNext === 90 ? "Excellent" : tierNext === 75 ? "Great" : "Good"} tier` : null;
+
+  if (!hasBusinessData && incompleteSetup.length > 0) {
+    panelTitle = "🚀 Getting started";
+    panelSubtitle = "Complete these steps to unlock your personalised insights";
+    tasks = incompleteSetup.slice(0, 4).map(s => ({ emoji: s.emoji, text: s.body, tab: s.tab }));
+  } else {
+    if (score.invoicingScore < 20) tasks.push({ emoji: "⚡", text: "Chase overdue invoices — earn up to +12 pts", tab: "invoices" });
+    if (score.complianceScore < 12) tasks.push({ emoji: "🛡️", text: "Top up your tax reserve to hit your target", tab: "money" });
+    if (score.opsScore < 20) tasks.push({ emoji: "📅", text: "Fill gaps in this week's schedule", tab: "scheduler" });
+    if (score.revScore < 20) tasks.push({ emoji: "💷", text: "Log any payments received today", tab: "money" });
+    if (score.growthScore < 8) tasks.push({ emoji: "🏃", text: "Create a 90-day sprint goal in Annual Review", tab: "review" });
+    if (tasks.length === 0) tasks.push({ emoji: "🎯", text: "Business running smoothly — keep it up!", tab: null });
+  }
 
   return (
     <Card className="overflow-hidden border-t-2 border-t-brand-blue">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <div>
-          <SL className="mb-0.5">🤖 Cadi AI — boost your score</SL>
-          {tierNext && <p className="text-xs text-gray-400">{ptsToNext} pts to unlock <span className="font-semibold text-brand-navy">{tierNext === 90 ? "Excellent" : tierNext === 75 ? "Great" : "Good"}</span> tier</p>}
+          <SL className="mb-0.5">{panelTitle}</SL>
+          {panelSubtitle && <p className="text-xs text-gray-400">{panelSubtitle}</p>}
         </div>
         <button onClick={() => setDismissed(true)} className="text-xs text-gray-300 hover:text-gray-500">✕</button>
       </div>
@@ -1427,7 +1439,7 @@ function RemainingTasksBanner({ steps, onNavigate }) {
 }
 
 // ─── Leaderboard panel ────────────────────────────────────────────────────────
-function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, onOptIn, healthDelta = 0, entries }) {
+function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, onOptIn, healthDelta = 0, entries, isPreview = false }) {
   const [filter, setFilter] = useState("all");
   const [showExplainer, setShowExplainer] = useState(() => {
     try { return !localStorage.getItem('cadi_lb_explained'); } catch { return true; }
@@ -1530,31 +1542,44 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
 
         {/* Your rank hero */}
         <div className="px-4 py-4 border-y border-white/10 bg-white/5 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-brand-skyblue/60 mb-1">Your ranking</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-black text-white">#{userRank}</span>
-              <span className="text-sm text-white/40">of {totalCount} businesses</span>
+          {isPreview ? (
+            <div className="flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-skyblue/60 mb-1">Your ranking</p>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-2xl">🔒</span>
+                <p className="text-sm font-black text-white">Building your rank…</p>
+              </div>
+              <p className="text-xs text-white/40 leading-relaxed">Add customers, jobs and invoices to see where your business stands against others.</p>
             </div>
-            <p className="text-xs text-brand-skyblue/70 mt-1">
-              Top <span className="font-bold text-white">{topPct}%</span> · <span className={`font-black ${topPct <= 10 ? "text-yellow-400" : topPct <= 25 ? "text-emerald-400" : topPct <= 50 ? "text-brand-skyblue" : "text-white/40"}`}>{tierLabel} tier</span>
-            </p>
-          </div>
-          <div className="text-right">
-            {healthDelta !== 0 && (
-              <>
-                <div className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                  healthDelta > 0 ? "bg-emerald-500/20 border border-emerald-500/30" : "bg-red-500/20 border border-red-500/30"
-                }`}>
-                  <span className={`text-sm font-black ${healthDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {healthDelta > 0 ? `↑ +${healthDelta}` : `↓ ${healthDelta}`}
-                  </span>
-                  <span className={`text-[10px] ${healthDelta > 0 ? "text-emerald-400/70" : "text-red-400/70"}`}>pts</span>
+          ) : (
+            <>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-skyblue/60 mb-1">Your ranking</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-black text-white">#{userRank}</span>
+                  <span className="text-sm text-white/40">of {totalCount} businesses</span>
                 </div>
-                <p className="text-[10px] text-white/25 mt-1.5">since last session</p>
-              </>
-            )}
-          </div>
+                <p className="text-xs text-brand-skyblue/70 mt-1">
+                  Top <span className="font-bold text-white">{topPct}%</span> · <span className={`font-black ${topPct <= 10 ? "text-yellow-400" : topPct <= 25 ? "text-emerald-400" : topPct <= 50 ? "text-brand-skyblue" : "text-white/40"}`}>{tierLabel} tier</span>
+                </p>
+              </div>
+              <div className="text-right">
+                {healthDelta !== 0 && (
+                  <>
+                    <div className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl ${
+                      healthDelta > 0 ? "bg-emerald-500/20 border border-emerald-500/30" : "bg-red-500/20 border border-red-500/30"
+                    }`}>
+                      <span className={`text-sm font-black ${healthDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {healthDelta > 0 ? `↑ +${healthDelta}` : `↓ ${healthDelta}`}
+                      </span>
+                      <span className={`text-[10px] ${healthDelta > 0 ? "text-emerald-400/70" : "text-red-400/70"}`}>pts</span>
+                    </div>
+                    <p className="text-[10px] text-white/25 mt-1.5">since last session</p>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Podium */}
@@ -2084,6 +2109,8 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     }).catch(err => console.error('Failed to sync leaderboard entry:', err));
   }, [user?.id, communityOptIn, score.total, profile?.business_name, profile?.cleaner_type, profile?.postcode, displayName]);
 
+  const isPreviewBoard = useMemo(() => (liveBoard || []).filter(r => r.owner_id !== user?.id).length < 2, [liveBoard, user?.id]);
+
   // Merge live entries with demo padding so the board never looks empty
   const leaderboardEntries = useMemo(() => {
     const real = (liveBoard || [])
@@ -2344,6 +2371,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                           communityOptIn={communityOptIn}
                           onOptIn={handleCommunityOptIn}
                           entries={leaderboardEntries}
+                          isPreview={isPreviewBoard}
                         />
                       </DemoHint>
                     ) : (
@@ -2357,6 +2385,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                           onOptIn={handleCommunityOptIn}
                           healthDelta={healthDelta}
                           entries={leaderboardEntries}
+                          isPreview={isPreviewBoard}
                         />
                       </>
                     )
@@ -2389,10 +2418,10 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                   {/* AI Boost */}
                   {demoMode ? (
                     <DemoHint label="🤖 Cadi AI — personalised tasks to boost your score">
-                      <AiBoostPanel score={score} onNavigate={onNavigate} />
+                      <AiBoostPanel score={score} onNavigate={onNavigate} setupSteps={onboardingSteps} />
                     </DemoHint>
                   ) : (
-                    <AiBoostPanel score={score} onNavigate={onNavigate} />
+                    <AiBoostPanel score={score} onNavigate={onNavigate} setupSteps={onboardingSteps} />
                   )}
                 </div>
               </div>
@@ -2438,6 +2467,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                           communityOptIn={communityOptIn}
                           onOptIn={handleCommunityOptIn}
                           entries={leaderboardEntries}
+                          isPreview={isPreviewBoard}
                         />
                       </DemoHint>
                     ) : (
@@ -2451,6 +2481,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                           onOptIn={handleCommunityOptIn}
                           healthDelta={healthDelta}
                           entries={leaderboardEntries}
+                          isPreview={isPreviewBoard}
                         />
                       </>
                     )
@@ -2481,10 +2512,10 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
                   {demoMode ? (
                     <DemoHint label="🤖 Cadi AI — personalised tasks to boost your score">
-                      <AiBoostPanel score={score} onNavigate={onNavigate} />
+                      <AiBoostPanel score={score} onNavigate={onNavigate} setupSteps={onboardingSteps} />
                     </DemoHint>
                   ) : (
-                    <AiBoostPanel score={score} onNavigate={onNavigate} />
+                    <AiBoostPanel score={score} onNavigate={onNavigate} setupSteps={onboardingSteps} />
                   )}
                 </div>
               </div>
