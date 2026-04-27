@@ -6,7 +6,7 @@ import CadiWordmark from '../../components/CadiWordmark';
 export default function Confirm() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const goToCheckout = searchParams.get('checkout') === '1';
+  const goToCheckout = searchParams.get('checkout') === '1' || localStorage.getItem('pendingCheckout') === '1';
   const [status, setStatus] = useState('confirming'); // confirming | error
 
   useEffect(() => {
@@ -25,6 +25,7 @@ export default function Confirm() {
             });
             if (error) throw error;
             if (data?.url) {
+              localStorage.removeItem('pendingCheckout');
               window.location.href = data.url;
               return;
             }

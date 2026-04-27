@@ -34,7 +34,7 @@ export default function Signup() {
       password,
       options: {
         data: { first_name: firstName, business_name: businessName },
-        emailRedirectTo: `${window.location.origin}/auth/confirm?checkout=1`,
+        emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
     });
 
@@ -44,6 +44,8 @@ export default function Signup() {
       return;
     }
 
+    // Store checkout intent so /auth/confirm picks it up even if query params are stripped
+    localStorage.setItem('pendingCheckout', '1');
     setSubmitted(true);
   };
 
