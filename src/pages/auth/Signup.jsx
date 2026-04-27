@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 import CadiWordmark from '../../components/CadiWordmark';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 
@@ -15,7 +16,6 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { signUp } = useAuth();
-  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -29,12 +29,29 @@ export default function Signup() {
     }
     setLoading(true);
     setError('');
-    const { error } = await signUp(email, password, businessName, firstName);
-    if (error) {
-      setError(error.message);
+
+    const { error: signUpError } = await signUp(email, password, businessName, firstName);
+    if (signUpError) {
+      setError(signUpError.message);
       setLoading(false);
-    } else {
-      navigate('/dashboard');
+      return;
+    }
+
+    // Account created — kick off Stripe checkout immediately
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('create-checkout', {
+        body: { returnUrl: window.location.origin },
+      });
+      if (fnError) throw fnError;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL returned');
+      }
+    } catch {
+      // Account exists but checkout failed — send them to settings to subscribe
+      setError('Account created but checkout could not open. Please subscribe from Settings → Plan.');
+      setLoading(false);
     }
   };
 
@@ -48,7 +65,7 @@ export default function Signup() {
 
         <div className="bg-white rounded-2xl p-8 shadow-2xl">
           <h2 className="text-xl font-bold text-[#010a4f] mb-1">Run your whole business from one place.</h2>
-          <p className="text-sm text-gray-400 mb-6">Pricing · Scheduling · Invoicing · Growth — built specifically for cleaning businesses.</p>
+          <p className="text-sm text-gray-400 mb-6">Scheduling · Invoicing · HMRC MTD · Growth — built for cleaning businesses.</p>
 
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl mb-4">
@@ -112,16 +129,16 @@ export default function Signup() {
             </div>
             <button type="submit" disabled={loading}
               className="w-full py-3 bg-[#1f48ff] text-white font-bold rounded-xl hover:bg-[#3a5eff] transition-colors disabled:opacity-50 text-sm tracking-wide">
-              {loading ? 'Setting up your account...' : 'Get Started Free →'}
+              {loading ? 'Setting up your account…' : 'Start for £29/month →'}
             </button>
           </form>
 
           <div className="flex items-center justify-center gap-3 mt-5">
-            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> Free Plan</span>
+            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> £29/month</span>
             <span className="text-gray-200">|</span>
-            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> No Card Needed</span>
+            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> Cancel anytime</span>
             <span className="text-gray-200">|</span>
-            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> Upgrade as You Grow</span>
+            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> Powered by Stripe</span>
           </div>
 
           <p className="text-center text-sm text-gray-500 mt-4">
