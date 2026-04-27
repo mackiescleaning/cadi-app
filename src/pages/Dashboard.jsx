@@ -1272,7 +1272,8 @@ function BadgesShelf({ badges, onShare }) {
 function CadiSetupJourney({ customerCount = 0, hasJobs = false, hasInvoices = false, onNavigate }) {
   const [importPath, setImportPath] = useState(null); // null | 'switch' | 'fresh'
 
-  const steps = [
+  // Core steps drive the journey progress. Integration steps appear as "up next" once core is done.
+  const coreSteps = [
     {
       id: 'customers',
       emoji: '👥',
@@ -1291,36 +1292,27 @@ function CadiSetupJourney({ customerCount = 0, hasJobs = false, hasInvoices = fa
       done: hasJobs,
     },
     {
-      id: 'banking',
-      emoji: '🏦',
-      title: 'Connect your bank account',
-      done: false,
-      tab: 'money',
-    },
-    {
       id: 'invoices',
       emoji: '📄',
       title: 'Send your first invoice',
       done: hasInvoices,
       tab: 'invoices',
     },
-    {
-      id: 'payments',
-      emoji: '💳',
-      title: 'Set up how you get paid',
-      done: false,
-      tab: 'settings',
-    },
   ];
 
-  const doneCount = steps.filter(s => s.done).length;
-  const pct = Math.round((doneCount / steps.length) * 100);
-  const currentStep = steps.find(s => !s.done);
-  const allDone = !currentStep;
+  const integrationSteps = [
+    { id: 'banking',  emoji: '🏦', title: 'Connect your bank account' },
+    { id: 'payments', emoji: '💳', title: 'Set up how you get paid' },
+  ];
 
-  if (allDone) return null; // hand off to AiBoostPanel
+  const doneCount = coreSteps.filter(s => s.done).length;
+  const pct = Math.round((doneCount / coreSteps.length) * 100);
+  const currentStep = coreSteps.find(s => !s.done);
+  const coreDone = !currentStep;
 
-  const upcoming = steps.filter(s => !s.done && s.id !== currentStep.id).slice(0, 3);
+  if (coreDone) return null; // hand off to AiBoostPanel
+
+  const upcoming = coreSteps.filter(s => !s.done && s.id !== currentStep.id);
 
   // Content for each step
   const stepContent = {
@@ -1420,7 +1412,7 @@ function CadiSetupJourney({ customerCount = 0, hasJobs = false, hasInvoices = fa
       <div className="px-4 py-3 border-b border-gray-100">
         <div className="flex items-center justify-between mb-2">
           <SL>🤖 Cadi AI — setting up your business</SL>
-          <span className="text-[10px] font-bold text-gray-400">{doneCount}/{steps.length} done</span>
+          <span className="text-[10px] font-bold text-gray-400">{doneCount}/{coreSteps.length} done</span>
         </div>
         {/* Progress bar */}
         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -1445,14 +1437,20 @@ function CadiSetupJourney({ customerCount = 0, hasJobs = false, hasInvoices = fa
         )}
       </div>
 
-      {/* Upcoming steps */}
-      {upcoming.length > 0 && (
+      {/* Upcoming core steps + integration teasers */}
+      {(upcoming.length > 0 || integrationSteps.length > 0) && (
         <div className="border-t border-gray-100 px-4 py-3">
           <p className="text-[10px] font-bold tracking-widest uppercase text-gray-300 mb-2">Up next</p>
           <div className="space-y-1.5">
             {upcoming.map(s => (
               <div key={s.id} className="flex items-center gap-2">
                 <span className="text-sm opacity-40">{s.emoji}</span>
+                <p className="text-xs text-gray-400">{s.title}</p>
+              </div>
+            ))}
+            {integrationSteps.map(s => (
+              <div key={s.id} className="flex items-center gap-2 opacity-40">
+                <span className="text-sm">{s.emoji}</span>
                 <p className="text-xs text-gray-400">{s.title}</p>
               </div>
             ))}
@@ -1464,7 +1462,7 @@ function CadiSetupJourney({ customerCount = 0, hasJobs = false, hasInvoices = fa
       {doneCount > 0 && (
         <div className="border-t border-gray-50 px-4 py-2">
           <div className="flex flex-wrap gap-2">
-            {steps.filter(s => s.done).map(s => (
+            {coreSteps.filter(s => s.done).map(s => (
               <span key={s.id} className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                 <span>✓</span>{s.title}
               </span>
@@ -1599,7 +1597,7 @@ function OnboardingScorecard({ steps, onNavigate, onPreview }) {
         {/* Footer */}
         <div className="mt-5 pt-4 border-t border-white/10 flex items-center justify-between">
           <p className="text-[11px] text-brand-skyblue/50">
-            🔒 Leaderboard unlocks at <strong className="text-white">3 of {total}</strong> steps
+            🔒 Complete all {total} steps to unlock the leaderboard
           </p>
           {onPreview && (
             <button onClick={onPreview} className="text-xs font-bold text-brand-skyblue hover:text-white transition-colors">
@@ -2285,7 +2283,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     try {
       if (localStorage.getItem('cadi_lb_preview') === '1') return true;
     } catch {}
-    return doneCount >= 3;
+    return doneCount >= onboardingSteps.length;
   }, [onboardingSteps]);
 
   const previewLeaderboard = () => {
@@ -2626,20 +2624,21 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                     </Card>
                   )}
 
-                  {/* AI panel — journey for new users, data-driven tips once set up */}
+                  {/* AI panel — journey until core setup done, then data-driven tips */}
                   {demoMode ? (
                     <DemoHint label="🤖 Cadi AI — personalised tasks to boost your score">
                       <AiBoostPanel score={score} onNavigate={onNavigate} setupSteps={onboardingSteps} />
                     </DemoHint>
-                  ) : !hasBusinessData ? (
-                    <CadiSetupJourney
-                      customerCount={liveCustomerCount ?? 0}
-                      hasJobs={hasJobs}
-                      hasInvoices={hasInvoices}
-                      onNavigate={onNavigate}
-                    />
                   ) : (
-                    <AiBoostPanel score={score} onNavigate={onNavigate} setupSteps={onboardingSteps} />
+                    <>
+                      <CadiSetupJourney
+                        customerCount={liveCustomerCount ?? 0}
+                        hasJobs={hasJobs}
+                        hasInvoices={hasInvoices}
+                        onNavigate={onNavigate}
+                      />
+                      <AiBoostPanel score={score} onNavigate={onNavigate} setupSteps={onboardingSteps} />
+                    </>
                   )}
                 </div>
               </div>
