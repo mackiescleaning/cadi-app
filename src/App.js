@@ -18,6 +18,7 @@ import StaffDashboard from './pages/StaffDashboard';
 
 import InvoiceGenerator from './pages/InvoiceGenerator';
 import HmrcCallback from './pages/HmrcCallback';
+import Confirm from './pages/auth/Confirm';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 
@@ -50,7 +51,8 @@ function App() {
         <Route path="/staff-login" element={<StaffLogin />} />
         <Route path="/staff-dashboard" element={<StaffDashboard />} />
 
-        {/* HMRC OAuth callback — outside ProtectedRoute so the redirect lands correctly */}
+        {/* Auth callbacks — outside ProtectedRoute so redirects land correctly */}
+        <Route path="/auth/confirm" element={<Confirm />} />
         <Route path="/hmrc/callback" element={<HmrcCallback />} />
 
         {/* Legal — public, no auth required */}

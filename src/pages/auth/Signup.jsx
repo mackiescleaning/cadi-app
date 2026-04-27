@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import CadiWordmark from '../../components/CadiWordmark';
-import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Mail } from 'lucide-react';
 
 export default function Signup() {
   const [businessName, setBusinessName] = useState('');
@@ -15,7 +14,7 @@ export default function Signup() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { signUp } = useAuth();
+  const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,30 +29,52 @@ export default function Signup() {
     setLoading(true);
     setError('');
 
-    const { error: signUpError } = await signUp(email, password, businessName, firstName);
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { first_name: firstName, business_name: businessName },
+        emailRedirectTo: `${window.location.origin}/auth/confirm?checkout=1`,
+      },
+    });
+
     if (signUpError) {
       setError(signUpError.message);
       setLoading(false);
       return;
     }
 
-    // Account created — kick off Stripe checkout immediately
-    try {
-      const { data, error: fnError } = await supabase.functions.invoke('create-checkout', {
-        body: { returnUrl: window.location.origin },
-      });
-      if (fnError) throw fnError;
-      if (data?.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('No checkout URL returned');
-      }
-    } catch {
-      // Account exists but checkout failed — send them to settings to subscribe
-      setError('Account created but checkout could not open. Please subscribe from Settings → Plan.');
-      setLoading(false);
-    }
+    setSubmitted(true);
   };
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen bg-[#010a4f] flex items-center justify-center px-4">
+        <div className="w-full max-w-md text-center">
+          <div className="flex justify-center mb-6"><CadiWordmark height={36} /></div>
+          <div className="bg-white rounded-2xl p-8 shadow-2xl">
+            <div className="w-14 h-14 bg-[#010a4f] rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Mail size={26} className="text-[#99c5ff]" />
+            </div>
+            <h2 className="text-xl font-bold text-[#010a4f] mb-2">Check your email</h2>
+            <p className="text-sm text-gray-500 mb-1">
+              We've sent a confirmation link to
+            </p>
+            <p className="text-sm font-semibold text-[#010a4f] mb-4">{email}</p>
+            <p className="text-sm text-gray-400">
+              Click the link to verify your address — we'll take you straight to payment after.
+            </p>
+            <p className="text-xs text-gray-400 mt-6">
+              Wrong email?{' '}
+              <button onClick={() => setSubmitted(false)} className="text-[#1f48ff] font-bold hover:underline">
+                Go back
+              </button>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#010a4f] flex items-center justify-center px-4">
