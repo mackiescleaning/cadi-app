@@ -66,6 +66,8 @@ import SetupWizard from "../components/SetupWizard";
 import CadiWordmark from "../components/CadiWordmark";
 import SpotlightTour from "../components/SpotlightTour";
 import Onboarding from "./Onboarding";
+import { usePlan, PRO_TABS } from "../hooks/usePlan";
+import { UpgradeModal } from "../components/UpgradePrompt";
 
 // ─── Demo data ────────────────────────────────────────────────────────────────
 const DEMO_ACCOUNTS = {
@@ -2149,7 +2151,18 @@ function WelcomeModal({ businessName, firstName, onClose }) {
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function DashboardTab({ accountsData, schedulerData, invoiceData, teamData: incomingTeamData, feedData: incomingFeedData, onNavigate: onNavigateProp }) {
   const routerNavigate = useNavigate();
-  const onNavigate = onNavigateProp || ((tab) => routerNavigate(`/${tab}`));
+  const { isPro } = usePlan();
+  const [dashUpgradeReason, setDashUpgradeReason] = useState(null);
+
+  const onNavigate = (tab) => {
+    const path = `/${tab}`;
+    if (!isPro && PRO_TABS.some(p => path.startsWith(p))) {
+      setDashUpgradeReason(`Upgrade to Cadi Pro to access ${tab.charAt(0).toUpperCase() + tab.slice(1)}.`);
+      return;
+    }
+    if (onNavigateProp) { onNavigateProp(tab); } else { routerNavigate(path); }
+  };
+
   const { user, profile, updateProfile } = useAuth();
   const {
     accountsData: liveAccountsData,
@@ -2471,6 +2484,10 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
   return (
     <div className="flex flex-col h-full bg-gray-50/50">
+
+      {dashUpgradeReason && (
+        <UpgradeModal reason={dashUpgradeReason} onClose={() => setDashUpgradeReason(null)} />
+      )}
 
       {/* ── Header ── */}
       <div className="bg-brand-navy text-white px-4 sm:px-6 py-4">
