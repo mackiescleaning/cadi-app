@@ -2886,6 +2886,525 @@ function ExteriorTab({ accounts, onSaveQuote, onAcceptQuote, customers = [], ini
   );
 }
 
+// ─── Walkthrough Mode ────────────────────────────────────────────────────────
+const WALK_CONDITIONS = [
+  { id:"quick",    label:"Quick",    mult:0.7,  desc:"Light — recently cleaned" },
+  { id:"standard", label:"Standard", mult:1.0,  desc:"Normal condition"         },
+  { id:"dirty",    label:"Attention",mult:1.3,  desc:"Needs extra time"         },
+  { id:"deep",     label:"Deep",     mult:1.8,  desc:"Heavy soiling"            },
+];
+
+const ROOM_ADDONS = {
+  kitchen:      ["Oven clean", "Fridge clean", "Hob descale", "Dishwasher clean"],
+  bathroom:     ["Shower screen descale", "Limescale treatment", "Mould treatment", "Grout clean"],
+  ensuite:      ["Shower screen descale", "Limescale treatment", "Mould treatment"],
+  bedroom:      ["Carpet clean", "Wardrobe inside", "Ironing"],
+  lounge:       ["Carpet clean", "Sofa clean", "Blinds clean"],
+  dining:       ["Carpet clean", "Chair upholstery"],
+  hallway:      ["Stairs carpet", "Skirting boards"],
+  study:        ["Carpet clean"],
+  conservatory: ["Interior windows", "Roof panels"],
+  utility:      ["Appliance deep clean"],
+};
+
+const PROP_ROOM_STACK = {
+  "1bed": ["hallway","lounge","kitchen","bathroom","bedroom"],
+  "2bed": ["hallway","lounge","kitchen","bathroom","bedroom","bedroom"],
+  "3bed": ["hallway","lounge","dining","kitchen","bathroom","bedroom","bedroom","bedroom"],
+  "4bed": ["hallway","lounge","dining","kitchen","bathroom","ensuite","bedroom","bedroom","bedroom","bedroom"],
+  "5bed": ["hallway","lounge","dining","kitchen","bathroom","ensuite","ensuite","bedroom","bedroom","bedroom","bedroom","bedroom"],
+};
+
+const COND_STYLES = {
+  quick:    { active:"bg-emerald-500 text-white border-emerald-500",  inactive:"bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50" },
+  standard: { active:"bg-brand-blue text-white border-brand-blue",    inactive:"bg-white text-brand-blue border-blue-200 hover:bg-blue-50"        },
+  dirty:    { active:"bg-amber-500 text-white border-amber-500",       inactive:"bg-white text-amber-700 border-amber-200 hover:bg-amber-50"        },
+  deep:     { active:"bg-red-500 text-white border-red-500",           inactive:"bg-white text-red-700 border-red-200 hover:bg-red-50"              },
+};
+
+function WalkthroughTab({ accounts, onSaveQuote, customers = [] }) {
+  const navigate = useNavigate();
+  const { addJobAndSyncCustomer } = useData();
+
+  const [step,         setStep]         = useState('setup');
+  const [propSize,     setPropSize]     = useState('');
+  const [cleanType,    setCleanType]    = useState('regular');
+  const [rooms,        setRooms]        = useState([]);
+  const [showAddRoom,  setShowAddRoom]  = useState(false);
+  const [customer,     setCustomer]     = useState('');
+  const [custSearch,   setCustSearch]   = useState('');
+  const [showCustDrop, setShowCustDrop] = useState(false);
+  const [notes,        setNotes]        = useState('');
+  const [lastQuote,    setLastQuote]    = useState(null);
+
+  const cleanMult = CLEAN_TYPES.find(c => c.id === cleanType)?.mult ?? 1.0;
+
+  const roomPrice = useCallback((room) => {
+    const type     = ROOM_TYPES.find(r => r.id === room.typeId);
+    const condMult = WALK_CONDITIONS.find(c => c.id === room.condition)?.mult ?? 1.0;
+    const base     = Math.round((type?.basePrice ?? 0) * condMult * cleanMult);
+    const addonsTotal = room.addons.reduce((sum, a) => sum + (parseFloat(a.price) || 0), 0);
+    return base + addonsTotal;
+  }, [cleanMult]);
+
+  const totalPrice = rooms.reduce((s, r) => s + roomPrice(r), 0);
+  const totalHrs   = rooms.reduce((s, room) => {
+    const type = ROOM_TYPES.find(r => r.id === room.typeId);
+    const cond = WALK_CONDITIONS.find(c => c.id === room.condition);
+    return s + ((type?.mins ?? 30) * (cond?.mult ?? 1.0) * cleanMult) / 60;
+  }, 0);
+
+  const startWalkthrough = () => {
+    const stack = PROP_ROOM_STACK[propSize] ?? [];
+    setRooms(stack.map(typeId => ({ uid:uid(), typeId, condition:'standard', addons:[], note:'' })));
+    setStep('rooms');
+  };
+
+  const updateRoom  = (id, upd)   => setRooms(prev => prev.map(r => r.uid === id ? { ...r, ...upd } : r));
+  const removeRoom  = (id)        => setRooms(prev => prev.filter(r => r.uid !== id));
+  const addRoom     = (typeId)    => { setRooms(prev => [...prev, { uid:uid(), typeId, condition:'standard', addons:[], note:'' }]); setShowAddRoom(false); };
+  const toggleAddon = (roomId, label) => setRooms(prev => prev.map(r => {
+    if (r.uid !== roomId) return r;
+    const has = r.addons.some(a => a.label === label);
+    return { ...r, addons: has ? r.addons.filter(a => a.label !== label) : [...r.addons, { label, price: '' }] };
+  }));
+  const updateAddonPrice = (roomId, label, price) => setRooms(prev => prev.map(r => {
+    if (r.uid !== roomId) return r;
+    return { ...r, addons: r.addons.map(a => a.label === label ? { ...a, price } : a) };
+  }));
+  const addCustomAddon = (roomId) => setRooms(prev => prev.map(r => {
+    if (r.uid !== roomId) return r;
+    return { ...r, addons: [...r.addons, { label: '', price: '', custom: true, uid: uid() }] };
+  }));
+  const updateCustomAddon = (roomId, addonUid, upd) => setRooms(prev => prev.map(r => {
+    if (r.uid !== roomId) return r;
+    return { ...r, addons: r.addons.map(a => a.uid === addonUid ? { ...a, ...upd } : a) };
+  }));
+  const removeAddon = (roomId, addonUid, label) => setRooms(prev => prev.map(r => {
+    if (r.uid !== roomId) return r;
+    return { ...r, addons: r.addons.filter(a => (a.uid ?? a.label) !== (addonUid ?? label)) };
+  }));
+
+  const custMatches = custSearch.length > 1
+    ? customers.filter(c => c.name.toLowerCase().includes(custSearch.toLowerCase())).slice(0, 5)
+    : [];
+
+  const pickCustomer = (c) => { setCustomer(c.name); setCustSearch(c.name); setShowCustDrop(false); };
+
+  const saveQuote = async () => {
+    if (!customer) return;
+    const cleanLabel = CLEAN_TYPES.find(c => c.id === cleanType)?.label ?? '';
+    const roomLines  = rooms.map(r => {
+      const type = ROOM_TYPES.find(t => t.id === r.typeId);
+      const cond = WALK_CONDITIONS.find(c => c.id === r.condition);
+      return `${type?.label ?? r.typeId} — ${cond?.label ?? r.condition}${r.addons.length ? ' + ' + r.addons.filter(a => a.label).map(a => `${a.label}${a.price ? ' £'+a.price : ''}`).join(', ') : ''}${r.note ? ' (' + r.note + ')' : ''}`;
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    const quoteObj = {
+      customer,
+      jobLabel: customer,
+      price:    totalPrice,
+      hrs:      Math.round(totalHrs * 10) / 10,
+      type:     'walkthrough',
+      freq:     cleanType === 'regular' ? 'weekly' : 'one-off',
+      savedAt:  new Date().toISOString(),
+      notes:    [`${cleanLabel} clean`, ...roomLines, notes].filter(Boolean).join('\n'),
+    };
+    await onSaveQuote?.(quoteObj);
+    addJobAndSyncCustomer?.({
+      id:          `wt-${Date.now()}`,
+      customer,
+      date:        today,
+      startHour:   9,
+      durationHrs: Math.max(1, Math.round(totalHrs)),
+      service:     `Walkthrough — ${cleanLabel}`,
+      price:       totalPrice,
+      status:      'quoted',
+      notes:       quoteObj.notes,
+      color:       '#1f48ff',
+    });
+    setLastQuote(quoteObj);
+  };
+
+  const resetAll = () => { setStep('setup'); setPropSize(''); setRooms([]); setCustomer(''); setCustSearch(''); setNotes(''); setLastQuote(null); };
+
+  // ── Step 1: Setup ────────────────────────────────────────────────────────────
+  if (step === 'setup') {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-6 space-y-5">
+        <div className="text-center pb-1">
+          <p className="text-xs font-bold tracking-widest uppercase text-brand-blue mb-1">Walkthrough mode</p>
+          <h3 className="text-xl font-bold text-brand-navy">Walk the property, build the quote</h3>
+          <p className="text-sm text-gray-500 mt-1">Choose property type to pre-load the room list, then scope each room as you walk around.</p>
+        </div>
+
+        <Card>
+          <div className="px-4 pt-4 pb-3 border-b border-gray-100"><SL>Property size</SL></div>
+          <div className="p-4">
+            <div className="grid grid-cols-5 gap-2">
+              {PROPERTY_SIZES.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setPropSize(p.id)}
+                  className={`flex flex-col items-center py-3 rounded-sm text-xs font-bold border transition-colors ${
+                    propSize === p.id ? 'bg-brand-navy text-white border-brand-navy' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-blue hover:text-brand-blue'
+                  }`}
+                >
+                  <span className="text-lg font-black">{p.beds}</span>
+                  <span className="text-[10px] mt-0.5">{p.beds === 5 ? 'bed+' : 'bed'}</span>
+                </button>
+              ))}
+            </div>
+            {propSize && (
+              <p className="mt-2 text-xs text-gray-400 text-center">
+                {(PROP_ROOM_STACK[propSize] ?? []).length} rooms pre-loaded · you can add more during the walkthrough
+              </p>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <div className="px-4 pt-4 pb-3 border-b border-gray-100"><SL>Type of clean</SL></div>
+          <div className="p-4">
+            <div className="grid grid-cols-2 gap-2">
+              {CLEAN_TYPES.map(ct => (
+                <button
+                  key={ct.id}
+                  onClick={() => setCleanType(ct.id)}
+                  className={`flex flex-col items-start p-3 rounded-sm text-left border transition-colors ${
+                    cleanType === ct.id ? 'bg-brand-navy text-white border-brand-navy' : 'bg-white text-gray-700 border-gray-200 hover:border-brand-blue'
+                  }`}
+                >
+                  <span className="text-xs font-bold">{ct.label}</span>
+                  <span className={`text-[10px] mt-0.5 ${cleanType === ct.id ? 'text-white/60' : 'text-gray-400'}`}>{ct.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </Card>
+
+        <button
+          onClick={startWalkthrough}
+          disabled={!propSize}
+          className="w-full py-4 bg-brand-navy text-white font-black text-sm rounded-sm hover:bg-brand-blue transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Start walkthrough →
+        </button>
+      </div>
+    );
+  }
+
+  // ── Step 2: Room-by-room walkthrough ──────────────────────────────────────────
+  if (step === 'rooms') {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-xl mx-auto px-4 py-4 space-y-3">
+
+            <div className="flex items-center gap-3">
+              <button onClick={() => setStep('setup')} className="text-xs text-gray-400 hover:text-gray-700 shrink-0">← Back</button>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-brand-navy truncate">
+                  {PROPERTY_SIZES.find(p => p.id === propSize)?.label} · {CLEAN_TYPES.find(c => c.id === cleanType)?.label}
+                </p>
+                <p className="text-xs text-gray-400">{rooms.length} rooms · scope each as you walk through</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-lg font-black text-brand-navy">£{totalPrice}</p>
+                <p className="text-[10px] text-gray-400">{Math.round(totalHrs * 10) / 10} hrs</p>
+              </div>
+            </div>
+
+            {rooms.map((room) => {
+              const type   = ROOM_TYPES.find(r => r.id === room.typeId);
+              const addons = ROOM_ADDONS[room.typeId] ?? [];
+              const price  = roomPrice(room);
+              return (
+                <Card key={room.uid}>
+                  <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
+                    <div>
+                      <p className="text-sm font-bold text-brand-navy">{type?.label ?? room.typeId}</p>
+                      <p className="text-xs text-gray-400">{type?.mins ?? 30} min base · £{type?.basePrice ?? 0} base price</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-base font-black text-brand-navy">£{price}</p>
+                      <button onClick={() => removeRoom(room.uid)} className="text-gray-300 hover:text-red-400 transition-colors text-sm leading-none">✕</button>
+                    </div>
+                  </div>
+                  <div className="p-3 space-y-2.5">
+                    <div className="flex gap-1.5">
+                      {WALK_CONDITIONS.map(cond => {
+                        const s      = COND_STYLES[cond.id];
+                        const active = room.condition === cond.id;
+                        return (
+                          <button
+                            key={cond.id}
+                            onClick={() => updateRoom(room.uid, { condition: cond.id })}
+                            title={cond.desc}
+                            className={`flex-1 py-1.5 text-xs font-bold border rounded-sm transition-colors ${active ? s.active : s.inactive}`}
+                          >
+                            {cond.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Suggestion chips — tap to add, no fixed price */}
+                    {addons.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {addons.map(label => {
+                          const on = room.addons.some(a => a.label === label);
+                          return (
+                            <button
+                              key={label}
+                              onClick={() => toggleAddon(room.uid, label)}
+                              className={`px-2.5 py-1 text-xs font-bold border rounded-sm transition-colors ${
+                                on
+                                  ? 'bg-brand-blue text-white border-brand-blue'
+                                  : 'bg-white text-gray-600 border-gray-200 hover:border-brand-blue hover:text-brand-blue'
+                              }`}
+                            >
+                              {on ? `✓ ${label}` : `+ ${label}`}
+                            </button>
+                          );
+                        })}
+                        <button
+                          onClick={() => addCustomAddon(room.uid)}
+                          className="px-2.5 py-1 text-xs font-bold border border-dashed border-gray-300 text-gray-400 rounded-sm hover:border-brand-blue hover:text-brand-blue transition-colors"
+                        >
+                          + Custom
+                        </button>
+                      </div>
+                    )}
+                    {/* Selected add-ons with price inputs */}
+                    {room.addons.length > 0 && (
+                      <div className="space-y-1.5 pt-0.5">
+                        {room.addons.map(addon => (
+                          <div key={addon.uid ?? addon.label} className="flex items-center gap-2">
+                            {addon.custom ? (
+                              <input
+                                type="text"
+                                value={addon.label}
+                                onChange={e => updateCustomAddon(room.uid, addon.uid, { label: e.target.value })}
+                                placeholder="Extra description…"
+                                className="flex-1 text-xs border border-gray-200 rounded-sm px-2 py-1.5 text-gray-700 placeholder-gray-300 focus:outline-none focus:border-brand-blue"
+                              />
+                            ) : (
+                              <span className="flex-1 text-xs text-gray-700 font-medium">{addon.label}</span>
+                            )}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-xs text-gray-400">£</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={addon.price}
+                                onChange={e => addon.custom
+                                  ? updateCustomAddon(room.uid, addon.uid, { price: e.target.value })
+                                  : updateAddonPrice(room.uid, addon.label, e.target.value)
+                                }
+                                placeholder="0"
+                                className="w-16 text-xs border border-gray-200 rounded-sm px-2 py-1.5 text-gray-700 focus:outline-none focus:border-brand-blue text-right"
+                              />
+                            </div>
+                            <button
+                              onClick={() => removeAddon(room.uid, addon.uid, addon.label)}
+                              className="text-gray-300 hover:text-red-400 transition-colors text-xs shrink-0"
+                            >✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      value={room.note}
+                      onChange={e => updateRoom(room.uid, { note: e.target.value })}
+                      placeholder="Note (e.g. heavy limescale, pet hair, stained carpet)…"
+                      className="w-full text-xs border border-gray-200 rounded-sm px-3 py-2 text-gray-700 placeholder-gray-300 focus:outline-none focus:border-brand-blue"
+                    />
+                  </div>
+                </Card>
+              );
+            })}
+
+            {showAddRoom ? (
+              <Card>
+                <div className="p-3">
+                  <p className="text-xs font-bold text-gray-500 mb-2">Choose room to add</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {ROOM_TYPES.map(rt => (
+                      <button
+                        key={rt.id}
+                        onClick={() => addRoom(rt.id)}
+                        className="px-3 py-2 text-xs font-bold text-left border border-gray-200 rounded-sm hover:border-brand-blue hover:text-brand-blue transition-colors"
+                      >
+                        {rt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => setShowAddRoom(false)} className="mt-2 w-full py-1.5 text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                </div>
+              </Card>
+            ) : (
+              <button
+                onClick={() => setShowAddRoom(true)}
+                className="w-full py-3 border-2 border-dashed border-gray-200 hover:border-brand-blue text-sm font-bold text-gray-400 hover:text-brand-blue rounded-sm transition-colors"
+              >
+                + Add room
+              </button>
+            )}
+
+            <div className="h-20" />
+          </div>
+        </div>
+
+        <div className="border-t border-gray-200 bg-white px-4 py-3 shrink-0">
+          <div className="max-w-xl mx-auto flex items-center gap-4">
+            <div className="flex-1">
+              <p className="text-xs text-gray-400">{rooms.length} rooms · {Math.round(totalHrs * 10) / 10} hrs est.</p>
+              <p className="text-xl font-black text-brand-navy">£{totalPrice}</p>
+            </div>
+            <button
+              onClick={() => setStep('quote')}
+              disabled={rooms.length === 0}
+              className="px-6 py-3 bg-brand-navy text-white font-black text-sm rounded-sm hover:bg-brand-blue transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Get quote →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 3: Quote summary + save ──────────────────────────────────────────────
+  return (
+    <div className="max-w-xl mx-auto px-4 py-6 space-y-4">
+      <div className="flex items-center gap-3">
+        <button onClick={() => setStep('rooms')} className="text-xs text-gray-400 hover:text-gray-700">← Back to walkthrough</button>
+      </div>
+
+      {/* Your price summary (internal only) */}
+      <div className="px-4 py-3 rounded-sm bg-brand-navy/5 border border-brand-navy/10">
+        <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-1">Your breakdown (not shown to customer)</p>
+        <div className="flex items-baseline gap-2">
+          <p className="text-3xl font-black text-brand-navy">£{totalPrice}</p>
+          {accounts?.vatRegistered && (
+            <p className="text-xs text-gray-500">+ VAT → client pays £{Math.round(totalPrice * 1.2)}</p>
+          )}
+        </div>
+        <p className="text-xs text-gray-400 mt-0.5">{rooms.length} rooms · {Math.round(totalHrs * 10) / 10} hrs · {CLEAN_TYPES.find(c => c.id === cleanType)?.label}</p>
+        <div className="mt-2 space-y-0.5">
+          {rooms.map(room => {
+            const type  = ROOM_TYPES.find(r => r.id === room.typeId);
+            const cond  = WALK_CONDITIONS.find(c => c.id === room.condition);
+            const price = roomPrice(room);
+            return (
+              <div key={room.uid} className="flex justify-between text-xs text-gray-600">
+                <span>{type?.label ?? room.typeId} <span className="text-gray-400">({cond?.label})</span></span>
+                <span className="font-semibold">£{price}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* What the customer sees */}
+      <Card>
+        <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+          <SL>Scope of work</SL>
+        </div>
+        <div className="divide-y divide-gray-50">
+          {rooms.map(room => {
+            const type  = ROOM_TYPES.find(r => r.id === room.typeId);
+            const cond  = WALK_CONDITIONS.find(c => c.id === room.condition);
+            const addonLabels = room.addons.filter(a => a.label).map(a => a.label);
+            return (
+              <div key={room.uid} className="px-4 py-2.5">
+                <p className="text-sm font-semibold text-brand-navy">{type?.label ?? room.typeId}</p>
+                <p className="text-xs text-gray-400">
+                  {cond?.label} clean
+                  {addonLabels.length > 0 && ` · ${addonLabels.join(', ')}`}
+                  {room.note && ` · ${room.note}`}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+          <p className="text-sm font-bold text-brand-navy">Total</p>
+          <p className="text-xl font-black text-brand-navy">£{totalPrice}{accounts?.vatRegistered ? ' + VAT' : ''}</p>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="px-4 pt-4 pb-3 border-b border-gray-100"><SL>Customer</SL></div>
+        <div className="p-4 space-y-3 relative">
+          <div className="relative">
+            <input
+              type="text"
+              value={custSearch}
+              onChange={e => { setCustSearch(e.target.value); setCustomer(e.target.value); setShowCustDrop(true); }}
+              onFocus={() => setShowCustDrop(true)}
+              onBlur={() => setTimeout(() => setShowCustDrop(false), 150)}
+              placeholder="Customer name…"
+              className="w-full text-sm border border-gray-200 rounded-sm px-3 py-2.5 text-gray-700 placeholder-gray-300 focus:outline-none focus:border-brand-blue"
+            />
+            {showCustDrop && custMatches.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-sm shadow-lg z-20">
+                {custMatches.map(c => (
+                  <button key={c.id} onClick={() => pickCustomer(c)} className="w-full px-3 py-2.5 text-left hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                    <p className="text-sm font-semibold text-gray-800">{c.name}</p>
+                    {c.address_line1 && <p className="text-xs text-gray-400">{c.address_line1}</p>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Additional notes for the customer…"
+            rows={2}
+            className="w-full text-sm border border-gray-200 rounded-sm px-3 py-2 text-gray-700 placeholder-gray-300 focus:outline-none focus:border-brand-blue resize-none"
+          />
+        </div>
+      </Card>
+
+      {lastQuote ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-sm bg-emerald-50 border border-emerald-200">
+            <span className="text-emerald-600 font-black">✓</span>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-emerald-700">Quote saved for {lastQuote.customer}</p>
+              <p className="text-xs text-emerald-600">£{lastQuote.price} · logged to accounts · linked to customer</p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate(`/scheduler?customer=${encodeURIComponent(lastQuote.customer)}`)}
+            className="w-full py-3 border border-brand-navy text-brand-navy font-bold text-sm rounded-sm hover:bg-brand-navy hover:text-white transition-colors"
+          >
+            Book as job in Scheduler →
+          </button>
+          <button
+            onClick={resetAll}
+            className="w-full py-3 border border-gray-200 text-gray-500 font-bold text-sm rounded-sm hover:bg-gray-50 transition-colors"
+          >
+            Start new walkthrough
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={saveQuote}
+          disabled={!customer}
+          className="w-full py-4 bg-brand-navy text-white font-black text-sm rounded-sm hover:bg-brand-blue transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Save quote — £{totalPrice}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function PricingCalculator({ accountsData, userHourlyRate, sectorHint, onNavigate, onSaveDraft, onAcceptQuote, onAcceptedQuote }) {
   const { customers = [] } = useData();
@@ -2962,12 +3481,13 @@ export default function PricingCalculator({ accountsData, userHourlyRate, sector
   const [activeTab, setActiveTab] = useState(defaultTab);
 
   const TABS = [
-    { id: "residential", label: "Residential", sub: "Quick quote + room builder"   },
-    { id: "commercial",  label: "Commercial",  sub: "Cost-build calculator"         },
-    { id: "exterior",    label: "Exterior",    sub: "Property & one-off jobs"       },
+    { id: "residential",  label: "Residential",  sub: "Quick quote + room builder"   },
+    { id: "commercial",   label: "Commercial",   sub: "Cost-build calculator"         },
+    { id: "exterior",     label: "Exterior",     sub: "Property & one-off jobs"       },
+    { id: "walkthrough",  label: "Walkthrough",  sub: "Room-by-room on-site quote"    },
   ];
 
-  const ACCENT = { residential: "text-emerald-600", commercial: "text-brand-blue", exterior: "text-orange-600" };
+  const ACCENT = { residential: "text-emerald-600", commercial: "text-brand-blue", exterior: "text-orange-600", walkthrough: "text-violet-600" };
 
   return (
     <div className="flex flex-col h-full bg-gray-50/50">
@@ -3018,9 +3538,10 @@ export default function PricingCalculator({ accountsData, userHourlyRate, sector
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === "residential" && <ResidentialTab accounts={accounts} userHourlyRate={userHourlyRate} onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => q.type === 'residential')} />}
-        {activeTab === "commercial"  && <CommercialTab  accounts={accounts} userHourlyRate={userHourlyRate} onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => q.type === 'commercial')} />}
-        {activeTab === "exterior"    && <ExteriorTab    accounts={accounts}                                 onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => !['residential','commercial'].includes(q.type))} />}
+        {activeTab === "residential"  && <ResidentialTab  accounts={accounts} userHourlyRate={userHourlyRate} onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => q.type === 'residential')} />}
+        {activeTab === "commercial"   && <CommercialTab   accounts={accounts} userHourlyRate={userHourlyRate} onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => q.type === 'commercial')} />}
+        {activeTab === "exterior"     && <ExteriorTab     accounts={accounts}                                 onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => !['residential','commercial'].includes(q.type))} />}
+        {activeTab === "walkthrough"  && <WalkthroughTab  accounts={accounts}                                 onSaveQuote={handleSaveQuote} customers={customers} />}
       </div>
     </div>
   );

@@ -17,6 +17,7 @@ import StaffLogin from './pages/StaffLogin';
 import StaffDashboard from './pages/StaffDashboard';
 
 import InvoiceGenerator from './pages/InvoiceGenerator';
+import Quotes from './pages/Quotes';
 import HmrcCallback from './pages/HmrcCallback';
 import Confirm from './pages/auth/Confirm';
 import Privacy from './pages/Privacy';
@@ -77,6 +78,7 @@ function App() {
           <Route path="scaling" element={<BusinessLab />} />
           <Route path="routes" element={<RoutePlanner />} />
           <Route path="invoices" element={<InvoiceGenerator />} />
+          <Route path="quotes" element={<Quotes />} />
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="staff" element={<TrainingStaff />} />
           <Route path="review" element={<AnnualReview />} />

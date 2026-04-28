@@ -26,17 +26,36 @@ export async function createQuote(quote) {
   return data;
 }
 
-export async function listQuotes(limit = 100) {
+// options: { page, pageSize } — default loads first 100.
+// Legacy: pass a number as first arg for a plain limit (backward compat).
+export async function listQuotes(optionsOrLimit = {}) {
   const ownerId = await getCurrentUserId();
+
+  const opts = typeof optionsOrLimit === 'number'
+    ? { pageSize: optionsOrLimit, page: 0 }
+    : optionsOrLimit;
+
+  const { page = 0, pageSize = 100 } = opts;
+
   const { data, error } = await supabase
     .from('quotes')
     .select('*')
     .eq('owner_id', ownerId)
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(page * pageSize, (page + 1) * pageSize - 1);
 
   if (error) throw error;
   return data ?? [];
+}
+
+export async function deleteQuote(id) {
+  const ownerId = await getCurrentUserId();
+  const { error } = await supabase
+    .from('quotes')
+    .delete()
+    .eq('id', id)
+    .eq('owner_id', ownerId);
+  if (error) throw error;
 }
 
 export async function updateQuoteStatus(id, status) {

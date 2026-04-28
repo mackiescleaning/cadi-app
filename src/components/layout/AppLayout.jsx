@@ -3,7 +3,7 @@ import CadiWordmark from '../CadiWordmark';
 import {
   LayoutDashboard, Calculator, CalendarDays, Users,
   PoundSterling, Settings, Menu, X,
-  TrendingUp, MapPin, FileText,
+  TrendingUp, MapPin, FileText, ClipboardCheck,
   GraduationCap, ClipboardList, Package, Lock
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -21,6 +21,7 @@ const TAB_GUIDES = {
   '/inventory':  "Track your cleaning kit — products, quantities, costs and restock alerts so you never run out.",
   '/money':      "Your financial dashboard — income, expenses, tax reserve, target tracker and payment logging.",
   '/invoices':   "Send and track invoices — one tap to invoice, one tap to chase, overdue alerts automatic.",
+  '/quotes':     "Quote pipeline — track every quote you've sent, mark who said yes or no, and log accepted quotes to income.",
   '/accounts':   "Bookkeeping and compliance — MTD submissions, mileage claims and year-end figures ready to go.",
   '/routes':     "Route planner — optimise your daily drive, reduce fuel costs and log mileage for HMRC.",
   '/scaling':    "Business Lab — growth strategies, pricing analysis and AI-powered insights to scale your business.",
@@ -45,6 +46,7 @@ const navItems = [
   { path: '/inventory',  label: 'Inventory',       icon: Package },
   { path: '/money',      label: 'Money',           icon: PoundSterling },
   { path: '/invoices',   label: 'Invoices',        icon: FileText },
+  { path: '/quotes',     label: 'Quotes',          icon: ClipboardCheck },
   { path: '/accounts',   label: 'Accounts',        icon: PoundSterling },
   { path: '/routes',     label: 'Routes',          icon: MapPin },
   { path: '/scaling',    label: 'Business Lab',    icon: TrendingUp },
