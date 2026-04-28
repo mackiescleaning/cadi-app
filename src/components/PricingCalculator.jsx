@@ -3405,6 +3405,890 @@ function WalkthroughTab({ accounts, onSaveQuote, customers = [] }) {
   );
 }
 
+// ─── CommercialWalkthroughTab ─────────────────────────────────────────────────
+
+const CW_SECTORS = [
+  { id: 'office',      label: 'Office / co-working'  },
+  { id: 'retail',      label: 'Retail / shop'        },
+  { id: 'hospitality', label: 'Hotel / hospitality'  },
+  { id: 'education',   label: 'School / education'   },
+  { id: 'healthcare',  label: 'Healthcare / clinic'  },
+  { id: 'industrial',  label: 'Industrial / warehouse'},
+  { id: 'leisure',     label: 'Gym / leisure'        },
+  { id: 'residential_block', label: 'Residential block' },
+  { id: 'other',       label: 'Other'                },
+];
+
+const CW_FREQS = [
+  { id: 'daily',         label: 'Daily',            sub: null,       visitsPerYear: null }, // sub-option required
+  { id: 'weekly',        label: 'Weekly',           sub: '1×/wk',   visitsPerYear: 52   },
+  { id: '2weekly',       label: '2× per week',      sub: '2×/wk',   visitsPerYear: 104  },
+  { id: '3weekly',       label: '3× per week',      sub: '3×/wk',   visitsPerYear: 156  },
+  { id: 'fortnightly',   label: 'Fortnightly',      sub: '1×/2wk',  visitsPerYear: 26   },
+  { id: 'monthly',       label: 'Monthly',          sub: '1×/mo',   visitsPerYear: 12   },
+  { id: 'quarterly',     label: 'Quarterly',        sub: '4×/yr',   visitsPerYear: 4    },
+  { id: 'adhoc',         label: 'Ad hoc / one-off', sub: '—',       visitsPerYear: 1    },
+];
+
+const CW_DAILY_PATTERNS = [
+  { id: 'mon_fri',   label: 'Mon–Fri',    sub: '5 days/wk',  visitsPerYear: 260 },
+  { id: 'mon_sat',   label: 'Mon–Sat',    sub: '6 days/wk',  visitsPerYear: 312 },
+  { id: 'mon_sun',   label: 'Mon–Sun',    sub: '7 days/wk',  visitsPerYear: 365 },
+  { id: 'term_time', label: 'Term time',  sub: '~38 wks/yr', visitsPerYear: 190 },
+  { id: 'custom',    label: 'Custom',     sub: 'days/wk',    visitsPerYear: null },
+];
+
+const CW_AREA_TYPES = [
+  { id: 'open_office',    label: 'Open-plan office',   suggestMins: 30 },
+  { id: 'meeting_room',   label: 'Meeting room',        suggestMins: 15 },
+  { id: 'reception',      label: 'Reception / lobby',   suggestMins: 20 },
+  { id: 'kitchen',        label: 'Kitchen / break room',suggestMins: 20 },
+  { id: 'toilet_block',   label: 'Toilet block',        suggestMins: 25 },
+  { id: 'corridor',       label: 'Corridor / stairwell',suggestMins: 15 },
+  { id: 'server_room',    label: 'Server / storage room',suggestMins: 10 },
+  { id: 'warehouse_floor',label: 'Warehouse floor',     suggestMins: 45 },
+  { id: 'loading_bay',    label: 'Loading bay',         suggestMins: 20 },
+  { id: 'showroom',       label: 'Showroom / sales floor',suggestMins: 30 },
+  { id: 'changing_room',  label: 'Changing room',       suggestMins: 20 },
+  { id: 'gym_floor',      label: 'Gym floor',           suggestMins: 35 },
+  { id: 'pool_area',      label: 'Pool / wet area',     suggestMins: 40 },
+  { id: 'classroom',      label: 'Classroom',           suggestMins: 20 },
+  { id: 'canteen',        label: 'Canteen / dining',    suggestMins: 30 },
+  { id: 'ext_car_park',   label: 'Car park (ext.)',     suggestMins: 40 },
+  { id: 'ext_entrance',   label: 'Entrance / path',     suggestMins: 15 },
+  { id: 'ext_windows',    label: 'External windows',    suggestMins: 30 },
+  { id: 'ext_bins',       label: 'Bin store / waste area', suggestMins: 15 },
+  { id: 'custom',         label: '+ Custom area',       suggestMins: 20 },
+];
+
+const CW_SECTOR_DEFAULTS = {
+  office:           ['open_office','meeting_room','reception','kitchen','toilet_block','corridor'],
+  retail:           ['showroom','toilet_block','reception','ext_entrance'],
+  hospitality:      ['reception','corridor','kitchen','toilet_block','changing_room'],
+  education:        ['classroom','corridor','toilet_block','kitchen','canteen'],
+  healthcare:       ['reception','corridor','toilet_block','kitchen'],
+  industrial:       ['warehouse_floor','loading_bay','toilet_block','kitchen','office'],
+  leisure:          ['gym_floor','changing_room','pool_area','reception','toilet_block'],
+  residential_block:['corridor','toilet_block','ext_entrance','ext_bins'],
+  other:            ['reception','toilet_block'],
+};
+
+let cwUid = 0;
+function cwId() { return ++cwUid; }
+
+function CommercialWalkthroughTab({ accounts, onSaveQuote, customers = [] }) {
+  const [step, setStep]           = useState('setup');   // setup | areas | costs | quote
+  const [sector, setSector]       = useState('');
+  const [siteName, setSiteName]   = useState('');
+  const [freq, setFreq]                   = useState('weekly');
+  const [dailyPattern, setDailyPattern]   = useState('mon_fri');
+  const [customDays, setCustomDays]       = useState('5');
+  const [scope, setScope]                 = useState('interior'); // interior | exterior | both
+  const [cleanerCount, setCleanerCount] = useState(2);
+  const [rate, setRate]           = useState(13);
+  const [knownHrs, setKnownHrs]   = useState(''); // if set, skips area builder
+
+  // Areas
+  const [intAreas, setIntAreas]   = useState([]);
+  const [extAreas, setExtAreas]   = useState([]);
+  const [showAddArea, setShowAddArea] = useState(null); // 'int' | 'ext' | null
+
+  // Costs
+  const [costTab, setCostTab]     = useState('products');
+  const [products, setProducts]   = useState([]);
+  const [equipment, setEquipment] = useState([]);
+  const [overheads, setOverheads] = useState([]);
+  const [marginPct, setMarginPct] = useState(30);
+
+  // Quote / customer
+  const [customer, setCustomer]   = useState('');
+  const [custSearch, setCustSearch] = useState('');
+  const [showCustDrop, setShowCustDrop] = useState(false);
+  const [notes, setNotes]         = useState('');
+  const [lastQuote, setLastQuote] = useState(null);
+  const [saving, setSaving]       = useState(false);
+
+  const selectedFreqBase = CW_FREQS.find(f => f.id === freq) ?? CW_FREQS[1];
+  const selectedFreq = useMemo(() => {
+    if (freq !== 'daily') return selectedFreqBase;
+    const pattern = CW_DAILY_PATTERNS.find(p => p.id === dailyPattern);
+    const visitsPerYear = dailyPattern === 'custom'
+      ? Math.round((parseFloat(customDays) || 5) * 52)
+      : (pattern?.visitsPerYear ?? 260);
+    const label = pattern?.label ?? 'Daily';
+    const sub   = dailyPattern === 'custom' ? `${customDays}×/wk` : pattern?.sub ?? '';
+    return { ...selectedFreqBase, visitsPerYear, label: `Daily (${label})`, sub };
+  }, [freq, dailyPattern, customDays, selectedFreqBase]);
+
+  // ── Derived totals ──────────────────────────────────────────────────────────
+  const activeAreas = useMemo(() => {
+    const int = scope !== 'exterior' ? intAreas : [];
+    const ext = scope !== 'interior' ? extAreas : [];
+    return { int, ext, all: [...int, ...ext] };
+  }, [scope, intAreas, extAreas]);
+
+  const totalMins = useMemo(() =>
+    activeAreas.all.reduce((s, a) => s + (Number(a.mins) || 0) * (Number(a.qty) || 1), 0),
+  [activeAreas]);
+
+  const totalManHrs    = knownHrs !== '' ? (parseFloat(knownHrs) || 0) : totalMins / 60;
+  const visitDurHrs    = cleanerCount > 0 ? totalManHrs / cleanerCount : totalManHrs;
+  const labourCost     = totalManHrs * rate;
+  const visitsPerWeek  = selectedFreq.visitsPerYear / 52;
+  const visitsPerMonth = selectedFreq.visitsPerYear / 12;
+  const productsCost   = products.reduce((s, r) => {
+    const raw = parseFloat(r.cost) || 0;
+    return s + raw / Math.max(visitsPerWeek, 0.01);
+  }, 0);
+  const equipmentCost  = equipment.reduce((s, r) => {
+    const raw = parseFloat(r.cost) || 0;
+    if (r.period === 'weekly')  return s + raw / Math.max(visitsPerWeek, 0.01);
+    if (r.period === 'monthly') return s + raw / Math.max(visitsPerMonth, 0.01);
+    if (r.period === 'oneoff')  return s + raw / Math.max(parseFloat(r.uses) || 1, 1);
+    return s + raw;
+  }, 0);
+  const overheadCost   = overheads.reduce((s, r) => {
+    const raw = parseFloat(r.cost) || 0;
+    return s + (r.period === 'month' ? raw / Math.max(visitsPerMonth, 0.01) : raw);
+  }, 0);
+  const totalCost      = labourCost + productsCost + equipmentCost + overheadCost;
+  const pricePerVisit  = marginPct < 100 ? Math.round(totalCost / (1 - marginPct / 100)) : totalCost * 10;
+  const annualValue    = pricePerVisit * selectedFreq.visitsPerYear;
+  const grossMargin    = pricePerVisit - totalCost;
+
+  // ── Helpers: areas ──────────────────────────────────────────────────────────
+  function addArea(side, typeId) {
+    const def = CW_AREA_TYPES.find(a => a.id === typeId);
+    const isCustom = typeId === 'custom';
+    const entry = {
+      uid:    cwId(),
+      typeId,
+      label:  isCustom ? '' : def?.label ?? typeId,
+      mins:   isCustom ? '' : String(def?.suggestMins ?? 20),
+      qty:    1,
+      custom: isCustom,
+    };
+    if (side === 'int') setIntAreas(p => [...p, entry]);
+    else                setExtAreas(p => [...p, entry]);
+    setShowAddArea(null);
+  }
+
+  function updateArea(side, uid, field, val) {
+    const setter = side === 'int' ? setIntAreas : setExtAreas;
+    setter(p => p.map(a => a.uid === uid ? { ...a, [field]: val } : a));
+  }
+
+  function removeArea(side, uid) {
+    if (side === 'int') setIntAreas(p => p.filter(a => a.uid !== uid));
+    else                setExtAreas(p => p.filter(a => a.uid !== uid));
+  }
+
+  // ── Helpers: cost rows ──────────────────────────────────────────────────────
+  function addCostRow(type) {
+    const row = type === 'equipment' ? { uid: cwId(), label: '', cost: '', period: 'monthly', uses: '' }
+              : type === 'overheads' ? { uid: cwId(), label: '', cost: '', period: 'month' }
+              : { uid: cwId(), label: '', cost: '' };
+    if (type === 'products')  setProducts(p  => [...p, row]);
+    if (type === 'equipment') setEquipment(p => [...p, row]);
+    if (type === 'overheads') setOverheads(p => [...p, row]);
+  }
+
+  function updateCostRow(type, uid, field, val) {
+    const setter = type === 'products' ? setProducts : type === 'equipment' ? setEquipment : setOverheads;
+    setter(p => p.map(r => r.uid === uid ? { ...r, [field]: val } : r));
+  }
+
+  function removeCostRow(type, uid) {
+    const setter = type === 'products' ? setProducts : type === 'equipment' ? setEquipment : setOverheads;
+    setter(p => p.filter(r => r.uid !== uid));
+  }
+
+  // ── Sector select → pre-load areas ──────────────────────────────────────────
+  function handleSectorSelect(s) {
+    setSector(s);
+    const defaults = CW_SECTOR_DEFAULTS[s] ?? [];
+    setIntAreas(defaults.filter(id => !id.startsWith('ext_')).map(typeId => {
+      const def = CW_AREA_TYPES.find(a => a.id === typeId);
+      return { uid: cwId(), typeId, label: def?.label ?? typeId, mins: String(def?.suggestMins ?? 20), qty: 1, custom: false };
+    }));
+    setExtAreas(defaults.filter(id => id.startsWith('ext_')).map(typeId => {
+      const def = CW_AREA_TYPES.find(a => a.id === typeId);
+      return { uid: cwId(), typeId, label: def?.label ?? typeId, mins: String(def?.suggestMins ?? 20), qty: 1, custom: false };
+    }));
+  }
+
+  // ── Save ────────────────────────────────────────────────────────────────────
+  async function saveQuote() {
+    setSaving(true);
+    const payload = { sector, siteName, freq, scope, cleanerCount, rate, intAreas, extAreas, products, equipment, overheads, marginPct, notes };
+    const quote = {
+      type:     'site_audit',
+      jobLabel: siteName || customer || 'Commercial site',
+      customer,
+      price:    pricePerVisit,
+      hrs:      Math.round(visitDurHrs * 10) / 10,
+      notes:    notes || [
+        `${CW_SECTORS.find(s => s.id === sector)?.label ?? sector}`,
+        `${selectedFreq.label} · ${activeAreas.all.length} areas · ${Math.round(totalManHrs * 10) / 10} man-hrs/visit`,
+        `${cleanerCount} cleaner${cleanerCount !== 1 ? 's' : ''} · ${Math.round(visitDurHrs * 10) / 10} hrs on site`,
+      ].join('\n'),
+      payload,
+    };
+    try {
+      const saved = await onSaveQuote(quote);
+      setLastQuote(saved ?? quote);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const custMatches = customers.filter(c =>
+    (c.name ?? '').toLowerCase().includes(custSearch.toLowerCase())
+  ).slice(0, 6);
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Step 1: Setup
+  // ══════════════════════════════════════════════════════════════════════════════
+  if (step === 'setup') {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-xl mx-auto px-4 py-6 space-y-6">
+
+            <div>
+              <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-2">Sector</p>
+              <div className="grid grid-cols-2 gap-2">
+                {CW_SECTORS.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleSectorSelect(s.id)}
+                    className={`px-3 py-2.5 rounded-sm border text-sm font-semibold text-left transition-all ${
+                      sector === s.id
+                        ? 'bg-brand-navy text-white border-brand-navy'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-brand-navy/40'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-2">Site name</p>
+              <input
+                value={siteName}
+                onChange={e => setSiteName(e.target.value)}
+                placeholder="e.g. Apex House, Units 1–4"
+                className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue"
+              />
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-2">Cleaning frequency</p>
+              <div className="flex flex-wrap gap-2">
+                {CW_FREQS.map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFreq(f.id)}
+                    className={`px-3 py-1.5 rounded-sm border text-xs font-bold transition-all ${
+                      freq === f.id
+                        ? 'bg-brand-blue text-white border-brand-blue'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-brand-blue/40'
+                    }`}
+                  >
+                    {f.label}{f.sub && <span className="opacity-60 ml-1">{f.sub}</span>}
+                  </button>
+                ))}
+              </div>
+
+              {/* Daily sub-options */}
+              {freq === 'daily' && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">Which days?</p>
+                  <div className="flex flex-wrap gap-2">
+                    {CW_DAILY_PATTERNS.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => setDailyPattern(p.id)}
+                        className={`px-3 py-1.5 rounded-sm border text-xs font-bold transition-all ${
+                          dailyPattern === p.id
+                            ? 'bg-brand-blue text-white border-brand-blue'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-brand-blue/40'
+                        }`}
+                      >
+                        {p.label} <span className="opacity-60">{p.sub}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {dailyPattern === 'custom' && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={customDays}
+                        onChange={e => setCustomDays(e.target.value)}
+                        min={1} max={7}
+                        className="w-16 border border-gray-200 rounded-sm px-2 py-1.5 text-sm focus:outline-none focus:border-brand-blue"
+                      />
+                      <span className="text-sm text-gray-400">days/week</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-2">Scope</p>
+              <div className="flex gap-2">
+                {[
+                  { id: 'interior', label: 'Interior only'  },
+                  { id: 'exterior', label: 'Exterior only'  },
+                  { id: 'both',     label: 'Interior + exterior' },
+                ].map(o => (
+                  <button
+                    key={o.id}
+                    onClick={() => setScope(o.id)}
+                    className={`px-3 py-1.5 rounded-sm border text-xs font-bold transition-all ${
+                      scope === o.id
+                        ? 'bg-brand-navy text-white border-brand-navy'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-brand-navy/40'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-2">Cleaners on site</p>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setCleanerCount(n => Math.max(1, n - 1))} className="w-8 h-8 rounded-sm border border-gray-200 text-gray-700 font-bold hover:bg-gray-100">−</button>
+                <span className="text-base font-black text-brand-navy w-6 text-center">{cleanerCount}</span>
+                <button onClick={() => setCleanerCount(n => n + 1)} className="w-8 h-8 rounded-sm border border-gray-200 text-gray-700 font-bold hover:bg-gray-100">+</button>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-2">Labour rate (£/hr per person)</p>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-400">£</span>
+                <input
+                  type="number"
+                  value={rate}
+                  onChange={e => setRate(parseFloat(e.target.value) || 0)}
+                  className="w-24 border border-gray-200 rounded-sm px-3 py-1.5 text-sm focus:outline-none focus:border-brand-blue"
+                />
+                <span className="text-sm text-gray-400">/hr</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">Total man-hours already known?</p>
+                {knownHrs !== '' && (
+                  <button onClick={() => setKnownHrs('')} className="text-[10px] text-gray-400 hover:text-gray-600 underline">Clear — build from areas instead</button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={knownHrs}
+                  onChange={e => setKnownHrs(e.target.value)}
+                  placeholder="e.g. 4.5"
+                  className="w-28 border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue"
+                />
+                <span className="text-sm text-gray-400">man-hrs / visit</span>
+              </div>
+              {knownHrs !== '' && (
+                <p className="text-[10px] text-brand-blue mt-1">
+                  Areas step skipped — jump straight to costs →
+                </p>
+              )}
+            </div>
+
+          </div>
+        </div>
+        <div className="border-t border-gray-200 bg-white px-4 py-3 shrink-0">
+          <div className="max-w-xl mx-auto">
+            <button
+              onClick={() => setStep(knownHrs !== '' ? 'costs' : 'areas')}
+              disabled={!sector}
+              className="w-full py-3 bg-brand-navy text-white font-black text-sm rounded-sm hover:bg-brand-blue transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {knownHrs !== '' ? 'Next: costs →' : 'Next: map the site →'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Step 2: Areas
+  // ══════════════════════════════════════════════════════════════════════════════
+  if (step === 'areas') {
+    function AreaSection({ label, side, areas }) {
+      return (
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">{label}</p>
+          {areas.map(area => (
+            <div key={area.uid} className="flex items-center gap-2 bg-white border border-gray-200 rounded-sm px-3 py-2">
+              {area.custom ? (
+                <input
+                  value={area.label}
+                  onChange={e => updateArea(side, area.uid, 'label', e.target.value)}
+                  placeholder="Area name"
+                  className="flex-1 text-sm focus:outline-none text-brand-navy font-semibold"
+                />
+              ) : (
+                <p className="flex-1 text-sm font-semibold text-brand-navy">{area.label}</p>
+              )}
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => updateArea(side, area.uid, 'qty', Math.max(1, (Number(area.qty) || 1) - 1))} className="w-6 h-6 rounded border border-gray-200 text-gray-500 text-xs font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
+                <span className="text-sm font-black text-brand-navy w-5 text-center">{area.qty ?? 1}</span>
+                <button onClick={() => updateArea(side, area.uid, 'qty', (Number(area.qty) || 1) + 1)} className="w-6 h-6 rounded border border-gray-200 text-gray-500 text-xs font-bold hover:bg-gray-100 flex items-center justify-center">+</button>
+                <span className="text-xs text-gray-300 mx-1">×</span>
+                <input
+                  type="number"
+                  value={area.mins}
+                  onChange={e => updateArea(side, area.uid, 'mins', e.target.value)}
+                  className="w-12 text-sm text-right border border-gray-200 rounded-sm px-1.5 py-0.5 focus:outline-none focus:border-brand-blue"
+                />
+                <span className="text-xs text-gray-400">min</span>
+              </div>
+              <button onClick={() => removeArea(side, area.uid)} className="text-gray-300 hover:text-red-400 text-sm ml-1">✕</button>
+            </div>
+          ))}
+
+          {showAddArea === side ? (
+            <div className="bg-gray-50 border border-gray-200 rounded-sm p-3">
+              <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-2">Add area</p>
+              <div className="flex flex-wrap gap-1.5">
+                {CW_AREA_TYPES.map(a => (
+                  <button
+                    key={a.id}
+                    onClick={() => addArea(side, a.id)}
+                    className="px-2 py-1 text-xs font-semibold border border-dashed border-gray-300 rounded-sm text-gray-600 hover:border-brand-blue hover:text-brand-blue transition-colors"
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setShowAddArea(null)} className="mt-2 text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddArea(side)}
+              className="w-full py-2 text-xs font-bold border border-dashed border-gray-300 rounded-sm text-gray-400 hover:border-brand-blue hover:text-brand-blue transition-colors"
+            >
+              + Add area
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    const totalVisitMins = activeAreas.all.reduce((s, a) => s + (Number(a.mins) || 0) * (Number(a.qty) || 1), 0);
+    const visitHrs       = cleanerCount > 0 ? (totalVisitMins / 60) / cleanerCount : 0;
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-xl mx-auto px-4 py-6 space-y-6">
+            <button onClick={() => setStep('setup')} className="text-xs text-gray-400 hover:text-gray-700">← Back to setup</button>
+
+            {/* Live time bar */}
+            {totalVisitMins > 0 && (
+              <div className="bg-brand-navy/5 border border-brand-navy/10 rounded-sm px-4 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">Total man-time</p>
+                  <p className="text-lg font-black text-brand-navy">{Math.round(totalVisitMins / 6) / 10} hrs</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">On-site duration</p>
+                  <p className="text-lg font-black text-brand-navy">{Math.round(visitHrs * 10) / 10} hrs <span className="text-xs font-normal text-gray-400">({cleanerCount} cleaners)</span></p>
+                </div>
+              </div>
+            )}
+
+            {scope !== 'exterior' && (
+              <AreaSection label="Interior areas" side="int" areas={intAreas} />
+            )}
+            {scope !== 'interior' && (
+              <AreaSection label="Exterior areas" side="ext" areas={extAreas} />
+            )}
+          </div>
+        </div>
+        <div className="border-t border-gray-200 bg-white px-4 py-3 shrink-0">
+          <div className="max-w-xl mx-auto flex items-center gap-4">
+            <div className="flex-1">
+              <p className="text-xs text-gray-400">{activeAreas.all.length} areas · {Math.round(totalManHrs * 10) / 10} man-hrs</p>
+              <p className="text-sm font-bold text-brand-navy">{Math.round(visitDurHrs * 10) / 10} hrs on site</p>
+            </div>
+            <button
+              onClick={() => setStep('costs')}
+              disabled={activeAreas.all.length === 0}
+              className="px-6 py-3 bg-brand-navy text-white font-black text-sm rounded-sm hover:bg-brand-blue transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next: costs →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Step 3: Costs
+  // ══════════════════════════════════════════════════════════════════════════════
+  if (step === 'costs') {
+    const costTabs = [
+      { id: 'products',  label: 'Products',  total: productsCost,  unit: '/visit' },
+      { id: 'equipment', label: 'Equipment', total: equipmentCost, unit: '/visit' },
+      { id: 'overheads', label: 'Overheads', total: overheadCost,  unit: '/visit' },
+    ];
+
+    const TAB_HINTS = {
+      products:  'Weekly spend on products/chemicals — auto-divided by your clean frequency to get the per-visit cost.',
+      equipment: 'Enter cost and choose how often you pay it. One-off items are spread across the number of uses you enter.',
+      overheads: 'Regular business costs — toggle monthly or per-visit. Monthly amounts are auto-divided by your clean frequency.',
+    };
+
+    function perVisitPreview(type, row) {
+      const raw = parseFloat(row.cost) || 0;
+      if (!raw) return null;
+      if (type === 'products') {
+        const pv = raw / Math.max(visitsPerWeek, 0.01);
+        return `= £${pv.toFixed(2)} / visit (${Math.round(visitsPerWeek * 10) / 10} visits/wk)`;
+      }
+      if (type === 'equipment') {
+        if (row.period === 'weekly')  return `= £${(raw / Math.max(visitsPerWeek, 0.01)).toFixed(2)} / visit`;
+        if (row.period === 'monthly') return `= £${(raw / Math.max(visitsPerMonth, 0.01)).toFixed(2)} / visit`;
+        if (row.period === 'oneoff') {
+          const uses = Math.max(parseFloat(row.uses) || 1, 1);
+          return `= £${(raw / uses).toFixed(2)} / visit`;
+        }
+      }
+      if (type === 'overheads' && row.period === 'month') {
+        return `= £${(raw / Math.max(visitsPerMonth, 0.01)).toFixed(2)} / visit (${Math.round(visitsPerMonth * 10) / 10} visits/mo)`;
+      }
+      return null;
+    }
+
+    function CostRows({ type, rows }) {
+      return (
+        <div className="space-y-3">
+          <p className="text-[10px] text-gray-400 leading-relaxed">{TAB_HINTS[type]}</p>
+          {rows.map(row => {
+            const preview = perVisitPreview(type, row);
+            return (
+              <div key={row.uid} className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input
+                    value={row.label}
+                    onChange={e => updateCostRow(type, row.uid, 'label', e.target.value)}
+                    placeholder="Item name"
+                    className="flex-1 min-w-0 border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue"
+                  />
+
+                  {/* Equipment period toggle */}
+                  {type === 'equipment' && (
+                    <div className="flex rounded-sm border border-gray-200 overflow-hidden shrink-0">
+                      {[['weekly','Wkly'],['monthly','Mo'],['oneoff','One-off']].map(([val, lbl]) => (
+                        <button key={val}
+                          onClick={() => updateCostRow(type, row.uid, 'period', val)}
+                          className={`px-2 py-1.5 text-[10px] font-bold transition-colors ${row.period === val ? 'bg-brand-navy text-white' : 'text-gray-400 hover:bg-gray-50'}`}
+                        >{lbl}</button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Overheads period toggle */}
+                  {type === 'overheads' && (
+                    <div className="flex rounded-sm border border-gray-200 overflow-hidden shrink-0">
+                      {[['month','/mo'],['visit','/visit']].map(([val, lbl]) => (
+                        <button key={val}
+                          onClick={() => updateCostRow(type, row.uid, 'period', val)}
+                          className={`px-2 py-1.5 text-[10px] font-bold transition-colors ${row.period === val ? 'bg-brand-navy text-white' : 'text-gray-400 hover:bg-gray-50'}`}
+                        >{lbl}</button>
+                      ))}
+                    </div>
+                  )}
+
+                  <span className="text-sm text-gray-400">£</span>
+                  <input
+                    type="number"
+                    value={row.cost}
+                    onChange={e => updateCostRow(type, row.uid, 'cost', e.target.value)}
+                    placeholder="0.00"
+                    className="w-20 border border-gray-200 rounded-sm px-2 py-2 text-sm text-right focus:outline-none focus:border-brand-blue"
+                  />
+                  <button onClick={() => removeCostRow(type, row.uid)} className="text-gray-300 hover:text-red-400 shrink-0">✕</button>
+                </div>
+
+                {/* One-off uses field */}
+                {type === 'equipment' && row.period === 'oneoff' && (
+                  <div className="flex items-center gap-2 pl-2">
+                    <span className="text-[10px] text-gray-400">Spread over</span>
+                    <input
+                      type="number"
+                      value={row.uses}
+                      onChange={e => updateCostRow(type, row.uid, 'uses', e.target.value)}
+                      placeholder="e.g. 50"
+                      className="w-20 border border-gray-200 rounded-sm px-2 py-1 text-xs text-right focus:outline-none focus:border-brand-blue"
+                    />
+                    <span className="text-[10px] text-gray-400">visits</span>
+                  </div>
+                )}
+
+                {preview && (
+                  <p className="text-[10px] text-brand-blue pl-2">{preview}</p>
+                )}
+              </div>
+            );
+          })}
+          <button
+            onClick={() => addCostRow(type)}
+            className="w-full py-2 text-xs font-bold border border-dashed border-gray-300 rounded-sm text-gray-400 hover:border-brand-blue hover:text-brand-blue transition-colors"
+          >
+            + Add row
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-xl mx-auto px-4 py-6 space-y-6">
+            <button onClick={() => setStep(knownHrs !== '' ? 'setup' : 'areas')} className="text-xs text-gray-400 hover:text-gray-700">← Back to {knownHrs !== '' ? 'setup' : 'areas'}</button>
+
+            {/* Labour — auto-calculated */}
+            <div className="bg-brand-navy/5 border border-brand-navy/10 rounded-sm px-4 py-3 space-y-1">
+              <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">Labour (auto-calculated)</p>
+              <div className="flex items-baseline justify-between">
+                <p className="text-sm text-gray-600">{Math.round(totalManHrs * 10) / 10} man-hrs × £{rate}/hr</p>
+                <p className="text-base font-black text-brand-navy">£{Math.round(labourCost)}</p>
+              </div>
+            </div>
+
+            {/* Cost type tabs */}
+            <div>
+              <div className="flex gap-0 border-b border-gray-200 mb-4">
+                {costTabs.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setCostTab(t.id)}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-all ${
+                      costTab === t.id
+                        ? 'border-brand-blue text-brand-blue'
+                        : 'border-transparent text-gray-400 hover:text-gray-700'
+                    }`}
+                  >
+                    {t.label}
+                    {t.total > 0 && (
+                      <span className="text-[10px] font-bold">£{Math.round(t.total)}{t.unit}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {costTab === 'products'  && <CostRows type="products"  rows={products}  />}
+              {costTab === 'equipment' && <CostRows type="equipment" rows={equipment} />}
+              {costTab === 'overheads' && <CostRows type="overheads" rows={overheads} />}
+            </div>
+
+            {/* Margin slider */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">Target margin</p>
+                <p className="text-sm font-black text-brand-navy">{marginPct}%</p>
+              </div>
+              <input
+                type="range"
+                min={0} max={70} step={1}
+                value={marginPct}
+                onChange={e => setMarginPct(Number(e.target.value))}
+                className="w-full accent-brand-blue"
+              />
+              <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                <span>Break-even</span>
+                <span>70%</span>
+              </div>
+            </div>
+
+            {/* Cost breakdown */}
+            <div className="bg-gray-50 border border-gray-200 rounded-sm divide-y divide-gray-100">
+              {[
+                { label: 'Labour',    val: labourCost   },
+                { label: 'Products',  val: productsCost  },
+                { label: 'Equipment', val: equipmentCost },
+                { label: 'Overheads', val: overheadCost  },
+              ].map(({ label, val }) => val > 0 && (
+                <div key={label} className="flex justify-between px-4 py-2">
+                  <span className="text-xs text-gray-500">{label}</span>
+                  <span className="text-xs font-semibold text-gray-700">£{Math.round(val)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between px-4 py-2">
+                <span className="text-xs font-bold text-gray-700">Total cost</span>
+                <span className="text-xs font-black text-brand-navy">£{Math.round(totalCost)}</span>
+              </div>
+              <div className="flex justify-between px-4 py-2 bg-brand-navy/5">
+                <span className="text-xs font-black text-brand-navy">Quote price / visit</span>
+                <span className="text-sm font-black text-brand-navy">£{pricePerVisit}</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+        <div className="border-t border-gray-200 bg-white px-4 py-3 shrink-0">
+          <div className="max-w-xl mx-auto flex items-center gap-4">
+            <div className="flex-1">
+              <p className="text-xs text-gray-400">Cost £{Math.round(totalCost)} · {marginPct}% margin</p>
+              <p className="text-xl font-black text-brand-navy">£{pricePerVisit} / visit</p>
+            </div>
+            <button
+              onClick={() => setStep('quote')}
+              className="px-6 py-3 bg-brand-navy text-white font-black text-sm rounded-sm hover:bg-brand-blue transition-colors"
+            >
+              Get quote →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Step 4: Quote
+  // ══════════════════════════════════════════════════════════════════════════════
+  return (
+    <div className="max-w-xl mx-auto px-4 py-6 space-y-4">
+      <button onClick={() => setStep('costs')} className="text-xs text-gray-400 hover:text-gray-700">← Back to costs</button>
+
+      {/* Hero numbers */}
+      <div className="bg-brand-navy rounded-sm px-4 py-5 text-white space-y-3">
+        <div className="flex items-baseline justify-between">
+          <div>
+            <p className="text-[10px] font-bold tracking-widest uppercase opacity-60">Price per visit</p>
+            <p className="text-4xl font-black">£{pricePerVisit}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-bold tracking-widest uppercase opacity-60">Annual contract value</p>
+            <p className="text-2xl font-black">£{annualValue.toLocaleString('en-GB')}</p>
+            <p className="text-[10px] opacity-50">{selectedFreq.label} · {selectedFreq.visitsPerYear} visits/yr</p>
+          </div>
+        </div>
+        <div className="border-t border-white/20 pt-3 grid grid-cols-3 gap-3 text-center">
+          <div>
+            <p className="text-[10px] opacity-60 uppercase tracking-wide">Cost</p>
+            <p className="text-sm font-bold">£{Math.round(totalCost)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] opacity-60 uppercase tracking-wide">Gross margin</p>
+            <p className="text-sm font-bold">£{Math.round(grossMargin)} ({marginPct}%)</p>
+          </div>
+          <div>
+            <p className="text-[10px] opacity-60 uppercase tracking-wide">On-site</p>
+            <p className="text-sm font-bold">{Math.round(visitDurHrs * 10) / 10} hrs</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Scope of work (customer-facing) */}
+      <div className="bg-white border border-gray-200 rounded-sm px-4 py-4 space-y-3">
+        <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400">Scope of work — customer view</p>
+        <div className="space-y-1">
+          {activeAreas.int.length > 0 && (
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide mb-0.5">Interior</p>
+              {activeAreas.int.map(a => (
+                <p key={a.uid} className="text-xs text-gray-600">· {a.label || 'Area'}{(a.qty ?? 1) > 1 ? ` ×${a.qty}` : ''}</p>
+              ))}
+            </div>
+          )}
+          {activeAreas.ext.length > 0 && (
+            <div className="mt-1">
+              <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide mb-0.5">Exterior</p>
+              {activeAreas.ext.map(a => (
+                <p key={a.uid} className="text-xs text-gray-600">· {a.label || 'Area'}{(a.qty ?? 1) > 1 ? ` ×${a.qty}` : ''}</p>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="border-t border-gray-100 pt-3 flex items-baseline justify-between">
+          <p className="text-xs text-gray-400">{selectedFreq.label} service</p>
+          <p className="text-lg font-black text-brand-navy">£{pricePerVisit} / visit</p>
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div>
+        <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-1">Notes</p>
+        <textarea
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          rows={3}
+          placeholder="Access details, special requirements, areas not included…"
+          className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue resize-none"
+        />
+      </div>
+
+      {/* Customer */}
+      <div>
+        <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-1">Customer / contact</p>
+        <div className="relative">
+          <input
+            value={custSearch || customer}
+            onChange={e => { setCustSearch(e.target.value); setCustomer(e.target.value); setShowCustDrop(true); }}
+            onFocus={() => setShowCustDrop(true)}
+            onBlur={() => setTimeout(() => setShowCustDrop(false), 150)}
+            placeholder="Type name or select…"
+            className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue"
+          />
+          {showCustDrop && custMatches.length > 0 && (
+            <div className="absolute z-10 top-full left-0 right-0 bg-white border border-gray-200 rounded-sm shadow-sm mt-0.5 max-h-40 overflow-y-auto">
+              {custMatches.map(c => (
+                <button
+                  key={c.id}
+                  onMouseDown={() => { setCustomer(c.name); setCustSearch(''); setShowCustDrop(false); }}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 text-gray-700"
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {lastQuote ? (
+        <div className="px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-sm">
+          <p className="text-sm font-bold text-emerald-700">Quote saved.</p>
+          <p className="text-xs text-emerald-600 mt-0.5">Manage it in the Quotes tab.</p>
+          <button onClick={() => { setStep('setup'); setSector(''); setSiteName(''); setIntAreas([]); setExtAreas([]); setProducts([]); setEquipment([]); setOverheads([]); setNotes(''); setCustomer(''); setLastQuote(null); setMarginPct(30); }}
+            className="mt-3 text-xs font-bold text-emerald-700 underline"
+          >
+            Start new quote
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={saveQuote}
+          disabled={saving || !customer}
+          className="w-full py-4 bg-brand-navy text-white font-black text-sm rounded-sm hover:bg-brand-blue transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {saving ? 'Saving…' : `Save quote — £${pricePerVisit}/visit`}
+        </button>
+      )}
+
+      <div className="h-6" />
+    </div>
+  );
+}
+
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function PricingCalculator({ accountsData, userHourlyRate, sectorHint, onNavigate, onSaveDraft, onAcceptQuote, onAcceptedQuote }) {
   const { customers = [] } = useData();
@@ -3485,9 +4369,10 @@ export default function PricingCalculator({ accountsData, userHourlyRate, sector
     { id: "commercial",   label: "Commercial",   sub: "Cost-build calculator"         },
     { id: "exterior",     label: "Exterior",     sub: "Property & one-off jobs"       },
     { id: "walkthrough",  label: "Walkthrough",  sub: "Room-by-room on-site quote"    },
+    { id: "siteaudit",   label: "Site audit",   sub: "Area-by-area cost build"       },
   ];
 
-  const ACCENT = { residential: "text-emerald-600", commercial: "text-brand-blue", exterior: "text-orange-600", walkthrough: "text-violet-600" };
+  const ACCENT = { residential: "text-emerald-600", commercial: "text-brand-blue", exterior: "text-orange-600", walkthrough: "text-violet-600", siteaudit: "text-teal-600" };
 
   return (
     <div className="flex flex-col h-full bg-gray-50/50">
@@ -3541,7 +4426,8 @@ export default function PricingCalculator({ accountsData, userHourlyRate, sector
         {activeTab === "residential"  && <ResidentialTab  accounts={accounts} userHourlyRate={userHourlyRate} onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => q.type === 'residential')} />}
         {activeTab === "commercial"   && <CommercialTab   accounts={accounts} userHourlyRate={userHourlyRate} onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => q.type === 'commercial')} />}
         {activeTab === "exterior"     && <ExteriorTab     accounts={accounts}                                 onSaveQuote={handleSaveQuote} onAcceptQuote={handleAcceptQuote} customers={customers} initialQuotes={dbQuotes.filter(q => !['residential','commercial'].includes(q.type))} />}
-        {activeTab === "walkthrough"  && <WalkthroughTab  accounts={accounts}                                 onSaveQuote={handleSaveQuote} customers={customers} />}
+        {activeTab === "walkthrough"  && <WalkthroughTab          accounts={accounts} onSaveQuote={handleSaveQuote} customers={customers} />}
+        {activeTab === "siteaudit"   && <CommercialWalkthroughTab accounts={accounts} onSaveQuote={handleSaveQuote} customers={customers} />}
       </div>
     </div>
   );
