@@ -266,9 +266,33 @@ export default function AppLayout() {
           </div>
         </header>
 
-        {/* Page content */}
+        {/* Page content — blocked for free users on pro-only routes */}
         <main className="flex-1 px-4 md:px-8 py-6 pb-24 md:pb-6">
-          <Outlet />
+          {isTabLocked(location.pathname) ? (
+            <div className="flex items-center justify-center min-h-[60vh]">
+              <div className="w-full max-w-md">
+                <div className="rounded-2xl overflow-hidden border border-[#1f48ff]/20 text-center"
+                  style={{ background: 'linear-gradient(135deg, #010a4f 0%, #0d1e78 100%)' }}>
+                  <div className="px-6 py-10">
+                    <div className="text-4xl mb-4">🔒</div>
+                    <p className="text-lg font-black text-white mb-2">Cadi Pro feature</p>
+                    <p className="text-sm text-white/50 mb-6">
+                      {PRO_TAB_REASONS[Object.keys(PRO_TAB_REASONS).find(k => location.pathname.startsWith(k))] || 'Upgrade to unlock this feature.'}
+                    </p>
+                    <button
+                      onClick={() => setUpgradeModalReason(PRO_TAB_REASONS[Object.keys(PRO_TAB_REASONS).find(k => location.pathname.startsWith(k))] || 'Upgrade to Cadi Pro.')}
+                      className="px-6 py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black text-sm rounded-xl transition-all shadow-lg"
+                    >
+                      Upgrade to Pro — £29/month
+                    </button>
+                    <p className="text-[10px] text-white/25 mt-3">Cancel anytime · Powered by Stripe</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
 
