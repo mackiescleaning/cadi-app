@@ -44,8 +44,6 @@ export default function Signup() {
       return;
     }
 
-    // Store checkout intent so /auth/confirm picks it up even if query params are stripped
-    localStorage.setItem('pendingCheckout', '1');
     setSubmitted(true);
   };
 
@@ -64,7 +62,7 @@ export default function Signup() {
             </p>
             <p className="text-sm font-semibold text-[#010a4f] mb-4">{email}</p>
             <p className="text-sm text-gray-400">
-              Click the link to verify your address — we'll take you straight to payment after.
+              Click the link to verify your address — we'll take you straight into Cadi.
             </p>
             <p className="text-xs text-gray-400 mt-6">
               Wrong email?{' '}
@@ -88,7 +86,7 @@ export default function Signup() {
 
         <div className="bg-white rounded-2xl p-8 shadow-2xl">
           <h2 className="text-xl font-bold text-[#010a4f] mb-1">Run your whole business from one place.</h2>
-          <p className="text-sm text-gray-400 mb-6">Scheduling · Invoicing · HMRC MTD · Growth — built for cleaning businesses.</p>
+          <p className="text-sm text-gray-400 mb-6">Free to start · Scheduling · Invoicing · Growth — built for cleaning businesses.</p>
 
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl mb-4">
@@ -152,16 +150,16 @@ export default function Signup() {
             </div>
             <button type="submit" disabled={loading}
               className="w-full py-3 bg-[#1f48ff] text-white font-bold rounded-xl hover:bg-[#3a5eff] transition-colors disabled:opacity-50 text-sm tracking-wide">
-              {loading ? 'Setting up your account…' : 'Start for £29/month →'}
+              {loading ? 'Setting up your account…' : 'Start for free →'}
             </button>
           </form>
 
           <div className="flex items-center justify-center gap-3 mt-5">
-            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> £29/month</span>
+            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> Free plan included</span>
             <span className="text-gray-200">|</span>
-            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> Cancel anytime</span>
+            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> No card required</span>
             <span className="text-gray-200">|</span>
-            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> Powered by Stripe</span>
+            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="text-green-500">✓</span> Upgrade anytime</span>
           </div>
 
           <p className="text-center text-sm text-gray-500 mt-4">

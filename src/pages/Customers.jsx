@@ -20,6 +20,8 @@ import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { usePlan, FREE_CUSTOMER_LIMIT } from "../hooks/usePlan";
+import { UpgradeModal } from "../components/UpgradePrompt";
 
 // ─── Job type taxonomy ────────────────────────────────────────────────────────
 // Used for filtering, tagging, and AI suggestion logic.
@@ -1721,6 +1723,7 @@ function AddCustomerModal({ onClose, onSave }) {
 export default function CustomerTab() {
   const { customers, addCustomer, updateCustomer, deleteCustomer } = useData();
   const { user } = useAuth();
+  const { isPro, customerLimit } = usePlan();
   const navigate = useNavigate();
   const ownerId = user?.id || "demo";
   const [search,        setSearch]       = useState("");
@@ -1731,6 +1734,10 @@ export default function CustomerTab() {
   const [composing,     setComposing]    = useState(null);
   const [showDetail,    setShowDetail]   = useState(false);
   const [showAddModal,  setShowAddModal] = useState(false);
+  const [showUpgrade,   setShowUpgrade]  = useState(false);
+
+  const activeCustomers = useMemo(() => customers.filter(c => c.status !== 'archived'), [customers]);
+  const atLimit = !isPro && activeCustomers.length >= customerLimit;
 
   // ── Filtering + sorting — O(n) — handles thousands of records ───────────────
   const filtered = useMemo(() => {
@@ -1793,9 +1800,10 @@ export default function CustomerTab() {
   }, []);
 
   const handleAddSave = useCallback(async (newCustomer) => {
+    if (atLimit) { setShowUpgrade(true); return; }
     await addCustomer(newCustomer);
     setShowAddModal(false);
-  }, [addCustomer]);
+  }, [addCustomer, atLimit]);
 
   const handleBookJob = (customer) => navigate(`/scheduler?customer=${encodeURIComponent(customer.name)}`);
 
@@ -1806,6 +1814,12 @@ export default function CustomerTab() {
 
   return (
     <div className="relative flex h-full bg-[#010a4f] overflow-hidden">
+      {showUpgrade && (
+        <UpgradeModal
+          reason={`You've reached ${FREE_CUSTOMER_LIMIT} customers on the free plan. Upgrade to Pro for unlimited customers.`}
+          onClose={() => setShowUpgrade(false)}
+        />
+      )}
       {/* Ambient glow blobs */}
       <div className="pointer-events-none fixed -top-40 -right-20 w-[400px] h-[400px] rounded-full bg-[rgba(31,72,255,0.10)] blur-[90px]" />
       <div className="pointer-events-none fixed -bottom-32 -left-16 w-[300px] h-[300px] rounded-full bg-[rgba(153,197,255,0.05)] blur-[70px]" />
@@ -1820,9 +1834,11 @@ export default function CustomerTab() {
               <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-0.5">Cadi</p>
               <h2 className="text-2xl font-black text-white">Customers</h2>
             </div>
-            <button onClick={() => setShowAddModal(true)}
+            <button
+              onClick={() => atLimit ? setShowUpgrade(true) : setShowAddModal(true)}
               className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-bold transition-all rounded-xl shadow-lg shadow-[#1f48ff]/30 active:scale-95">
-              <span className="text-lg leading-none">+</span> Add
+              <span className="text-lg leading-none">{atLimit ? '🔒' : '+'}</span>
+              {atLimit ? `${activeCustomers.length}/${FREE_CUSTOMER_LIMIT}` : 'Add'}
             </button>
           </div>
           {/* Status filter chips — below header on all screens */}
