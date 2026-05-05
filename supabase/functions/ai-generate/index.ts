@@ -49,7 +49,7 @@ serve(async (req: Request) => {
     return new Response("Unauthorized", { status: 401, headers: CORS_HEADERS });
   }
 
-  let body: { messages: unknown[]; model?: string; max_tokens?: number };
+  let body: { messages: unknown[]; model?: string; max_tokens?: number; system?: string };
   try {
     body = await req.json();
   } catch {
@@ -68,9 +68,10 @@ serve(async (req: Request) => {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model:      body.model      ?? "claude-sonnet-4-5",
-      max_tokens: body.max_tokens ?? 400,
+      model:      body.model      ?? "claude-haiku-4-5-20251001",
+      max_tokens: body.max_tokens ?? 350,
       messages:   body.messages,
+      ...(body.system && { system: body.system }),
     }),
   });
 

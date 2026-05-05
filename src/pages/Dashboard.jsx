@@ -1499,149 +1499,146 @@ const NAV_INTENTS = [
   { pattern: /dashboard|home/,                              tab: 'dashboard',  label: 'Dashboard'     },
 ];
 
-function cadiReply(input, score, onNavigate) {
-  const q = input.toLowerCase();
+function buildSystemPrompt(score) {
+  const { total, tier, revScore, opsScore, invoicingScore, complianceScore, growthScore } = score;
+  return `You are Cadi, an AI co-pilot built into the Cadi app — an all-in-one business OS for UK cleaning businesses.
 
-  // Navigation intent — "take me to X", "go to X", "open X", "show me X"
-  const isNavIntent = /\b(take me to|go to|open|show me|navigate to|get to|switch to)\b/.test(q);
-  if (isNavIntent) {
-    const match = NAV_INTENTS.find(({ pattern }) => pattern.test(q));
-    if (match) {
-      setTimeout(() => onNavigate?.(match.tab), 400);
-      return `Taking you to ${match.label} now!`;
-    }
-  }
+Current user's Cadi Score: ${total}/100 (Tier: ${tier})
+Score breakdown: Revenue ${revScore}/25 · Operations ${opsScore}/25 · Invoicing ${invoicingScore}/25 · Compliance ${complianceScore}/15 · Growth ${growthScore}/10
 
-  // Score / improvement
-  if (/\b(score|improve|boost|points?|pts|tier|elite|firing|solid|building)\b/.test(q)) {
-    const dims = score.dims ?? [];
-    const lowest = [...dims].sort((a, b) => (a.score / a.max) - (b.score / b.max))[0];
-    if (!lowest) return "Check your Score breakdown below — each bar shows exactly where points are being lost.";
-    const advice = {
-      Revenue:    "make sure your jobs are on the calendar and log payments as they come in so your income is tracked.",
-      Operations: "mark jobs complete after each clean and make sure no jobs today are sitting unassigned.",
-      Invoicing:  "chase any overdue invoices — each one costs 12 points. A quick reminder from the Invoices tab usually does the trick.",
-      Compliance: "top up your tax reserve in the Money tab, and keep your mileage log up to date.",
-      Growth:     "set up a 90-day sprint in Annual Review — it earns you 4 points straight away.",
-    };
-    return `Your biggest opportunity right now is ${lowest.label} — you're at ${lowest.score} out of ${lowest.max} points there. To push it up, ${advice[lowest.label] || "check the score breakdown for specific tips."}`;
-  }
+THE CADI APP — sections and features:
 
-  // Invoices
-  if (/invoices?|overdue|unpaid|send invoice|create invoice/.test(q)) {
-    return "Head to the Invoices tab to create, send, and manage your invoices. Overdue invoices each knock 12 points off your Cadi Score, so chasing them is worth it. You can track who owes you and send payment reminders from there.";
-  }
+Dashboard — Cadi Score overview, KPI strip (today's revenue, week revenue, month income, outstanding invoices, jobs today, tax reserve %), priority actions, community leaderboard, and this AI chat.
 
-  // MTD / HMRC
-  if (/\b(mtd|making tax digital|hmrc|tax return|quarterly|filing|submission)\b/.test(q)) {
-    return "MTD (Making Tax Digital) is HMRC's system for submitting income tax quarterly instead of annually. Cadi handles the connection and filing directly — go to the MTD tab, connect your HMRC account, and submit your quarters from there. Filing on time earns you 4 compliance points.";
-  }
+Scheduler — Create and manage cleaning jobs. One-off or recurring bookings. Assign staff. Mark jobs complete. Completing jobs earns up to 18 Operations score points. Unassigned jobs lose 2 pts each.
 
-  // Tax reserve
-  if (/tax reserve|tax pot|set aside|save for tax|saving for tax/.test(q)) {
-    return "Your tax reserve is a pot inside Cadi where you track money set aside for your tax bill. Set your target in Settings → Money and Cadi shows how close you are. Hitting your target earns up to 7 compliance points — and means no nasty surprises come January.";
-  }
+Invoices — Create invoices and quotes. Track payment status (unpaid/paid/overdue). Send payment reminders to clients. Each overdue invoice costs 12 Cadi Score points. More than 3 unpaid invoices stacking up costs 5 pts.
 
-  // Leaderboard
-  if (/leaderboard|ranking?|community|other businesses|competitors/.test(q)) {
-    return "The leaderboard shows how your Cadi Score compares to other cleaning businesses — anonymously by default. Filter by sector to see your residential, commercial, or exterior league. Opt in to show your real business name and claim your spot on the board.";
-  }
+Staff — Add team members who each get their own login to see their schedule and clock jobs. Track hours, set pay rates, generate payslips.
 
-  // Staff
-  if (/staff|team|cleaners?|employees?|workers?|invite|team member/.test(q)) {
-    return "Add team members in the Staff tab. Each cleaner gets their own login to see their schedule and clock jobs. You can track hours, set pay rates, and generate payslips all from there.";
-  }
+Money — Log income payments and expenses. Mileage log (claiming ≥90% of logged mileage earns 4 compliance pts). Set monthly and annual income targets. Tax reserve pot — set a target and track how much you've set aside (worth up to 7 compliance pts).
 
-  // Jobs / schedule
-  if (/jobs?|schedules?|bookings?|appointments?|calendar|recurring|visits?/.test(q)) {
-    return "Head to the Scheduler tab to manage your jobs. You can set up one-off or recurring bookings, assign staff, and mark jobs complete. Completing jobs earns up to 18 points in your Operations score.";
-  }
+MTD (Making Tax Digital) — Connect HMRC account via OAuth. Submit quarterly income tax returns directly from Cadi. Filing on time earns 4 compliance points. Cadi handles the fraud headers and obligation checks required by HMRC.
 
-  // Mileage
-  if (/mileage|miles|expenses?|fuel|travel/.test(q)) {
-    return "Log your mileage in the Money tab under Mileage Log. Claiming at least 90% of your logged mileage earns 4 compliance points — and reduces your tax bill, so it's well worth keeping on top of.";
-  }
+Annual Review — Set annual income target. Create 90-day sprint goals (having an active sprint earns 4 growth pts). Track year-to-date income vs target.
 
-  // Quotes
-  if (/quotes?|estimates?|quotations?|proposals?/.test(q)) {
-    return "Create quotes from the Invoices tab — just select Quote when creating a new document. Send it to the client and convert it to an invoice once the job is confirmed.";
-  }
+Settings — Business profile (name, logo, sector, region, contact details), billing and subscription management, SMTP email settings, integrations. Business logo appears on all invoices and quotes.
 
-  // Billing / pricing / cancel
-  if (/cancel|subscription|billing|pric(e|ing)|cost|plan|how much/.test(q)) {
-    return "Cadi is £29 per month with no contract. To manage or cancel your subscription, go to Settings → Billing. If you need a hand with anything billing-related, email support@cadi.cleaning and we'll sort it right away.";
-  }
+Leaderboard — Community feature showing Cadi Scores ranked against other cleaning businesses. Anonymous by default — opt in to show your real business name. Filter by sector (residential, commercial, exterior) for a sector league. Weekly rank movement shown.
 
-  // Export / data
-  if (/export|download|data|backup|csv|spreadsheet/.test(q)) {
-    return "You can export invoice data from the Invoices tab. For a full export of your account data, email support@cadi.cleaning and we'll get everything over to you.";
-  }
+CADI SCORE (0–100):
+- Revenue (25 pts): weekly earned revenue vs calendar jobs + YTD income vs annual target
+- Operations (25 pts): jobs marked complete + no unassigned jobs today
+- Invoicing (25 pts): starts at 25, loses 12 per overdue invoice, loses 5 if >3 unpaid stack up
+- Compliance (15 pts): tax reserve progress (7 pts) + mileage claiming (4 pts) + MTD filing (4 pts)
+- Growth (10 pts): active 90-day sprint (4 pts) + monthly target progress (3–6 pts)
+Tiers: Getting Started (0–39) · Building (40–59) · Solid (60–74) · Firing (75–89) · Elite (90+)
 
-  // Password / login
-  if (/password|log\s?in|sign\s?in|locked out|reset|account/.test(q)) {
-    return "Reset your password from the sign-in page — click Forgot password and we'll send a reset link. For any other account issues, email support@cadi.cleaning and we'll get you sorted.";
-  }
+NAVIGATION: Users can ask you to take them somewhere. When they do, confirm it warmly.
 
-  // What is Cadi
-  if (/what is cadi|who are you|what can you do|how do you work/.test(q)) {
-    return "I'm Cadi — your cleaning business co-pilot. I can help with your score, invoices, scheduling, tax, MTD filings, and anything else about running your business. I can also take you straight to any part of the app — just say \"take me to invoices\" or \"open the scheduler\". What do you need?";
-  }
+PRICING: Cadi is £29/month, no contract. Free plan available with limited features.
 
-  // Greetings
-  if (/^(hi|hello|hey|thanks|thank you|cheers|ok|okay|great|awesome|perfect|nice|good|👍|🙏)[!.\s]*$/.test(q)) {
-    const r = ["Happy to help! What else would you like to know?", "Anytime! Got any other questions?", "Of course — is there anything else I can help with?"];
-    return r[Math.floor(Math.random() * r.length)];
-  }
+SUPPORT: For anything you can't resolve, direct users to support@cadi.cleaning.
 
-  // Fallback
-  return `I don't have a specific answer for that one, but the Cadi support team will. Drop them an email at support@cadi.cleaning and they'll get back to you quickly.`;
+HOW TO RESPOND:
+- Be warm, direct, and practical — like a knowledgeable business coach who knows their numbers.
+- Use their actual score data to give specific, personalised advice.
+- Keep replies concise — 2–4 sentences. This is a chat, not a help article.
+- Write in plain conversational English. No markdown, no bullet points, no headers.
+- If they ask something outside Cadi (e.g. general business advice), help briefly then bring it back to what Cadi can do for them.
+- Never make up features that don't exist. If unsure, say so and point to support@cadi.cleaning.`;
+}
+
+const CHAT_BG = { background: 'linear-gradient(160deg, #010a4f 0%, #05124a 60%, #091660 100%)' };
+
+function ChatHeader({ isPro }) {
+  return (
+    <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2.5">
+      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black shrink-0 ${isPro ? 'bg-brand-blue' : 'bg-white/20'}`}>C</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-black text-white leading-none">Ask Cadi</p>
+        <p className="text-[10px] text-brand-skyblue/60 mt-0.5">Your cleaning business co-pilot</p>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {isPro ? (
+          <><div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /><span className="text-[10px] text-emerald-400 font-bold">Online</span></>
+        ) : (
+          <span className="text-[10px] text-white/30 font-bold px-2 py-0.5 rounded-full border border-white/15">Pro</span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
+  const { isPro }     = usePlan();
+  const navigate      = useNavigate();
   const initialized   = useRef(false);
   const bottomRef     = useRef(null);
   const inputRef      = useRef(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
-  const [typing, setTyping]     = useState(false);
+  const [thinking, setThinking] = useState(false);
 
-  // One-time opening message based on score at mount
+  // One-time opening message (instant, no API cost)
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
     const { total } = score;
     let greeting;
     if (total >= 90)      greeting = `Cadi Score ${total} — Elite! You're running things seriously well. What can I help you with today?`;
-    else if (total >= 75) greeting = `Cadi Score ${total} and Firing! You're close to Elite. What would you like help with?`;
-    else if (total >= 60) greeting = `Cadi Score ${total} — looking Solid. A few tweaks could push you higher. Ask me anything.`;
+    else if (total >= 75) greeting = `Cadi Score ${total} and Firing — you're close to Elite. What would you like help with?`;
+    else if (total >= 60) greeting = `Cadi Score ${total} looking Solid. A few tweaks could push you higher. Ask me anything.`;
     else if (total >= 40) greeting = `Cadi Score ${total} — you're Building. Let's get it moving. Ask me anything about your business or how Cadi works.`;
-    else                  greeting = `Hi! Your Cadi Score is ${total} right now. I'm here to help — ask me about your score, invoices, tax, scheduling, or anything else.`;
+    else                  greeting = `Hi! Your Cadi Score is ${total} right now. I'm here to help — ask about your score, invoices, tax, scheduling, or anything else.`;
     setMessages([{ id: 0, from: 'cadi', text: greeting }]);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, typing]);
+  }, [messages, thinking]);
 
-  const send = (text) => {
+  const send = async (text) => {
     const t = (text ?? input).trim();
-    if (!t || typing) return;
+    if (!t || thinking) return;
     setMessages(m => [...m, { id: Date.now(), from: 'user', text: t }]);
     setInput('');
-    setTyping(true);
-    setTimeout(() => {
-      const reply = cadiReply(t, score, onNavigate);
-      setMessages(m => [...m, { id: Date.now() + 1, from: 'cadi', text: reply }]);
-      setTyping(false);
-    }, 700 + Math.random() * 500);
+    setThinking(true);
+
+    // Navigation intent — fast, no API call needed
+    const q = t.toLowerCase();
+    if (/\b(take me to|go to|open|show me|navigate to|get to|switch to)\b/.test(q)) {
+      const match = NAV_INTENTS.find(({ pattern }) => pattern.test(q));
+      if (match) {
+        setMessages(m => [...m, { id: Date.now() + 1, from: 'cadi', text: `Taking you to ${match.label} now!` }]);
+        setThinking(false);
+        setTimeout(() => onNavigate?.(match.tab), 400);
+        return;
+      }
+    }
+
+    // Call Claude via Edge Function
+    try {
+      // Build alternating message history for Claude
+      const history = messages.map(m => ({ role: m.from === 'user' ? 'user' : 'assistant', content: m.text }));
+      history.push({ role: 'user', content: t });
+
+      const { data, error } = await supabase.functions.invoke('ai-generate', {
+        body: { messages: history, system: buildSystemPrompt(score), max_tokens: 350 },
+      });
+
+      if (error || !data?.content?.[0]?.text) throw new Error(error?.message ?? 'Empty response');
+      setMessages(m => [...m, { id: Date.now() + 1, from: 'cadi', text: data.content[0].text }]);
+    } catch {
+      setMessages(m => [...m, { id: Date.now() + 1, from: 'cadi', text: "I'm having a moment — please try again or email support@cadi.cleaning if it keeps happening." }]);
+    } finally {
+      setThinking(false);
+    }
   };
 
-  // Contextual quick chips
   const chips = useMemo(() => {
     const out = [];
-    const dims = score.dims ?? [];
-    const lowest = [...dims].sort((a, b) => (a.score / a.max) - (b.score / b.max))[0];
+    const lowest = [...(score.dims ?? [])].sort((a, b) => (a.score / a.max) - (b.score / b.max))[0];
     if (lowest) out.push(`How do I improve ${lowest.label.toLowerCase()}?`);
     if (score.invoicingScore < 20) out.push('Help with overdue invoices');
     if (score.complianceScore < 12) out.push('Tax reserve tips');
@@ -1650,22 +1647,52 @@ function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
     return out.slice(0, 4);
   }, [score]);
 
-  const showChips = messages.length < 2;
-
-  return (
-    <div className="rounded-2xl overflow-hidden border border-white/10" style={{ background: 'linear-gradient(160deg, #010a4f 0%, #05124a 60%, #091660 100%)' }}>
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-full bg-brand-blue flex items-center justify-center text-white text-xs font-black shrink-0">C</div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-black text-white leading-none">Ask Cadi</p>
-          <p className="text-[10px] text-brand-skyblue/60 mt-0.5">Your cleaning business co-pilot</p>
+  // ── Free user gate ────────────────────────────────────────────────────────────
+  if (!isPro) {
+    return (
+      <div className="rounded-2xl overflow-hidden border border-white/10" style={CHAT_BG}>
+        <ChatHeader isPro={false} />
+        {/* Teaser preview */}
+        <div className="px-3 py-4 space-y-3 pointer-events-none select-none">
+          <div className="flex items-end gap-2 opacity-50">
+            <div className="w-6 h-6 rounded-full bg-brand-blue flex items-center justify-center text-white text-[10px] font-black shrink-0">C</div>
+            <div className="bg-white/10 text-white px-3 py-2 rounded-2xl rounded-bl-sm text-xs max-w-[82%]">
+              Hi! Ask me anything — your score, invoices, tax, scheduling, MTD...
+            </div>
+          </div>
+          <div className="flex justify-end opacity-50">
+            <div className="bg-brand-blue text-white px-3 py-2 rounded-2xl rounded-br-sm text-xs">
+              How do I improve my invoicing score?
+            </div>
+          </div>
+          <div className="flex items-end gap-2 opacity-25 blur-[2px]">
+            <div className="w-6 h-6 rounded-full bg-brand-blue flex items-center justify-center text-white text-[10px] font-black shrink-0">C</div>
+            <div className="bg-white/10 text-white px-3 py-2 rounded-2xl rounded-bl-sm text-xs max-w-[82%]">
+              Your invoicing score is being pulled down by overdue invoices — each one costs 12 points. The quickest win is...
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-[10px] text-emerald-400 font-bold">Online</span>
+        {/* Upgrade CTA */}
+        <div className="px-4 pb-4">
+          <div className="rounded-xl border border-brand-skyblue/25 bg-white/5 p-4">
+            <p className="text-white font-bold text-sm mb-1">Ask Cadi is a Pro feature</p>
+            <p className="text-white/50 text-xs mb-3">Real AI answers to any question about your business, powered by Claude. £29/mo, no contract.</p>
+            <button
+              onClick={() => navigate('/settings?tab=billing')}
+              className="w-full py-2.5 bg-brand-blue hover:bg-[#1a3de0] text-white font-bold text-sm rounded-xl transition-colors shadow-lg shadow-brand-blue/30"
+            >
+              Upgrade to Pro →
+            </button>
+          </div>
         </div>
       </div>
+    );
+  }
+
+  // ── Pro user: full chat ───────────────────────────────────────────────────────
+  return (
+    <div className="rounded-2xl overflow-hidden border border-white/10" style={CHAT_BG}>
+      <ChatHeader isPro={true} />
 
       {/* Messages */}
       <div className="px-3 py-3 space-y-3 max-h-64 overflow-y-auto">
@@ -1675,29 +1702,25 @@ function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
               <div className="w-6 h-6 rounded-full bg-brand-blue flex items-center justify-center text-white text-[10px] font-black shrink-0 mb-0.5">C</div>
             )}
             <div className={`max-w-[82%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-              msg.from === 'cadi'
-                ? 'bg-white/10 text-white rounded-bl-sm'
-                : 'bg-brand-blue text-white rounded-br-sm'
+              msg.from === 'cadi' ? 'bg-white/10 text-white rounded-bl-sm' : 'bg-brand-blue text-white rounded-br-sm'
             }`}>
               {msg.text}
             </div>
           </div>
         ))}
-        {typing && (
+        {thinking && (
           <div className="flex items-end gap-2">
             <div className="w-6 h-6 rounded-full bg-brand-blue flex items-center justify-center text-white text-[10px] font-black shrink-0">C</div>
             <div className="bg-white/10 px-3 py-2.5 rounded-2xl rounded-bl-sm flex gap-1 items-center">
-              {[0, 150, 300].map(delay => (
-                <div key={delay} className="w-1.5 h-1.5 rounded-full bg-white/50 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
-              ))}
+              {[0, 150, 300].map(d => <div key={d} className="w-1.5 h-1.5 rounded-full bg-white/50 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
             </div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Quick chips */}
-      {showChips && (
+      {/* Quick chips — shown until first exchange */}
+      {messages.length < 2 && (
         <div className="px-3 pb-2 flex gap-1.5 flex-wrap">
           {chips.map(c => (
             <button key={c} onClick={() => send(c)}
@@ -1719,11 +1742,8 @@ function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
             placeholder="Ask me anything..."
             className="flex-1 bg-transparent text-xs text-white placeholder-white/30 outline-none"
           />
-          <button
-            onClick={() => send()}
-            disabled={!input.trim() || typing}
-            className="w-6 h-6 rounded-full bg-brand-blue flex items-center justify-center text-white disabled:opacity-30 hover:bg-[#1a3de0] transition-colors shrink-0"
-          >
+          <button onClick={() => send()} disabled={!input.trim() || thinking}
+            className="w-6 h-6 rounded-full bg-brand-blue flex items-center justify-center text-white disabled:opacity-30 hover:bg-[#1a3de0] transition-colors shrink-0">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M1 9L9 5L1 1V4.3L7 5L1 5.7V9Z" fill="currentColor" />
             </svg>
