@@ -3,14 +3,21 @@ import { getCurrentUserId } from './authDb';
 
 // ─── Products ────────────────────────────────────────────────────────────────
 
-export async function listProducts(limit = 500) {
+export async function listProducts(optionsOrLimit = {}) {
   const ownerId = await getCurrentUserId();
+
+  const opts = typeof optionsOrLimit === 'number'
+    ? { pageSize: optionsOrLimit, page: 0 }
+    : optionsOrLimit;
+
+  const { page = 0, pageSize = 200 } = opts;
+
   const { data, error } = await supabase
     .from('products')
     .select('*')
     .eq('owner_id', ownerId)
     .order('name', { ascending: true })
-    .limit(limit);
+    .range(page * pageSize, (page + 1) * pageSize - 1);
 
   if (error) throw error;
   return data ?? [];
@@ -65,14 +72,21 @@ export async function deleteProduct(id) {
 
 // ─── Inventory Orders (restock log) ──────────────────────────────────────────
 
-export async function listOrders(limit = 200) {
+export async function listOrders(optionsOrLimit = {}) {
   const ownerId = await getCurrentUserId();
+
+  const opts = typeof optionsOrLimit === 'number'
+    ? { pageSize: optionsOrLimit, page: 0 }
+    : optionsOrLimit;
+
+  const { page = 0, pageSize = 200 } = opts;
+
   const { data, error } = await supabase
     .from('inventory_orders')
     .select('*')
     .eq('owner_id', ownerId)
     .order('date', { ascending: false })
-    .limit(limit);
+    .range(page * pageSize, (page + 1) * pageSize - 1);
 
   if (error) throw error;
   return data ?? [];

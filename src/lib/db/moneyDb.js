@@ -14,6 +14,7 @@ export async function createMoneyEntry(entry) {
     method: entry.method || null,
     notes: entry.notes || null,
     kind: entry.kind || 'income',
+    category: entry.category || null,
   };
 
   const { data, error } = await supabase
@@ -26,15 +27,53 @@ export async function createMoneyEntry(entry) {
   return data;
 }
 
-export async function listMoneyEntries(limit = 500) {
+// options: { page, pageSize, from (ISO date), to (ISO date) }
+// Legacy: pass a number as first arg for a plain limit (backward compat).
+export async function listMoneyEntries(optionsOrLimit = {}) {
   const ownerId = await getCurrentUserId();
-  const { data, error } = await supabase
+
+  const opts = typeof optionsOrLimit === 'number'
+    ? { pageSize: optionsOrLimit, page: 0 }
+    : optionsOrLimit;
+
+  const { page = 0, pageSize = 200, from, to } = opts;
+
+  let q = supabase
     .from('money_entries')
     .select('*')
     .eq('owner_id', ownerId)
     .order('date', { ascending: false })
-    .limit(limit);
+    .range(page * pageSize, (page + 1) * pageSize - 1);
 
+  if (from) q = q.gte('date', from);
+  if (to) q = q.lte('date', to);
+
+  const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
+}
+
+export async function updateMoneyEntry(id, updates) {
+  const ownerId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from('money_entries')
+    .update(updates)
+    .eq('id', id)
+    .eq('owner_id', ownerId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMoneyEntry(id) {
+  const ownerId = await getCurrentUserId();
+  const { error } = await supabase
+    .from('money_entries')
+    .delete()
+    .eq('id', id)
+    .eq('owner_id', ownerId);
+
+  if (error) throw error;
 }

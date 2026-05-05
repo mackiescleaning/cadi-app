@@ -756,6 +756,7 @@ export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileage
   const [routeSaved,  setRouteSaved]  = useState(false);
   const [activeTab,   setActiveTab]   = useState("planner");
   const [loading,     setLoading]     = useState(true);
+  const [saveError,   setSaveError]   = useState(null);
 
   // Load routes + mileage from Supabase
   useEffect(() => {
@@ -810,9 +811,10 @@ export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileage
       try {
         const saved = await createRoute(routeData);
         setSavedRoutes(prev => [{ ...routeData, id: saved.id }, ...prev]);
-      } catch (err) {
-        console.error('Failed to save route:', err);
+      } catch {
         setSavedRoutes(prev => [{ ...routeData, id: `r${Date.now()}` }, ...prev]);
+        setSaveError('Route saved locally but could not sync to your account. Check your connection.');
+        setTimeout(() => setSaveError(null), 5000);
       }
     } else {
       setSavedRoutes(prev => [{ ...routeData, id: `r${Date.now()}` }, ...prev]);
@@ -846,6 +848,13 @@ export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileage
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0f1e] via-[#0d1530] to-[#0a1628]">
+      {saveError && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-full px-4">
+          <div className="flex gap-3 p-3.5 border rounded-xl text-xs leading-relaxed bg-red-500/10 border-red-500/25 text-red-300">
+            <span className="shrink-0">⚠️</span><div>{saveError}</div>
+          </div>
+        </div>
+      )}
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}

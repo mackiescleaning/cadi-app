@@ -305,7 +305,14 @@ function NinoForm({ onSave, saving }) {
   const [val, setVal] = useState("");
   const [err, setErr] = useState("");
   const clean = (v) => v.toUpperCase().replace(/\s/g, "");
-  const valid  = (v) => /^[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]$/.test(v);
+  const valid = (v) => {
+    // Format: first letter (no D F I Q U V), second letter (no D F I O Q U V), 6 digits, suffix A-D
+    if (!/^[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\d{6}[A-D]$/.test(v)) return false;
+    // Reserved prefixes that HMRC will reject
+    const prefix = v.slice(0, 2);
+    if (["BG","GB","KN","NK","NT","TN","ZZ"].includes(prefix)) return false;
+    return true;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -411,12 +418,13 @@ function HmrcTab() {
   const {
     connected,
     connecting,
-    loading:        hmrcLoading,
+    loading:          hmrcLoading,
     nino,
     obligations,
     lastCalculation,
     bsasData,
-    error:          hmrcError,
+    error:            hmrcError,
+    reconnectRequired,
     connectHmrc,
     disconnectHmrc,
     saveNino,
@@ -490,6 +498,17 @@ function HmrcTab() {
         <h2 className="text-2xl font-black text-white">HMRC Connect</h2>
         <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">Quarterly submissions · SA103 mapping · Tax year 2026/27</p>
       </div>
+
+      {/* Reconnect required banner */}
+      {reconnectRequired && !connected && (
+        <div className="px-4 py-3 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-start gap-3">
+          <span className="text-amber-400 text-base mt-0.5">⚠</span>
+          <div>
+            <p className="text-sm font-bold text-amber-300">HMRC reconnection required</p>
+            <p className="text-[11px] text-amber-300/70 mt-0.5">Your HMRC authorisation has expired. Click "Connect to HMRC" below to relink your account — your data is safe and no submissions will be lost.</p>
+          </div>
+        </div>
+      )}
 
       {/* Connection card */}
       <GCard className="p-4">

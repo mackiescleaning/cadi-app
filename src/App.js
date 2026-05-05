@@ -19,6 +19,8 @@ import StaffDashboard from './pages/StaffDashboard';
 import InvoiceGenerator from './pages/InvoiceGenerator';
 import Quotes from './pages/Quotes';
 import HmrcCallback from './pages/HmrcCallback';
+import GocardlessCallback from './pages/GocardlessCallback';
+import TruelayerCallback from './pages/TruelayerCallback';
 import Confirm from './pages/auth/Confirm';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
@@ -55,6 +57,8 @@ function App() {
         {/* Auth callbacks — outside ProtectedRoute so redirects land correctly */}
         <Route path="/auth/confirm" element={<Confirm />} />
         <Route path="/hmrc/callback" element={<HmrcCallback />} />
+        <Route path="/gocardless/callback" element={<GocardlessCallback />} />
+        <Route path="/truelayer/callback" element={<TruelayerCallback />} />
 
         {/* Legal — public, no auth required */}
         <Route path="/privacy" element={<Privacy />} />

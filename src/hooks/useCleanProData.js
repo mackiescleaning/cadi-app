@@ -65,11 +65,8 @@ function getQuoteCustomerName(quote, customersById) {
 }
 
 function mapAccountsData({ profile, settings, moneyEntries }) {
-  const taxYearStart = startOfTaxYear();
-  const ytdEntries = (moneyEntries || []).filter(entry => {
-    if (!entry.date) return false;
-    return new Date(`${entry.date}T00:00:00`) >= taxYearStart;
-  });
+  // moneyEntries is already filtered to the current tax year at the DB level
+  const ytdEntries = moneyEntries || [];
 
   const ytdIncome = ytdEntries
     .filter(entry => entry.kind === 'income')
@@ -231,10 +228,11 @@ export function useCleanProData() {
     setError(null);
 
     try {
+      const taxYearFrom = formatIsoDate(startOfTaxYear());
       const [settings, quotes, moneyEntries, customers] = await Promise.all([
         getBusinessSettings(),
         listQuotes(250),
-        listMoneyEntries(1000),
+        listMoneyEntries({ from: taxYearFrom, pageSize: 2000 }),
         listCustomers(250),
       ]);
 

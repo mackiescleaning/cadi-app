@@ -1,15 +1,27 @@
 import { supabase } from '../supabase';
 import { getCurrentUserId } from './authDb';
 
-export async function listInvoices(limit = 500) {
+// options: { page, pageSize, status } — default loads first 100 newest.
+// Legacy: pass a number as first arg for a plain limit (backward compat).
+export async function listInvoices(optionsOrLimit = {}) {
   const ownerId = await getCurrentUserId();
-  const { data, error } = await supabase
+
+  const opts = typeof optionsOrLimit === 'number'
+    ? { pageSize: optionsOrLimit, page: 0 }
+    : optionsOrLimit;
+
+  const { page = 0, pageSize = 100, status } = opts;
+
+  let q = supabase
     .from('invoices')
     .select('*')
     .eq('owner_id', ownerId)
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(page * pageSize, (page + 1) * pageSize - 1);
 
+  if (status) q = q.eq('status', status);
+
+  const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
 }

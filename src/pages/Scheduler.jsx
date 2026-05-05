@@ -410,6 +410,50 @@ function FilterPill({ active, onClick, label, type }) {
   );
 }
 
+// ─── Mobile day-strip — quick-jump to any day of the current week ─────────────
+function MobileDayStrip({ weekDates, currentDateStr, setDayOffset, allJobs }) {
+  const todayStr = isoDate(getToday());
+  const today0 = new Date(); today0.setHours(0,0,0,0);
+  return (
+    <div className="sm:hidden flex gap-1 overflow-x-auto py-1 -mx-1 px-1">
+      {weekDates.map((d, i) => {
+        const ds = isoDate(d);
+        const isActive = ds === currentDateStr;
+        const isToday  = ds === todayStr;
+        const dayJobs  = allJobs.filter(j => j.date === ds && j.status !== 'cancelled');
+        const dotTypes = [...new Set(dayJobs.map(j => j.type))].slice(0, 3);
+        const diff = Math.round((d.getTime() - today0.getTime()) / 86400000);
+        return (
+          <button
+            key={i}
+            onClick={() => setDayOffset(diff)}
+            className={`flex flex-col items-center gap-0.5 px-2.5 py-2 rounded-xl flex-shrink-0 min-w-[44px] transition-all ${
+              isActive ? 'bg-slate-900 shadow-md' :
+              isToday  ? 'bg-blue-50 border border-blue-200' :
+              'hover:bg-white/60'
+            }`}
+          >
+            <span className={`text-[10px] font-bold uppercase tracking-wide leading-none ${isActive ? 'text-white/60' : 'text-slate-400'}`}>
+              {DAYS_SHORT[i]}
+            </span>
+            <span className={`text-sm font-black leading-tight ${
+              isActive ? 'text-white' : isToday ? 'text-blue-700' : 'text-slate-800'
+            }`}>{d.getDate()}</span>
+            <div className="flex gap-0.5 h-1.5 items-center justify-center mt-0.5">
+              {dotTypes.length > 0
+                ? dotTypes.map(type => (
+                    <div key={type} className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white/60' : (TYPE[type]?.dot || 'bg-slate-300')}`} />
+                  ))
+                : <div className="w-1.5 h-1.5" />
+              }
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── DAY VIEW — per-crew lanes on a 20-min grid ──────────────────────────────
 const DAY_START  = 6;
 const DAY_END    = 19;
@@ -581,44 +625,77 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter }) {
   }
 
   return (
-    <LightCard>
-      {/* Crew header row */}
-      <div className="flex border-b border-white/60 bg-white/40 backdrop-blur rounded-t-2xl">
-        <div className="w-14 shrink-0 border-r border-white/60" />
-        {crews.map((c) => {
-          const rev = c.jobs.reduce((s, j) => s + (j.price || 0), 0);
+    <>
+      {/* Mobile: time-sorted agenda list */}
+      <div className="sm:hidden space-y-1.5">
+        {[...filteredJobs].sort((a, b) => a.startHour - b.startHour).map(job => {
+          const t = TYPE[job.type] || TYPE.residential;
           return (
-            <div key={c.id} className="flex-1 min-w-[180px] border-r border-white/60 last:border-r-0 px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm"
-                  style={{ background: c.tint }}
-                >{c.init}</span>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 leading-tight truncate">{c.name}</div>
-                  <div className="text-[10.5px] text-slate-500 leading-tight tabular-nums">
-                    {c.jobs.length} {c.jobs.length === 1 ? "job" : "jobs"} · £{rev}
-                  </div>
-                </div>
+            <button
+              key={job.id}
+              onClick={() => onJobClick(job)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/75 backdrop-blur border border-white/70 shadow-sm text-left hover:bg-white/90 active:scale-[0.99] transition-all"
+            >
+              <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background: t.bar }} />
+              <div className="w-14 shrink-0">
+                <p className="text-xs font-semibold tabular-nums text-slate-700">{fmtTime(job.startHour)}</p>
+                <p className="text-[10px] text-slate-400">{job.durationHrs}hr</p>
               </div>
-            </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-bold text-slate-900 truncate ${job.status === 'complete' ? 'line-through opacity-50' : ''}`}>
+                  {job.customer}
+                </p>
+                <p className="text-xs text-slate-500 truncate">{job.service || job.postcode}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <p className="text-sm font-black tabular-nums text-emerald-600">£{job.price}</p>
+                <StatusChip status={job.status} />
+              </div>
+            </button>
           );
         })}
       </div>
 
-      {/* Grid */}
-      <div className="flex overflow-x-auto">
-        <HourRuler />
-        {crews.map((c) => (
-          <CrewLane key={c.id} jobs={c.jobs} onJobClick={onJobClick} />
-        ))}
-      </div>
-    </LightCard>
+      {/* Desktop: per-crew lane grid */}
+      <LightCard className="hidden sm:block">
+        {/* Crew header row */}
+        <div className="flex border-b border-white/60 bg-white/40 backdrop-blur rounded-t-2xl">
+          <div className="w-14 shrink-0 border-r border-white/60" />
+          {crews.map((c) => {
+            const rev = c.jobs.reduce((s, j) => s + (j.price || 0), 0);
+            return (
+              <div key={c.id} className="flex-1 min-w-[180px] border-r border-white/60 last:border-r-0 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm"
+                    style={{ background: c.tint }}
+                  >{c.init}</span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 leading-tight truncate">{c.name}</div>
+                    <div className="text-[10.5px] text-slate-500 leading-tight tabular-nums">
+                      {c.jobs.length} {c.jobs.length === 1 ? "job" : "jobs"} · £{rev}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Grid */}
+        <div className="flex overflow-x-auto">
+          <HourRuler />
+          {crews.map((c) => (
+            <CrewLane key={c.id} jobs={c.jobs} onJobClick={onJobClick} />
+          ))}
+        </div>
+      </LightCard>
+    </>
   );
 }
 
 // ─── WEEK VIEW — 7-col time grid (re-themed) ──────────────────────────────────
-function WeekView({ jobs, onJobClick }) {
+function WeekView({ jobs, onJobClick, weekDates = [] }) {
   const WEEK_PX_PER_HR = 56;
   const LABEL_W = 48;
   const [expandedDay, setExpandedDay] = useState(0);
@@ -641,9 +718,11 @@ function WeekView({ jobs, onJobClick }) {
                 onClick={() => setExpandedDay(isOpen ? -1 : dayIdx)}
                 className="w-full flex items-center gap-3 px-4 py-3 text-left"
               >
-                <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 bg-slate-900 text-white">
+                <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 text-white ${
+                  weekDates[dayIdx] && isoDate(weekDates[dayIdx]) === isoDate(getToday()) ? 'bg-blue-600' : 'bg-slate-900'
+                }`}>
                   <span className="text-[10px] font-bold uppercase leading-none">{day}</span>
-                  <span className="text-sm font-black leading-tight">{6 + dayIdx}</span>
+                  <span className="text-sm font-black leading-tight">{weekDates[dayIdx]?.getDate() ?? 6 + dayIdx}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className="text-sm font-bold text-slate-900">
@@ -704,10 +783,14 @@ function WeekView({ jobs, onJobClick }) {
             return (
               <div
                 key={d}
-                className={`flex-1 text-center py-2 border-l border-white/60 min-w-[100px] ${i === 0 ? "bg-blue-50/50" : ""}`}
+                className={`flex-1 text-center py-2 border-l border-white/60 min-w-[100px] ${
+                  weekDates[i] && isoDate(weekDates[i]) === isoDate(getToday()) ? 'bg-blue-50/80' : ''
+                }`}
               >
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{d}</p>
-                <p className="text-sm font-bold text-slate-900">{6 + i}</p>
+                <p className={`text-sm font-bold ${weekDates[i] && isoDate(weekDates[i]) === isoDate(getToday()) ? 'text-blue-600' : 'text-slate-900'}`}>
+                  {weekDates[i]?.getDate() ?? 6 + i}
+                </p>
                 <p className="text-xs text-emerald-600 font-semibold tabular-nums">£{rev}</p>
               </div>
             );
@@ -1084,6 +1167,23 @@ function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
             <StatusBadge status={status} />
             <TypeBadge type={job.type} />
           </div>
+
+          {getJobAssignees(job).length > 1 && (
+            <div>
+              <SectionLabel>Team on this job</SectionLabel>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {getJobAssignees(job).map(name => (
+                  <div key={name} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 rounded-full">
+                    <span
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                      style={{ background: tintForCrew(name) }}
+                    >{name.charAt(0).toUpperCase()}</span>
+                    <span className="text-xs font-semibold text-slate-700">{name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="rounded-xl border border-slate-200 divide-y divide-slate-100">
             {[
@@ -1667,6 +1767,21 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
 
         {view === "Day" && (
           <div className="border-t border-white/50 bg-white/30 backdrop-blur">
+            {/* Mobile: day-strip for quick navigation */}
+            <div className="px-4 pt-2 pb-1">
+              <MobileDayStrip
+                weekDates={(() => {
+                  const viewed = getViewDate(dayOffset, "Day");
+                  const mon = getMonday(viewed);
+                  return Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date(mon); d.setDate(d.getDate() + i); return d;
+                  });
+                })()}
+                currentDateStr={todayStr}
+                setDayOffset={setDayOffset}
+                allJobs={allJobs}
+              />
+            </div>
             <div className="px-4 sm:px-6 py-2.5">
               <FilterBar
                 typeFilter={typeFilter}
@@ -1684,7 +1799,7 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
       <div className="relative z-0 flex-1 overflow-y-auto p-4 lg:p-6">
         <div className="max-w-[1600px] mx-auto">
           {view === "Day"     && <DayView     jobs={todayJobs} onJobClick={handleJobClick} typeFilter={typeFilter} crewFilter={crewFilter} />}
-          {view === "Week"    && <WeekView    jobs={weekJobsWithDay} onJobClick={handleJobClick} />}
+          {view === "Week"    && <WeekView    jobs={weekJobsWithDay} onJobClick={handleJobClick} weekDates={weekDates} />}
           {view === "Month"   && <MonthView   jobs={allJobs.filter(j => j.status !== 'cancelled')} onJobClick={handleJobClick} viewDate={viewDate} />}
           {view === "Quarter" && <QuarterView jobs={allJobs.filter(j => j.status !== 'cancelled')} />}
         </div>

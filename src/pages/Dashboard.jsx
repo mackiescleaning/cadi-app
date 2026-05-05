@@ -2231,6 +2231,8 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const [showTour,         setShowTour]         = useState(false);
   const [showShareCard,    setShowShareCard]    = useState(false);
   const [milestone,        setMilestone]        = useState(null); // { emoji, title, body }
+  const [readyBanner,      setReadyBanner]      = useState(null); // null | { services, hourlyRate, targetRevenue, sectors, structure }
+  const [readyBannerDismissed, setReadyBannerDismissed] = useState(false);
   const [communityOptIn,   setCommunityOptIn]   = useState(() => {
     if (profile?.community_opt_in) return true;
     try { return localStorage.getItem('cadi_community_opt_in') === '1'; } catch { return false; }
@@ -2415,6 +2417,40 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     prevTierRef.current = score.tier;
   }, [score.tier, score.total]);
 
+  // Load setup_data to power the "ready for you" first-login banner
+  useEffect(() => {
+    if (!user || !profile?.onboarding_complete) return;
+    if (user.id === 'demo-user') return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('business_settings')
+          .select('setup_data')
+          .eq('owner_id', user.id)
+          .single();
+        const sd = data?.setup_data || {};
+        if (sd.welcome_banner_dismissed) return;
+        const services = sd.services || [];
+        const hourlyRate = sd.hourly_rate;
+        const targetRevenue = sd.target_revenue;
+        const sectors = sd.cleaner_sectors || (profile?.cleaner_type ? [profile.cleaner_type] : []);
+        const structure = profile?.biz_structure;
+        const hasContent = services.length || hourlyRate || targetRevenue || sectors.length;
+        if (hasContent) setReadyBanner({ services, hourlyRate, targetRevenue, sectors, structure });
+      } catch { /* non-critical */ }
+    })();
+  }, [user, profile?.onboarding_complete, profile?.cleaner_type, profile?.biz_structure]);
+
+  async function dismissReadyBanner() {
+    setReadyBannerDismissed(true);
+    if (!user || user.id === 'demo-user') return;
+    try {
+      const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).single();
+      const existing = data?.setup_data || {};
+      await supabase.from('business_settings').update({ setup_data: { ...existing, welcome_banner_dismissed: true } }).eq('owner_id', user.id);
+    } catch { /* non-critical */ }
+  }
+
   const handleDismissWelcome = () => {
     setShowWelcome(false);
     // Start the spotlight tour after first welcome
@@ -2547,6 +2583,84 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
         </div>
       )}
 
+      {/* ── "What Cadi has ready for you" first-login banner ── */}
+      {readyBanner && !readyBannerDismissed && (
+        <div className="mx-4 mt-4 rounded-2xl border border-[rgba(31,72,255,0.3)] bg-gradient-to-br from-[#05124a] to-[#0a1860] p-4 sm:p-5">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1f48ff] text-xs font-extrabold text-white">C</div>
+                <span className="text-[11px] font-bold uppercase tracking-widest text-[rgba(153,197,255,0.6)]">Cadi · Ready for you</span>
+              </div>
+              <p className="mt-2 text-[15px] font-bold text-white">
+                Your account is pre-built, {profile?.first_name || 'there'} — here's what's already set up.
+              </p>
+            </div>
+            <button onClick={dismissReadyBanner} className="mt-1 shrink-0 text-[rgba(153,197,255,0.4)] transition hover:text-white text-lg leading-none">✕</button>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {readyBanner.sectors?.length > 0 && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-[rgba(153,197,255,0.1)] bg-[rgba(153,197,255,0.05)] px-3 py-2.5">
+                <span className="mt-0.5 text-base">🧹</span>
+                <div>
+                  <div className="text-xs font-bold text-[#99c5ff]">App customised</div>
+                  <div className="text-[11px] leading-relaxed text-[rgba(153,197,255,0.55)]">
+                    {readyBanner.sectors.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', ')} edition — tools, filters and dashboard are set to your work
+                  </div>
+                </div>
+              </div>
+            )}
+            {readyBanner.services?.length > 0 && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-[rgba(153,197,255,0.1)] bg-[rgba(153,197,255,0.05)] px-3 py-2.5">
+                <span className="mt-0.5 text-base">✅</span>
+                <div>
+                  <div className="text-xs font-bold text-[#99c5ff]">Service menu built</div>
+                  <div className="text-[11px] leading-relaxed text-[rgba(153,197,255,0.55)]">
+                    {readyBanner.services.length} services ready as quick-picks on every job card, quote and invoice
+                  </div>
+                </div>
+              </div>
+            )}
+            {readyBanner.hourlyRate && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-[rgba(153,197,255,0.1)] bg-[rgba(153,197,255,0.05)] px-3 py-2.5">
+                <span className="mt-0.5 text-base">💷</span>
+                <div>
+                  <div className="text-xs font-bold text-[#99c5ff]">Pricing pre-loaded</div>
+                  <div className="text-[11px] leading-relaxed text-[rgba(153,197,255,0.55)]">
+                    £{readyBanner.hourlyRate}/hr flows into your pricing calculator, quote builder and job cards
+                  </div>
+                </div>
+              </div>
+            )}
+            {readyBanner.targetRevenue && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-[rgba(153,197,255,0.1)] bg-[rgba(153,197,255,0.05)] px-3 py-2.5">
+                <span className="mt-0.5 text-base">🎯</span>
+                <div>
+                  <div className="text-xs font-bold text-[#99c5ff]">Sprint target set</div>
+                  <div className="text-[11px] leading-relaxed text-[rgba(153,197,255,0.55)]">
+                    £{Number(readyBanner.targetRevenue).toLocaleString()}/mo target is live — Cadi tracks every job against it
+                  </div>
+                </div>
+              </div>
+            )}
+            {readyBanner.structure && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-[rgba(153,197,255,0.1)] bg-[rgba(153,197,255,0.05)] px-3 py-2.5">
+                <span className="mt-0.5 text-base">📋</span>
+                <div>
+                  <div className="text-xs font-bold text-[#99c5ff]">Tax & accounts configured</div>
+                  <div className="text-[11px] leading-relaxed text-[rgba(153,197,255,0.55)]">
+                    {readyBanner.structure === 'sole_trader' ? 'Self Assessment SA103' : readyBanner.structure === 'limited' ? 'Corporation Tax & Companies House' : 'Accounts'} tools and defaults set
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <p className="mt-3 text-[11px] text-[rgba(153,197,255,0.4)]">
+            All of this updates automatically as you work. You can change any setting in the Settings tab.
+          </p>
+        </div>
+      )}
+
       {/* ── Loading state ── */}
       {isLive && dataLoading && (
         <div className="flex items-center justify-center py-12">
@@ -2583,6 +2697,11 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           {/* ── SOLO MODE ── */}
           {mode === "solo" && (
             <div className="space-y-4">
+
+              {/* ── Setup guide — shown for real users until wizard is complete ── */}
+              {isLive && profile?.onboarding_complete && (
+                <SetupWizard onAllDone={() => {}} />
+              )}
 
               {/* ── LEADERBOARD HERO — front and centre (or onboarding scorecard for new users) ── */}
               <div id="tour-leaderboard" className="grid grid-cols-1 lg:grid-cols-3 gap-4">

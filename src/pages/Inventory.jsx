@@ -951,11 +951,12 @@ export default function InventoryTab({ accountsData, onExpenseLog }) {
     }).catch(() => {});
   }, [user]);
 
-  const [tab,      setTab]      = useState("stock");
-  const [products, setProducts] = useState([]);
-  const [kits,     setKits]     = useState([]);
-  const [orders,   setOrders]   = useState([]);
-  const [loading,  setLoading]  = useState(true);
+  const [tab,        setTab]       = useState("stock");
+  const [products,   setProducts]  = useState([]);
+  const [kits,       setKits]      = useState([]);
+  const [orders,     setOrders]    = useState([]);
+  const [loading,    setLoading]   = useState(true);
+  const [saveError,  setSaveError] = useState(null);
 
   // Map DB row to component shape
   const mapProduct = (r) => ({
@@ -1011,7 +1012,10 @@ export default function InventoryTab({ accountsData, onExpenseLog }) {
         if ('supplierUrl' in updates) dbUpdates.supplier_url = updates.supplierUrl;
         if ('notes' in updates) dbUpdates.notes = updates.notes;
         if (Object.keys(dbUpdates).length > 0) await updateProduct(id, dbUpdates);
-      } catch (err) { console.error('Failed to update product:', err); }
+      } catch {
+        setSaveError('Could not save product changes. Please try again.');
+        setTimeout(() => setSaveError(null), 5000);
+      }
     }
   }, [isLive]);
 
@@ -1021,7 +1025,10 @@ export default function InventoryTab({ accountsData, onExpenseLog }) {
         const saved = await createProduct(product);
         setProducts(prev => [...prev, mapProduct(saved)]);
         return;
-      } catch (err) { console.error('Failed to save product:', err); }
+      } catch {
+        setSaveError('Could not add product. Please try again.');
+        setTimeout(() => setSaveError(null), 5000);
+      }
     }
     setProducts(prev => [...prev, { ...product, id: Date.now() }]);
   }, [isLive]);
@@ -1029,7 +1036,10 @@ export default function InventoryTab({ accountsData, onExpenseLog }) {
   const deleteProductLocal = useCallback(async (id) => {
     setProducts(prev => prev.filter(p => p.id !== id));
     if (isLive) {
-      try { await deleteProduct(id); } catch (err) { console.error('Failed to delete product:', err); }
+      try { await deleteProduct(id); } catch {
+        setSaveError('Could not delete product. Please try again.');
+        setTimeout(() => setSaveError(null), 5000);
+      }
     }
   }, [isLive]);
 
@@ -1048,8 +1058,9 @@ export default function InventoryTab({ accountsData, onExpenseLog }) {
       try {
         const saved = await createOrder(orderData);
         setOrders(prev => [mapOrder(saved), ...prev]);
-      } catch (err) {
-        console.error('Failed to save order:', err);
+      } catch {
+        setSaveError('Could not log order. Please try again.');
+        setTimeout(() => setSaveError(null), 5000);
         setOrders(prev => [{ id: `o${Date.now()}`, date: orderData.date, supplier: product.supplier, items: [{ name: product.name, qty, cost: product.unitCost }], total, receipt: false, logged: true }, ...prev]);
       }
     } else {
@@ -1080,6 +1091,14 @@ export default function InventoryTab({ accountsData, onExpenseLog }) {
         style={{ backgroundImage: "linear-gradient(rgba(153,197,255,0.5) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,0.5) 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
 
       <div className="relative max-w-3xl mx-auto px-4 py-6 space-y-4">
+
+        {/* Save error toast */}
+        {saveError && (
+          <div className="px-4 py-3 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center gap-2">
+            <span className="text-red-400 text-sm font-bold">!</span>
+            <p className="text-xs text-red-300 font-semibold flex-1">{saveError}</p>
+          </div>
+        )}
 
         {/* Page header */}
         <div className="flex items-center justify-between gap-4">

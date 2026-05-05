@@ -61,6 +61,11 @@ export function useHmrc() {
   const [connecting,      setConnecting]      = useState(false);
   const [loading,         setLoading]         = useState(!isDemo); // no load in demo
   const [error,           setError]           = useState(null);
+  // Set to true when a previously-connected user's tokens have expired/been cleared.
+  // Persisted in localStorage so the message survives page refreshes.
+  const [reconnectRequired, setReconnectRequired] = useState(() => {
+    try { return localStorage.getItem('cadi_hmrc_reconnect_required') === '1'; } catch { return false; }
+  });
 
   const pollRef = useRef(null);
 
@@ -73,6 +78,22 @@ export function useHmrc() {
     if (isDemo) return;
     try {
       const s = await getHmrcStatus();
+      // If the user was previously connected and is now not, flag reconnect.
+      if (!s.connected) {
+        const wasConnected = localStorage.getItem('cadi_hmrc_was_connected') === '1';
+        if (wasConnected) {
+          setReconnectRequired(true);
+          try { localStorage.setItem('cadi_hmrc_reconnect_required', '1'); } catch {}
+        }
+      } else {
+        // Currently connected — record this so we can detect future drops.
+        try { localStorage.setItem('cadi_hmrc_was_connected', '1'); } catch {}
+        // Clear any stale reconnect flag.
+        if (reconnectRequired) {
+          setReconnectRequired(false);
+          try { localStorage.removeItem('cadi_hmrc_reconnect_required'); } catch {}
+        }
+      }
       setStatus(s);
       setError(null);
     } catch (e) {
@@ -83,7 +104,7 @@ export function useHmrc() {
     } finally {
       setLoading(false);
     }
-  }, [isDemo]);
+  }, [isDemo, reconnectRequired]);
 
   useEffect(() => {
     if (isDemo) return undefined;
@@ -129,6 +150,11 @@ export function useHmrc() {
       setObligations([]);
       setBusinessId(null);
       setLastCalculation(null);
+      setReconnectRequired(false);
+      try {
+        localStorage.removeItem('cadi_hmrc_reconnect_required');
+        localStorage.removeItem('cadi_hmrc_was_connected');
+      } catch {}
     } catch (e) {
       setError(e.message);
     } finally {
@@ -335,6 +361,7 @@ export function useHmrc() {
     lastCalculation,
     bsasData,
     error,
+    reconnectRequired,
 
     // Actions
     connectHmrc,

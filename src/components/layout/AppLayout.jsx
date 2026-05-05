@@ -69,6 +69,17 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const { user, profile, signOut, refreshProfile } = useAuth();
   const { isPro, isTabLocked } = usePlan();
+  const [logoUrl, setLogoUrl] = useState('');
+
+  useEffect(() => {
+    if (!user || user.id === 'demo-user') return;
+    (async () => {
+      try {
+        const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).single();
+        if (data?.setup_data?.logo_url) setLogoUrl(data.setup_data.logo_url);
+      } catch { /* non-critical */ }
+    })();
+  }, [user]);
 
   // Close "More" menu when clicking outside or navigating
   useEffect(() => {
@@ -151,10 +162,22 @@ export default function AppLayout() {
       {/* ── SIDEBAR (desktop) ── */}
       <aside className="hidden md:flex flex-col w-64 min-h-screen bg-[#010a4f] text-white fixed left-0 top-0 bottom-0 z-40">
 
-        {/* Logo */}
+        {/* Logo / brand */}
         <div className="px-6 py-5 border-b border-white/10">
-          <CadiWordmark height={24} />
-          <p className="text-[10px] text-[#99c5ff] mt-1 tracking-wide">Business OS</p>
+          {logoUrl ? (
+            <div className="flex items-center gap-3">
+              <img src={logoUrl} alt="Business logo" className="h-9 w-9 rounded-xl object-contain bg-white/10 p-0.5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-white truncate">{profile?.business_name || 'My Business'}</p>
+                <p className="text-[10px] text-[#99c5ff] tracking-wide">powered by Cadi</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <CadiWordmark height={24} />
+              <p className="text-[10px] text-[#99c5ff] mt-1 tracking-wide">Business OS</p>
+            </>
+          )}
         </div>
 
         {/* Nav links */}
@@ -217,9 +240,10 @@ export default function AppLayout() {
         {/* User block */}
         <div className="px-4 py-5 border-t border-white/10">
           <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-white/5">
-            <div className="w-8 h-8 rounded-full bg-[#1f48ff] flex items-center justify-center text-xs font-bold text-white">
-              {userInitial}
-            </div>
+            {logoUrl
+              ? <img src={logoUrl} alt="" className="w-8 h-8 rounded-full object-contain bg-white/10 p-0.5 shrink-0" />
+              : <div className="w-8 h-8 rounded-full bg-[#1f48ff] flex items-center justify-center text-xs font-bold text-white shrink-0">{userInitial}</div>
+            }
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white truncate">{userName}</p>
               <p className="text-xs text-[#99c5ff] truncate">{planLabel}</p>

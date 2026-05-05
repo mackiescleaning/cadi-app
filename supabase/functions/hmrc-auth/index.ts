@@ -43,7 +43,7 @@ const OAUTH_SCOPES = [
 
 // ─── CORS headers ─────────────────────────────────────────────────────────────
 const CORS = {
-  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Origin":  Deno.env.get("APP_ORIGIN") ?? "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -60,9 +60,7 @@ async function getUser(req: Request) {
   const sb    = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
   const authHeader = req.headers.get("Authorization") ?? "";
   const token = authHeader.replace("Bearer ", "");
-  console.log("[getUser] auth header present:", !!authHeader, "token length:", token.length, "prefix:", token.substring(0, 12));
   const { data: { user }, error } = await sb.auth.getUser(token);
-  console.log("[getUser] user:", user?.id ?? "null", "error:", error?.message ?? "none");
   if (error || !user) throw new Error("Unauthorized");
   return { user, sb };
 }
@@ -129,21 +127,16 @@ serve(async (req: Request) => {
       const { user, sb } = await getUser(req);
       const { code, state } = body;
 
-      console.log("[callback] user:", user.id, "code present:", !!code, "state:", state?.substring(0, 8));
-
       if (!code || !state) return json({ error: "Missing code or state" }, 400);
 
       // Verify state matches what we stored (CSRF check)
-      const { data: profile, error: profileErr } = await sb
+      const { data: profile } = await sb
         .from("profiles")
         .select("hmrc_oauth_state")
         .eq("id", user.id)
         .single();
 
-      console.log("[callback] profile found:", !!profile, "stored_state:", profile?.hmrc_oauth_state?.substring(0, 8) ?? "null", "profileErr:", profileErr?.message ?? "none");
-
       if (profile?.hmrc_oauth_state !== state) {
-        console.error("[callback] state mismatch: stored=", profile?.hmrc_oauth_state, "received=", state);
         return json({ error: "State mismatch — possible CSRF" }, 400);
       }
 
@@ -168,9 +161,7 @@ serve(async (req: Request) => {
         token_type:    string;
       };
 
-      console.log("[callback] HMRC token res status:", tokenRes.status);
       if (!tokenRes.ok) {
-        console.error("[callback] HMRC token exchange failed:", JSON.stringify(tokens));
         return json({ error: "Token exchange failed", detail: tokens }, 400);
       }
 

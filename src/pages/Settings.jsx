@@ -9,7 +9,7 @@ import {
   ChevronRight, Save, Check, Eye, EyeOff, Sparkles,
   LogOut, Trash2, Download, Shield, Phone, Mail,
   MapPin, Globe, Clock, PoundSterling, ToggleLeft,
-  ToggleRight, AlertCircle, CheckCircle
+  ToggleRight, AlertCircle, CheckCircle, Plug, Link, Unlink, RefreshCw, Copy
 } from 'lucide-react';
 
 // ─── Billing portal button ────────────────────────────────────────────────────
@@ -134,11 +134,12 @@ function SavedToast({ show }) {
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'profile', label: 'Profile', icon: User },
-  { id: 'business', label: 'Business', icon: Building2 },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'subscription', label: 'Plan', icon: CreditCard },
-  { id: 'security', label: 'Security', icon: Lock },
+  { id: 'profile',      label: 'Profile',       icon: User       },
+  { id: 'business',     label: 'Business',      icon: Building2  },
+  { id: 'notifications',label: 'Notifications', icon: Bell       },
+  { id: 'subscription', label: 'Plan',          icon: CreditCard },
+  { id: 'security',     label: 'Security',      icon: Lock       },
+  { id: 'integrations', label: 'Integrations',  icon: Plug       },
 ];
 
 export default function Settings() {
@@ -146,9 +147,11 @@ export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile: authProfile, updateProfile, signOut } = useAuth();
   const { isPro, priceMonthly } = usePlan();
-  const [activeTab, setActiveTab] = useState(() =>
-    searchParams.get('upgraded') === '1' ? 'subscription' : 'profile'
-  );
+  const [activeTab, setActiveTab] = useState(() => {
+    if (searchParams.get('upgraded') === '1') return 'subscription';
+    if (searchParams.get('tab')) return searchParams.get('tab');
+    return 'profile';
+  });
   const [upgradeSuccess, setUpgradeSuccess] = useState(searchParams.get('upgraded') === '1');
   const [saved, setSaved] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -193,6 +196,15 @@ export default function Settings() {
 
   const [communityOptIn, setCommunityOptIn] = useState(Boolean(authProfile?.community_opt_in));
 
+  // Logo state
+  const [logoUrl, setLogoUrl] = useState('');
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  // GoCardless state
+  const [gcStatus, setGcStatus] = useState(null); // null | { connected, connectedAt, organisationId, sandbox }
+  const [gcLoading, setGcLoading] = useState(false);
+  const [gcCopied, setGcCopied] = useState(false);
+
   useEffect(() => {
     if (!authProfile && !user) return;
 
@@ -233,6 +245,7 @@ export default function Settings() {
 
         const bd = settings.bank_details || {};
         const sd = settings.setup_data || {};
+        if (sd.logo_url) setLogoUrl(sd.logo_url);
         setBusiness((prev) => ({
           ...prev,
           hourlyRate: settings.hourly_rate != null ? String(settings.hourly_rate) : prev.hourlyRate,
@@ -259,6 +272,53 @@ export default function Settings() {
       mounted = false;
     };
   }, []);
+
+  // Load GoCardless status when Integrations tab opens
+  useEffect(() => {
+    if (activeTab !== 'integrations') return;
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session || !mounted) return;
+        const { data } = await supabase.functions.invoke('gocardless-auth', {
+          body:    { action: 'status' },
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (mounted) setGcStatus(data);
+      } catch { /* ignore */ }
+    })();
+    return () => { mounted = false; };
+  }, [activeTab]);
+
+  const handleGcConnect = async () => {
+    setGcLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data } = await supabase.functions.invoke('gocardless-auth', {
+        body:    { action: 'url' },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (data?.url) window.location.href = data.url;
+    } catch { /* ignore */ } finally {
+      setGcLoading(false);
+    }
+  };
+
+  const handleGcDisconnect = async () => {
+    if (!window.confirm('Disconnect GoCardless? You will no longer be able to collect Direct Debits until you reconnect.')) return;
+    setGcLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await supabase.functions.invoke('gocardless-auth', {
+        body:    { action: 'disconnect' },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      setGcStatus(s => ({ ...s, connected: false, connectedAt: null, organisationId: null }));
+    } catch { /* ignore */ } finally {
+      setGcLoading(false);
+    }
+  };
 
   const showSaved = () => {
     setSaved(true);
@@ -330,6 +390,63 @@ export default function Settings() {
     }
   };
 
+  const compressImage = (file, cb) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 256;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        cb(canvas.toDataURL('image/png', 0.85));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoUpload = async (file) => {
+    if (!file || !user) return;
+    setLogoUploading(true);
+    compressImage(file, async (dataUrl) => {
+      try {
+        const { data: existing } = await supabase
+          .from('business_settings')
+          .select('setup_data')
+          .eq('owner_id', user.id)
+          .single();
+        const sd = existing?.setup_data ?? {};
+        await supabase
+          .from('business_settings')
+          .upsert({ owner_id: user.id, setup_data: { ...sd, logo_url: dataUrl } }, { onConflict: 'owner_id' });
+        setLogoUrl(dataUrl);
+        showSaved();
+      } catch { /* ignore */ }
+      setLogoUploading(false);
+    });
+  };
+
+  const handleLogoRemove = async () => {
+    if (!user) return;
+    try {
+      const { data: existing } = await supabase
+        .from('business_settings')
+        .select('setup_data')
+        .eq('owner_id', user.id)
+        .single();
+      const sd = { ...(existing?.setup_data ?? {}) };
+      delete sd.logo_url;
+      await supabase
+        .from('business_settings')
+        .upsert({ owner_id: user.id, setup_data: sd }, { onConflict: 'owner_id' });
+      setLogoUrl('');
+      showSaved();
+    } catch { /* ignore */ }
+  };
+
   const updateProfileField = (f, v) => setProfile(p => ({ ...p, [f]: v }));
   const updateBusiness = (f, v) => setBusiness(b => ({ ...b, [f]: v }));
   const updateNotif = (f, v) => setNotifications(n => ({ ...n, [f]: v }));
@@ -381,6 +498,41 @@ export default function Settings() {
                 <button className="mt-2 text-xs font-bold text-[#1f48ff] hover:underline">
                   Change photo
                 </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Business Logo */}
+          <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6">
+            <h3 className="font-bold text-[#010a4f] mb-1">Business Logo</h3>
+            <p className="text-xs text-gray-400 mb-4">Appears in the sidebar, on invoices and quotes. Square or circular logos look best.</p>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-2xl bg-gray-100 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {logoUrl
+                  ? <img src={logoUrl} alt="Business logo" className="w-full h-full object-contain" />
+                  : <span className="text-2xl">🖼️</span>
+                }
+              </div>
+              <div className="space-y-2">
+                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2.5 bg-[#1f48ff] text-white text-xs font-bold rounded-xl hover:bg-[#010a4f] transition-colors">
+                  {logoUploading ? 'Uploading…' : logoUrl ? 'Change logo' : 'Upload logo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => { if (e.target.files?.[0]) handleLogoUpload(e.target.files[0]); }}
+                    disabled={logoUploading}
+                  />
+                </label>
+                {logoUrl && (
+                  <button
+                    onClick={handleLogoRemove}
+                    className="block text-xs font-semibold text-red-400 hover:text-red-600 transition-colors"
+                  >
+                    Remove logo
+                  </button>
+                )}
+                <p className="text-[10px] text-gray-400">PNG, JPG or SVG · max 256px stored</p>
               </div>
             </div>
           </div>
@@ -694,6 +846,167 @@ export default function Settings() {
               </button>
             </SettingRow>
           </Section>
+        </div>
+      )}
+
+      {/* ── INTEGRATIONS TAB ── */}
+      {activeTab === 'integrations' && (
+        <div className="space-y-5">
+
+          {/* GoCardless Payments */}
+          <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#f0f4ff] flex items-center justify-center text-xl shrink-0">
+                🏦
+              </div>
+              <div>
+                <h3 className="font-bold text-[#010a4f]">GoCardless — Direct Debit collection</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Collect payments from your customers by Direct Debit · 1% + 20p, max £4 per transaction</p>
+              </div>
+              {gcStatus?.sandbox && (
+                <span className="ml-auto shrink-0 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-600 border border-amber-200">
+                  Sandbox
+                </span>
+              )}
+            </div>
+
+            <div className="p-6 space-y-5">
+
+              {/* Connection status */}
+              {gcStatus === null ? (
+                <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <div className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-[#1f48ff] animate-spin" />
+                  Checking connection…
+                </div>
+              ) : gcStatus.connected ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-green-50 border border-green-100">
+                    <div className="w-8 h-8 rounded-full bg-green-500/15 border border-green-500/25 flex items-center justify-center shrink-0">
+                      <CheckCircle size={15} className="text-green-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-green-800">GoCardless connected</p>
+                      <p className="text-xs text-green-600 mt-0.5 font-mono truncate">
+                        Org: {gcStatus.organisationId ?? '—'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleGcDisconnect}
+                      disabled={gcLoading}
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
+                    >
+                      <Unlink size={12} />
+                      Disconnect
+                    </button>
+                  </div>
+
+                  {/* Customer payment link */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-gray-500">Send this link to customers to set up their Direct Debit mandate:</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs font-mono text-gray-500 truncate">
+                        Use "Set up Direct Debit" button on each customer's profile
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText('https://app.cadi.cleaning/customers');
+                          setGcCopied(true);
+                          setTimeout(() => setGcCopied(false), 2000);
+                        }}
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold text-[#1f48ff] border border-[#1f48ff]/30 rounded-xl hover:bg-[#1f48ff]/5 transition-colors"
+                      >
+                        <Copy size={12} />
+                        {gcCopied ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* What's enabled */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      { icon: '🔗', label: 'Mandate links', desc: 'Send setup links to customers' },
+                      { icon: '💸', label: 'One-off collection', desc: 'Collect against any invoice' },
+                      { icon: '🔄', label: 'Auto status sync', desc: 'Invoices marked paid automatically' },
+                    ].map(f => (
+                      <div key={f.label} className="p-3 rounded-xl bg-[#f8faff] border border-[#e8eeff]">
+                        <div className="text-lg mb-1">{f.icon}</div>
+                        <p className="text-xs font-bold text-[#010a4f]">{f.label}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{f.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-500">
+                    Connect your GoCardless account to start collecting Direct Debit payments from your customers.
+                    Money goes straight to your bank — Cadi never touches it.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      { icon: '⚡', label: 'One-click collection', desc: 'Tick off jobs and collect with one click' },
+                      { icon: '🏦', label: 'Direct to your bank', desc: 'Funds clear directly, no middleman' },
+                      { icon: '📧', label: 'Email mandate links', desc: 'Customers set up DD in 2 minutes' },
+                      { icon: '✅', label: 'Auto invoice updates', desc: 'Invoices marked paid when DD clears' },
+                    ].map(f => (
+                      <div key={f.label} className="flex items-start gap-3 p-3 rounded-xl bg-[#f8faff] border border-[#e8eeff]">
+                        <span className="text-lg shrink-0">{f.icon}</span>
+                        <div>
+                          <p className="text-xs font-bold text-[#010a4f]">{f.label}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{f.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-1">
+                    <button
+                      onClick={handleGcConnect}
+                      disabled={gcLoading}
+                      className="flex items-center gap-2 px-6 py-3 bg-[#1f48ff] hover:bg-[#010a4f] text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+                    >
+                      <Link size={14} />
+                      {gcLoading ? 'Redirecting…' : 'Connect GoCardless account'}
+                    </button>
+                    <p className="text-xs text-gray-400">
+                      You'll need a GoCardless merchant account.{' '}
+                      <a
+                        href="https://gocardless.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#1f48ff] hover:underline font-semibold"
+                      >
+                        Sign up free →
+                      </a>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Open Banking (coming soon) */}
+          <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden opacity-70">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#f0f4ff] flex items-center justify-center text-xl shrink-0">
+                📊
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-[#010a4f]">Open Banking — auto-import transactions</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Connect your business bank account · zero manual entry · instant categorisation</p>
+              </div>
+              <span className="shrink-0 text-xs font-bold px-2.5 py-1 rounded-full bg-[#1f48ff]/10 text-[#1f48ff] border border-[#1f48ff]/20">
+                Coming soon
+              </span>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-sm text-gray-400">
+                Auto-import your bank transactions, match them to invoices, and categorise expenses — all without manual entry.
+              </p>
+            </div>
+          </div>
+
         </div>
       )}
 

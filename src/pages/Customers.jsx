@@ -1167,6 +1167,67 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
 
   const TABS = ["overview", "history", "suggestions", "messages", "secure"];
 
+  // GoCardless state
+  const [gcLoading, setGcLoading]       = useState(false);
+  const [gcMandateUrl, setGcMandateUrl] = useState(null);
+  const [gcCopied, setGcCopied]         = useState(false);
+  const [gcPayAmount, setGcPayAmount]   = useState("");
+  const [gcPayLoading, setGcPayLoading] = useState(false);
+  const [gcError, setGcError]           = useState(null);
+  const [gcSuccess, setGcSuccess]       = useState(null);
+
+  const gcInvoke = async (body) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke("gocardless-api", {
+      body,
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (error) {
+      let msg = error.message;
+      try { const rb = await error.context?.json?.(); if (rb?.error) msg = rb.error; } catch {}
+      throw new Error(msg);
+    }
+    if (data?.error) throw new Error(data.error);
+    return data;
+  };
+
+  const handleGcSync = async () => {
+    setGcLoading(true); setGcError(null); setGcSuccess(null);
+    try {
+      const res = await gcInvoke({ action: "sync_customer", customerId: customer.id });
+      onUpdateCustomer?.(customer.id, { gc_customer_id: res.gcCustomerId });
+      setGcSuccess("Customer synced to GoCardless.");
+    } catch (e) { setGcError(e.message); } finally { setGcLoading(false); }
+  };
+
+  const handleGcMandateLink = async () => {
+    setGcLoading(true); setGcError(null); setGcSuccess(null);
+    try {
+      const res = await gcInvoke({ action: "create_mandate_link", customerId: customer.id });
+      setGcMandateUrl(res.mandateUrl);
+    } catch (e) { setGcError(e.message); } finally { setGcLoading(false); }
+  };
+
+  const handleGcCollect = async () => {
+    const pence = Math.round(parseFloat(gcPayAmount) * 100);
+    if (!pence || pence <= 0) { setGcError("Enter a valid amount."); return; }
+    setGcPayLoading(true); setGcError(null); setGcSuccess(null);
+    try {
+      await gcInvoke({ action: "create_payment", customerId: customer.id, amountPence: pence, description: `Payment — ${customer.name}` });
+      setGcSuccess(`£${gcPayAmount} collection sent to GoCardless.`);
+      setGcPayAmount("");
+    } catch (e) { setGcError(e.message); } finally { setGcPayLoading(false); }
+  };
+
+  const handleGcSyncMandate = async () => {
+    setGcLoading(true); setGcError(null); setGcSuccess(null);
+    try {
+      const res = await gcInvoke({ action: "sync_mandate", customerId: customer.id });
+      onUpdateCustomer?.(customer.id, { gc_mandate_id: res.mandateId, gc_mandate_status: res.mandateStatus });
+      setGcSuccess(`Mandate synced — status: ${res.mandateStatus}`);
+    } catch (e) { setGcError(e.message); } finally { setGcLoading(false); }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#010a4f]">
       {/* Header */}
@@ -1355,6 +1416,7 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
                 Add note
               </button>
             </div>
+
           </>
         )}
 
@@ -1482,6 +1544,89 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
         {activeTab === "secure" && (
           <SecureVault customer={customer} ownerId={ownerId} />
         )}
+
+        {/* GoCardless Direct Debit */}
+        <GlassCard>
+          <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.06)] flex items-center gap-2">
+            <span className="text-base">🏦</span>
+            <span className="text-[11px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.7)]">Direct Debit</span>
+            {customer.gc_mandate_status && (
+              <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
+                customer.gc_mandate_status === "active"
+                  ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/20"
+                  : "text-amber-400 bg-amber-400/10 border-amber-400/20"
+              }`}>
+                {customer.gc_mandate_status}
+              </span>
+            )}
+          </div>
+          <div className="px-4 py-3 space-y-3">
+            {/* Step 1: sync to GC */}
+            {!customer.gc_customer_id && (
+              <button
+                onClick={handleGcSync}
+                disabled={gcLoading}
+                className="w-full py-2.5 text-xs font-bold uppercase tracking-wide rounded-xl bg-[rgba(153,197,255,0.1)] border border-[rgba(153,197,255,0.2)] text-[#99c5ff] hover:bg-[rgba(153,197,255,0.18)] transition-all disabled:opacity-50"
+              >
+                {gcLoading ? "Syncing…" : "Set up GoCardless →"}
+              </button>
+            )}
+            {/* Step 2: get mandate link */}
+            {customer.gc_customer_id && !customer.gc_mandate_id && (
+              <button
+                onClick={handleGcMandateLink}
+                disabled={gcLoading}
+                className="w-full py-2.5 text-xs font-bold uppercase tracking-wide rounded-xl bg-[rgba(153,197,255,0.1)] border border-[rgba(153,197,255,0.2)] text-[#99c5ff] hover:bg-[rgba(153,197,255,0.18)] transition-all disabled:opacity-50"
+              >
+                {gcLoading ? "Generating…" : "Get Direct Debit link →"}
+              </button>
+            )}
+            {/* Mandate link — copy to send to customer */}
+            {gcMandateUrl && (
+              <div className="rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] p-3 space-y-2">
+                <p className="text-[10px] text-[rgba(153,197,255,0.5)]">Send this link to {customer.name.split(" ")[0]} to authorise the Direct Debit:</p>
+                <p className="text-[10px] text-[#99c5ff] break-all font-mono">{gcMandateUrl}</p>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(gcMandateUrl); setGcSuccess("Link copied!"); }}
+                  className="text-[10px] font-bold text-[#99c5ff] hover:text-white transition-colors"
+                >
+                  Copy link
+                </button>
+              </div>
+            )}
+            {/* Sync mandate status after customer completes the link */}
+            {customer.gc_customer_id && (!customer.gc_mandate_id || (customer.gc_mandate_status && !["active"].includes(customer.gc_mandate_status))) && (
+              <button
+                onClick={handleGcSyncMandate}
+                disabled={gcLoading}
+                className="w-full py-2 text-[10px] font-bold uppercase tracking-wide rounded-xl border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] hover:border-[rgba(153,197,255,0.25)] transition-all disabled:opacity-50"
+              >
+                {gcLoading ? "Checking…" : "↻ Sync mandate status"}
+              </button>
+            )}
+            {/* Step 3: collect payment */}
+            {["active", "submitted", "pending_submission"].includes(customer.gc_mandate_status) && (
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  placeholder="Amount £"
+                  value={gcPayAmount}
+                  onChange={e => setGcPayAmount(e.target.value)}
+                  className="flex-1 px-3 py-2 rounded-xl bg-[rgba(153,197,255,0.08)] border border-[rgba(153,197,255,0.15)] text-white text-xs placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[rgba(153,197,255,0.4)]"
+                />
+                <button
+                  onClick={handleGcCollect}
+                  disabled={gcPayLoading || !gcPayAmount}
+                  className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-bold hover:bg-emerald-500/30 transition-all disabled:opacity-50"
+                >
+                  {gcPayLoading ? "…" : "Collect"}
+                </button>
+              </div>
+            )}
+            {gcError   && <p className="text-[11px] text-red-400">{gcError}</p>}
+            {gcSuccess && <p className="text-[11px] text-emerald-400">{gcSuccess}</p>}
+          </div>
+        </GlassCard>
 
         {/* Danger zone — archive customer */}
         <div className="px-5 py-4 border-t border-[rgba(153,197,255,0.08)]">
@@ -1986,7 +2131,7 @@ export default function CustomerTab() {
       {showDetail && selected ? (
         <div className="flex-1 overflow-hidden">
           <CustomerDetail
-            customer={selected}
+            customer={customers.find(c => c.id === selected.id) ?? selected}
             onMessage={handleMessage}
             onClose={() => { setShowDetail(false); setSelected(null); }}
             onBookJob={handleBookJob}

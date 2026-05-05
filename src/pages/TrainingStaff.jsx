@@ -23,6 +23,7 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 
 // ─── Demo staff data ───────────────────────────────────────────────────────────
 const DEMO_STAFF = [
@@ -269,11 +270,8 @@ function monthlyCost(s) {
 
 // ─── AI training plan via Claude API ─────────────────────────────────────────
 async function generateTrainingPlan(roleDesc, weeks) {
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+  const { data, error } = await supabase.functions.invoke("ai-generate", {
+    body: {
       max_tokens: 1200,
       messages: [{
         role: "user",
@@ -291,20 +289,16 @@ Respond ONLY with valid JSON (no markdown):
 
 Each week must have 4–6 specific, practical tasks. Week ${weeks} must include a review conversation and goal-setting.`,
       }],
-    }),
+    },
   });
-  if (!r.ok) throw new Error(`API ${r.status}`);
-  const d = await r.json();
-  return JSON.parse((d.content?.[0]?.text ?? "").replace(/```json|```/g, "").trim());
+  if (error) throw error;
+  return JSON.parse((data?.content?.[0]?.text ?? "").replace(/```json|```/g, "").trim());
 }
 
 // ─── AI offer / rejection letter ─────────────────────────────────────────────
 async function generateLetter(type, staff, role, rate, startDate, hours) {
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+  const { data, error } = await supabase.functions.invoke("ai-generate", {
+    body: {
       max_tokens: 600,
       messages: [{
         role: "user",
@@ -312,11 +306,10 @@ async function generateLetter(type, staff, role, rate, startDate, hours) {
           ? `Write a concise UK employment offer letter for a cleaning business. Candidate: ${staff}. Role: ${role}. Rate: £${rate}/hr. Hours: ${hours} per week. Start date: ${startDate}. Include: job title, start date, pay rate, hours, notice period (1 week), holiday entitlement (5.6 weeks). End with a signature line. Professional but warm. No subject line, no placeholders.`
           : `Write a brief, professional, legally safe rejection letter for a cleaning job applicant in the UK. Candidate name: ${staff}. No specific reason — just thank them for their time, say the role has been filled, wish them well. Three sentences maximum. No subject line.`,
       }],
-    }),
+    },
   });
-  if (!r.ok) throw new Error(`API ${r.status}`);
-  const d = await r.json();
-  return d.content?.[0]?.text ?? "";
+  if (error) throw error;
+  return data?.content?.[0]?.text ?? "";
 }
 
 // ─── SECTION: Team Overview ───────────────────────────────────────────────────

@@ -36,9 +36,10 @@ export default function Calculator() {
 
     (async () => {
       try {
+        const taxYearStart = startOfTaxYear();
         const [settingsData, moneyEntries] = await Promise.all([
           getBusinessSettings(),
-          listMoneyEntries(2000),
+          listMoneyEntries({ from: taxYearStart, pageSize: 2000 }),
         ]);
 
         if (!mounted) return;
@@ -51,10 +52,8 @@ export default function Calculator() {
           }
         }
 
-        // Compute YTD income from money_entries
-        const taxYearStart = startOfTaxYear();
         const income = (moneyEntries || [])
-          .filter(e => e.kind === 'income' && e.date >= taxYearStart)
+          .filter(e => e.kind === 'income')
           .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
         setYtdIncome(income);
       } catch (err) {

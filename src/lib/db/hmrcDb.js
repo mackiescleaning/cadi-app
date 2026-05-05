@@ -79,7 +79,6 @@ export async function hmrcApi(action, payload = {}) {
     e.hmrcStatus = data.hmrcStatus;
     e.hmrcBody   = data.hmrcBody;
     e.path       = data.path;
-    console.error('[hmrc-api]', data.error, { hmrcStatus: data.hmrcStatus, hmrcBody: data.hmrcBody, path: data.path });
     throw e;
   }
   return data;

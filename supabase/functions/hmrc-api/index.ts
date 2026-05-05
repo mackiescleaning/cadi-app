@@ -112,7 +112,7 @@ const HMRC_BASE = SANDBOX
   : "https://api.service.hmrc.gov.uk";
 
 const CORS = {
-  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Origin":  Deno.env.get("APP_ORIGIN") ?? "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -175,7 +175,6 @@ async function getAccessToken(userId: string, sb: ReturnType<typeof createClient
   }
 
   // ── Refresh the access token ───────────────────────────────────────────────
-  console.log(`Refreshing HMRC token for user ${userId}`);
   const refreshRes = await fetch(`${HMRC_BASE}/oauth/token`, {
     method:  "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -311,10 +310,7 @@ async function hmrcFetch(
     data = { raw: await res.text() };
   }
 
-  // Diagnostic: surface HMRC's actual error payload in logs on non-2xx
-  if (!res.ok) {
-    console.error("HMRC non-2xx:", method, path, res.status, JSON.stringify(data));
-  }
+  // Non-2xx — error payload is returned to the caller so they can surface it
 
   return { ok: res.ok, status: res.status, data };
 }
@@ -441,7 +437,7 @@ serve(async (req: Request) => {
           turnover: incomeData.turnover,
           ...(incomeData.other ? { other: incomeData.other } : {}),
         },
-        periodExpenses: expenses,
+        ...(Object.keys(expenses).length > 0 ? { periodExpenses: expenses } : {}),
       };
 
       const result = await hmrcFetch(

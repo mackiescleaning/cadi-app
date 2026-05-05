@@ -3,14 +3,22 @@ import { getCurrentUserId } from './authDb';
 
 // ─── Saved Routes ────────────────────────────────────────────────────────────
 
-export async function listRoutes(limit = 100) {
+export async function listRoutes(optionsOrLimit = {}) {
   const ownerId = await getCurrentUserId();
+
+  const opts = typeof optionsOrLimit === 'number'
+    ? { pageSize: optionsOrLimit, page: 0 }
+    : optionsOrLimit;
+
+  const { page = 0, pageSize = 100 } = opts;
+
   const { data, error } = await supabase
     .from('saved_routes')
     .select('*')
     .eq('owner_id', ownerId)
     .order('updated_at', { ascending: false })
-    .limit(limit);
+    .range(page * pageSize, (page + 1) * pageSize - 1);
+
   if (error) throw error;
   return data ?? [];
 }
@@ -63,14 +71,27 @@ export async function deleteRoute(id) {
 
 // ─── Mileage Logs ────────────────────────────────────────────────────────────
 
-export async function listMileageLogs(limit = 500) {
+// options: { page, pageSize, from (ISO date), to (ISO date) }
+export async function listMileageLogs(optionsOrLimit = {}) {
   const ownerId = await getCurrentUserId();
-  const { data, error } = await supabase
+
+  const opts = typeof optionsOrLimit === 'number'
+    ? { pageSize: optionsOrLimit, page: 0 }
+    : optionsOrLimit;
+
+  const { page = 0, pageSize = 200, from, to } = opts;
+
+  let q = supabase
     .from('mileage_logs')
     .select('*')
     .eq('owner_id', ownerId)
     .order('date', { ascending: false })
-    .limit(limit);
+    .range(page * pageSize, (page + 1) * pageSize - 1);
+
+  if (from) q = q.gte('date', from);
+  if (to) q = q.lte('date', to);
+
+  const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
 }

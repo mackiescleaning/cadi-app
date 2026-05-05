@@ -22,6 +22,9 @@ function mapRow(r) {
     services: [],
     notes: r.notes || "",
     source: r.source || "",
+    gc_customer_id: r.gc_customer_id || null,
+    gc_mandate_id: r.gc_mandate_id || null,
+    gc_mandate_status: r.gc_mandate_status || null,
   };
 }
 

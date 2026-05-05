@@ -45,8 +45,18 @@ export function AuthProvider({ children }) {
         setUser(session?.user ?? null);
         if (session?.user) {
           fetchProfile(session.user.id);
+          if (window.FS) {
+            window.FS('setIdentity', {
+              uid: session.user.id,
+              properties: {
+                email: session.user.email ?? '',
+                displayName: session.user.user_metadata?.first_name ?? session.user.email ?? '',
+              },
+            });
+          }
         } else {
           setProfile(null);
+          if (window.FS) window.FS('setIdentity', { anonymous: true });
         }
         setLoading(false);
       }
@@ -98,6 +108,12 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
   }
 
+  async function refreshProfile() {
+    if (user?.id && user.id !== 'demo-user') {
+      await fetchProfile(user.id);
+    }
+  }
+
   async function updateProfile(updates) {
     // Demo user — update locally only
     if (user?.id === 'demo-user') {
@@ -119,7 +135,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, loading, profileLoading, isPro,
-      signUp, signIn, signOut, loginAsDemo, updateProfile
+      signUp, signIn, signOut, loginAsDemo, updateProfile, refreshProfile
     }}>
       {children}
     </AuthContext.Provider>

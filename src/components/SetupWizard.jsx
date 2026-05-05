@@ -13,7 +13,20 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
 // ─── Step definitions ──────────────────────────────────────────────────────────
+// Each step includes a `settingsLink` so skipped onboarding items have a clear home.
 const STEPS = [
+  {
+    id: 'logo',
+    emoji: '🖼️',
+    title: 'Add your business logo',
+    mission: 'Upload your logo and the app looks completely yours — it appears in the sidebar, on every invoice and quote.',
+    tab: 'settings',
+    tabLabel: 'Open Settings',
+    settingsTab: 'profile',
+    hint: 'Settings → Profile → Business Logo',
+    detect: (profile, sd) => !!sd?.logo_url,
+    autoDetect: true,
+  },
   {
     id: 'sectors',
     emoji: '🧹',
@@ -21,7 +34,8 @@ const STEPS = [
     mission: 'Tell Cadi what you do — residential, commercial or exterior — and the entire app reorders itself around your work.',
     tab: 'settings',
     tabLabel: 'Open Settings',
-    hint: 'Head to Settings → Profile → Cleaning Sector',
+    settingsTab: 'profile',
+    hint: 'Settings → Profile → Cleaning Sector',
     detect: (profile) => !!profile?.cleaner_type,
     autoDetect: true,
   },
@@ -32,7 +46,7 @@ const STEPS = [
     mission: 'Add your hourly rate and minimum job price. These flow automatically into every quote, invoice and job card across Cadi.',
     tab: 'calculator',
     tabLabel: 'Open Pricing',
-    hint: 'Set your base hourly rate in the Pricing calculator',
+    hint: 'Pricing tab → set your base hourly rate',
     detect: (profile, sd) => !!sd?.hourly_rate,
     autoDetect: true,
   },
@@ -43,8 +57,31 @@ const STEPS = [
     mission: "Pick every service you offer. They'll appear as options on job cards, customer profiles and invoices — no more typing from scratch.",
     tab: 'calculator',
     tabLabel: 'Open Pricing',
-    hint: 'Select your services in the Pricing tab service list',
+    hint: 'Pricing tab → Services section',
     detect: (profile, sd) => Array.isArray(sd?.services) && sd.services.length > 0,
+    autoDetect: true,
+  },
+  {
+    id: 'goals',
+    emoji: '🎯',
+    title: 'Set your revenue target',
+    mission: "Set a monthly target and Cadi tracks every job against it — showing exactly how many bookings stand between you and your goal.",
+    tab: 'review',
+    tabLabel: 'Open Sprint Planner',
+    hint: 'Annual Review → create a 90-day sprint',
+    detect: (profile, sd) => !!sd?.target_revenue,
+    autoDetect: true,
+  },
+  {
+    id: 'compliance',
+    emoji: '🛡️',
+    title: 'Log your compliance',
+    mission: 'Add your PLI, DBS, ICO and COSHH status. Cadi tracks renewal dates and alerts you before anything lapses.',
+    tab: 'settings',
+    tabLabel: 'Open Settings',
+    settingsTab: 'business',
+    hint: 'Settings → Business → Compliance',
+    detect: (profile, sd) => !!(sd?.pli || sd?.dbs || sd?.ico || sd?.coshh),
     autoDetect: true,
   },
   {
@@ -54,7 +91,7 @@ const STEPS = [
     mission: 'Log your existing clients — names, addresses, notes and a star rating. This is the foundation of everything: scheduling, invoicing, routes.',
     tab: 'customers',
     tabLabel: 'Open Customers',
-    hint: 'Add at least one customer to get started',
+    hint: 'Customers tab → Add customer',
     detect: null,
     autoDetect: false,
   },
@@ -65,7 +102,7 @@ const STEPS = [
     mission: 'Drop your current jobs onto the scheduler. See your week take shape — and let the dashboard start showing real numbers.',
     tab: 'scheduler',
     tabLabel: 'Open Scheduler',
-    hint: 'Add your jobs for the week in the Scheduler',
+    hint: 'Scheduler tab → Add job',
     detect: null,
     autoDetect: false,
   },
@@ -76,20 +113,9 @@ const STEPS = [
     mission: 'Log your products, quantities and restock dates. Cadi tracks what you use so you never run out mid-job.',
     tab: 'inventory',
     tabLabel: 'Open Inventory',
-    hint: 'Add your cleaning products in Inventory',
+    hint: 'Inventory tab → Add product',
     detect: null,
     autoDetect: false,
-  },
-  {
-    id: 'goals',
-    emoji: '🎯',
-    title: 'Set your first business goal',
-    mission: "Create a 90-day sprint with a revenue target. Cadi will track every job against it and tell you exactly how many bookings stand between you and your goal.",
-    tab: 'review',
-    tabLabel: 'Open Sprint Planner',
-    hint: 'Create a 90-day sprint in the Annual Review tab',
-    detect: (profile, sd) => !!sd?.target_revenue,
-    autoDetect: true,
   },
 ];
 
@@ -180,7 +206,8 @@ export default function SetupWizard({ onAllDone }) {
 
   const goToTab = (step) => {
     setActiveStep(step.id);
-    navigate(`/${step.tab}`);
+    const path = step.settingsTab ? `/${step.tab}?tab=${step.settingsTab}` : `/${step.tab}`;
+    navigate(path);
   };
 
   if (dismissed) return null;

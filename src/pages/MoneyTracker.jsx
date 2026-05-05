@@ -4,10 +4,11 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { createMoneyEntry, listMoneyEntries } from "../lib/db/moneyDb";
+import { createMoneyEntry, listMoneyEntries, updateMoneyEntry, deleteMoneyEntry } from "../lib/db/moneyDb";
 import { listQuotes, updateQuoteStatus } from "../lib/db/quotesDb";
 import { useAuth } from "../context/AuthContext";
 import { useInvoices } from "../context/InvoiceContext";
+import { supabase } from "../lib/supabase";
 
 // ─── Expense categories ───────────────────────────────────────────────────────
 const EXPENSE_CATS = [
@@ -99,16 +100,31 @@ function buildLastSixMonths(entries) {
   return months;
 }
 
-// Build AI insights based on real data
-function buildInsights(accounts, monthlyData, expenses) {
+// Build AI insights based on real data (manual entries + bank transactions)
+function buildInsights(accounts, monthlyData, expenses, bankTxs = []) {
   const insights = [];
   const curr     = monthlyData.find(m => m.isCurrent) ?? { income: 0, expenses: 0 };
   const prev     = monthlyData.filter(m => !m.isCurrent).at(-1) ?? { income: 0, expenses: 0 };
   const taxShort = Math.max(accounts.taxReserveTarget - accounts.taxReserve, 0);
   const expRatio = curr.income > 0 ? curr.expenses / curr.income : 0;
   const vsLast   = curr.income - prev.income;
-  const fuelSpend = expenses.filter(e => e.category === "fuel").reduce((s,e) => s + Number(e.amount), 0);
+  const fuelSpend     = expenses.filter(e => e.category === "fuel").reduce((s,e) => s + Number(e.amount), 0);
   const suppliesSpend = expenses.filter(e => e.category === "supplies").reduce((s,e) => s + Number(e.amount), 0);
+
+  // Bank-data nudges (only when we have real open-banking data)
+  const needsReview  = bankTxs.filter(t => t.needs_review).length;
+  const personalDebit = bankTxs
+    .filter(t => !t.is_business && t.transaction_type === "debit")
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const prevExpRatio = prev.income > 0 ? prev.expenses / prev.income : 0;
+  const expTrend     = expRatio - prevExpRatio;
+
+  if (needsReview > 3) insights.push({
+    id: "review", type: "warn", emoji: "🔍",
+    title: `${needsReview} bank transactions still need sorting`,
+    body:  "Unsorted transactions aren't counted in your P&L or tax estimate. A few minutes now keeps your numbers accurate.",
+    cta:   "Sort now",
+  });
 
   if (taxShort > 500) insights.push({
     id: "tax", type: "warn", emoji: "🏦",
@@ -124,10 +140,19 @@ function buildInsights(accounts, monthlyData, expenses) {
     cta:   null,
   });
 
+  if (personalDebit > 150) insights.push({
+    id: "personal", type: "tip", emoji: "💳",
+    title: `£${personalDebit.toFixed(0)} personal spend through your business account`,
+    body:  "Mixing personal and business spending makes self-assessment harder. A separate personal card keeps your books clean and saves hours at year-end.",
+    cta:   null,
+  });
+
   if (expRatio > 0.22) insights.push({
     id: "expenses", type: "tip", emoji: "💡",
     title: `Expenses are ${fmtPct(expRatio * 100)} of income this month`,
-    body:  "Buying cleaning supplies in bulk (Prochem, Premiere) typically saves 18–25% vs retail. A fuel card with cashback can also cut 3–5p per litre.",
+    body:  expTrend > 0.05
+      ? `Up ${fmtPct(expTrend * 100)} on last month. Buying cleaning supplies in bulk (Prochem, Premiere) typically saves 18–25%. A fuel card can cut 3–5p per litre.`
+      : "Buying cleaning supplies in bulk (Prochem, Premiere) typically saves 18–25% vs retail. A fuel card with cashback can also cut 3–5p per litre.",
     cta:   "See saving tips",
   });
 
@@ -170,23 +195,179 @@ function SectionLabel({ children, className = "" }) {
 }
 
 // ─── Open Banking Banner ──────────────────────────────────────────────────────
-function OpenBankingBanner() {
-  const [dismissed, setDismissed] = useState(false);
-  if (dismissed) return null;
+function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete }) {
+  const { user } = useAuth();
+  const [connected,  setConnected]  = useState(false);
+  const [loading,    setLoading]    = useState(false);
+  const [syncing,    setSyncing]    = useState(false);
+  const [error,      setError]      = useState(null);
+  const [success,    setSuccess]    = useState(null);
+  const [showTxs,    setShowTxs]    = useState(false);
+
+  const tlInvoke = async (fn, body) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error: e } = await supabase.functions.invoke(fn, {
+      body,
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    });
+    if (e) { let m = e.message; try { const rb = await e.context?.json?.(); if (rb?.error) m = rb.error; } catch {} throw new Error(m); }
+    if (data?.error) throw new Error(data.error);
+    return data;
+  };
+
+  useEffect(() => {
+    if (!user || user.id === 'demo-user') return;
+    tlInvoke('truelayer-auth', { action: 'status' })
+      .then(d => setConnected(d.connected))
+      .catch(() => {});
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleConnect = async () => {
+    setLoading(true); setError(null);
+    try {
+      const { url } = await tlInvoke('truelayer-auth', { action: 'url' });
+      window.location.href = url;
+    } catch (e) { setError(e.message); setLoading(false); }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true); setError(null); setSuccess(null);
+    try {
+      const res = await tlInvoke('truelayer-api', { action: 'sync' });
+      setSuccess(`Imported ${res.imported} transactions from ${res.accounts} account${res.accounts !== 1 ? 's' : ''}.`);
+      const txRes = await tlInvoke('truelayer-api', { action: 'transactions', days: 90 });
+      const txs = txRes.transactions ?? [];
+      setBankTxs(txs);
+      setShowTxs(true);
+      onSyncComplete?.(txs);
+    } catch (e) { setError(e.message); } finally { setSyncing(false); }
+  };
+
+  const handleDisconnect = async () => {
+    if (!window.confirm('Disconnect your bank account? Imported transactions will be kept.')) return;
+    try { await tlInvoke('truelayer-auth', { action: 'disconnect' }); setConnected(false); setBankTxs([]); setShowTxs(false); onSyncComplete?.([]); }
+    catch (e) { setError(e.message); }
+  };
+
+  const handleCategorise = async (txId, isBusiness, category) => {
+    try {
+      await tlInvoke('truelayer-api', { action: 'categorise', transactionId: txId, isBusiness, category });
+      setBankTxs(prev => prev.map(t => t.id === txId ? { ...t, is_business: isBusiness, is_personal: !isBusiness, needs_review: false, category } : t));
+    } catch (e) { setError(e.message); }
+  };
+
+  const needsReview = bankTxs.filter(t => t.needs_review);
+  const business    = bankTxs.filter(t => t.is_business);
+  const personal    = bankTxs.filter(t => t.is_personal);
+  const personalTotal = personal.filter(t => t.transaction_type === 'debit').reduce((s, t) => s + Number(t.amount), 0);
+
+  if (user?.id === 'demo-user') return null;
+
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-[#1f48ff]/30 bg-gradient-to-r from-[#1f48ff]/10 via-[#1f48ff]/5 to-transparent p-4">
+    <div className="rounded-2xl border border-[#1f48ff]/30 bg-gradient-to-r from-[#1f48ff]/10 via-[#1f48ff]/5 to-transparent overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-[#1f48ff]/60 via-[#99c5ff]/40 to-transparent" />
-      <div className="flex items-start gap-3 sm:items-center sm:gap-4">
-        <div className="shrink-0 w-10 h-10 rounded-xl bg-[#1f48ff]/20 border border-[#1f48ff]/30 flex items-center justify-center text-xl">🏦</div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-black text-white">Open banking — coming soon</p>
-            <button onClick={() => setDismissed(true)} className="shrink-0 text-[rgba(153,197,255,0.35)] hover:text-white text-lg leading-none -mt-1">×</button>
+      <div className="p-4">
+        <div className="flex items-center gap-3">
+          <div className="shrink-0 w-10 h-10 rounded-xl bg-[#1f48ff]/20 border border-[#1f48ff]/30 flex items-center justify-center text-xl">🏦</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-black text-white">
+              {connected ? 'Bank connected' : 'Connect your bank'}
+              {connected && <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400">Live</span>}
+            </p>
+            <p className="text-xs text-[rgba(153,197,255,0.6)] mt-0.5">
+              {connected ? 'Auto-import transactions · smart categorisation · real P&L' : 'Auto-import transactions · zero manual entry · real-time cash flow'}
+            </p>
           </div>
-          <p className="text-xs text-[rgba(153,197,255,0.6)] mt-0.5">Auto-import transactions · zero manual entry · instant expense categorisation · real-time cash flow</p>
-          <span className="inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold bg-[#1f48ff]/20 border border-[#1f48ff]/40 text-[#99c5ff]">Notify me</span>
+          {connected && (
+            <button onClick={handleDisconnect} className="text-[10px] text-[rgba(153,197,255,0.4)] hover:text-red-400 transition-colors">Disconnect</button>
+          )}
         </div>
+
+        <div className="mt-3 flex gap-2 flex-wrap">
+          {!connected ? (
+            <button onClick={handleConnect} disabled={loading}
+              className="px-4 py-2 rounded-xl bg-[#1f48ff] text-white text-xs font-bold hover:bg-[#1f48ff]/80 transition-all disabled:opacity-50">
+              {loading ? 'Connecting…' : '🔗 Connect bank account'}
+            </button>
+          ) : (
+            <button onClick={handleSync} disabled={syncing}
+              className="px-4 py-2 rounded-xl bg-[rgba(153,197,255,0.12)] border border-[rgba(153,197,255,0.2)] text-[#99c5ff] text-xs font-bold hover:bg-[rgba(153,197,255,0.2)] transition-all disabled:opacity-50">
+              {syncing ? 'Syncing…' : '↻ Sync transactions'}
+            </button>
+          )}
+          {connected && bankTxs.length > 0 && (
+            <button onClick={() => setShowTxs(v => !v)}
+              className="px-4 py-2 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.6)] text-xs font-bold hover:text-[#99c5ff] transition-all">
+              {showTxs ? 'Hide' : 'View'} transactions ({bankTxs.length})
+            </button>
+          )}
+        </div>
+
+        {error   && <p className="mt-2 text-xs text-red-400">{error}</p>}
+        {success && <p className="mt-2 text-xs text-emerald-400">{success}</p>}
+
+        {/* Summary pills */}
+        {bankTxs.length > 0 && (
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {[
+              { label: 'Business', value: business.length, color: 'text-emerald-400' },
+              { label: 'Personal', value: personal.length, color: 'text-amber-400' },
+              { label: 'Review', value: needsReview.length, color: needsReview.length > 0 ? 'text-red-400' : 'text-[rgba(153,197,255,0.4)]' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="rounded-xl bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.08)] p-2 text-center">
+                <p className={`text-base font-black ${color}`}>{value}</p>
+                <p className="text-[10px] text-[rgba(153,197,255,0.4)]">{label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Personal spend insight */}
+        {personalTotal > 0 && (
+          <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <p className="text-xs text-amber-300 font-bold">💡 Personal spend this period: £{personalTotal.toFixed(2)}</p>
+            <p className="text-[10px] text-amber-300/70 mt-0.5">These aren't included in your P&L. Review them to make sure nothing business-related slipped through.</p>
+          </div>
+        )}
       </div>
+
+      {/* Transaction triage */}
+      {showTxs && bankTxs.length > 0 && (
+        <div className="border-t border-[rgba(153,197,255,0.08)] max-h-96 overflow-y-auto">
+          {needsReview.length > 0 && (
+            <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20">
+              <p className="text-[10px] font-bold text-red-400 uppercase tracking-wide">{needsReview.length} need review — business or personal?</p>
+            </div>
+          )}
+          {bankTxs.map(tx => (
+            <div key={tx.id} className={`flex items-center gap-3 px-4 py-3 border-b border-[rgba(153,197,255,0.05)] last:border-0 ${tx.needs_review ? 'bg-amber-500/5' : ''}`}>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-white font-semibold truncate">{tx.merchant_name || tx.description}</p>
+                <p className="text-[10px] text-[rgba(153,197,255,0.4)]">{tx.date} · {tx.category}</p>
+              </div>
+              <p className={`text-xs font-bold shrink-0 ${tx.transaction_type === 'credit' ? 'text-emerald-400' : 'text-white'}`}>
+                {tx.transaction_type === 'debit' ? '-' : '+'}£{Number(tx.amount).toFixed(2)}
+              </p>
+              {tx.needs_review ? (
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => handleCategorise(tx.id, true, tx.category)}
+                    className="px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/30 transition-all">
+                    Biz
+                  </button>
+                  <button onClick={() => handleCategorise(tx.id, false, 'personal')}
+                    className="px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] font-bold hover:bg-amber-500/30 transition-all">
+                    Personal
+                  </button>
+                </div>
+              ) : (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${tx.is_business ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'}`}>
+                  {tx.is_business ? 'Biz' : 'Personal'}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -346,6 +527,104 @@ function AiCoachPanel({ insights, onNavigate }) {
               className={`w-1.5 h-1.5 rounded-full transition-all ${i === idx ? "bg-[#1f48ff] w-4" : "bg-[rgba(153,197,255,0.2)]"}`} />
           ))}
         </div>
+      )}
+    </GCard>
+  );
+}
+
+// ─── Monthly Report ───────────────────────────────────────────────────────────
+function MonthlyReport({ monthlyData, expenses, accounts }) {
+  const curr = monthlyData.find(m => m.isCurrent) ?? { income: 0, expenses: 0 };
+  const prev = monthlyData.filter(m => !m.isCurrent).at(-1) ?? { income: 0, expenses: 0 };
+
+  if (curr.income === 0 && curr.expenses === 0) return null;
+
+  const now         = new Date();
+  const monthName   = now.toLocaleDateString("en-GB", { month: "long" });
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysGone    = now.getDate();
+  const daysLeft    = daysInMonth - daysGone;
+  const profit      = curr.income - curr.expenses;
+  const vsLast      = curr.income - prev.income;
+  const vsLastPct   = prev.income > 0 ? vsLast / prev.income : 0;
+  const onPace      = daysGone > 0 ? Math.round(curr.income / daysGone * daysInMonth) : curr.income;
+
+  // Top expense category from actual expense list
+  const catSpend = {};
+  expenses.forEach(e => { if (e.category) catSpend[e.category] = (catSpend[e.category] || 0) + Number(e.amount); });
+  const topCat    = Object.entries(catSpend).sort((a,b) => b[1]-a[1])[0];
+  const topCatObj = topCat ? catById(topCat[0]) : null;
+
+  // Annual target: sum all months / target
+  const ytdIncome      = monthlyData.reduce((s,m) => s + m.income, 0);
+  const targetProgress = accounts.annualTarget > 0 ? ytdIncome / accounts.annualTarget : null;
+
+  // Plain-English narrative
+  const sentences = [];
+  if (daysLeft > 0) {
+    if (vsLast > 50)  sentences.push(`${monthName} is already ${fmtPct(Math.abs(vsLastPct) * 100)} ahead of ${prev.month ?? "last month"} with ${daysLeft} day${daysLeft !== 1 ? "s" : ""} still to go.`);
+    else if (vsLast < -50) sentences.push(`${monthName} is ${fmtPct(Math.abs(vsLastPct) * 100)} behind ${prev.month ?? "last month"} with ${daysLeft} day${daysLeft !== 1 ? "s" : ""} to turn it around.`);
+    else sentences.push(`${monthName} is ${daysGone} days in — you've brought in ${fmt(curr.income)} so far.`);
+  } else {
+    sentences.push(`${monthName} closed with ${fmt(curr.income)} income.`);
+  }
+
+  if (curr.expenses > 0 && curr.income > 0) {
+    sentences.push(`Expenses came to ${fmt(curr.expenses)} (${fmtPct(curr.expenses / curr.income * 100)} of income), leaving ${fmt(profit)} profit.`);
+  }
+
+  if (topCatObj && topCat[1] > 0) {
+    sentences.push(`Biggest cost: ${topCatObj.label.toLowerCase()} at ${fmt(topCat[1])}.`);
+  }
+
+  if (targetProgress !== null) {
+    sentences.push(`You're ${fmtPct(targetProgress * 100)} toward your ${fmt(accounts.annualTarget)} annual target.`);
+  }
+
+  return (
+    <GCard className="p-4">
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <SectionLabel>{monthName} {now.getFullYear()}</SectionLabel>
+          <p className="text-sm font-black text-white mt-0.5">Month in review</p>
+        </div>
+        <span className="text-2xl">📊</span>
+      </div>
+
+      <p className="text-sm text-[rgba(153,197,255,0.8)] leading-relaxed">{sentences.join(" ")}</p>
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {[
+          { label: "Income",   value: fmt(curr.income),   color: "text-emerald-400" },
+          { label: "Expenses", value: fmt(curr.expenses), color: "text-amber-400"   },
+          { label: "Kept",     value: fmt(profit),        color: profit >= 0 ? "text-white" : "text-red-400" },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="text-center p-2 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
+            <p className="text-[9px] font-bold tracking-wider uppercase text-[rgba(153,197,255,0.35)] mb-1">{label}</p>
+            <p className={`text-sm font-black tabular-nums ${color}`}>{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {targetProgress !== null && (
+        <div className="mt-4">
+          <div className="flex justify-between text-[10px] text-[rgba(153,197,255,0.4)] mb-1.5">
+            <span>Annual target progress</span>
+            <span>{fmt(ytdIncome)} of {fmt(accounts.annualTarget)}</span>
+          </div>
+          <div className="h-2 rounded-full bg-[rgba(153,197,255,0.08)] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#1f48ff] to-[#99c5ff] transition-all duration-700"
+              style={{ width: `${Math.min(targetProgress * 100, 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {daysLeft > 0 && curr.income > 0 && (
+        <p className="mt-3 text-[10px] text-[rgba(153,197,255,0.35)]">
+          {daysLeft} day{daysLeft !== 1 ? "s" : ""} left in {monthName} · on pace for {fmt(onPace)}
+        </p>
       )}
     </GCard>
   );
@@ -801,16 +1080,31 @@ function IncomeStream({ transactions, invoices, onLogPayment, onReminder }) {
 
 // ─── Money Goals & Gamification ───────────────────────────────────────────────
 function MoneyGoals({ accounts, weekRevenue, monthlyData, transactions = [], onNavigate }) {
-  const curr       = monthlyData.find(m => m.isCurrent) ?? { income: 0 };
-  const prev       = monthlyData.filter(m => !m.isCurrent).at(-1) ?? { income: 1 };
-  const monthPct   = Math.round((curr.income / Math.max(accounts.annualTarget / 12, 1)) * 100);
-  const ytdPct     = Math.round((accounts.ytdIncome / Math.max(accounts.annualTarget, 1)) * 100);
-  const remaining  = Math.max(accounts.annualTarget - accounts.ytdIncome, 0);
+  const curr     = monthlyData.find(m => m.isCurrent) ?? { income: 0 };
+  const prev     = monthlyData.filter(m => !m.isCurrent).at(-1) ?? { income: 1 };
+
+  // Real YTD income from actual transaction data (not stale settings value)
+  const ytdIncome    = monthlyData.reduce((s, m) => s + m.income, 0);
+  const monthlyTarget = accounts.annualTarget > 0 ? Math.round(accounts.annualTarget / 12) : 0;
+  const monthPct     = monthlyTarget > 0 ? Math.round((curr.income / monthlyTarget) * 100) : 0;
+  const ytdPct       = Math.round((ytdIncome / Math.max(accounts.annualTarget, 1)) * 100);
+  const remaining    = Math.max(accounts.annualTarget - ytdIncome, 0);
+
+  // Tax year months left (UK: April–March)
   const taxMonth   = (() => { const m = new Date().getMonth(); return m >= 3 ? m - 3 + 1 : m + 9 + 1; })();
   const monthsLeft = Math.max(1, 12 - taxMonth);
   const needed     = Math.round(remaining / monthsLeft);
+
+  // Monthly pacing: how much per day to hit target, vs actual daily average so far
+  const now          = new Date();
+  const daysInMonth  = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysGone     = now.getDate();
+  const daysLeft     = daysInMonth - daysGone;
+  const dailyNeeded  = monthlyTarget > 0 ? Math.round((monthlyTarget - curr.income) / Math.max(daysLeft, 1)) : 0;
+  const onPace       = daysGone > 0 ? Math.round((curr.income / daysGone) * daysInMonth) : 0;
+  const aheadOfPace  = monthlyTarget > 0 && onPace >= monthlyTarget;
+
   const beatingMonth = curr.income > prev.income;
-  // Streak from transactions this week
   const streak = (() => {
     const today = new Date();
     let count = 0;
@@ -823,7 +1117,6 @@ function MoneyGoals({ accounts, weekRevenue, monthlyData, transactions = [], onN
     return count;
   })();
 
-  // If no annual target set, show setup prompt
   if (!accounts.annualTarget || accounts.annualTarget <= 0) {
     return (
       <GCard className="overflow-hidden">
@@ -849,13 +1142,64 @@ function MoneyGoals({ accounts, weekRevenue, monthlyData, transactions = [], onN
       </div>
       <div className="p-4 space-y-4">
 
-        {/* Annual target */}
+        {/* ── Monthly target — live progress ── */}
+        <div className="rounded-xl border border-[rgba(153,197,255,0.1)] bg-[rgba(153,197,255,0.03)] p-4">
+          <div className="flex items-end justify-between mb-3">
+            <div>
+              <p className="text-[10px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.35)] mb-1">
+                {now.toLocaleDateString("en-GB", { month: "long" })} target
+              </p>
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-2xl font-black text-white tabular-nums">{fmt(curr.income)}</p>
+                <p className="text-sm text-[rgba(153,197,255,0.4)]">of {fmt(monthlyTarget)}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className={`text-3xl font-black tabular-nums ${monthPct >= 100 ? "text-emerald-400" : monthPct >= 70 ? "text-[#99c5ff]" : "text-white"}`}>
+                {monthPct}%
+              </p>
+            </div>
+          </div>
+
+          {/* Thick progress bar */}
+          <div className="relative h-4 bg-[rgba(153,197,255,0.06)] rounded-full overflow-hidden mb-2">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${monthPct >= 100 ? "bg-emerald-400" : "bg-gradient-to-r from-[#1f48ff] to-[#99c5ff]"}`}
+              style={{ width: `${Math.min(monthPct, 100)}%` }}
+            />
+            {/* Pace marker */}
+            {daysGone > 0 && daysGone < daysInMonth && (
+              <div
+                className="absolute top-0 w-0.5 h-full bg-white/30"
+                style={{ left: `${Math.min((daysGone / daysInMonth) * 100, 99)}%` }}
+              />
+            )}
+          </div>
+
+          {/* Pacing status */}
+          <div className="flex justify-between items-center">
+            <p className={`text-[10px] font-bold ${aheadOfPace ? "text-emerald-400" : dailyNeeded > 0 ? "text-amber-400" : "text-[rgba(153,197,255,0.4)]"}`}>
+              {monthPct >= 100
+                ? `✓ Target hit! ${fmt(curr.income - monthlyTarget)} over`
+                : aheadOfPace
+                  ? `On pace for ${fmt(onPace)} 🚀`
+                  : dailyNeeded > 0
+                    ? `Need ${fmt(dailyNeeded)}/day to hit target`
+                    : "Log income to track progress"}
+            </p>
+            <p className="text-[10px] text-[rgba(153,197,255,0.3)]">{daysLeft}d left</p>
+          </div>
+        </div>
+
+        {/* ── Annual target ── */}
         <div>
           <div className="flex justify-between items-end mb-2">
             <div>
-              <p className="text-[10px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.35)] mb-0.5">Annual target {(() => { const now = new Date(); const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; return `${y}/${(y+1).toString().slice(2)}`; })()}</p>
+              <p className="text-[10px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.35)] mb-0.5">
+                Annual target {(() => { const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; return `${y}/${(y+1).toString().slice(2)}`; })()}
+              </p>
               <div className="flex items-baseline gap-1.5">
-                <p className="text-xl font-black text-white tabular-nums">{fmt(accounts.ytdIncome)}</p>
+                <p className="text-xl font-black text-white tabular-nums">{fmt(ytdIncome)}</p>
                 <p className="text-xs text-[rgba(153,197,255,0.4)]">of {fmt(accounts.annualTarget)}</p>
               </div>
             </div>
@@ -869,7 +1213,7 @@ function MoneyGoals({ accounts, weekRevenue, monthlyData, transactions = [], onN
               style={{ width: `${Math.min(ytdPct, 100)}%` }} />
           </div>
           <div className="flex justify-between text-[9px] text-[rgba(153,197,255,0.3)] mt-1.5">
-            {(() => { const now = new Date(); const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; const q = Math.floor(now.getMonth() / 3) + 1; return <><span>Apr {y}</span><span>Q{q} now</span><span>Mar {y + 1}</span></>; })()}
+            {(() => { const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; const q = Math.floor(now.getMonth() / 3) + 1; return <><span>Apr {y}</span><span>Q{q} now</span><span>Mar {y+1}</span></>; })()}
           </div>
         </div>
 
@@ -885,35 +1229,44 @@ function MoneyGoals({ accounts, weekRevenue, monthlyData, transactions = [], onN
           </div>
         </div>
 
-        {/* Fun motivational badges */}
-        <div className="space-y-2">
-          <p className="text-[9px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.3)]">This period</p>
-          <div className="flex flex-wrap gap-2">
-            {beatingMonth && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <span className="text-xs">🔥</span>
-                <span className="text-[10px] font-black text-emerald-400">Beating last month</span>
-              </div>
-            )}
-            {monthPct >= 50 && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1f48ff]/10 border border-[#1f48ff]/20">
-                <span className="text-xs">🎯</span>
-                <span className="text-[10px] font-black text-[#99c5ff]">Halfway to target</span>
-              </div>
-            )}
-            {streak > 0 && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20">
-                <span className="text-xs">⚡</span>
-                <span className="text-[10px] font-black text-amber-400">{streak}-day active streak</span>
-              </div>
-            )}
-            {accounts.taxReserve >= accounts.taxReserveTarget && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20">
-                <span className="text-xs">🏦</span>
-                <span className="text-[10px] font-black text-purple-400">Tax fully covered</span>
-              </div>
-            )}
-          </div>
+        {/* Achievement badges */}
+        <div className="flex flex-wrap gap-2">
+          {beatingMonth && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+              <span className="text-xs">🔥</span>
+              <span className="text-[10px] font-black text-emerald-400">Beating last month</span>
+            </div>
+          )}
+          {monthPct >= 100 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+              <span className="text-xs">🎯</span>
+              <span className="text-[10px] font-black text-emerald-400">Monthly target hit!</span>
+            </div>
+          )}
+          {monthPct >= 50 && monthPct < 100 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1f48ff]/10 border border-[#1f48ff]/20">
+              <span className="text-xs">⚡</span>
+              <span className="text-[10px] font-black text-[#99c5ff]">Halfway there</span>
+            </div>
+          )}
+          {aheadOfPace && monthPct < 100 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1f48ff]/10 border border-[#1f48ff]/20">
+              <span className="text-xs">🚀</span>
+              <span className="text-[10px] font-black text-[#99c5ff]">Ahead of pace</span>
+            </div>
+          )}
+          {streak > 1 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+              <span className="text-xs">📅</span>
+              <span className="text-[10px] font-black text-amber-400">{streak}-day streak</span>
+            </div>
+          )}
+          {accounts.taxReserve >= accounts.taxReserveTarget && accounts.taxReserveTarget > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20">
+              <span className="text-xs">🏦</span>
+              <span className="text-[10px] font-black text-purple-400">Tax fully covered</span>
+            </div>
+          )}
         </div>
 
         {/* Beat last month challenge */}
@@ -930,10 +1283,197 @@ function MoneyGoals({ accounts, weekRevenue, monthlyData, transactions = [], onN
               style={{ width: `${Math.min((curr.income / Math.max(prev.income, 1)) * 100, 100)}%` }} />
           </div>
           <p className={`text-[10px] font-black ${curr.income >= prev.income ? "text-emerald-400" : "text-[rgba(153,197,255,0.5)]"}`}>
-            {curr.income >= prev.income ? `✓ Achieved! +${fmt(curr.income - prev.income)}` : `${fmt(Math.max(prev.income - curr.income, 0))} to go — you've got this 💪`}
+            {curr.income >= prev.income
+              ? `✓ Achieved! +${fmt(curr.income - prev.income)}`
+              : `${fmt(Math.max(prev.income - curr.income, 0))} to go — you've got this 💪`}
           </p>
         </div>
+
       </div>
+    </GCard>
+  );
+}
+
+// ─── Tax Estimate ─────────────────────────────────────────────────────────────
+// UK self-employed tax calculator (2025/26 rates)
+function calcSelfEmployedTax(profit) {
+  const PA = 12570;   // personal allowance
+  const BRT = 50270;  // basic rate threshold
+  const BR  = 0.20;   // basic rate
+  const HR  = 0.40;   // higher rate
+  const NI_LOW  = 0.06; // Class 4 NI below upper profits limit
+  const NI_HIGH = 0.02; // Class 4 NI above upper profits limit
+
+  const taxable = Math.max(profit - PA, 0);
+  const incomeTax = taxable <= (BRT - PA)
+    ? taxable * BR
+    : (BRT - PA) * BR + (taxable - (BRT - PA)) * HR;
+
+  const niBase    = Math.max(profit - PA, 0);
+  const ni = niBase <= (BRT - PA)
+    ? niBase * NI_LOW
+    : (BRT - PA) * NI_LOW + (niBase - (BRT - PA)) * NI_HIGH;
+
+  return { incomeTax: Math.round(incomeTax), ni: Math.round(ni), total: Math.round(incomeTax + ni) };
+}
+
+// Months remaining in current UK tax year (ends 5 April)
+function taxYearMonthsLeft() {
+  const now = new Date();
+  const endYear = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
+  const taxEnd  = new Date(endYear, 3, 5);
+  return Math.max(1, Math.ceil((taxEnd - now) / (30.44 * 24 * 60 * 60 * 1000)));
+}
+
+const ALLOWABLE_CATS = ["fuel", "supplies", "equipment", "insurance", "marketing", "vehicle", "other"];
+
+function TaxEstimate({ monthlyData, expenses, accounts }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const ytdIncome = monthlyData.reduce((s, m) => s + m.income, 0);
+  if (ytdIncome === 0) return null;
+
+  // Tally allowable expenses by category
+  const catTotals = {};
+  ALLOWABLE_CATS.forEach(c => { catTotals[c] = 0; });
+  expenses.forEach(e => {
+    const cat = e.category ?? "other";
+    if (ALLOWABLE_CATS.includes(cat)) catTotals[cat] = (catTotals[cat] || 0) + Number(e.amount);
+  });
+  const totalAllowable = Object.values(catTotals).reduce((s, v) => s + v, 0);
+  const taxableProfit  = Math.max(ytdIncome - totalAllowable, 0);
+  const { incomeTax, ni, total: totalTax } = calcSelfEmployedTax(taxableProfit);
+
+  const reserved   = accounts.taxReserve ?? 0;
+  const shortfall  = Math.max(totalTax - reserved, 0);
+  const monthsLeft = taxYearMonthsLeft();
+  const monthlySetAside = shortfall > 0 ? Math.ceil(shortfall / monthsLeft) : 0;
+
+  const topCats = Object.entries(catTotals)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+  const maxCatVal = topCats[0]?.[1] ?? 1;
+
+  return (
+    <GCard className="overflow-hidden">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between text-left"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-base">🧾</span>
+          <div>
+            <SectionLabel>Tax estimate · {(() => { const now = new Date(); const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; return `${y}/${(y+1).toString().slice(2)}`; })()}</SectionLabel>
+            <p className="text-xs text-white font-bold mt-0.5">
+              {shortfall > 0
+                ? `Set aside ${fmt(monthlySetAside)}/mo · ${monthsLeft} month${monthsLeft !== 1 ? "s" : ""} left`
+                : "Tax pot fully covered ✓"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <p className={`text-xl font-black tabular-nums ${shortfall > 0 ? "text-amber-400" : "text-emerald-400"}`}>{fmt(totalTax)}</p>
+          <span className="text-[rgba(153,197,255,0.4)] text-xs">{expanded ? "▲" : "▼"}</span>
+        </div>
+      </button>
+
+      {/* Collapsed summary strip */}
+      {!expanded && (
+        <div className="px-4 py-3 grid grid-cols-3 gap-2">
+          {[
+            { label: "Income YTD",    value: fmt(ytdIncome),      color: "text-emerald-400" },
+            { label: "Deductions",    value: fmt(totalAllowable), color: "text-[#99c5ff]"   },
+            { label: "Taxable profit",value: fmt(taxableProfit),  color: "text-white"       },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="text-center p-2 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
+              <p className="text-[9px] font-bold tracking-wider uppercase text-[rgba(153,197,255,0.35)] mb-1">{label}</p>
+              <p className={`text-xs font-black tabular-nums ${color}`}>{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Expanded breakdown */}
+      {expanded && (
+        <div className="p-4 space-y-4">
+
+          {/* Income vs deductions */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
+              <p className="text-[9px] font-black tracking-widest uppercase text-emerald-500/60 mb-1">Income YTD</p>
+              <p className="text-lg font-black text-emerald-400 tabular-nums">{fmt(ytdIncome)}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-[#1f48ff]/5 border border-[#1f48ff]/15">
+              <p className="text-[9px] font-black tracking-widest uppercase text-[#99c5ff]/60 mb-1">Allowable expenses</p>
+              <p className="text-lg font-black text-[#99c5ff] tabular-nums">−{fmt(totalAllowable)}</p>
+            </div>
+          </div>
+
+          {/* Expense category breakdown */}
+          {topCats.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[9px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.35)]">Allowable deductions</p>
+              {topCats.map(([cat, val]) => {
+                const obj = catById(cat);
+                return (
+                  <div key={cat} className="flex items-center gap-2">
+                    <span className="text-sm w-5 shrink-0">{obj.emoji}</span>
+                    <p className="text-xs text-[rgba(153,197,255,0.6)] w-20 shrink-0">{obj.label}</p>
+                    <div className="flex-1 h-1.5 rounded-full bg-[rgba(153,197,255,0.06)] overflow-hidden">
+                      <div className="h-full rounded-full bg-[#1f48ff]/60 transition-all" style={{ width: `${(val / maxCatVal) * 100}%` }} />
+                    </div>
+                    <p className="text-xs font-bold text-white tabular-nums shrink-0 w-14 text-right">{fmt(val)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Taxable profit → tax */}
+          <div className="rounded-xl border border-[rgba(153,197,255,0.1)] bg-[rgba(153,197,255,0.03)] p-3 space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-[rgba(153,197,255,0.5)]">Taxable profit</span>
+              <span className="font-bold text-white">{fmt(taxableProfit)}</span>
+            </div>
+            <div className="flex justify-between text-xs border-t border-[rgba(153,197,255,0.06)] pt-2">
+              <span className="text-[rgba(153,197,255,0.5)]">Income tax (20%)</span>
+              <span className="font-bold text-amber-400">{fmt(incomeTax)}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-[rgba(153,197,255,0.5)]">Class 4 NI (6%)</span>
+              <span className="font-bold text-amber-400">{fmt(ni)}</span>
+            </div>
+            <div className="flex justify-between text-sm border-t border-[rgba(153,197,255,0.1)] pt-2">
+              <span className="font-black text-white">Total tax bill</span>
+              <span className="font-black text-amber-400">{fmt(totalTax)}</span>
+            </div>
+          </div>
+
+          {/* Tax pot status */}
+          <div>
+            <div className="flex justify-between text-[10px] text-[rgba(153,197,255,0.4)] mb-1.5">
+              <span>Tax pot</span>
+              <span>{fmt(reserved)} saved of {fmt(totalTax)} needed</span>
+            </div>
+            <div className="h-2 rounded-full bg-[rgba(153,197,255,0.08)] overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${reserved >= totalTax ? "bg-emerald-400" : "bg-amber-400"}`}
+                style={{ width: `${Math.min((reserved / Math.max(totalTax, 1)) * 100, 100)}%` }}
+              />
+            </div>
+            {shortfall > 0 && (
+              <p className="mt-2 text-[10px] text-amber-400">
+                Set aside {fmt(monthlySetAside)}/month for the next {monthsLeft} month{monthsLeft !== 1 ? "s" : ""} to cover your bill.
+              </p>
+            )}
+          </div>
+
+          <p className="text-[9px] text-[rgba(153,197,255,0.25)] leading-relaxed">
+            Estimate based on 2025/26 UK rates. Personal allowance £12,570, basic rate 20%, Class 4 NI 6%. Based on income and expenses recorded in Cadi. Consult an accountant for your final return.
+          </p>
+        </div>
+      )}
     </GCard>
   );
 }
@@ -1121,6 +1661,8 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
   const [transactions, setTransactions] = useState(isLive ? [] : DEMO_TRANSACTIONS);
   const [monthlyData,  setMonthlyData]  = useState(isLive ? buildLastSixMonths([]) : MONTHLY_DATA);
   const [expenses,     setExpenses]     = useState(isLive ? [] : DEMO_EXPENSES);
+  const [bankTxs,      setBankTxs]     = useState([]);
+  const manualRowsRef  = useRef([]);
   const [period,       setPeriod]       = useState("Month");
   const [showPayment,  setShowPayment]  = useState(false);
   const [showReminder, setShowReminder] = useState(false);
@@ -1130,9 +1672,18 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
     if (!isLive) return; // demo mode uses context data — no DB fetch needed
     let mounted = true;
     (async () => {
+      let manualMoneyRows = [];
+
       try {
-        const [quoteRows, moneyRows] = await Promise.all([listQuotes(250), listMoneyEntries(1000)]);
+        const [quoteRows, moneyRows] = await Promise.all([
+          listQuotes(250),
+          listMoneyEntries({ pageSize: 1000 }),
+        ]);
         if (!mounted) return;
+
+        manualMoneyRows = moneyRows; // save for bank merge below
+        manualRowsRef.current = moneyRows;
+
         const mappedInvoices = quoteRows.map(q => {
           const created = new Date(q.created_at || Date.now());
           const due = new Date(created); due.setDate(created.getDate() + 7);
@@ -1140,17 +1691,71 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
           if (status !== "paid" && (Date.now() - due.getTime()) / 86400000 > 0) status = "overdue";
           return { id: q.id, customer: q.job_label || q.payload?.customer || "Customer", amount: Number(q.price) || 0, sentDate: toISODate(created), dueDate: toISODate(due), status, type: q.type || "residential" };
         });
+
         const incomeRows  = moneyRows.filter(m => m.kind === "income");
         const expenseRows = moneyRows.filter(m => m.kind === "expense");
-        const mappedTx    = incomeRows.map(m => ({ id: m.id, date: m.date, customer: m.client || "Payment received", amount: Number(m.amount) || 0, type: "residential", status: "paid" })).sort((a,b) => new Date(b.date)-new Date(a.date));
-        const mappedExp   = expenseRows.map(m => ({ id: m.id, date: m.date, label: m.description || m.client || "Expense", amount: Number(m.amount) || 0, category: m.category || "other" }));
+        const manualTx  = incomeRows.map(m => ({ id: m.id, date: m.date, customer: m.client || "Payment received", amount: Number(m.amount) || 0, type: "residential", status: "paid" }));
+        const manualExp = expenseRows.map(m => ({ id: m.id, date: m.date, label: m.description || m.client || "Expense", amount: Number(m.amount) || 0, category: m.category || "other" }));
+
         setLiveInvoices(mappedInvoices);
-        setTransactions(mappedTx);
+        setTransactions(manualTx.sort((a,b) => new Date(b.date)-new Date(a.date)));
         setMonthlyData(buildLastSixMonths(moneyRows));
-        setExpenses(mappedExp);
-      } catch {
+        setExpenses(manualExp.sort((a,b) => new Date(b.date)-new Date(a.date)));
+      } catch (e) {
+        console.error("MoneyTracker load error:", e);
         if (!mounted) return;
         setLiveInvoices([]); setTransactions([]); setMonthlyData(buildLastSixMonths([])); setExpenses([]);
+      }
+
+      // Separately load + merge bank transactions — own try/catch so failures
+      // here never wipe the manual data loaded above
+      const applyBankRows = (allRows, manualRows) => {
+        if (!allRows?.length) return;
+        const bizRows    = allRows.filter(b => b.is_business);
+        const bankIncome = bizRows.filter(b => b.transaction_type === "credit");
+        const bankExpense= bizRows.filter(b => b.transaction_type === "debit");
+        const bankTxIncome = bankIncome.map(b => ({ id: `bk-${b.id}`, date: b.date, customer: b.merchant_name || b.description || "Bank income", amount: Number(b.amount) || 0, type: "residential", status: "paid" }));
+        const bankExp      = bankExpense.map(b => ({ id: `bk-${b.id}`, date: b.date, label: b.merchant_name || b.description || "Expense", amount: Number(b.amount) || 0, category: b.category || "other" }));
+        setTransactions(prev => [...prev.filter(t => !t.id?.startsWith("bk-")), ...bankTxIncome].sort((a,b) => new Date(b.date)-new Date(a.date)));
+        setExpenses(prev => [...prev.filter(e => !e.id?.startsWith("bk-")), ...bankExp].sort((a,b) => new Date(b.date)-new Date(a.date)));
+        setBankTxs(allRows);
+        const bankMoneyRows = [
+          ...bankIncome.map(b => ({ kind: "income",  amount: b.amount, date: b.date })),
+          ...bankExpense.map(b => ({ kind: "expense", amount: b.amount, date: b.date })),
+        ];
+        setMonthlyData(buildLastSixMonths([...(manualRows ?? []), ...bankMoneyRows]));
+      };
+
+      try {
+        const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        const { data: bankRows, error: bankErr } = await supabase
+          .from("bank_transactions")
+          .select("id,date,description,merchant_name,amount,transaction_type,category,is_business,is_personal,needs_review,matched_invoice_id")
+          .gte("date", ninetyDaysAgo)
+          .order("date", { ascending: false });
+
+        if (bankErr) { console.error("Bank tx query error:", bankErr); }
+        else if (mounted) applyBankRows(bankRows, manualMoneyRows);
+
+        // Background auto-sync: pull fresh data from TrueLayer, then re-apply
+        // Runs silently — no spinner, no toast — so the page feels always up to date
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && mounted) {
+          supabase.functions.invoke('truelayer-api', {
+            body: { action: 'sync' },
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          }).then(async ({ data: syncData }) => {
+            if (!mounted || !syncData?.imported) return; // nothing new — skip re-query
+            const { data: freshRows } = await supabase
+              .from("bank_transactions")
+              .select("id,date,description,merchant_name,amount,transaction_type,category,is_business,is_personal,needs_review,matched_invoice_id")
+              .gte("date", ninetyDaysAgo)
+              .order("date", { ascending: false });
+            if (mounted) applyBankRows(freshRows, manualMoneyRows);
+          }).catch(() => {}); // silent fail — not connected or token expired
+        }
+      } catch (e) {
+        console.error("Bank merge error:", e);
       }
     })();
     return () => { mounted = false; };
@@ -1159,7 +1764,7 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
   const weekRevenue    = weekData.reduce((s,d) => s + (d.done || d.isToday ? d.revenue : 0), 0);
   const monthIncome    = monthlyData.find(m => m.isCurrent)?.income ?? 0;
   const unpaidInvoices = invoices.filter(i => i.status !== "paid");
-  const insights       = useMemo(() => buildInsights(accounts, monthlyData, expenses), [accounts, monthlyData, expenses]);
+  const insights       = useMemo(() => buildInsights(accounts, monthlyData, expenses, bankTxs), [accounts, monthlyData, expenses, bankTxs]);
 
   const [saveError, setSaveError] = useState(null);
 
@@ -1208,12 +1813,12 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
 
   const handleBulkCategorize = async (ids, newCat) => {
     setExpenses(prev => prev.map(e => ids.includes(e.id) ? { ...e, category: newCat } : e));
-    // TODO: persist category changes to money_entries when update endpoint is added
+    await Promise.allSettled(ids.map(id => updateMoneyEntry(id, { category: newCat })));
   };
 
   const handleBulkDelete = async (ids) => {
     setExpenses(prev => prev.filter(e => !ids.includes(e.id)));
-    // TODO: delete from money_entries when delete endpoint is added
+    await Promise.allSettled(ids.map(id => deleteMoneyEntry(id)));
   };
 
   return (
@@ -1233,7 +1838,25 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
         )}
 
         {/* Open banking banner */}
-        <OpenBankingBanner />
+        <OpenBankingBanner
+          bankTxs={bankTxs}
+          setBankTxs={setBankTxs}
+          onSyncComplete={(txs) => {
+            // Re-apply full merge after a manual sync from the banner
+            const bizRows    = txs.filter(b => b.is_business);
+            const bankIncome = bizRows.filter(b => b.transaction_type === "credit");
+            const bankExpense= bizRows.filter(b => b.transaction_type === "debit");
+            const bankTxIncome = bankIncome.map(b => ({ id: `bk-${b.id}`, date: b.date, customer: b.merchant_name || b.description || "Bank income", amount: Number(b.amount) || 0, type: "residential", status: "paid" }));
+            const bankExp      = bankExpense.map(b => ({ id: `bk-${b.id}`, date: b.date, label: b.merchant_name || b.description || "Expense", amount: Number(b.amount) || 0, category: b.category || "other" }));
+            setTransactions(prev => [...prev.filter(t => !t.id?.startsWith("bk-")), ...bankTxIncome].sort((a,b) => new Date(b.date)-new Date(a.date)));
+            setExpenses(prev => [...prev.filter(e => !e.id?.startsWith("bk-")), ...bankExp].sort((a,b) => new Date(b.date)-new Date(a.date)));
+            const bankMoneyRows = [
+              ...bankIncome.map(b => ({ kind: "income",  amount: b.amount, date: b.date })),
+              ...bankExpense.map(b => ({ kind: "expense", amount: b.amount, date: b.date })),
+            ];
+            setMonthlyData(buildLastSixMonths([...manualRowsRef.current, ...bankMoneyRows]));
+          }}
+        />
 
         {/* Period hero */}
         <PeriodHero
@@ -1248,6 +1871,9 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
         {/* AI coach */}
         <AiCoachPanel insights={insights} onNavigate={onNavigate} />
 
+        {/* Monthly report */}
+        <MonthlyReport monthlyData={monthlyData} expenses={expenses} accounts={accounts} />
+
         {/* P&L waterfall */}
         <PnLWaterfall period={period} monthlyData={monthlyData}
           weekRevenue={weekRevenue}
@@ -1261,6 +1887,9 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
           <WeekGrid weekData={weekData} />
           <MoneyGoals accounts={accounts} weekRevenue={weekRevenue} monthlyData={monthlyData} transactions={transactions} onNavigate={onNavigate} />
         </div>
+
+        {/* Tax estimate */}
+        <TaxEstimate monthlyData={monthlyData} expenses={expenses} accounts={accounts} />
 
         {/* Expense sorter */}
         <ExpenseSorter
@@ -1284,7 +1913,7 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
           <p className="text-[10px] text-[rgba(153,197,255,0.3)]">
             Figures sync with your{" "}
             <button onClick={() => onNavigate?.("accounts")} className="text-[#99c5ff] font-bold hover:text-white underline underline-offset-2 transition-colors">Accounts tab</button>
-            {" "}· Open banking connection coming soon
+            {" "}· Bank transactions via open banking · AI insights update automatically
           </p>
         </div>
       </div>
