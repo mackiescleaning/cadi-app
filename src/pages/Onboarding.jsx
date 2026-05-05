@@ -144,7 +144,7 @@ const TURNS = [
   },
   {
     id: 'summary',
-    cadi: f => `You're all set, ${f.firstName}! 🎉\n\nHere's everything I've built for ${f.bizName || 'your account'} — ready to go the moment you walk in.`,
+    cadi: f => `You're all set, ${f.firstName}! 🎉\n\nHere's everything I've built for ${f.bizName || 'your account'} — ready to go the moment you walk in.\n\nYour first 3 actions inside Cadi:\n📅 Add your first job in Scheduler\n👥 Add your first customer\n📄 Send your first invoice\n\nAsk Cadi anything if you get stuck — I'm on every tab.`,
     type: 'summary',
     chapter: 4,
   },
@@ -1051,6 +1051,24 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           {readyItems.length === 0 && (
             <p className="text-sm text-[rgba(153,197,255,0.6)]">Your account is ready — you can fill in the details from inside the app.</p>
           )}
+
+          {/* Next 3 actions */}
+          <div className="rounded-xl border border-[rgba(153,197,255,0.15)] bg-[#091660] px-4 py-3 space-y-2">
+            <p className="text-[10px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">Your first 3 actions</p>
+            {[
+              { emoji: '📅', label: 'Add your first job', detail: 'Scheduler' },
+              { emoji: '👥', label: 'Add your first customer', detail: 'Customers' },
+              { emoji: '📄', label: 'Send your first invoice', detail: 'Invoices' },
+            ].map(a => (
+              <div key={a.label} className="flex items-center gap-3">
+                <span className="text-base shrink-0">{a.emoji}</span>
+                <span className="text-sm text-white font-semibold flex-1">{a.label}</span>
+                <span className="text-[10px] text-[rgba(153,197,255,0.4)]">{a.detail}</span>
+              </div>
+            ))}
+            <p className="text-[10px] text-[rgba(153,197,255,0.35)] pt-1">Ask Cadi anything if you get stuck — I'm on every tab.</p>
+          </div>
+
           <button
             type="button"
             disabled={saving}
