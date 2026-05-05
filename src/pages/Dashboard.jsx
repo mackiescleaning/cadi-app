@@ -1660,32 +1660,63 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
 
   const userEntry = {
     id: "me",
+    owner_id: "me",
     name: communityOptIn ? (userBizName || "Your Business") : "Your Business",
     sector: userSector || "residential",
     score: userScore ?? 42,
-    delta: +3,
+    prev_score: null,
     region: "You",
     isMe: true,
   };
 
   const boardSource = entries && entries.length > 0 ? entries : LEADERBOARD_DEMO;
+  const allSource   = [...boardSource, userEntry];
 
-  // Insert user into correct ranked position
-  const allEntries = [...boardSource, userEntry]
+  // ── Global ranking with rank-delta from prev_score ─────────────────────────
+  const globalRanked = [...allSource]
     .sort((a, b) => b.score - a.score)
-    .map((e, i) => ({ ...e, rank: i + 1 }));
+    .map((e, i) => ({ ...e, globalRank: i + 1 }));
+
+  const globalPrevRanked = [...allSource]
+    .sort((a, b) => (b.prev_score ?? b.score) - (a.prev_score ?? a.score))
+    .map((e, i) => ({ ...e, globalPrevRank: i + 1 }));
+
+  const prevRankMap = {};
+  globalPrevRanked.forEach(e => { prevRankMap[e.owner_id ?? e.id] = e.globalPrevRank; });
+
+  const allEntries = globalRanked.map(e => {
+    const key      = e.owner_id ?? e.id;
+    const prevRank = prevRankMap[key] ?? e.globalRank;
+    return { ...e, rank: e.globalRank, rankDelta: prevRank - e.globalRank };
+  });
+
+  // ── Sector league: re-rank within sector when filter active ────────────────
+  const sectorLabel = filter === "all" ? null : SECTOR_COLORS[filter]?.label ?? filter;
 
   const filtered = filter === "all"
     ? allEntries
-    : allEntries.filter(e => e.sector === filter || e.isMe);
+    : (() => {
+        const inSector  = allSource.filter(e => e.sector === filter || e.isMe);
+        const sPrevMap  = {};
+        [...inSector]
+          .sort((a, b) => (b.prev_score ?? b.score) - (a.prev_score ?? a.score))
+          .forEach((e, i) => { sPrevMap[e.owner_id ?? e.id] = i + 1; });
+        return [...inSector]
+          .sort((a, b) => b.score - a.score)
+          .map((e, i) => {
+            const key = e.owner_id ?? e.id;
+            return { ...e, rank: i + 1, rankDelta: (sPrevMap[key] ?? i + 1) - (i + 1) };
+          });
+      })();
 
-  const userRank   = allEntries.find(e => e.isMe)?.rank ?? allEntries.length;
-  const totalCount = allEntries.length;
+  const userRank   = filtered.find(e => e.isMe)?.rank ?? filtered.length;
+  const totalCount = filtered.length;
   const topPct     = Math.round((userRank / totalCount) * 100);
+  const globalRank = allEntries.find(e => e.isMe)?.rank ?? allEntries.length;
 
-  const podium = allEntries.slice(0, 3);
+  const podium = filtered.filter(e => !e.isMe).slice(0, 3);
 
-  // Tier labels based on rank percentile
+  // Tier labels based on rank percentile within current view
   const tierLabel = topPct <= 10 ? "Elite" : topPct <= 25 ? "Pro" : topPct <= 50 ? "Rising" : "Starter";
   const tierColor = topPct <= 10 ? "text-yellow-600" : topPct <= 25 ? "text-emerald-600" : topPct <= 50 ? "text-brand-blue" : "text-gray-500";
   const tierBg    = topPct <= 10 ? "bg-yellow-50 border-yellow-200" : topPct <= 25 ? "bg-emerald-50 border-emerald-200" : topPct <= 50 ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200";
@@ -1704,8 +1735,13 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
         {/* Header */}
         <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/60 mb-0.5">Cadi community leaderboard</p>
-            <p className="text-xs text-white/40">Ranked by health score · updated weekly · preview leaderboard</p>
+            <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/60 mb-0.5">
+              {sectorLabel ? `${sectorLabel} league` : "Cadi community leaderboard"}
+            </p>
+            <p className="text-xs text-white/40">
+              {sectorLabel ? `Ranked among ${sectorLabel.toLowerCase()} cleaners · ` : "All sectors · "}
+              health score · updated weekly
+            </p>
           </div>
           <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
             topPct <= 10 ? "bg-yellow-400/20 border-yellow-400/40 text-yellow-300"
@@ -1728,21 +1764,25 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
           </div>
         )}
 
-        {/* Community opt-in CTA */}
-        {!communityOptIn && (
+        {/* Community opt-in CTA — loss-aversion framing */}
+        {!communityOptIn && !isPreview && (
           <div className="mx-4 mt-4 mb-2 p-4 rounded-xl bg-gradient-to-r from-brand-blue/20 to-brand-skyblue/10 border border-brand-skyblue/25">
             <div className="flex items-start gap-3">
-              <span className="text-2xl shrink-0">🏆</span>
+              <span className="text-2xl shrink-0">👻</span>
               <div className="flex-1">
-                <p className="text-sm font-black text-white mb-0.5">Join the Cadi community</p>
-                <p className="text-xs text-white/50 leading-relaxed mb-3">Show your real business name, compete nationwide and get featured when you hit Elite tier.</p>
+                <p className="text-sm font-black text-white mb-0.5">
+                  You're ranked #{globalRank} anonymously
+                </p>
+                <p className="text-xs text-white/50 leading-relaxed mb-3">
+                  Reveal {userBizName || "your business name"} to claim your spot on the leaderboard — and get featured when you hit Elite tier.
+                </p>
                 <button
                   onClick={onOptIn}
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-skyblue text-brand-navy text-xs font-black rounded-lg hover:bg-white transition-colors shadow-lg"
                 >
-                  Join the community →
+                  Claim my spot →
                 </button>
-                <p className="text-[10px] text-white/30 mt-1.5">Your business name will appear on the leaderboard</p>
+                <p className="text-[10px] text-white/30 mt-1.5">Your business name replaces "Your Business" on the board</p>
               </div>
             </div>
           </div>
@@ -1762,13 +1802,16 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
           ) : (
             <>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-skyblue/60 mb-1">Your ranking</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-skyblue/60 mb-1">
+                  {sectorLabel ? `Your ${sectorLabel} rank` : "Your ranking"}
+                </p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-4xl font-black text-white">#{userRank}</span>
-                  <span className="text-sm text-white/40">of {totalCount} businesses</span>
+                  <span className="text-sm text-white/40">of {totalCount} {sectorLabel ? `${sectorLabel.toLowerCase()} businesses` : "businesses"}</span>
                 </div>
                 <p className="text-xs text-brand-skyblue/70 mt-1">
                   Top <span className="font-bold text-white">{topPct}%</span> · <span className={`font-black ${topPct <= 10 ? "text-yellow-400" : topPct <= 25 ? "text-emerald-400" : topPct <= 50 ? "text-brand-skyblue" : "text-white/40"}`}>{tierLabel} tier</span>
+                  {sectorLabel && <span className="text-white/30 font-normal"> · #{globalRank} overall</span>}
                 </p>
               </div>
               <div className="text-right">
@@ -1792,7 +1835,9 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
 
         {/* Podium */}
         <div className="px-4 py-4 border-b border-white/10">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-skyblue/50 mb-3">This week's podium</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-skyblue/50 mb-3">
+            {sectorLabel ? `${sectorLabel} podium` : "This week's podium"}
+          </p>
           <div className="flex items-end justify-center gap-2">
             {[podium[1], podium[0], podium[2]].map((entry, i) => {
               const heights   = ["h-16", "h-24", "h-14"];
@@ -1855,9 +1900,9 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
                   {entry.name} {entry.isMe && <span className="text-brand-skyblue font-bold">(you)</span>}
                 </p>
                 <span className={`text-xs font-bold tabular-nums ${entry.isMe ? "text-white" : "text-white/50"}`}>{entry.score}</span>
-                {entry.delta !== 0 && (
-                  <span className={`text-[10px] font-bold w-8 text-right shrink-0 ${entry.delta > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {entry.delta > 0 ? `↑${entry.delta}` : `↓${Math.abs(entry.delta)}`}
+                {entry.rankDelta !== 0 && entry.rankDelta !== undefined && (
+                  <span className={`text-[10px] font-bold w-8 text-right shrink-0 ${entry.rankDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {entry.rankDelta > 0 ? `↑${entry.rankDelta}` : `↓${Math.abs(entry.rankDelta)}`}
                   </span>
                 )}
               </div>
