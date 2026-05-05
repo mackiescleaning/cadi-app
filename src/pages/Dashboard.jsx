@@ -168,9 +168,9 @@ function calcHealthScore({ accounts, weekJobs, invoices, jobsToday }) {
     { label: "Growth",     score: growthScore,        max: 10, color: "bg-brand-blue"   },
   ];
 
-  const tier     = total >= 90 ? "Excellent" : total >= 75 ? "Great" : total >= 60 ? "Good" : total >= 40 ? "OK" : "Needs work";
+  const tier     = total >= 90 ? "Elite" : total >= 75 ? "Firing" : total >= 60 ? "Solid" : total >= 40 ? "Building" : "Getting Started";
   const tierNext = total >= 90 ? null : total >= 75 ? 90 : total >= 60 ? 75 : total >= 40 ? 60 : 40;
-  const tierColor = total >= 75 ? "text-emerald-600" : total >= 50 ? "text-amber-600" : "text-red-500";
+  const tierColor = total >= 90 ? "text-violet-300" : total >= 75 ? "text-emerald-400" : total >= 60 ? "text-sky-300" : total >= 40 ? "text-amber-400" : "text-red-400";
 
   return { total, dims, tier, tierNext, tierColor, revScore, opsScore, invoicingScore, complianceScore, growthScore };
 }
@@ -299,27 +299,27 @@ function Chip({ children, color = "blue" }) {
 }
 
 // ─── Health score ring ─────────────────────────────────────────────────────────
-function ScoreRing({ score, tier, tierColor, size = 96 }) {
-  const r          = (size / 2) - 8;
-  const circ       = 2 * Math.PI * r;
-  const dashOffset = circ * (1 - score / 100);
-  const strokeColor = score >= 75 ? "#10b981" : score >= 50 ? "#f59e0b" : "#ef4444";
+function ScoreRing({ score, size = 112 }) {
+  const r           = (size / 2) - 10;
+  const circ        = 2 * Math.PI * r;
+  const dashOffset  = circ * (1 - score / 100);
+  const strokeColor = score >= 90 ? "#a78bfa" : score >= 75 ? "#34d399" : score >= 60 ? "#38bdf8" : score >= 40 ? "#fbbf24" : "#f87171";
 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e5e7eb" strokeWidth="7" />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="9" />
         <circle
           cx={size/2} cy={size/2} r={r} fill="none"
-          stroke={strokeColor} strokeWidth="7" strokeLinecap="round"
+          stroke={strokeColor} strokeWidth="9" strokeLinecap="round"
           strokeDasharray={circ}
           strokeDashoffset={dashOffset}
-          style={{ transition: "stroke-dashoffset 1s ease" }}
+          style={{ transition: "stroke-dashoffset 1s ease", filter: `drop-shadow(0 0 6px ${strokeColor}90)` }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-bold tabular-nums text-brand-navy leading-none">{score}</span>
-        <span className={`text-xs font-bold mt-0.5 ${tierColor}`}>{tier}</span>
+        <span className="text-3xl font-black tabular-nums text-white leading-none">{score}</span>
+        <span className="text-[10px] font-bold mt-1 text-white/50 tracking-wider">/ 100</span>
       </div>
     </div>
   );
@@ -423,7 +423,7 @@ function ScoreExplainerModal({ score, onClose }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
           <div>
-            <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/80">Health Score</p>
+            <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/80">Cadi Score</p>
             <h3 className="text-lg font-black text-brand-navy">How this is calculated</h3>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">✕</button>
@@ -454,7 +454,7 @@ function ScoreExplainerModal({ score, onClose }) {
           </div>
           <div className="text-xs text-gray-500 bg-gray-50 rounded-xl p-3 leading-relaxed">
             <p className="font-bold text-gray-700 mb-1">Tier thresholds</p>
-            <p>0–39 Needs work · 40–59 OK · 60–74 Good · 75–89 Great · 90+ Excellent</p>
+            <p>0–39 Getting Started · 40–59 Building · 60–74 Solid · 75–89 Firing · 90+ Elite</p>
           </div>
         </div>
       </div>
@@ -462,86 +462,85 @@ function ScoreExplainerModal({ score, onClose }) {
   );
 }
 
+const TIERS_ORDERED = ["Getting Started", "Building", "Solid", "Firing", "Elite"];
+
 function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
   const { total, dims, tier, tierNext, tierColor } = score;
-  const ptsToNext  = tierNext ? tierNext - total : 0;
+  const ptsToNext   = tierNext ? tierNext - total : 0;
+  const tierIdx     = TIERS_ORDERED.indexOf(tier);
+  const nextTier    = TIERS_ORDERED[tierIdx + 1];
   const [showExplainer, setShowExplainer] = useState(false);
 
   return (
-    <Card className="overflow-hidden">
-      {/* Score hero */}
-      <div className="flex items-start gap-5 p-5 border-b border-gray-100">
-        <ScoreRing score={total} tier={tier} tierColor={tierColor} size={96} />
-        <div className="flex-1 min-w-0">
-          <SL className="mb-1">Business health score</SL>
-          <p className={`text-2xl font-bold ${tierColor}`}>{tier}</p>
-          <p className="text-xs text-gray-400 mt-1">
-            {scoreDelta !== 0 && (
-              <span className={`font-semibold ${scoreDelta > 0 ? "text-emerald-600" : "text-red-500"}`}>
-                {scoreDelta > 0 ? "↑" : "↓"} {Math.abs(scoreDelta)} pts
-              </span>
-            )}
-            {scoreDelta !== 0 && " since last session"}
-            {scoreDelta === 0 && <span className="text-gray-400">No change since last session</span>}
-            {tierNext && <span className="ml-2">· <span className="font-semibold text-brand-navy">{ptsToNext} pts</span> to {tierNext === 90 ? "Excellent" : tierNext === 75 ? "Great" : "Good"}</span>}
-          </p>
-          {/* Tier ladder */}
-          <div className="flex items-center gap-1 mt-3">
-            {["Needs work","OK","Good","Great","Excellent"].map((t, i) => {
-              const active = t === tier;
-              const passed = ["Needs work","OK","Good","Great","Excellent"].indexOf(tier) > i;
-              return (
-                <div key={t} className="flex items-center gap-1">
-                  <div className={`h-1.5 rounded-full transition-all ${
-                    active ? "w-10 bg-brand-blue" :
-                    passed ? "w-6 bg-emerald-400" :
-                    "w-6 bg-gray-200"
+    <div className="rounded-2xl overflow-hidden shadow-sm border border-gray-200">
+      {/* Dark navy hero */}
+      <div className="bg-brand-navy px-5 py-5">
+        <div className="flex items-center gap-5">
+          <ScoreRing score={total} size={112} />
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/70 mb-1">Cadi Score</p>
+            <p className={`text-2xl font-black leading-tight ${tierColor}`}>{tier}</p>
+            <p className="text-xs text-white/50 mt-1.5 leading-relaxed">
+              {scoreDelta !== 0 && (
+                <span className={`font-bold ${scoreDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {scoreDelta > 0 ? "↑" : "↓"} {Math.abs(scoreDelta)} pts
+                </span>
+              )}
+              {scoreDelta !== 0 && " this session · "}
+              {tierNext && <><span className="font-bold text-white">{ptsToNext} pts</span> to {nextTier}</>}
+              {!tierNext && <span className="text-violet-300 font-bold">Peak performance</span>}
+            </p>
+            {/* Tier progress pills */}
+            <div className="flex items-center gap-1.5 mt-3">
+              {TIERS_ORDERED.map((t, i) => {
+                const active = t === tier;
+                const passed = tierIdx > i;
+                return (
+                  <div key={t} className={`rounded-full transition-all duration-300 ${
+                    active ? "w-6 h-2 bg-brand-skyblue" :
+                    passed ? "w-2 h-2 bg-emerald-400" :
+                    "w-2 h-2 bg-white/15"
                   }`} />
-                  {i === 4 ? null : null}
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex gap-2 mt-1.5 flex-wrap">
-            {["Needs work","OK","Good","Great","Excellent"].map((t,i) => {
-              const active = t === tier;
-              return <span key={t} className={`text-xs ${active ? `font-bold ${tierColor}` : "text-gray-300"}`}>{t}</span>;
-            })}
+                );
+              })}
+            </div>
+            <div className="flex gap-2 mt-1.5 flex-wrap">
+              {TIERS_ORDERED.map((t) => (
+                <span key={t} className={`text-[10px] font-bold ${t === tier ? tierColor : "text-white/25"}`}>{t}</span>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Dimension bars */}
-      <div className="px-5 py-4">
-        <SL className="mb-3">What's driving your score</SL>
+      {/* Dimension bars — white */}
+      <div className="bg-white px-5 py-4 border-t border-gray-100">
+        <div className="flex items-center justify-between mb-3">
+          <SL>Score breakdown</SL>
+          <button onClick={() => setShowExplainer(true)} className="text-xs font-bold text-brand-blue hover:underline">
+            How it works →
+          </button>
+        </div>
         <div className="space-y-2.5">
           {dims.map(({ label, score: s, max, color }) => (
             <div key={label} className="flex items-center gap-3">
               <span className="text-xs text-gray-500 w-24 shrink-0">{label}</span>
-              <div className="flex-1 h-3 bg-gray-100 rounded-sm overflow-hidden">
-                <div
-                  className={`h-full ${color} rounded-sm transition-all duration-700`}
-                  style={{ width: `${(s / max) * 100}%` }}
-                />
+              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full ${color} rounded-full transition-all duration-700`} style={{ width: `${(s / max) * 100}%` }} />
               </div>
-              <div className="flex items-center gap-1 w-14 shrink-0 justify-end">
+              <div className="flex items-center gap-0.5 w-12 shrink-0 justify-end">
                 <span className="text-xs font-mono font-bold text-gray-700">{s}</span>
                 <span className="text-xs text-gray-300">/{max}</span>
               </div>
             </div>
           ))}
         </div>
-        <button
-          onClick={() => setShowExplainer(true)}
-          className="mt-3 text-xs font-bold text-brand-blue hover:underline"
-        >
-          How is this calculated? →
-        </button>
       </div>
+
       {showExplainer && (
         <ScoreExplainerModal score={score} onClose={() => setShowExplainer(false)} />
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -1489,7 +1488,7 @@ function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
 
   let tasks = [];
   let panelTitle = "🤖 Cadi AI — boost your score";
-  let panelSubtitle = tierNext ? `${ptsToNext} pts to unlock ${tierNext === 90 ? "Excellent" : tierNext === 75 ? "Great" : "Good"} tier` : null;
+  let panelSubtitle = tierNext ? `${ptsToNext} pts to unlock ${tierNext === 90 ? "Elite" : tierNext === 75 ? "Firing" : tierNext === 60 ? "Solid" : "Building"} tier` : null;
 
   if (!hasBusinessData && incompleteSetup.length > 0) {
     panelTitle = "🚀 Getting started";
@@ -1926,14 +1925,14 @@ function ShareCardModal({ onClose, businessName, sector, score, badges, rank, to
   const earnedBadges  = badges.filter(b => b.earned).slice(0, 4);
   const sc            = SECTOR_COLORS[sector] ?? SECTOR_COLORS.residential;
   const topPct        = Math.round(((rank ?? totalUsers) / (totalUsers ?? 1)) * 100);
-  const tierColor     = score?.total >= 90 ? "#10b981" : score?.total >= 75 ? "#f59e0b" : score?.total >= 60 ? "#3b82f6" : "#9ca3af";
-  const tier          = score?.tier ?? "Good";
+  const tierColor     = score?.total >= 90 ? "#a78bfa" : score?.total >= 75 ? "#34d399" : score?.total >= 60 ? "#38bdf8" : score?.total >= 40 ? "#fbbf24" : "#f87171";
+  const tier          = score?.tier ?? "Solid";
   const r             = 38;
   const circ          = 2 * Math.PI * r;
   const dashOffset    = circ * (1 - (score?.total ?? 0) / 100);
 
   const handleCopy = () => {
-    navigator.clipboard?.writeText("Check out my Cadi Business Health Score! 🚀 getcadi.co.uk").then(() => {
+    navigator.clipboard?.writeText("Check out my Cadi Score! 🚀 cadi.cleaning").then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {
@@ -1978,7 +1977,7 @@ function ShareCardModal({ onClose, businessName, sector, score, badges, rank, to
             {/* Middle: Business name + score ring */}
             <div className="flex flex-col items-center text-center gap-4">
               <div>
-                <p className="text-brand-skyblue/70 text-xs font-bold uppercase tracking-widest mb-1">Business Health Score</p>
+                <p className="text-brand-skyblue/70 text-xs font-bold uppercase tracking-widest mb-1">Cadi Score</p>
                 <h2 className="text-white font-black text-2xl leading-tight tracking-tight">{businessName || "My Business"}</h2>
               </div>
 
@@ -2446,12 +2445,12 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
   const prevTierRef = useRef(null);
   useEffect(() => {
-    if (prevTierRef.current && prevTierRef.current !== score.tier && score.tier !== "Needs work") {
+    if (prevTierRef.current && prevTierRef.current !== score.tier && score.tier !== "Getting Started") {
       const msgs = {
-        "OK":        { emoji: "📈", title: "You're gaining momentum!", body: `Health score reached ${score.total} — keep pushing!` },
-        "Good":      { emoji: "💚", title: "Good tier unlocked!", body: `Health score hit ${score.total} — your business is getting stronger.` },
-        "Great":     { emoji: "⭐", title: "Great tier! You're flying!", body: `Health score hit ${score.total} — you're in the top 25% of Cadi businesses.` },
-        "Excellent": { emoji: "🏆", title: "EXCELLENT! Elite status!", body: `Health score hit ${score.total} — screenshot this and share it! 📸` },
+        "Building": { emoji: "📈", title: "You're gaining momentum!", body: `Cadi Score reached ${score.total} — keep pushing!` },
+        "Solid":    { emoji: "💪", title: "Solid! Business is on track.", body: `Cadi Score hit ${score.total} — your business is getting stronger.` },
+        "Firing":   { emoji: "⭐", title: "Firing! You're flying!", body: `Cadi Score hit ${score.total} — you're in the top 25% of Cadi businesses.` },
+        "Elite":    { emoji: "🏆", title: "Elite status unlocked!", body: `Cadi Score hit ${score.total} — screenshot this and share it!` },
       };
       const msg = msgs[score.tier];
       if (msg) {
