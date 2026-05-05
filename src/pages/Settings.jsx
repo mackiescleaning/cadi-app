@@ -136,6 +136,7 @@ function SavedToast({ show }) {
 const TABS = [
   { id: 'profile',      label: 'Profile',       icon: User       },
   { id: 'business',     label: 'Business',      icon: Building2  },
+  { id: 'compliance',   label: 'Compliance',    icon: Shield     },
   { id: 'notifications',label: 'Notifications', icon: Bell       },
   { id: 'subscription', label: 'Plan',          icon: CreditCard },
   { id: 'security',     label: 'Security',      icon: Lock       },
@@ -194,6 +195,12 @@ export default function Settings() {
     twoFactor: false,
   });
 
+  // Compliance state
+  const [compliance, setCompliance] = useState({
+    pli: false, pliPolicy: '', pliRenewal: '',
+    dbs: false, ico: false, coshh: false,
+  });
+
   const [communityOptIn, setCommunityOptIn] = useState(Boolean(authProfile?.community_opt_in));
 
   // Logo state
@@ -246,6 +253,14 @@ export default function Settings() {
         const bd = settings.bank_details || {};
         const sd = settings.setup_data || {};
         if (sd.logo_url) setLogoUrl(sd.logo_url);
+        setCompliance({
+          pli: Boolean(sd.pli),
+          pliPolicy: sd.pli_policy || '',
+          pliRenewal: sd.pli_renewal || '',
+          dbs: Boolean(sd.dbs),
+          ico: Boolean(sd.ico),
+          coshh: Boolean(sd.coshh),
+        });
         setBusiness((prev) => ({
           ...prev,
           hourlyRate: settings.hourly_rate != null ? String(settings.hourly_rate) : prev.hourlyRate,
@@ -346,12 +361,15 @@ export default function Settings() {
 
   const handleBusinessSave = async () => {
     try {
+      const existing = await getBusinessSettings();
+      const sd = existing?.setup_data ?? {};
       await upsertBusinessSettings({
         hourly_rate: Number(business.hourlyRate) || 0,
         currency: business.currency,
         business_email: business.businessEmail,
         bank_details: { bankName: business.bankName, sortCode: business.sortCode, accountNum: business.accountNum },
         setup_data: {
+          ...sd,
           working_days: business.workingDays,
           start_time: business.startTime,
           finish_time: business.endTime,
@@ -362,6 +380,27 @@ export default function Settings() {
         business_name: business.name,
         home_postcode: business.homePostcode,
         postcode: business.homePostcode,
+      });
+      showSaved();
+    } catch {
+      // Keep local values when persistence fails.
+    }
+  };
+
+  const handleComplianceSave = async () => {
+    try {
+      const existing = await getBusinessSettings();
+      const sd = existing?.setup_data ?? {};
+      await upsertBusinessSettings({
+        setup_data: {
+          ...sd,
+          pli: compliance.pli,
+          pli_policy: compliance.pliPolicy,
+          pli_renewal: compliance.pliRenewal,
+          dbs: compliance.dbs,
+          ico: compliance.ico,
+          coshh: compliance.coshh,
+        },
       });
       showSaved();
     } catch {
@@ -451,6 +490,7 @@ export default function Settings() {
   const updateBusiness = (f, v) => setBusiness(b => ({ ...b, [f]: v }));
   const updateNotif = (f, v) => setNotifications(n => ({ ...n, [f]: v }));
   const updateSecurity = (f, v) => setSecurity(s => ({ ...s, [f]: v }));
+  const updateCompliance = (f, v) => setCompliance(c => ({ ...c, [f]: v }));
   const toggleDay = (day) => setBusiness(b => ({
     ...b, workingDays: { ...b.workingDays, [day]: !b.workingDays[day] }
   }));
@@ -670,6 +710,77 @@ export default function Settings() {
               <Save size={14} /> Save Changes
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ── COMPLIANCE TAB ── */}
+      {activeTab === 'compliance' && (
+        <div className="space-y-5">
+
+          <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6 space-y-1">
+            <h3 className="font-bold text-[#010a4f]">Compliance &amp; Certificates</h3>
+            <p className="text-xs text-gray-400">Keep a record of your insurance and regulatory documents. These are for your reference only — Cadi doesn't verify or store document files.</p>
+          </div>
+
+          {/* Public Liability Insurance */}
+          <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+            <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[#f0f4ff] flex items-center justify-center shrink-0">
+                  <Shield size={15} className="text-[#1f48ff]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[#010a4f]">Public Liability Insurance</p>
+                  <p className="text-xs text-gray-400">Required for most commercial cleaning contracts</p>
+                </div>
+              </div>
+              <Toggle enabled={compliance.pli} onChange={v => updateCompliance('pli', v)} />
+            </div>
+            {compliance.pli && (
+              <div className="px-6 py-4 space-y-4">
+                <InputField
+                  label="Policy Number"
+                  value={compliance.pliPolicy}
+                  onChange={v => updateCompliance('pliPolicy', v)}
+                  placeholder="e.g. PLI-0000000"
+                />
+                <InputField
+                  label="Renewal Date"
+                  value={compliance.pliRenewal}
+                  onChange={v => updateCompliance('pliRenewal', v)}
+                  type="date"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* DBS Check */}
+          <Section title="DBS Check" desc="Disclosure and Barring Service check — required for some domestic clients">
+            <SettingRow icon={CheckCircle} label="DBS Check completed" desc="You hold a valid DBS certificate">
+              <Toggle enabled={compliance.dbs} onChange={v => updateCompliance('dbs', v)} />
+            </SettingRow>
+          </Section>
+
+          {/* ICO Registration */}
+          <Section title="ICO Registration" desc="Required if you store personal data about clients or staff">
+            <SettingRow icon={Globe} label="Registered with ICO" desc="Information Commissioner's Office data registration">
+              <Toggle enabled={compliance.ico} onChange={v => updateCompliance('ico', v)} />
+            </SettingRow>
+          </Section>
+
+          {/* COSHH */}
+          <Section title="COSHH Awareness" desc="Control of Substances Hazardous to Health — handling cleaning chemicals safely">
+            <SettingRow icon={AlertCircle} label="COSHH training completed" desc="You understand safe handling of cleaning products">
+              <Toggle enabled={compliance.coshh} onChange={v => updateCompliance('coshh', v)} />
+            </SettingRow>
+          </Section>
+
+          <button
+            onClick={handleComplianceSave}
+            className="flex items-center gap-2 px-6 py-3 bg-[#1f48ff] text-white text-sm font-bold rounded-xl hover:bg-[#010a4f] transition-colors"
+          >
+            <Save size={14} /> Save Compliance
+          </button>
         </div>
       )}
 
