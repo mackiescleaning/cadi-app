@@ -1488,10 +1488,32 @@ function CadiSetupJourney({ customerCount = 0, hasJobs = false, hasInvoices = fa
 }
 
 // ─── Cadi AI Chat ──────────────────────────────────────────────────────────────
-function cadiReply(input, score) {
+const NAV_INTENTS = [
+  { pattern: /invoices?|billing|bills/,                    tab: 'invoices',   label: 'Invoices'      },
+  { pattern: /schedule|scheduler|jobs?|bookings?|calendar/, tab: 'scheduler',  label: 'Scheduler'     },
+  { pattern: /staff|team|cleaners?|employees?/,             tab: 'staff',      label: 'Staff'         },
+  { pattern: /money|payments?|accounts?|mileage|expenses?/, tab: 'money',      label: 'Money'         },
+  { pattern: /settings?/,                                   tab: 'settings',   label: 'Settings'      },
+  { pattern: /mtd|tax return|hmrc/,                         tab: 'mtd',        label: 'MTD'           },
+  { pattern: /annual review|sprint|review/,                 tab: 'review',     label: 'Annual Review' },
+  { pattern: /dashboard|home/,                              tab: 'dashboard',  label: 'Dashboard'     },
+];
+
+function cadiReply(input, score, onNavigate) {
   const q = input.toLowerCase();
 
-  if (/\b(score|improve|boost|points?|pts|tier|elite|firing|solid|building|getting started)\b/.test(q)) {
+  // Navigation intent — "take me to X", "go to X", "open X", "show me X"
+  const isNavIntent = /\b(take me to|go to|open|show me|navigate to|get to|switch to)\b/.test(q);
+  if (isNavIntent) {
+    const match = NAV_INTENTS.find(({ pattern }) => pattern.test(q));
+    if (match) {
+      setTimeout(() => onNavigate?.(match.tab), 400);
+      return `Taking you to ${match.label} now!`;
+    }
+  }
+
+  // Score / improvement
+  if (/\b(score|improve|boost|points?|pts|tier|elite|firing|solid|building)\b/.test(q)) {
     const dims = score.dims ?? [];
     const lowest = [...dims].sort((a, b) => (a.score / a.max) - (b.score / b.max))[0];
     if (!lowest) return "Check your Score breakdown below — each bar shows exactly where points are being lost.";
@@ -1505,59 +1527,73 @@ function cadiReply(input, score) {
     return `Your biggest opportunity right now is ${lowest.label} — you're at ${lowest.score} out of ${lowest.max} points there. To push it up, ${advice[lowest.label] || "check the score breakdown for specific tips."}`;
   }
 
-  if (/\b(invoice|overdue|unpaid|send invoice|create invoice|bill)\b/.test(q)) {
+  // Invoices
+  if (/invoices?|overdue|unpaid|send invoice|create invoice/.test(q)) {
     return "Head to the Invoices tab to create, send, and manage your invoices. Overdue invoices each knock 12 points off your Cadi Score, so chasing them is worth it. You can track who owes you and send payment reminders from there.";
   }
 
+  // MTD / HMRC
   if (/\b(mtd|making tax digital|hmrc|tax return|quarterly|filing|submission)\b/.test(q)) {
     return "MTD (Making Tax Digital) is HMRC's system for submitting income tax quarterly instead of annually. Cadi handles the connection and filing directly — go to the MTD tab, connect your HMRC account, and submit your quarters from there. Filing on time earns you 4 compliance points.";
   }
 
-  if (/\b(tax reserve|tax pot|set aside|save for tax|saving for tax|tax money)\b/.test(q)) {
+  // Tax reserve
+  if (/tax reserve|tax pot|set aside|save for tax|saving for tax/.test(q)) {
     return "Your tax reserve is a pot inside Cadi where you track money set aside for your tax bill. Set your target in Settings → Money and Cadi shows how close you are. Hitting your target earns up to 7 compliance points — and means no nasty surprises come January.";
   }
 
-  if (/\b(leaderboard|rank|ranking|community|other businesses|competitors)\b/.test(q)) {
+  // Leaderboard
+  if (/leaderboard|ranking?|community|other businesses|competitors/.test(q)) {
     return "The leaderboard shows how your Cadi Score compares to other cleaning businesses — anonymously by default. Filter by sector to see your residential, commercial, or exterior league. Opt in to show your real business name and claim your spot on the board.";
   }
 
-  if (/\b(staff|team|cleaner|employee|worker|invite|add staff|team member)\b/.test(q)) {
+  // Staff
+  if (/staff|team|cleaners?|employees?|workers?|invite|team member/.test(q)) {
     return "Add team members in the Staff tab. Each cleaner gets their own login to see their schedule and clock jobs. You can track hours, set pay rates, and generate payslips all from there.";
   }
 
-  if (/\b(job|schedule|booking|appointment|calendar|recurring|visit)\b/.test(q)) {
+  // Jobs / schedule
+  if (/jobs?|schedules?|bookings?|appointments?|calendar|recurring|visits?/.test(q)) {
     return "Head to the Scheduler tab to manage your jobs. You can set up one-off or recurring bookings, assign staff, and mark jobs complete. Completing jobs earns up to 18 points in your Operations score.";
   }
 
-  if (/\b(mileage|miles|expense|fuel|travel)\b/.test(q)) {
+  // Mileage
+  if (/mileage|miles|expenses?|fuel|travel/.test(q)) {
     return "Log your mileage in the Money tab under Mileage Log. Claiming at least 90% of your logged mileage earns 4 compliance points — and reduces your tax bill, so it's well worth keeping on top of.";
   }
 
-  if (/\b(quote|estimate|quotation|proposal)\b/.test(q)) {
+  // Quotes
+  if (/quotes?|estimates?|quotations?|proposals?/.test(q)) {
     return "Create quotes from the Invoices tab — just select Quote when creating a new document. Send it to the client and convert it to an invoice once the job is confirmed.";
   }
 
-  if (/\b(cancel|subscription|billing|price|pricing|cost|plan|how much)\b/.test(q)) {
+  // Billing / pricing / cancel
+  if (/cancel|subscription|billing|pric(e|ing)|cost|plan|how much/.test(q)) {
     return "Cadi is £29 per month with no contract. To manage or cancel your subscription, go to Settings → Billing. If you need a hand with anything billing-related, email support@cadi.cleaning and we'll sort it right away.";
   }
 
-  if (/\b(export|download|data|backup|csv|spreadsheet)\b/.test(q)) {
+  // Export / data
+  if (/export|download|data|backup|csv|spreadsheet/.test(q)) {
     return "You can export invoice data from the Invoices tab. For a full export of your account data, email support@cadi.cleaning and we'll get everything over to you.";
   }
 
-  if (/\b(password|login|sign in|locked out|reset|account|email address)\b/.test(q)) {
+  // Password / login
+  if (/password|log\s?in|sign\s?in|locked out|reset|account/.test(q)) {
     return "Reset your password from the sign-in page — click Forgot password and we'll send a reset link. For any other account issues, email support@cadi.cleaning and we'll get you sorted.";
   }
 
-  if (/\b(what is cadi|who are you|what can you do|what do you do|how do you work)\b/.test(q)) {
-    return "I'm Cadi — your cleaning business co-pilot. I can help with your score, invoices, scheduling, tax, MTD filings, and anything else about running your business in Cadi. If I can't help, I'll connect you with the support team. What would you like to know?";
+  // What is Cadi
+  if (/what is cadi|who are you|what can you do|how do you work/.test(q)) {
+    return "I'm Cadi — your cleaning business co-pilot. I can help with your score, invoices, scheduling, tax, MTD filings, and anything else about running your business. I can also take you straight to any part of the app — just say \"take me to invoices\" or \"open the scheduler\". What do you need?";
   }
 
+  // Greetings
   if (/^(hi|hello|hey|thanks|thank you|cheers|ok|okay|great|awesome|perfect|nice|good|👍|🙏)[!.\s]*$/.test(q)) {
     const r = ["Happy to help! What else would you like to know?", "Anytime! Got any other questions?", "Of course — is there anything else I can help with?"];
     return r[Math.floor(Math.random() * r.length)];
   }
 
+  // Fallback
   return `I don't have a specific answer for that one, but the Cadi support team will. Drop them an email at support@cadi.cleaning and they'll get back to you quickly.`;
 }
 
@@ -1595,7 +1631,7 @@ function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
     setInput('');
     setTyping(true);
     setTimeout(() => {
-      const reply = cadiReply(t, score);
+      const reply = cadiReply(t, score, onNavigate);
       setMessages(m => [...m, { id: Date.now() + 1, from: 'cadi', text: reply }]);
       setTyping(false);
     }, 700 + Math.random() * 500);
