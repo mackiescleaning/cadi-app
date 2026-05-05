@@ -927,14 +927,19 @@ function InvoicePreview({ draft, accounts, business, onEdit, onSaveAndSend, onBa
         <div className="bg-white rounded-2xl overflow-hidden shadow-2xl shadow-black/40">
           {/* Header */}
           <div className="bg-[#010a4f] px-8 py-6 flex justify-between items-start">
-            <div>
-              <p className="text-2xl font-bold text-white">{business.name}</p>
-              <p className="text-sm text-[#99c5ff] mt-1 leading-relaxed">
-                {business.address}<br />{business.phone} · {business.email}
-              </p>
-              {accounts.vatRegistered && business.vatNumber && (
-                <p className="text-xs text-[#99c5ff]/70 mt-1">VAT reg: {business.vatNumber}</p>
+            <div className="flex items-start gap-4">
+              {business.logo && (
+                <img src={business.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-white/10 p-1 shrink-0" />
               )}
+              <div>
+                <p className="text-2xl font-bold text-white">{business.name}</p>
+                <p className="text-sm text-[#99c5ff] mt-1 leading-relaxed">
+                  {business.address}<br />{business.phone} · {business.email}
+                </p>
+                {accounts.vatRegistered && business.vatNumber && (
+                  <p className="text-xs text-[#99c5ff]/70 mt-1">VAT reg: {business.vatNumber}</p>
+                )}
+              </div>
             </div>
             <div className="text-right">
               <p className="text-3xl font-bold text-white">INVOICE</p>
@@ -1247,6 +1252,7 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
           address: profile?.postcode || '',
           vatNumber: settings?.setup_data?.vat_number || '',
           companyNum: settings?.setup_data?.company_number || '',
+          logo: settings?.setup_data?.logo_url || '',
           bankName: bankDetails.bankName || '',
           sortCode: bankDetails.sortCode || '',
           accountNum: bankDetails.accountNum || '',

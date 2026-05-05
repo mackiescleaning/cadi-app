@@ -76,10 +76,10 @@ export default function AppLayout() {
     (async () => {
       try {
         const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).single();
-        if (data?.setup_data?.logo_url) setLogoUrl(data.setup_data.logo_url);
+        setLogoUrl(data?.setup_data?.logo_url || '');
       } catch { /* non-critical */ }
     })();
-  }, [user]);
+  }, [user, location.pathname]);
 
   // Close "More" menu when clicking outside or navigating
   useEffect(() => {
