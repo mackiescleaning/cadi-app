@@ -1570,9 +1570,28 @@ function ChatHeader({ isPro }) {
   );
 }
 
+function demoReply(input, score) {
+  const q = input.toLowerCase();
+  if (/score|improve|boost|points?|pts/.test(q)) {
+    const lowest = [...(score.dims ?? [])].sort((a, b) => (a.score / a.max) - (b.score / b.max))[0];
+    return lowest
+      ? `Your lowest area is ${lowest.label} at ${lowest.score}/${lowest.max} pts. Sign up for a real account to get full AI advice tailored to your business.`
+      : "Check the score breakdown below to see where points are being lost.";
+  }
+  if (/invoices?|overdue/.test(q)) return "Head to the Invoices tab to create and manage invoices. Overdue invoices cost 12 score points each — chasing them is the quickest win.";
+  if (/mtd|hmrc|tax return/.test(q)) return "MTD (Making Tax Digital) lets you file quarterly income tax directly from Cadi. Connect your HMRC account in the MTD tab.";
+  if (/tax reserve|set aside/.test(q)) return "Your tax reserve tracks money set aside for your tax bill. Set a target in Settings → Money — hitting it earns up to 7 compliance points.";
+  if (/staff|team|cleaner/.test(q)) return "Add team members in the Staff tab. Each gets their own login to view their schedule and clock jobs.";
+  if (/jobs?|schedule|booking/.test(q)) return "Manage all your cleaning jobs in the Scheduler tab — one-off or recurring, with staff assignment and job completion tracking.";
+  if (/leaderboard|rank/.test(q)) return "The leaderboard shows your Cadi Score ranked against other cleaning businesses by sector. Opt in to show your real business name.";
+  if (/^(hi|hello|hey|thanks|cheers|ok|great)[!.\s]*$/.test(q)) return "Happy to help! What else would you like to know?";
+  return "This is a demo — sign up for a free account to get full AI answers powered by Claude, personalised to your real business data.";
+}
+
 function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
-  const { isPro }     = usePlan();
-  const navigate      = useNavigate();
+  const { isPro, user } = useAuth();
+  const isDemo          = user?.id === 'demo-user';
+  const navigate        = useNavigate();
   const initialized   = useRef(false);
   const bottomRef     = useRef(null);
   const inputRef      = useRef(null);
@@ -1617,9 +1636,16 @@ function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
       }
     }
 
-    // Call Claude via Edge Function
+    // Demo users: rule-based reply (no JWT available for Edge Function)
+    if (isDemo) {
+      await new Promise(r => setTimeout(r, 600 + Math.random() * 400));
+      setMessages(m => [...m, { id: Date.now() + 1, from: 'cadi', text: demoReply(t, score) }]);
+      setThinking(false);
+      return;
+    }
+
+    // Real pro users: call Claude via Edge Function
     try {
-      // Build alternating message history for Claude
       const history = messages.map(m => ({ role: m.from === 'user' ? 'user' : 'assistant', content: m.text }));
       history.push({ role: 'user', content: t });
 
