@@ -117,7 +117,7 @@ MTD (Making Tax Digital) — Connect HMRC account via OAuth. Submit quarterly in
 
 Annual Review — Set annual income target. Create 90-day sprint goals (having an active sprint earns 4 growth pts). Track year-to-date income vs target.
 
-Settings — Business profile (name, logo, sector, region, contact details), billing and subscription management, SMTP email settings, integrations.
+Settings — Business profile (name, logo, sector, region, contact details), billing and subscription management, integrations. Invoice emails are sent automatically via Cadi — no email setup needed. The business email in the profile is used as the reply-to address so clients can reply directly.
 
 Leaderboard — Community feature showing Cadi Scores ranked against other cleaning businesses. Anonymous by default — opt in to show your real business name.
 
