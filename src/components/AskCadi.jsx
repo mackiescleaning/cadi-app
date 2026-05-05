@@ -129,7 +129,7 @@ CADI SCORE (0–100):
 - Growth (10 pts): active 90-day sprint (4 pts) + monthly target progress (3–6 pts)
 Tiers: Getting Started (0–39) · Building (40–59) · Solid (60–74) · Firing (75–89) · Elite (90+)
 
-NAVIGATION: Users can ask you to take them somewhere. When they do, confirm it warmly.
+NAVIGATION: You CAN navigate the app for users. If someone says "take me to invoices", "I'm not in invoices", "go to scheduler", "open staff" etc — reply warmly confirming you're taking them there. Do NOT say you can't navigate. Supported sections: Dashboard, Scheduler, Invoices, Staff, Money, Settings, MTD, Annual Review.
 
 PRICING: Cadi is £29/month, no contract. Free plan available with limited features.
 
@@ -224,7 +224,8 @@ export default function AskCadi({ tab = 'dashboard', score }) {
 
     // Navigation intent — fast, no API call needed
     const q = t.toLowerCase();
-    if (/\b(take me to|go to|open|show me|navigate to|get to|switch to)\b/.test(q)) {
+    const navTrigger = /\b(take me to|go to|open|show me|navigate to|get to|switch to|i'm not in|im not in|not in the|i need to go|i want to go|bring me to|get me to|how do i get to)\b/.test(q);
+    if (navTrigger) {
       const match = NAV_INTENTS.find(({ pattern }) => pattern.test(q));
       if (match) {
         setMessages(m => [...m, { id: Date.now() + 1, from: 'cadi', text: `Taking you to ${match.label} now!` }]);
