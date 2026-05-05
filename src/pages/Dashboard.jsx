@@ -367,6 +367,7 @@ const SCORE_DIMENSIONS = [
     label: "Revenue",
     max: 25,
     color: "bg-brand-blue",
+    glow: { bar: "linear-gradient(90deg, #38bdf8, #1f48ff)", shadow: "0 0 10px 2px rgba(56,189,248,0.6)" },
     summary: "How close you are to your weekly and yearly income targets.",
     rules: [
       "Up to 12 pts for this week's earned revenue vs. the jobs on your calendar.",
@@ -377,6 +378,7 @@ const SCORE_DIMENSIONS = [
     label: "Operations",
     max: 25,
     color: "bg-emerald-500",
+    glow: { bar: "linear-gradient(90deg, #34d399, #059669)", shadow: "0 0 10px 2px rgba(52,211,153,0.6)" },
     summary: "Jobs marked complete and today's schedule fully staffed.",
     rules: [
       "Up to 18 pts for completing today/past jobs in the week.",
@@ -387,6 +389,7 @@ const SCORE_DIMENSIONS = [
     label: "Invoicing",
     max: 25,
     color: "bg-amber-400",
+    glow: { bar: "linear-gradient(90deg, #fbbf24, #d97706)", shadow: "0 0 10px 2px rgba(251,191,36,0.6)" },
     summary: "Clean invoices — no overdue, no pile-up of unpaid.",
     rules: [
       "Starts at 25 pts.",
@@ -398,6 +401,7 @@ const SCORE_DIMENSIONS = [
     label: "Compliance",
     max: 15,
     color: "bg-emerald-500",
+    glow: { bar: "linear-gradient(90deg, #a78bfa, #7c3aed)", shadow: "0 0 10px 2px rgba(167,139,250,0.6)" },
     summary: "Tax reserve, mileage logged, and MTD filings on track.",
     rules: [
       "Up to 7 pts for saving toward your tax reserve target.",
@@ -409,6 +413,7 @@ const SCORE_DIMENSIONS = [
     label: "Growth",
     max: 10,
     color: "bg-brand-blue",
+    glow: { bar: "linear-gradient(90deg, #f87171, #dc2626)", shadow: "0 0 10px 2px rgba(248,113,113,0.6)" },
     summary: "Running a sprint and making headway toward the annual target.",
     rules: [
       "4 pts when you have an active 90-day sprint.",
@@ -513,27 +518,33 @@ function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
         </div>
       </div>
 
-      {/* Dimension bars — white */}
-      <div className="bg-white px-5 py-4 border-t border-gray-100">
+      {/* Dimension bars — dark */}
+      <div className="bg-brand-navy px-5 py-4 border-t border-white/10">
         <div className="flex items-center justify-between mb-3">
-          <SL>Score breakdown</SL>
-          <button onClick={() => setShowExplainer(true)} className="text-xs font-bold text-brand-blue hover:underline">
+          <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/50">Score breakdown</p>
+          <button onClick={() => setShowExplainer(true)} className="text-xs font-bold text-brand-skyblue hover:text-white transition-colors">
             How it works →
           </button>
         </div>
-        <div className="space-y-2.5">
-          {dims.map(({ label, score: s, max, color }) => (
-            <div key={label} className="flex items-center gap-3">
-              <span className="text-xs text-gray-500 w-24 shrink-0">{label}</span>
-              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div className={`h-full ${color} rounded-full transition-all duration-700`} style={{ width: `${(s / max) * 100}%` }} />
+        <div className="space-y-3">
+          {dims.map(({ label, score: s, max, glow }) => {
+            const pct = (s / max) * 100;
+            return (
+              <div key={label} className="flex items-center gap-3">
+                <span className="text-xs text-white/40 w-24 shrink-0">{label}</span>
+                <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${pct}%`, background: glow.bar, boxShadow: pct > 5 ? glow.shadow : "none" }}
+                  />
+                </div>
+                <div className="flex items-center gap-0.5 w-12 shrink-0 justify-end">
+                  <span className="text-xs font-mono font-bold text-white/70">{s}</span>
+                  <span className="text-xs text-white/25">/{max}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-0.5 w-12 shrink-0 justify-end">
-                <span className="text-xs font-mono font-bold text-gray-700">{s}</span>
-                <span className="text-xs text-gray-300">/{max}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
