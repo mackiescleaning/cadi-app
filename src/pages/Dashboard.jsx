@@ -527,15 +527,16 @@ function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
           </button>
         </div>
         <div className="space-y-3">
-          {dims.map(({ label, score: s, max, glow }) => {
-            const pct = (s / max) * 100;
+          {dims.map(({ label, score: s, max }) => {
+            const pct  = (s / max) * 100;
+            const glow = SCORE_DIMENSIONS.find(d => d.label === label)?.glow;
             return (
               <div key={label} className="flex items-center gap-3">
                 <span className="text-xs text-white/40 w-24 shrink-0">{label}</span>
                 <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${pct}%`, background: glow.bar, boxShadow: pct > 5 ? glow.shadow : "none" }}
+                    style={{ width: `${pct}%`, background: glow?.bar, boxShadow: pct > 5 ? glow?.shadow : "none" }}
                   />
                 </div>
                 <div className="flex items-center gap-0.5 w-12 shrink-0 justify-end">
