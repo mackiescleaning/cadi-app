@@ -1839,20 +1839,21 @@ function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, 
           </p>
           <div className="flex items-end justify-center gap-2">
             {[podium[1], podium[0], podium[2]].map((entry, i) => {
-              const heights   = ["h-16", "h-24", "h-14"];
-              const medals    = ["🥈", "🥇", "🥉"];
-              const bgColors  = [
-                "bg-gradient-to-b from-white/20 to-white/10",
-                "bg-gradient-to-b from-yellow-400/60 to-amber-500/50",
-                "bg-gradient-to-b from-orange-400/40 to-orange-500/30",
+              const heights  = ["h-16", "h-24", "h-14"];
+              const medals   = ["🥈", "🥇", "🥉"];
+              const configs  = [
+                { bar: "bg-gradient-to-b from-slate-300 to-slate-400",  glow: "shadow-[0_0_18px_4px_rgba(148,163,184,0.55)]",  border: "border-slate-300/60",  score: "text-slate-100" },
+                { bar: "bg-gradient-to-b from-yellow-300 to-amber-400", glow: "shadow-[0_0_22px_6px_rgba(251,191,36,0.65)]",  border: "border-yellow-300/70", score: "text-yellow-100" },
+                { bar: "bg-gradient-to-b from-orange-400 to-amber-600", glow: "shadow-[0_0_16px_4px_rgba(251,146,60,0.55)]",  border: "border-orange-400/60", score: "text-orange-100" },
               ];
               if (!entry) return null;
+              const cfg = configs[i];
               return (
                 <div key={entry.id} className="flex-1 flex flex-col items-center gap-1">
                   <span className="text-lg">{medals[i]}</span>
                   <p className="text-[10px] font-bold text-white/70 text-center truncate w-full px-1">{entry.name}</p>
-                  <div className={`flex items-end justify-center w-full ${heights[i]} ${bgColors[i]} rounded-t-lg border border-white/10`}>
-                    <span className="text-sm font-black text-white pb-2">{entry.score}</span>
+                  <div className={`flex items-end justify-center w-full ${heights[i]} ${cfg.bar} ${cfg.glow} rounded-t-lg border ${cfg.border}`}>
+                    <span className={`text-sm font-black pb-2 ${cfg.score}`}>{entry.score}</span>
                   </div>
                 </div>
               );
