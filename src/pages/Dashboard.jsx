@@ -1653,9 +1653,13 @@ function AiBoostPanel({ score, onNavigate, setupSteps = [] }) {
         body: { messages: history, system: buildSystemPrompt(score), max_tokens: 350 },
       });
 
-      if (error || !data?.content?.[0]?.text) throw new Error(error?.message ?? 'Empty response');
+      if (error || !data?.content?.[0]?.text) {
+        console.error('[Ask Cadi] invoke error:', error, 'data:', JSON.stringify(data));
+        throw new Error(error?.message ?? 'Empty response');
+      }
       setMessages(m => [...m, { id: Date.now() + 1, from: 'cadi', text: data.content[0].text }]);
-    } catch {
+    } catch (err) {
+      console.error('[Ask Cadi] catch:', err);
       setMessages(m => [...m, { id: Date.now() + 1, from: 'cadi', text: "I'm having a moment — please try again or email support@cadi.cleaning if it keeps happening." }]);
     } finally {
       setThinking(false);
