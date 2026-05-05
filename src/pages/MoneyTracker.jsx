@@ -4,6 +4,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import AskCadi from "../components/AskCadi";
 import { createMoneyEntry, listMoneyEntries, updateMoneyEntry, deleteMoneyEntry } from "../lib/db/moneyDb";
 import { listQuotes, updateQuoteStatus } from "../lib/db/quotesDb";
 import { useAuth } from "../context/AuthContext";
@@ -1906,6 +1907,9 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
           onLogPayment={() => setShowPayment(true)}
           onReminder={(inv) => { setReminderInv(inv ?? unpaidInvoices[0] ?? null); setShowReminder(true); }}
         />
+
+        {/* Ask Cadi */}
+        <AskCadi tab="money" />
 
         {/* Footer */}
         <div className="flex items-center gap-2 py-2 px-1">

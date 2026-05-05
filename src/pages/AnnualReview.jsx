@@ -27,6 +27,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
+import AskCadi from "../components/AskCadi";
 
 // ─── Year data ─────────────────────────────────────────────────────────────────
 // Multi-year support — users can review any past year
@@ -1308,13 +1309,14 @@ export default function AnnualReviewTab({ accountsData, onNavigate }) {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className="flex-1 overflow-y-auto p-6 space-y-6">
         {section==="numbers" && <NumbersSection data={data} />}
         {section==="clients" && <ClientsSection data={data} highlights={highlights} setHighlights={setHighlights} />}
         {section==="goals"   && <GoalsSection wins={wins} setWins={setWins} goalsHit={goalsHit} setGoalsHit={setGoalsHit} goalsMissed={goalsMissed} setGoalsMissed={setGoalsMissed} improvements={improvements} setImprovements={setImprovements} />}
         {section==="ratings" && <SelfReview ratings={ratings} setRatings={setRatings} />}
         {section==="next"    && <NextYearSection data={data} nextYearGoals={nextYearGoals} setNextYearGoals={setNextYearGoals} vision={vision} setVision={setVision} />}
         {section==="sprint"  && <SprintSection />}
+        <AskCadi tab="review" />
       </main>
     </div>
   );

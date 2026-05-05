@@ -17,6 +17,7 @@ import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Plus, Filter, Search, X, Trash2 } from "lucide-react";
+import AskCadi from "../components/AskCadi";
 
 // ─── Theme — light glass ──────────────────────────────────────────────────────
 const TYPE = {
@@ -1797,11 +1798,12 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
 
       {/* Main content */}
       <div className="relative z-0 flex-1 overflow-y-auto p-4 lg:p-6">
-        <div className="max-w-[1600px] mx-auto">
+        <div className="max-w-[1600px] mx-auto space-y-4">
           {view === "Day"     && <DayView     jobs={todayJobs} onJobClick={handleJobClick} typeFilter={typeFilter} crewFilter={crewFilter} />}
           {view === "Week"    && <WeekView    jobs={weekJobsWithDay} onJobClick={handleJobClick} weekDates={weekDates} />}
           {view === "Month"   && <MonthView   jobs={allJobs.filter(j => j.status !== 'cancelled')} onJobClick={handleJobClick} viewDate={viewDate} />}
           {view === "Quarter" && <QuarterView jobs={allJobs.filter(j => j.status !== 'cancelled')} />}
+          <AskCadi tab="scheduler" />
         </div>
       </div>
 

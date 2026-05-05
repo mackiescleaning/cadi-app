@@ -5,6 +5,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import AskCadi from "../components/AskCadi";
 import { useAuth } from "../context/AuthContext";
 import { useInvoices } from "../context/InvoiceContext";
 import { useData } from "../context/DataContext";
@@ -1404,6 +1405,9 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
             onUpdate={handleUpdate} onBack={goBack} onDuplicate={handleDuplicate}
           />
         )}
+
+        {/* Ask Cadi — only on list screen */}
+        {screen === "list" && <AskCadi tab="invoices" />}
 
         {/* Inline quick-action modals (triggered from list row buttons) */}
         {quickAction?.type === 'send' && (

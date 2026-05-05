@@ -22,6 +22,7 @@
 
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import AskCadi from "../components/AskCadi";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 
@@ -1405,6 +1406,11 @@ export default function StaffingTab({ onStaffUpdate, onNavigate: onNavigateProp 
         {activeSection === "pay" && selectedPerson && (
           <PaySection person={selectedPerson} onUpdate={updatePerson} onStaffUpdate={onStaffUpdate} allStaff={staff} />
         )}
+      </div>
+
+      {/* Ask Cadi */}
+      <div className="px-4 lg:px-6 py-4 border-t border-gray-100">
+        <AskCadi tab="staff" />
       </div>
 
       {/* Footer */}
