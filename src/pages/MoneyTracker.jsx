@@ -101,86 +101,6 @@ function buildLastSixMonths(entries) {
   return months;
 }
 
-// Build AI insights based on real data (manual entries + bank transactions)
-function buildInsights(accounts, monthlyData, expenses, bankTxs = []) {
-  const insights = [];
-  const curr     = monthlyData.find(m => m.isCurrent) ?? { income: 0, expenses: 0 };
-  const prev     = monthlyData.filter(m => !m.isCurrent).at(-1) ?? { income: 0, expenses: 0 };
-  const taxShort = Math.max(accounts.taxReserveTarget - accounts.taxReserve, 0);
-  const expRatio = curr.income > 0 ? curr.expenses / curr.income : 0;
-  const vsLast   = curr.income - prev.income;
-  const fuelSpend     = expenses.filter(e => e.category === "fuel").reduce((s,e) => s + Number(e.amount), 0);
-  const suppliesSpend = expenses.filter(e => e.category === "supplies").reduce((s,e) => s + Number(e.amount), 0);
-
-  // Bank-data nudges (only when we have real open-banking data)
-  const needsReview  = bankTxs.filter(t => t.needs_review).length;
-  const personalDebit = bankTxs
-    .filter(t => !t.is_business && t.transaction_type === "debit")
-    .reduce((s, t) => s + Number(t.amount), 0);
-  const prevExpRatio = prev.income > 0 ? prev.expenses / prev.income : 0;
-  const expTrend     = expRatio - prevExpRatio;
-
-  if (needsReview > 3) insights.push({
-    id: "review", type: "warn", emoji: "🔍",
-    title: `${needsReview} bank transactions still need sorting`,
-    body:  "Unsorted transactions aren't counted in your P&L or tax estimate. A few minutes now keeps your numbers accurate.",
-    cta:   "Sort now",
-  });
-
-  if (taxShort > 500) insights.push({
-    id: "tax", type: "warn", emoji: "🏦",
-    title: `Tax pot needs a top-up — £${Math.round(taxShort)} short`,
-    body:  `You're ${fmtPct((accounts.taxReserve / Math.max(accounts.taxReserveTarget, 1)) * 100)} funded. Set aside ${Math.round((accounts.taxRate || 0.2) * 100)}p from every £1 you collect until you're covered. Next tax bill won't be a surprise.`,
-    cta:   "Log a transfer",
-  });
-
-  if (vsLast > 200) insights.push({
-    id: "growth", type: "win", emoji: "🚀",
-    title: `Up ${fmt(vsLast)} vs last month — you're growing`,
-    body:  `${curr.month} is already ${fmtPct((curr.income / Math.max(prev.income, 1)) * 100)} of last month. If this holds, you'll hit your annual target ahead of schedule.`,
-    cta:   null,
-  });
-
-  if (personalDebit > 150) insights.push({
-    id: "personal", type: "tip", emoji: "💳",
-    title: `£${personalDebit.toFixed(0)} personal spend through your business account`,
-    body:  "Mixing personal and business spending makes self-assessment harder. A separate personal card keeps your books clean and saves hours at year-end.",
-    cta:   null,
-  });
-
-  if (expRatio > 0.22) insights.push({
-    id: "expenses", type: "tip", emoji: "💡",
-    title: `Expenses are ${fmtPct(expRatio * 100)} of income this month`,
-    body:  expTrend > 0.05
-      ? `Up ${fmtPct(expTrend * 100)} on last month. Buying cleaning supplies in bulk (Prochem, Premiere) typically saves 18–25%. A fuel card can cut 3–5p per litre.`
-      : "Buying cleaning supplies in bulk (Prochem, Premiere) typically saves 18–25% vs retail. A fuel card with cashback can also cut 3–5p per litre.",
-    cta:   "See saving tips",
-  });
-
-  if (fuelSpend > 120) insights.push({
-    id: "fuel", type: "tip", emoji: "⛽",
-    title: `Fuel is ${fmt(fuelSpend)} this period — worth optimising`,
-    body:  "Route optimisation on your Scheduler tab can cut daily mileage by 15–20%. At today's prices that's easily £30–50/month back in your pocket.",
-    cta:   "Open Routes",
-  });
-
-  if (suppliesSpend > 0 && suppliesSpend < 80) insights.push({
-    id: "bulk", type: "tip", emoji: "🧴",
-    title: "You're buying supplies in small batches",
-    body:  "Spending under £80/month on supplies usually means buying as-needed at RRP. One bulk order per quarter can save £150–£200/year on the same products.",
-    cta:   null,
-  });
-
-  if (insights.length === 0) insights.push({
-    id: "great", type: "win", emoji: "✅",
-    title: "Everything looks healthy this month",
-    body:  `Expenses in check, tax reserve on track. Keep logging payments promptly to keep your P&L accurate. ${curr.income > 0 ? `You've retained ${fmtPct(((curr.income - curr.expenses - curr.income * 0.25) / curr.income) * 100)} of gross income this month.` : ""}`,
-    cta:   null,
-  });
-
-  return insights;
-}
-
 // ─── Glassmorphism primitives ─────────────────────────────────────────────────
 function GCard({ children, className = "" }) {
   return (
@@ -466,73 +386,6 @@ function PeriodHero({ period, setPeriod, weekRevenue, monthIncome, monthlyData, 
 }
 
 // ─── AI Coach Panel ───────────────────────────────────────────────────────────
-function AiCoachPanel({ insights, onNavigate }) {
-  const [idx, setIdx] = useState(0);
-  const tip = insights[idx] ?? insights[0];
-  if (!tip) return null;
-
-  const typeStyle = {
-    warn: "border-amber-500/25 bg-amber-500/5",
-    win:  "border-emerald-500/25 bg-emerald-500/5",
-    tip:  "border-[#1f48ff]/25 bg-[#1f48ff]/5",
-  };
-
-  return (
-    <GCard className="overflow-visible">
-      <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-[#1f48ff] flex items-center justify-center">
-            <svg width="12" height="12" viewBox="0 0 28 28" fill="none"><path d="M7 14C7 10.134 10.134 7 14 7C16.209 7 18.18 8.014 19.5 9.6L17.4 11.35C16.56 10.34 15.35 9.7 14 9.7C11.624 9.7 9.7 11.624 9.7 14C9.7 16.376 11.624 18.3 14 18.3C15.35 18.3 16.56 17.66 17.4 16.65L19.5 18.4C18.18 19.986 16.209 21 14 21C10.134 21 7 17.866 7 14Z" fill="white"/></svg>
-          </div>
-          <SectionLabel>Cadi money coach</SectionLabel>
-        </div>
-        {insights.length > 1 && (
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-[rgba(153,197,255,0.35)]">{idx + 1} / {insights.length}</span>
-            <div className="flex gap-1">
-              <button onClick={() => setIdx(i => Math.max(0, i - 1))}
-                className="w-6 h-6 rounded-lg border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.4)] hover:text-white hover:border-[rgba(153,197,255,0.3)] transition-all text-xs flex items-center justify-center">‹</button>
-              <button onClick={() => setIdx(i => Math.min(insights.length - 1, i + 1))}
-                className="w-6 h-6 rounded-lg border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.4)] hover:text-white hover:border-[rgba(153,197,255,0.3)] transition-all text-xs flex items-center justify-center">›</button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className={`m-4 rounded-xl border p-4 ${typeStyle[tip.type] ?? typeStyle.tip}`}>
-        <div className="flex items-start gap-3">
-          <span className="text-2xl shrink-0 mt-0.5">{tip.emoji}</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-black text-white leading-snug mb-1.5">{tip.title}</p>
-            <p className="text-xs text-[rgba(153,197,255,0.65)] leading-relaxed">{tip.body}</p>
-            {tip.cta && (
-              <button
-                onClick={() => {
-                  const ctaRoutes = { "Log a transfer": "money", "See saving tips": "inventory", "Open Routes": "routes" };
-                  const route = ctaRoutes[tip.cta];
-                  if (route) onNavigate?.(route);
-                }}
-                className="mt-3 px-3 py-1.5 rounded-lg text-xs font-black border border-[rgba(153,197,255,0.2)] text-[rgba(153,197,255,0.7)] hover:text-white hover:border-[rgba(153,197,255,0.4)] transition-all">
-                {tip.cta} →
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Dot navigation */}
-      {insights.length > 1 && (
-        <div className="flex justify-center gap-1.5 pb-4">
-          {insights.map((_, i) => (
-            <button key={i} onClick={() => setIdx(i)}
-              className={`w-1.5 h-1.5 rounded-full transition-all ${i === idx ? "bg-[#1f48ff] w-4" : "bg-[rgba(153,197,255,0.2)]"}`} />
-          ))}
-        </div>
-      )}
-    </GCard>
-  );
-}
-
 // ─── Monthly Report ───────────────────────────────────────────────────────────
 function MonthlyReport({ monthlyData, expenses, accounts }) {
   const curr = monthlyData.find(m => m.isCurrent) ?? { income: 0, expenses: 0 };
@@ -1765,7 +1618,6 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
   const weekRevenue    = weekData.reduce((s,d) => s + (d.done || d.isToday ? d.revenue : 0), 0);
   const monthIncome    = monthlyData.find(m => m.isCurrent)?.income ?? 0;
   const unpaidInvoices = invoices.filter(i => i.status !== "paid");
-  const insights       = useMemo(() => buildInsights(accounts, monthlyData, expenses, bankTxs), [accounts, monthlyData, expenses, bankTxs]);
 
   const [saveError, setSaveError] = useState(null);
 
@@ -1869,8 +1721,8 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
           accounts={accounts}
         />
 
-        {/* AI coach */}
-        <AiCoachPanel insights={insights} onNavigate={onNavigate} />
+        {/* Ask Cadi */}
+        <AskCadi tab="money" />
 
         {/* Monthly report */}
         <MonthlyReport monthlyData={monthlyData} expenses={expenses} accounts={accounts} />
@@ -1908,16 +1760,13 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
           onReminder={(inv) => { setReminderInv(inv ?? unpaidInvoices[0] ?? null); setShowReminder(true); }}
         />
 
-        {/* Ask Cadi */}
-        <AskCadi tab="money" />
-
         {/* Footer */}
         <div className="flex items-center gap-2 py-2 px-1">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
           <p className="text-[10px] text-[rgba(153,197,255,0.3)]">
             Figures sync with your{" "}
             <button onClick={() => onNavigate?.("accounts")} className="text-[#99c5ff] font-bold hover:text-white underline underline-offset-2 transition-colors">Accounts tab</button>
-            {" "}· Bank transactions via open banking · AI insights update automatically
+            {" "}· Bank transactions via open banking
           </p>
         </div>
       </div>
