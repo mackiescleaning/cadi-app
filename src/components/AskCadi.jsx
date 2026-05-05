@@ -12,15 +12,17 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
 // ─── Route map for navigation intents ─────────────────────────────────────────
+// tab  — used when onNavigate prop is provided (dashboard in-page switching)
+// route — used for React Router navigation (all other tabs)
 const NAV_INTENTS = [
-  { pattern: /invoices?|billing|bills/,                    route: '/invoices',   label: 'Invoices'      },
-  { pattern: /schedule|scheduler|jobs?|bookings?|calendar/, route: '/scheduler',  label: 'Scheduler'     },
-  { pattern: /staff|team|cleaners?|employees?/,             route: '/staff',      label: 'Staff'         },
-  { pattern: /money|payments?|accounts?|mileage|expenses?/, route: '/money',      label: 'Money'         },
-  { pattern: /settings?/,                                   route: '/settings',   label: 'Settings'      },
-  { pattern: /mtd|tax return|hmrc/,                        route: '/settings',   label: 'MTD'           },
-  { pattern: /annual review|sprint|review/,                route: '/review',     label: 'Annual Review' },
-  { pattern: /dashboard|home/,                             route: '/dashboard',  label: 'Dashboard'     },
+  { pattern: /invoices?|billing|bills/,                    tab: 'invoices',   route: '/invoices',   label: 'Invoices'      },
+  { pattern: /schedule|scheduler|jobs?|bookings?|calendar/, tab: 'scheduler',  route: '/scheduler',  label: 'Scheduler'     },
+  { pattern: /staff|team|cleaners?|employees?/,             tab: 'staff',      route: '/staff',      label: 'Staff'         },
+  { pattern: /money|payments?|accounts?|mileage|expenses?/, tab: 'money',      route: '/money',      label: 'Money'         },
+  { pattern: /settings?/,                                   tab: 'settings',   route: '/settings',   label: 'Settings'      },
+  { pattern: /mtd|tax return|hmrc/,                        tab: 'mtd',        route: '/settings',   label: 'MTD'           },
+  { pattern: /annual review|sprint|review/,                tab: 'review',     route: '/review',     label: 'Annual Review' },
+  { pattern: /dashboard|home/,                             tab: 'dashboard',  route: '/dashboard',  label: 'Dashboard'     },
 ];
 
 // ─── Tab config — opening message + quick chips ────────────────────────────────
@@ -189,7 +191,7 @@ function ChatHeader({ isPro }) {
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
-export default function AskCadi({ tab = 'dashboard', score }) {
+export default function AskCadi({ tab = 'dashboard', score, onNavigate }) {
   const { isPro, user } = useAuth();
   const isDemo          = user?.id === 'demo-user';
   const navigate        = useNavigate();
@@ -230,7 +232,7 @@ export default function AskCadi({ tab = 'dashboard', score }) {
       if (match) {
         setMessages(m => [...m, { id: Date.now() + 1, from: 'cadi', text: `Taking you to ${match.label} now!` }]);
         setThinking(false);
-        setTimeout(() => navigate(match.route), 400);
+        setTimeout(() => onNavigate ? onNavigate(match.tab) : navigate(match.route), 400);
         return;
       }
     }
