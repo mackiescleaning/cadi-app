@@ -26,7 +26,7 @@ export async function listCustomers(optionsOrLimit = {}) {
 export async function upsertCustomer(customer) {
   const ownerId = await getCurrentUserId();
   const payload = {
-    id: customer.id,
+    ...(customer.id ? { id: customer.id } : {}),
     owner_id: ownerId,
     name: customer.name,
     email: customer.email || null,

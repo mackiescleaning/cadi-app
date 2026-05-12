@@ -515,18 +515,24 @@ export default function CustomerImport({ onClose, onImported, existingCustomers 
     setImporting(true);
     setImportError(null);
     let count = 0;
-    try {
-      for (const { data } of customers) {
+    const failures = [];
+    for (const { data } of customers) {
+      try {
         await upsertCustomer(data);
         count++;
+      } catch (err) {
+        console.error('Import row failed:', err?.message, data);
+        failures.push(err?.message || 'Unknown error');
       }
+    }
+    setImporting(false);
+    if (count > 0) {
       setImportedCount(count);
       setStep('done');
       onImported?.();
-    } catch (err) {
-      setImportError('Something went wrong during import. Please try again.');
-    } finally {
-      setImporting(false);
+    } else {
+      const msg = failures[0] ?? 'Unknown error';
+      setImportError(`Import failed: ${msg}`);
     }
   };
 
