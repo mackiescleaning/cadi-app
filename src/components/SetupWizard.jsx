@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { usePlan } from '../hooks/usePlan';
 import { supabase } from '../lib/supabase';
 
 // ─── Step definitions ──────────────────────────────────────────────────────────
@@ -124,14 +125,18 @@ const TOTAL = STEPS.length;
 // ─── Component ─────────────────────────────────────────────────────────────────
 export default function SetupWizard({ onAllDone }) {
   const { user, profile } = useAuth();
+  const { isPro } = usePlan();
   const navigate = useNavigate();
 
-  const [setupData,   setSetupData]   = useState(null);
-  const [completed,   setCompleted]   = useState([]); // step ids
-  const [collapsed,   setCollapsed]   = useState(false);
-  const [celebrating, setCelebrating] = useState(false);
-  const [dismissed,   setDismissed]   = useState(false);
-  const [activeStep,  setActiveStep]  = useState(null);
+  const [setupData,      setSetupData]      = useState(null);
+  const [completed,      setCompleted]      = useState([]);
+  const [collapsed,      setCollapsed]      = useState(false);
+  const [celebrating,    setCelebrating]    = useState(false);
+  const [dismissed,      setDismissed]      = useState(false);
+  const [activeStep,     setActiveStep]     = useState(null);
+  const [goalValue,      setGoalValue]      = useState('');
+  const [goalSaving,     setGoalSaving]     = useState(false);
+  const [goalSaved,      setGoalSaved]      = useState(false);
 
   // ── Load setup_data + saved wizard progress from Supabase ──────────────────
   useEffect(() => {
@@ -208,6 +213,24 @@ export default function SetupWizard({ onAllDone }) {
     setActiveStep(step.id);
     const path = step.settingsTab ? `/${step.tab}?tab=${step.settingsTab}` : `/${step.tab}`;
     navigate(path);
+  };
+
+  const saveGoal = async () => {
+    const monthly = Number(goalValue);
+    if (!monthly || !user) return;
+    setGoalSaving(true);
+    try {
+      const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).single();
+      const existing = data?.setup_data ?? {};
+      await supabase.from('business_settings').upsert(
+        { owner_id: user.id, annual_target: monthly * 12, setup_data: { ...existing, target_revenue: monthly } },
+        { onConflict: 'owner_id' }
+      );
+      setSetupData(prev => ({ ...prev, target_revenue: monthly }));
+      setGoalSaved(true);
+      tick('goals');
+    } catch { /* silent */ }
+    setGoalSaving(false);
   };
 
   if (dismissed) return null;
@@ -344,25 +367,62 @@ export default function SetupWizard({ onAllDone }) {
                     {isCurrent && (
                       <div className="mt-2 space-y-2">
                         <p className="text-xs text-gray-500 leading-relaxed">{step.mission}</p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <button
-                            onClick={() => goToTab(step)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-navy text-white text-xs font-bold rounded-lg hover:bg-brand-blue transition-colors"
-                          >
-                            {step.tabLabel} →
-                          </button>
-                          {!step.autoDetect && (
+
+                        {/* Goals step: inline setter for free users */}
+                        {step.id === 'goals' && !isPro ? (
+                          goalSaved ? (
+                            <p className="text-xs font-bold text-emerald-600">✓ Target saved — tracking live on your dashboard</p>
+                          ) : (
+                            <div className="rounded-xl border border-[#1f48ff]/20 bg-[#f5f7ff] p-3 space-y-2">
+                              <p className="text-xs font-semibold text-[#010a4f]">What's your monthly revenue target?</p>
+                              <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">£</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={goalValue}
+                                    onChange={e => setGoalValue(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && saveGoal()}
+                                    placeholder="e.g. 3000"
+                                    className="w-full pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#1f48ff] bg-white"
+                                  />
+                                </div>
+                                <button
+                                  onClick={saveGoal}
+                                  disabled={goalSaving || !goalValue}
+                                  className="px-4 py-2 bg-[#1f48ff] text-white text-xs font-bold rounded-lg hover:bg-[#3a5eff] transition disabled:opacity-50"
+                                >
+                                  {goalSaving ? '…' : 'Save'}
+                                </button>
+                              </div>
+                              <p className="text-[10px] text-gray-400">Cadi shows your progress toward this target on the dashboard every day.</p>
+                            </div>
+                          )
+                        ) : (
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button
-                              onClick={() => tick(step.id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-emerald-300 text-emerald-700 bg-emerald-50 text-xs font-bold rounded-lg hover:bg-emerald-100 transition-colors"
+                              onClick={() => goToTab(step)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-navy text-white text-xs font-bold rounded-lg hover:bg-brand-blue transition-colors"
                             >
-                              ✓ Mark as done
+                              {step.tabLabel} →
                             </button>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-gray-400 flex items-center gap-1">
-                          <span>💡</span> {step.hint}
-                        </p>
+                            {!step.autoDetect && (
+                              <button
+                                onClick={() => tick(step.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-emerald-300 text-emerald-700 bg-emerald-50 text-xs font-bold rounded-lg hover:bg-emerald-100 transition-colors"
+                              >
+                                ✓ Mark as done
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {!(step.id === 'goals' && !isPro) && (
+                          <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                            <span>💡</span> {step.hint}
+                          </p>
+                        )}
                       </div>
                     )}
 
