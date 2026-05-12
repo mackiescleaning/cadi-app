@@ -1,11 +1,12 @@
-// CustomerImport.jsx — Step-by-step CSV import wizard
-// Accepts any CSV file. Auto-maps common column names, lets user fix mappings,
-// previews data, then bulk-upserts via customersDb.
+// CustomerImport.jsx — Step-by-step import wizard
+// Accepts CSV and Excel (.xlsx/.xls) files. Auto-maps common column names,
+// lets user fix mappings, previews data, then bulk-upserts via customersDb.
 //
 // Steps: source → upload → map columns → preview → done
 
 import { useState, useRef, useCallback } from 'react';
-import { X, Upload, ArrowRight, ArrowLeft, Check, AlertCircle, FileText, ChevronDown } from 'lucide-react';
+import { X, Upload, ArrowRight, ArrowLeft, Check, AlertCircle, ChevronDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { upsertCustomer } from '../lib/db/customersDb';
 
 // ─── Cadi fields that imports can fill ────────────────────────────────────────
@@ -47,44 +48,41 @@ function autoMap(header) {
   return '__skip';
 }
 
-// ─── Parse CSV text → array of objects ────────────────────────────────────────
-function parseCsv(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) return { headers: [], rows: [] };
-
-  const parseRow = (line) => {
-    const result = [];
-    let cur = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
-        else inQuotes = !inQuotes;
-      } else if (ch === ',' && !inQuotes) {
-        result.push(cur.trim());
-        cur = '';
-      } else {
-        cur += ch;
+// ─── Parse file (CSV or Excel) → { headers, rows } ───────────────────────────
+function parseFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read file.'));
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        if (!raw.length) { resolve({ headers: [], rows: [] }); return; }
+        const headers = Object.keys(raw[0]);
+        const rows = raw.map(r => {
+          const obj = {};
+          headers.forEach(h => { obj[h] = String(r[h] ?? '').trim(); });
+          return obj;
+        }).filter(row => Object.values(row).some(v => v !== ''));
+        resolve({ headers, rows });
+      } catch (err) {
+        reject(err);
       }
-    }
-    result.push(cur.trim());
-    return result;
-  };
-
-  const headers = parseRow(lines[0]);
-  const rows = lines.slice(1).map(line => {
-    const values = parseRow(line);
-    const obj = {};
-    headers.forEach((h, i) => { obj[h] = values[i] ?? ''; });
-    return obj;
-  }).filter(row => Object.values(row).some(v => v !== ''));
-
-  return { headers, rows };
+    };
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 // ─── Source choices ────────────────────────────────────────────────────────────
 const SOURCES = [
+  {
+    id: 'quickbooks',
+    name: 'QuickBooks',
+    icon: '📒',
+    hint: 'In QuickBooks go to Sales → Customers. Click the export icon (a small spreadsheet icon) in the top-right corner of the customer list. It will download an Excel file — upload that file here.',
+  },
   {
     id: 'cleanerplanner',
     name: 'CleanerPlanner',
@@ -113,13 +111,13 @@ const SOURCES = [
     id: 'excel',
     name: 'Excel',
     icon: '📗',
-    hint: 'In Excel go to File → Save As → CSV (Comma delimited). Then upload that file here.',
+    hint: 'Upload your Excel file (.xlsx) directly — no need to convert it first.',
   },
   {
     id: 'other',
     name: 'Another tool',
     icon: '📁',
-    hint: 'Export your customers as a CSV file from your current software, then upload it here. Most tools have an "Export" option under Customers or Contacts.',
+    hint: 'Export your customers as a CSV or Excel file from your current software, then upload it here. Most tools have an "Export" option under Customers or Contacts.',
   },
 ];
 
@@ -185,23 +183,25 @@ function StepUpload({ source, onBack, onParsed }) {
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
 
-  const handleFile = useCallback((file) => {
+  const handleFile = useCallback(async (file) => {
     setError(null);
     if (!file) return;
-    if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
-      setError('Please upload a CSV file. Most software has an "Export as CSV" option.');
+    const name = file.name.toLowerCase();
+    const ok = name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls');
+    if (!ok) {
+      setError('Please upload a CSV or Excel (.xlsx) file.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const { headers, rows } = parseCsv(e.target.result);
+    try {
+      const { headers, rows } = await parseFile(file);
       if (rows.length === 0) {
-        setError('The file looks empty. Make sure you exported the right thing.');
+        setError('The file looks empty. Make sure you exported the right sheet.');
         return;
       }
       onParsed({ headers, rows, fileName: file.name });
-    };
-    reader.readAsText(file);
+    } catch {
+      setError('Could not read that file. Try exporting again or use a different format.');
+    }
   }, [onParsed]);
 
   const handleDrop = useCallback((e) => {
@@ -240,13 +240,13 @@ function StepUpload({ source, onBack, onParsed }) {
           <Upload size={22} className="text-[#99c5ff]" />
         </div>
         <div className="text-center">
-          <p className="text-sm font-bold text-white">Drop your CSV file here</p>
-          <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">or click to browse</p>
+          <p className="text-sm font-bold text-white">Drop your file here</p>
+          <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">CSV or Excel (.xlsx) · click to browse</p>
         </div>
         <input
           ref={inputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.xlsx,.xls,text/csv"
           className="hidden"
           onChange={(e) => handleFile(e.target.files[0])}
         />
