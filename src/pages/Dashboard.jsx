@@ -2571,7 +2571,6 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                       </DemoHint>
                     ) : (
                       <>
-                        <RemainingTasksBanner steps={onboardingSteps} onNavigate={onNavigate} />
                         <LeaderboardPanel
                           userScore={score.total}
                           userBizName={profile?.business_name || displayName}
@@ -2667,7 +2666,6 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                       </DemoHint>
                     ) : (
                       <>
-                        <RemainingTasksBanner steps={onboardingSteps} onNavigate={onNavigate} />
                         <LeaderboardPanel
                           userScore={score.total}
                           userBizName={profile?.business_name || displayName}
