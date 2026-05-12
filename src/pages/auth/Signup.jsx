@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import CadiWordmark from '../../components/CadiWordmark';
 import { Eye, EyeOff, AlertCircle, Mail } from 'lucide-react';
 
 export default function Signup() {
+  const navigate = useNavigate();
   const [businessName, setBusinessName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
@@ -29,7 +30,7 @@ export default function Signup() {
     setLoading(true);
     setError('');
 
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -41,6 +42,13 @@ export default function Signup() {
     if (signUpError) {
       setError(signUpError.message);
       setLoading(false);
+      return;
+    }
+
+    // If email confirmation is disabled in Supabase, a session is returned
+    // immediately — skip the "check your email" screen and go straight in.
+    if (data?.session) {
+      navigate('/', { replace: true });
       return;
     }
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { usePlan } from '../hooks/usePlan';
 import CadiWordmark from './CadiWordmark';
 import { X } from 'lucide-react';
 
@@ -18,6 +19,7 @@ const PRO_FEATURES = [
 
 // Full-page overlay modal — use for tab locks and hard limits
 export function UpgradeModal({ onClose, reason }) {
+  const { priceMonthly } = usePlan();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -26,7 +28,7 @@ export function UpgradeModal({ onClose, reason }) {
     setError(null);
     try {
       const { data, error: fnError } = await supabase.functions.invoke('create-checkout', {
-        body: { returnUrl: window.location.origin },
+        body: { tier: 'pro', returnUrl: window.location.origin },
       });
       if (fnError) throw fnError;
       if (data?.url) window.location.href = data.url;
@@ -68,7 +70,7 @@ export function UpgradeModal({ onClose, reason }) {
 
           <div className="text-center mb-5">
             <div className="flex items-baseline justify-center gap-1 mb-1">
-              <span className="text-4xl font-black text-white">£29</span>
+              <span className="text-4xl font-black text-white">£{priceMonthly || 39}</span>
               <span className="text-[rgba(153,197,255,0.5)] text-sm">/month</span>
             </div>
             <p className="text-[10px] text-white/30 uppercase tracking-widest">Cadi Pro · Cancel anytime</p>
@@ -92,7 +94,7 @@ export function UpgradeModal({ onClose, reason }) {
             disabled={loading}
             className="w-full py-3.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black text-sm rounded-xl transition-all shadow-lg shadow-[#1f48ff]/40 disabled:opacity-50"
           >
-            {loading ? 'Opening checkout…' : 'Upgrade to Pro — £29/month'}
+            {loading ? 'Opening checkout…' : `Upgrade to Pro — £${priceMonthly || 39}/month`}
           </button>
 
           <p className="text-center text-[10px] text-white/25 mt-3">Powered by Stripe · Secure payment</p>
@@ -104,13 +106,14 @@ export function UpgradeModal({ onClose, reason }) {
 
 // Inline card — use inside pages when a feature is locked
 export function UpgradeBanner({ reason, compact = false }) {
+  const { priceMonthly } = usePlan();
   const [loading, setLoading] = useState(false);
 
   const handleUpgrade = async () => {
     setLoading(true);
     try {
       const { data } = await supabase.functions.invoke('create-checkout', {
-        body: { returnUrl: window.location.origin },
+        body: { tier: 'pro', returnUrl: window.location.origin },
       });
       if (data?.url) window.location.href = data.url;
     } catch {
@@ -145,7 +148,7 @@ export function UpgradeBanner({ reason, compact = false }) {
           disabled={loading}
           className="px-6 py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black text-sm rounded-xl transition-all shadow-lg shadow-[#1f48ff]/40 disabled:opacity-50"
         >
-          {loading ? 'Opening checkout…' : 'Upgrade to Pro — £29/month'}
+          {loading ? 'Opening checkout…' : `Upgrade to Pro — £${priceMonthly || 39}/month`}
         </button>
         <p className="text-[10px] text-white/25 mt-3">Cancel anytime · Powered by Stripe</p>
       </div>

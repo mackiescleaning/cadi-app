@@ -2034,6 +2034,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const [milestone,        setMilestone]        = useState(null); // { emoji, title, body }
   const [readyBanner,      setReadyBanner]      = useState(null); // null | { services, hourlyRate, targetRevenue, sectors, structure }
   const [readyBannerDismissed, setReadyBannerDismissed] = useState(false);
+  const [showMarketplaceBanner, setShowMarketplaceBanner] = useState(false);
   const [communityOptIn,   setCommunityOptIn]   = useState(() => {
     if (profile?.community_opt_in) return true;
     try { return localStorage.getItem('cadi_community_opt_in') === '1'; } catch { return false; }
@@ -2280,6 +2281,27 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     }
   };
 
+  // One-time marketplace interest prompt for existing users who completed onboarding without seeing the question
+  useEffect(() => {
+    if (!user || !isLive || !profile?.onboarding_complete) return;
+    if (profile?.marketplace_interest !== undefined && profile?.marketplace_interest !== null) return;
+    const key = 'cadi_mp_banner_dismissed';
+    try { if (localStorage.getItem(key)) return; } catch {}
+    setShowMarketplaceBanner(true);
+  }, [user, isLive, profile?.onboarding_complete, profile?.marketplace_interest]);
+
+  async function handleMarketplaceInterest(interested) {
+    setShowMarketplaceBanner(false);
+    try { localStorage.setItem('cadi_mp_banner_dismissed', '1'); } catch {}
+    if (!user || user.id === 'demo-user') return;
+    try {
+      await supabase.from('profiles').update({
+        marketplace_interest:    interested,
+        marketplace_interest_at: interested ? new Date().toISOString() : null,
+      }).eq('id', user.id);
+    } catch {}
+  }
+
   const [paymentError, setPaymentError] = useState(null);
 
   const handlePaymentLogged = async ({ customer, amount, method }) => {
@@ -2381,6 +2403,33 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           >
             End tour ✕
           </button>
+        </div>
+      )}
+
+      {/* ── Marketplace interest prompt (existing users) ── */}
+      {showMarketplaceBanner && (
+        <div className="mx-4 mt-4 rounded-2xl border p-4" style={{ borderColor: '#C2410C33', background: 'linear-gradient(135deg, #1a0800 0%, #05124a 100%)' }}>
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ backgroundColor: '#C2410C22' }}>🏗️</div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-white">We're building a marketplace for cleaners like you</p>
+              <p className="text-xs text-[rgba(153,197,255,0.6)] mt-0.5 leading-relaxed">
+                Cadi will connect you to FM aggregators across the UK who need reliable subcontractors. Would you be interested?
+              </p>
+              <div className="flex gap-2 mt-3">
+                <button onClick={() => handleMarketplaceInterest(true)}
+                  className="px-4 py-2 rounded-xl text-white text-xs font-bold transition-all hover:brightness-110"
+                  style={{ backgroundColor: '#C2410C' }}>
+                  Yes, I'm interested
+                </button>
+                <button onClick={() => handleMarketplaceInterest(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-[rgba(153,197,255,0.5)] hover:text-white transition-colors">
+                  Not now
+                </button>
+              </div>
+            </div>
+            <button onClick={() => handleMarketplaceInterest(false)} className="text-[rgba(153,197,255,0.3)] hover:text-white text-lg leading-none shrink-0">✕</button>
+          </div>
         </div>
       )}
 

@@ -9,8 +9,13 @@ import {
   ChevronRight, Save, Check, Eye, EyeOff, Sparkles,
   LogOut, Trash2, Download, Shield, Phone, Mail,
   MapPin, Globe, Clock, PoundSterling, ToggleLeft,
-  ToggleRight, AlertCircle, CheckCircle, Plug, Link, Unlink, RefreshCw, Copy
+  ToggleRight, AlertCircle, CheckCircle, Plug, Link, Unlink, RefreshCw, Copy,
+  Tag, Bot, MessageSquare, Star
 } from 'lucide-react';
+import PricingSettings from '../components/PricingSettings';
+import AgentSettings from '../components/AgentSettings';
+import FrontDeskSettings from '../components/FrontDeskSettings';
+import ReviewsSettings from '../components/ReviewsSettings';
 
 // ─── Billing portal button ────────────────────────────────────────────────────
 
@@ -136,6 +141,10 @@ function SavedToast({ show }) {
 const TABS = [
   { id: 'profile',      label: 'Profile',       icon: User       },
   { id: 'business',     label: 'Business',      icon: Building2  },
+  { id: 'pricing',      label: 'Pricing',       icon: Tag        },
+  { id: 'agents',       label: 'Agents',        icon: Bot        },
+  { id: 'front_desk',   label: 'Front Desk',    icon: MessageSquare },
+  { id: 'reviews',      label: 'Reviews',       icon: Star       },
   { id: 'compliance',   label: 'Compliance',    icon: Shield     },
   { id: 'notifications',label: 'Notifications', icon: Bell       },
   { id: 'subscription', label: 'Plan',          icon: CreditCard },
@@ -586,8 +595,16 @@ export default function Settings() {
               <InputField label="Last Name" value={profile.lastName}
                 onChange={v => updateProfileField('lastName', v)} placeholder="Last name" />
             </div>
-            <InputField label="Email Address" value={profile.email} type="email"
-              onChange={v => updateProfileField('email', v)} placeholder="you@example.com" />
+            <div>
+              <InputField label="Email Address" value={profile.email} type="email"
+                onChange={v => updateProfileField('email', v)} placeholder="you@example.com" />
+              {profile.email !== user?.email && (
+                <p className="text-xs text-amber-600 mt-1.5">We'll send a confirmation link to this address — the change won't take effect until you click it.</p>
+              )}
+              {profile.email === user?.email && (
+                <p className="text-xs text-gray-400 mt-1.5">This is the email address you use to log in. Wrong address? Change it here and save.</p>
+              )}
+            </div>
             <InputField label="Phone Number" value={profile.phone} type="tel"
               onChange={v => updateProfileField('phone', v)} placeholder="07700 000000" />
             <button
@@ -712,6 +729,18 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {/* ── PRICING TAB ── */}
+      {activeTab === 'pricing' && <PricingSettings />}
+
+      {/* ── AGENTS TAB ── */}
+      {activeTab === 'agents' && <AgentSettings />}
+
+      {/* ── FRONT DESK TAB ── */}
+      {activeTab === 'front_desk' && <FrontDeskSettings />}
+
+      {/* ── REVIEWS TAB ── */}
+      {activeTab === 'reviews' && <ReviewsSettings />}
 
       {/* ── COMPLIANCE TAB ── */}
       {activeTab === 'compliance' && (

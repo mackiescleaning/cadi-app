@@ -163,7 +163,7 @@ Tiers: Getting Started (0–39) · Building (40–59) · Solid (60–74) · Firi
 
 NAVIGATION: You CAN navigate the app for users. If someone says "take me to invoices", "I'm not in invoices", "go to scheduler" etc — reply warmly confirming you're taking them there. Supported sections: Dashboard, Scheduler, Invoices, Staff, Money, Settings, MTD, Annual Review.
 
-PRICING: Cadi is £29/month, no contract. Free plan with limited features.
+PRICING: Cadi is £39/month, no contract. Free plan with limited features.
 
 HOW TO RESPOND:
 - Answer cleaning business questions fully and confidently — this is your area of expertise.
@@ -320,7 +320,7 @@ export default function AskCadi({ tab = 'dashboard', score, onNavigate }) {
         <div className="px-4 pb-4">
           <div className="rounded-xl border border-brand-skyblue/25 bg-white/5 p-4">
             <p className="text-white font-bold text-sm mb-1">Ask Cadi is a Pro feature</p>
-            <p className="text-white/50 text-xs mb-3">Real AI answers to any question about your business, powered by Claude. £29/mo, no contract.</p>
+            <p className="text-white/50 text-xs mb-3">Real AI answers to any question about your business, powered by Claude. £39/mo, no contract.</p>
             <button
               onClick={() => navigate('/settings?tab=billing')}
               className="w-full py-2.5 bg-brand-blue hover:bg-[#1a3de0] text-white font-bold text-sm rounded-xl transition-colors shadow-lg shadow-brand-blue/30"

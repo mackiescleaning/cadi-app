@@ -6,6 +6,13 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
       "port": 3000
+    },
+    {
+      "name": "widget-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "3001"],
+      "cwd": "/Users/mackiescleaning/cleaning business blueprints/cadi-widget",
+      "port": 3001
     }
   ]
 }

@@ -1,5 +1,6 @@
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { usePlan } from '../../hooks/usePlan';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CadiWordmark from '../CadiWordmark';
@@ -17,6 +18,7 @@ const FEATURES = [
 
 export default function ProUpgradePage() {
   const { profile } = useAuth();
+  const { priceMonthly } = usePlan();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -26,7 +28,7 @@ export default function ProUpgradePage() {
     setError(null);
     try {
       const { data, error: fnError } = await supabase.functions.invoke('create-checkout', {
-        body: { returnUrl: window.location.origin },
+        body: { tier: 'pro', returnUrl: window.location.origin },
       });
       if (fnError) throw fnError;
       if (data?.url) window.location.href = data.url;
@@ -37,7 +39,7 @@ export default function ProUpgradePage() {
     }
   };
 
-  if (profile?.plan === 'pro') {
+  if (profile?.subscription_tier === 'pro' || profile?.subscription_tier === 'max' || profile?.plan === 'pro') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#010a4f] via-[#05124a] to-[#0d1e78] flex items-center justify-center px-4">
         <div className="text-center max-w-md">
@@ -69,7 +71,7 @@ export default function ProUpgradePage() {
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff] to-transparent" />
 
           <div className="flex items-baseline gap-1 mb-1">
-            <span className="text-4xl font-black text-white">£29</span>
+            <span className="text-4xl font-black text-white">£{priceMonthly || 39}</span>
             <span className="text-[rgba(153,197,255,0.5)] text-sm">/month</span>
           </div>
           <p className="text-[rgba(153,197,255,0.4)] text-xs mb-6">Cancel anytime · Powered by Stripe</p>
@@ -92,7 +94,7 @@ export default function ProUpgradePage() {
             disabled={loading}
             className="w-full py-4 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black text-sm rounded-xl transition-all shadow-lg shadow-[#1f48ff]/40 disabled:opacity-50"
           >
-            {loading ? 'Opening checkout…' : 'Subscribe — £29/month'}
+            {loading ? 'Opening checkout…' : `Subscribe — £${priceMonthly || 39}/month`}
           </button>
           <p className="text-center text-[10px] text-[rgba(153,197,255,0.3)] mt-3">
             Questions? <a href="mailto:support@cadi.cleaning" className="underline hover:text-[rgba(153,197,255,0.6)]">support@cadi.cleaning</a>

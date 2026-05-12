@@ -1,0 +1,10 @@
+[
+  { "id": "cl1", "name": "Riverside Academy Trust",  "sector": "Education",   "contact": "Karen Mills",    "email": "facilities@riversideacademy.org.uk",  "sites": 3 },
+  { "id": "cl2", "name": "Milton Keynes Hospital",   "sector": "Healthcare",  "contact": "James Patel",    "email": "estates@mkhospital.nhs.uk",           "sites": 2 },
+  { "id": "cl3", "name": "Tesco Distribution Hub",   "sector": "Retail",      "contact": "Sandra Briggs",  "email": "facilities@tesco-dist.co.uk",         "sites": 1 },
+  { "id": "cl4", "name": "Crown Gate Shopping Centre","sector": "Retail",     "contact": "Phil Hargreaves","email": "ops@crowngate.co.uk",                 "sites": 1 },
+  { "id": "cl5", "name": "Luton Borough Council",    "sector": "Government",  "contact": "Carol Nduka",    "email": "facilities@luton.gov.uk",             "sites": 4 },
+  { "id": "cl6", "name": "Watford Life Sciences Park","sector": "Commercial", "contact": "Ben Wu",         "email": "estates@wlspark.co.uk",               "sites": 2 },
+  { "id": "cl7", "name": "Premier Inn Group (MK)",   "sector": "Hospitality", "contact": "Anna Kowalska",  "email": "gm.mk@premierinn.com",                "sites": 1 },
+  { "id": "cl8", "name": "Aylesbury College",        "sector": "Education",   "contact": "David Shaw",     "email": "facilities@aylesbury.ac.uk",          "sites": 2 }
+]

@@ -69,6 +69,12 @@ const TURNS = [
     chapter: 1,
   },
   {
+    id: 'confirm',
+    cadi: f => `Just to confirm — I've pulled your details from signup. Does everything look right?`,
+    type: 'confirm',
+    chapter: 1,
+  },
+  {
     id: 'logo',
     cadi: f => `One more thing — want to add your logo? It'll appear at the top of the app, on every invoice and quote, making ${f.bizName} look completely yours from day one. Skip if you want to add it in Settings later.`,
     type: 'logo',
@@ -129,24 +135,37 @@ const TURNS = [
     skippable: true,
   },
   {
+    id: 'widget',
+    cadi: f => `Pricing done — now let's get ${f.bizName} its first online lead. 🌐\n\nCadi's chat widget goes on your website in 30 seconds. Visitors get instant quotes, you get their name and email. No extra software, no monthly fees.\n\nPaste this one line just before the </body> tag on your site — I've pre-filled your business ID:`,
+    type: 'widget',
+    chapter: 4,
+    skippable: true,
+  },
+  {
     id: 'goals',
     cadi: f => `What are you building towards, ${f.firstName}?\n\nSet your targets and the Cadi dashboard will track your progress every week — showing exactly how many jobs stand between you and your goal.`,
     type: 'goals',
-    chapter: 4,
+    chapter: 5,
     skippable: true,
   },
   {
     id: 'compliance',
     cadi: 'Any compliance to log? Cadi tracks renewal dates and sends reminders so nothing lapses. Skip for now if you want.',
     type: 'compliance',
-    chapter: 4,
+    chapter: 5,
     skippable: true,
+  },
+  {
+    id: 'marketplace_interest',
+    cadi: f => `One last thing, ${f.firstName} — we're building a marketplace that connects Cadi cleaners to commercial FM aggregators across the UK.\n\nWould you be interested in receiving commercial work through Cadi when the marketplace launches?`,
+    type: 'marketplace-interest',
+    chapter: 5,
   },
   {
     id: 'summary',
     cadi: f => `You're all set, ${f.firstName}! 🎉\n\nHere's everything I've built for ${f.bizName || 'your account'} — ready to go the moment you walk in.\n\nYour first 3 actions inside Cadi:\n📅 Add your first job in Scheduler\n👥 Add your first customer\n📄 Send your first invoice\n\nAsk Cadi anything if you get stuck — I'm on every tab.`,
     type: 'summary',
-    chapter: 4,
+    chapter: 5,
   },
 ];
 
@@ -154,7 +173,8 @@ const CHAPTERS = [
   { id: 1, label: 'About You' },
   { id: 2, label: 'Your Business' },
   { id: 3, label: 'Services & Pricing' },
-  { id: 4, label: 'Goals & Finish' },
+  { id: 4, label: 'Get Online' },
+  { id: 5, label: 'Goals & Finish' },
 ];
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -200,6 +220,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
   const navigate = useNavigate();
   const chatRef = useRef(null);
   const inputRef = useRef(null);
+  const initialized = useRef(false);
 
   // Chat state
   const [messages, setMessages] = useState([]);
@@ -207,6 +228,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
   const [isTyping, setIsTyping] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notif, setNotif] = useState(null);
+  const [confirmEditing, setConfirmEditing] = useState(false);
 
   // Input state (local to current turn — cleared on advance)
   const [textValue, setTextValue] = useState('');
@@ -224,14 +246,17 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
     services: [], customService: '',
     hourlyRate: '', minJobRate: '', minJobMins: '120',
     quoteType: 'inc_vat', paymentTerms: '0',
-    workingDays: 'mon_fri', startTime: '08:00', finishTime: '17:00',
+    workingDays: { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false },
+    startTime: '08:00', finishTime: '18:00',
     currentRevenue: '', targetRevenue: '',
     currentClients: '', targetClients: '',
     targetDate: '', ambition: 'growing_fast',
     pli: false, pliPolicy: '', pliRenewal: '',
     dbs: false, ico: false, coshh: false, accreditations: [],
+    businessId: null,
     bankConnected: false, goCardless: false, stripe: false,
     accountantName: '', accountantEmail: '', accountantFirm: '',
+    marketplaceInterest: null,
   });
 
   function patch(p) { setForm(prev => ({ ...prev, ...p })); }
@@ -261,15 +286,45 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
     }, 60);
   }
 
-  // Show first cadi message on mount
+  // Show first cadi message once profile has loaded
   useEffect(() => {
+    if (loading || profileLoading) return;
+    if (initialized.current) return;
+    initialized.current = true;
+
+    setIsTyping(true);
     const delay = setTimeout(() => {
       setIsTyping(false);
-      setMessages([{ id: 'cadi-0', role: 'cadi', text: cadiText(TURNS[0]) }]);
+      // If signup already captured name + business, skip the individual text questions
+      const hasSignupData = profile?.first_name && profile?.business_name;
+      if (hasSignupData) {
+        const confirmIdx = TURNS.findIndex(t => t.id === 'confirm');
+        setTurnIndex(confirmIdx);
+        setForm(prev => ({
+          ...prev,
+          firstName: profile.first_name,
+          lastName:  profile.last_name || '',
+          bizName:   profile.business_name,
+          bizEmail:  user?.email || prev.bizEmail,
+        }));
+        setMessages([{
+          id: 'cadi-0', role: 'cadi',
+          text: `Hi ${profile.first_name}! 👋 Welcome to Cadi.\n\nI've pulled your details from signup — just confirm they're right and we'll get your account set up. Takes about 2 minutes.`,
+        }]);
+      } else {
+        setMessages([{ id: 'cadi-0', role: 'cadi', text: cadiText(TURNS[0]) }]);
+      }
       scrollDown();
     }, 900);
     return () => clearTimeout(delay);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, profileLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load business ID for widget snippet
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('businesses').select('id').eq('owner_user_id', user.id).single()
+      .then(({ data }) => { if (data) patch({ businessId: data.id }); });
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-fill from existing profile
   useEffect(() => {
@@ -353,14 +408,25 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
     const existing = await loadSetupData();
     await supabase
       .from('business_settings')
-      .update({ setup_data: { ...existing, ...patch } })
-      .eq('owner_id', user.id);
+      .upsert(
+        { owner_id: user.id, setup_data: { ...existing, ...patch } },
+        { onConflict: 'owner_id' }
+      );
   }
 
   // Save is batched at chapter boundaries — called before advancing on key turns
   async function saveChapter(id) {
     if (!user || user.id === 'demo-user') return;
     try {
+      if (id === 'confirm') {
+        await supabase.from('profiles').update({
+          first_name: form.firstName.trim(),
+          last_name: form.lastName.trim(),
+          business_name: form.bizName.trim(),
+          onboarding_step: 1,
+        }).eq('id', user.id);
+        await mergeSetupData({ business_email: form.bizEmail.trim() });
+      }
       if (id === 'logo') {
         if (form.logoUrl) await mergeSetupData({ logo_url: form.logoUrl });
       }
@@ -385,7 +451,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
         await mergeSetupData({ company_number: form.companyNumber, fy_end: form.fyEnd || null });
       }
       if (id === 'vatRegistered') {
-        await supabase.from('business_settings').update({ vat_registered: form.vatRegistered }).eq('owner_id', user.id);
+        await supabase.from('business_settings').upsert({ owner_id: user.id, vat_registered: form.vatRegistered }, { onConflict: 'owner_id' });
         await mergeSetupData({ vat_number: form.vatNumber, vat_scheme: form.vatScheme || null });
         await supabase.from('profiles').update({ onboarding_step: 5 }).eq('id', user.id);
       }
@@ -399,7 +465,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
       }
       if (id === 'pricing') {
         const hr = Number(form.hourlyRate || 0);
-        await supabase.from('business_settings').update({ hourly_rate: hr || 20 }).eq('owner_id', user.id);
+        await supabase.from('business_settings').upsert({ owner_id: user.id, hourly_rate: hr || 20 }, { onConflict: 'owner_id' });
         await mergeSetupData({
           hourly_rate: hr || null,
           min_job_rate: Number(form.minJobRate || 0) || null,
@@ -412,9 +478,12 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
         });
         await supabase.from('profiles').update({ onboarding_step: 8 }).eq('id', user.id);
       }
+      if (id === 'widget') {
+        await supabase.from('profiles').update({ onboarding_step: 9 }).eq('id', user.id);
+      }
       if (id === 'goals') {
         const annual = Number(form.targetRevenue || 0) * 12;
-        if (annual) await supabase.from('business_settings').update({ annual_target: annual }).eq('owner_id', user.id);
+        if (annual) await supabase.from('business_settings').upsert({ owner_id: user.id, annual_target: annual }, { onConflict: 'owner_id' });
         await mergeSetupData({
           current_revenue: Number(form.currentRevenue || 0) || null,
           target_revenue: Number(form.targetRevenue || 0) || null,
@@ -423,7 +492,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           target_date: form.targetDate || null,
           ambition: form.ambition,
         });
-        await supabase.from('profiles').update({ onboarding_step: 9 }).eq('id', user.id);
+        await supabase.from('profiles').update({ onboarding_step: 10 }).eq('id', user.id);
       }
       if (id === 'compliance') {
         await mergeSetupData({
@@ -431,7 +500,15 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           dbs: form.dbs, ico: form.ico, coshh: form.coshh,
           accreditations: form.accreditations,
         });
-        await supabase.from('profiles').update({ onboarding_step: 10 }).eq('id', user.id);
+        await supabase.from('profiles').update({ onboarding_step: 11 }).eq('id', user.id);
+      }
+      if (id === 'marketplace_interest') {
+        const interested = form.marketplaceInterest === true;
+        await supabase.from('profiles').update({
+          marketplace_interest:    interested,
+          marketplace_interest_at: interested ? new Date().toISOString() : null,
+          onboarding_step: 12,
+        }).eq('id', user.id);
       }
     } catch (e) {
       flash(e.message || 'Save failed', 'error');
@@ -441,17 +518,25 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
 
   async function finishOnboarding() {
     setSaving(true);
-    try {
-      if (user?.id !== 'demo-user') {
-        await supabase.from('profiles').update({ onboarding_complete: true, onboarding_step: 12 }).eq('id', user.id);
-      }
-      await updateProfile({ onboarding_complete: true, onboarding_step: 12 });
-      if (isModal) onComplete?.();
-      else navigate('/dashboard', { replace: true });
-    } catch (e) {
-      flash(e.message || 'Could not complete setup', 'error');
-      setSaving(false);
+
+    // Fire the DB write without blocking — all chapter data was already saved
+    // incrementally, so a hang here should never trap the user on this screen.
+    if (user?.id !== 'demo-user') {
+      supabase.from('profiles')
+        .update({ onboarding_complete: true, onboarding_step: 13 })
+        .eq('id', user.id)
+        .then(() => {}).catch(() => {});
     }
+
+    // Update local auth state and navigate — don't wait for the DB round-trip
+    try {
+      await updateProfile({ onboarding_complete: true, onboarding_step: 13 });
+    } catch {
+      // Even if this fails, still let the user in — they can complete setup later
+    }
+
+    if (isModal) onComplete?.();
+    else navigate('/dashboard', { replace: true });
   }
 
   // ── Validate + handle answer submission ─────────────────────────────────────
@@ -510,6 +595,69 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           >
             {saving ? '…' : '→'}
           </button>
+        </div>
+      );
+    }
+
+    // Confirm pre-filled signup details
+    if (type === 'confirm') {
+      return (
+        <div className="space-y-3">
+          {!confirmEditing ? (
+            <div className="rounded-xl border border-[rgba(153,197,255,0.15)] bg-[#091660] divide-y divide-[rgba(153,197,255,0.08)]">
+              {[
+                { label: 'Your name', value: `${form.firstName} ${form.lastName}`.trim() || form.firstName },
+                { label: 'Business name', value: form.bizName },
+                { label: 'Email', value: form.bizEmail || user?.email },
+              ].map(row => (
+                <div key={row.label} className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-[rgba(153,197,255,0.5)] uppercase tracking-wide">{row.label}</span>
+                  <span className="text-sm font-semibold text-white">{row.value}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className={labelCls}>First name</label>
+                  <input className={inputCls} value={form.firstName} onChange={e => patch({ firstName: e.target.value })} placeholder="First name" />
+                </div>
+                <div>
+                  <label className={labelCls}>Last name</label>
+                  <input className={inputCls} value={form.lastName} onChange={e => patch({ lastName: e.target.value })} placeholder="Last name" />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Business name</label>
+                <input className={inputCls} value={form.bizName} onChange={e => patch({ bizName: e.target.value })} placeholder="Your business name" />
+              </div>
+              <div>
+                <label className={labelCls}>Business email</label>
+                <input className={inputCls} type="email" value={form.bizEmail} onChange={e => patch({ bizEmail: e.target.value })} placeholder="hello@yourbusiness.co.uk" />
+              </div>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmEditing(v => !v)}
+              className="rounded-[10px] border border-[rgba(153,197,255,0.15)] px-4 py-[11px] text-sm text-[rgba(153,197,255,0.5)] hover:text-white transition"
+            >
+              {confirmEditing ? 'Cancel' : 'Edit details'}
+            </button>
+            <button
+              type="button"
+              disabled={saving || !form.firstName || !form.bizName}
+              onClick={() => {
+                setConfirmEditing(false);
+                handleAnswer(id, `${form.firstName} · ${form.bizName}`, `${form.firstName} · ${form.bizName}`);
+              }}
+              className="flex-1 rounded-[10px] bg-[#1f48ff] py-[11px] text-sm font-bold text-white shadow-[0_4px_16px_rgba(31,72,255,0.4)] transition hover:bg-[#3a5eff] disabled:opacity-60"
+            >
+              {saving ? 'Saving…' : 'Yes, that\'s correct →'}
+            </button>
+          </div>
         </div>
       );
     }
@@ -837,6 +985,8 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
 
     // Pricing
     if (type === 'pricing') {
+      const DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
+      const DAY_LABELS = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
       return (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -851,6 +1001,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
             <div>
               <label className={labelCls}>Minimum Duration</label>
               <select className={inputCls} value={form.minJobMins} onChange={e => patch({ minJobMins: e.target.value })}>
+                <option value="0">No minimum</option>
                 <option value="60">1 hour</option>
                 <option value="90">1.5 hours</option>
                 <option value="120">2 hours</option>
@@ -874,13 +1025,34 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
                 <option value="30">30 days</option>
               </select>
             </div>
+          </div>
+          <div>
+            <label className={labelCls}>Working Days</label>
+            <div className="flex gap-1.5 flex-wrap mt-1">
+              {DAYS.map(d => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => patch({ workingDays: { ...form.workingDays, [d]: !form.workingDays[d] } })}
+                  className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                    form.workingDays[d]
+                      ? 'border-[#99c5ff] bg-[rgba(31,72,255,0.25)] text-white'
+                      : 'border-[rgba(153,197,255,0.12)] bg-[#091660] text-[rgba(153,197,255,0.4)] hover:text-white'
+                  }`}
+                >
+                  {DAY_LABELS[d]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Working Days</label>
-              <select className={inputCls} value={form.workingDays} onChange={e => patch({ workingDays: e.target.value })}>
-                <option value="mon_fri">Mon–Fri</option>
-                <option value="mon_sat">Mon–Sat</option>
-                <option value="mon_sun">Mon–Sun</option>
-              </select>
+              <label className={labelCls}>Opening Time</label>
+              <input type="time" className={inputCls} value={form.startTime} onChange={e => patch({ startTime: e.target.value })} />
+            </div>
+            <div>
+              <label className={labelCls}>Closing Time</label>
+              <input type="time" className={inputCls} value={form.finishTime} onChange={e => patch({ finishTime: e.target.value })} />
             </div>
           </div>
           <div className="flex gap-2">
@@ -1077,6 +1249,79 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           >
             {saving ? 'Setting up your account…' : `🚀 Open ${form.bizName || 'Cadi'}`}
           </button>
+        </div>
+      );
+    }
+
+    // Widget embed
+    if (type === 'widget') {
+      const snippet = form.businessId
+        ? `<script src="https://widget.cadi.cleaning/widget.js" data-business-id="${form.businessId}" async></script>`
+        : `<script src="https://widget.cadi.cleaning/widget.js" data-business-id="…" async></script>`;
+      return (
+        <div className="space-y-3">
+          <div className="rounded-xl bg-[#020d3a] border border-[rgba(153,197,255,0.15)] px-4 py-3 pr-14 font-mono text-[11px] text-[#99c5ff] break-all leading-relaxed relative">
+            {snippet}
+            <button
+              type="button"
+              onClick={() => { try { navigator.clipboard.writeText(snippet); } catch {} }}
+              className="absolute right-2 top-2 px-2 py-1 rounded-lg bg-[#1f48ff] text-white text-[10px] font-bold hover:bg-[#3a5eff] transition"
+            >
+              Copy
+            </button>
+          </div>
+          <p className="text-[11px] text-[rgba(153,197,255,0.4)]">Paste this just before &lt;/body&gt; on your website. Takes 30 seconds — you can also do it later in Settings → Front Desk.</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => advance('Done later', form)} className="rounded-[10px] border border-[rgba(153,197,255,0.15)] px-4 py-[11px] text-sm text-[rgba(153,197,255,0.5)] hover:text-white transition">
+              Do it later
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => handleAnswer(id, 'Widget added ✓', 'Widget added')}
+              className="flex-1 rounded-[10px] bg-[#1f48ff] py-[11px] text-sm font-bold text-white shadow-[0_4px_16px_rgba(31,72,255,0.4)] hover:bg-[#3a5eff] transition disabled:opacity-60"
+            >
+              {saving ? 'Saving…' : "I've added it →"}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Marketplace interest
+    if (type === 'marketplace-interest') {
+      return (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { val: true,  label: '✅ Yes, I\'m interested',   hint: "We'll add you to the early-access list" },
+              { val: false, label: '⏳ Not now',                 hint: "No problem — you can join later in the Earn tab" },
+            ].map(opt => (
+              <button
+                key={String(opt.val)}
+                type="button"
+                onClick={async () => {
+                  const f2 = { ...form, marketplaceInterest: opt.val };
+                  patch({ marketplaceInterest: opt.val });
+                  setSaving(true);
+                  try {
+                    const interested = opt.val === true;
+                    await supabase.from('profiles').update({
+                      marketplace_interest:    interested,
+                      marketplace_interest_at: interested ? new Date().toISOString() : null,
+                      onboarding_step: 11,
+                    }).eq('id', user.id);
+                  } catch { setSaving(false); return; }
+                  setSaving(false);
+                  advance(opt.label, f2);
+                }}
+                className="rounded-xl border-2 p-4 text-left transition-all hover:-translate-y-0.5 border-[rgba(153,197,255,0.15)] bg-[#091660] hover:border-[rgba(153,197,255,0.35)]"
+              >
+                <div className="text-sm font-bold text-white mb-1">{opt.label}</div>
+                <div className="text-xs text-[rgba(153,197,255,0.5)]">{opt.hint}</div>
+              </button>
+            ))}
+          </div>
         </div>
       );
     }

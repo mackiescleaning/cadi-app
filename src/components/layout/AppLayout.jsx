@@ -4,69 +4,134 @@ import {
   LayoutDashboard, Calculator, CalendarDays, Users,
   PoundSterling, Settings, Menu, X,
   TrendingUp, MapPin, FileText, ClipboardCheck,
-  GraduationCap, ClipboardList, Package, Lock
+  GraduationCap, ClipboardList, Package, Lock,
+  Briefcase, Star, Network, CheckSquare,
+  ShoppingBag, GitBranch, MessageSquare, Bell, Inbox
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { usePlan } from '../../hooks/usePlan';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { UpgradeModal } from '../UpgradePrompt';
 
+// ── Section definitions ───────────────────────────────────────────────────────
+
+const RUN_COLOR  = '#0d1a5e';
+const GROW_COLOR = '#059669';
+const EARN_COLOR = '#C2410C';
+
+const NAV_SECTIONS = [
+  {
+    id: 'run',
+    label: 'Run your business',
+    color: EARN_COLOR,   // accent only; bg stays navy
+    accent: '#3b5bdb',
+    items: [
+      { path: '/inbox',      label: 'AI Inbox',        icon: Inbox,       badge: 'pendingActions' },
+      { path: '/scheduler',  label: 'Scheduler',       icon: CalendarDays },
+      { path: '/customers',  label: 'Customers',       icon: Users },
+      { path: '/quotes',     label: 'Quotes',          icon: ClipboardCheck },
+      { path: '/invoices',   label: 'Invoices',        icon: FileText },
+      { path: '/routes',     label: 'Route Planner',   icon: MapPin },
+      { path: '/money',      label: 'Money',           icon: PoundSterling },
+      { path: '/accounts',   label: 'Accounting',      icon: PoundSterling },
+      { path: '/inventory',  label: 'Inventory',       icon: Package },
+      { path: '/staff',      label: 'Staffing',        icon: GraduationCap },
+    ],
+    tagline: 'RUN',
+    accentColor: '#4f78ff',
+  },
+  {
+    id: 'grow',
+    label: 'Grow your margins',
+    items: [
+      { path: '/scaling',    label: 'Cadi AI',         icon: TrendingUp },
+      { path: '/calculator', label: 'Pricing Calculator', icon: Calculator },
+      { path: '/business-lab', label: 'Business Lab',  icon: Briefcase },
+      { path: '/review',     label: 'Annual Review',   icon: ClipboardList },
+    ],
+    tagline: 'GROW',
+    accentColor: GROW_COLOR,
+  },
+  {
+    id: 'earn',
+    label: 'Earn more work',
+    items: [
+      { path: '/earn/marketplace',  label: 'Marketplace',      icon: ShoppingBag   },
+      { path: '/earn/pipeline',     label: 'Job Pipeline',     icon: GitBranch     },
+      { path: '/earn/completion',   label: 'Work Completion',  icon: CheckSquare   },
+      { path: '/earn/connections',  label: 'FM Connections',   icon: Network       },
+      { path: '/earn/reputation',   label: 'My Profile',       icon: Star          },
+      { path: '/earn/earnings',     label: 'Earnings',         icon: PoundSterling },
+      { path: '/earn/comms',        label: 'Messages',         icon: MessageSquare },
+    ],
+    tagline: 'EARN',
+    accentColor: EARN_COLOR,
+  },
+];
+
+// Flat nav for matching active route
+const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap(s => s.items);
+
 const TAB_GUIDES = {
-  '/dashboard':  "Your mission control — health score, leaderboard, badges and daily activity all in one place.",
-  '/calculator': "Pricing engine — generate instant quotes for residential, commercial and exterior jobs using UK market data.",
-  '/scheduler':  "Book and manage every job — daily schedule, status tracking and team assignment at a glance.",
-  '/customers':  "Your client database — notes, addresses, star ratings and full job history for every customer.",
-  '/inventory':  "Track your cleaning kit — products, quantities, costs and restock alerts so you never run out.",
-  '/money':      "Your financial dashboard — income, expenses, tax reserve, target tracker and payment logging.",
-  '/invoices':   "Send and track invoices — one tap to invoice, one tap to chase, overdue alerts automatic.",
-  '/quotes':     "Quote pipeline — track every quote you've sent, mark who said yes or no, and log accepted quotes to income.",
-  '/accounts':   "Bookkeeping and compliance — MTD submissions, mileage claims and year-end figures ready to go.",
-  '/routes':     "Route planner — optimise your daily drive, reduce fuel costs and log mileage for HMRC.",
-  '/scaling':    "Business Lab — growth strategies, pricing analysis and AI-powered insights to scale your business.",
-  '/staff':      "Team management — staff profiles, skills, availability and job assignments all in one place.",
-  '/review':     "Annual Review — 90-day sprint goals, performance tracking and year-on-year progress.",
-  '/settings':   "Settings — update your profile, hourly rate, services, sector and business preferences.",
+  '/dashboard':    "Your mission control — health score, leaderboard, badges and daily activity all in one place.",
+  '/calculator':   "Pricing engine — generate instant quotes using UK market data.",
+  '/scheduler':    "Book and manage every job — daily schedule, status tracking and team assignment.",
+  '/customers':    "Your client database — notes, addresses, star ratings and full job history.",
+  '/inventory':    "Track your cleaning kit — products, quantities, costs and restock alerts.",
+  '/money':        "Your financial dashboard — income, expenses, tax reserve and payment logging.",
+  '/invoices':     "Send and track invoices — one tap to invoice, one tap to chase.",
+  '/quotes':       "Quote pipeline — track every quote, mark accepted, log to income.",
+  '/accounts':     "Bookkeeping and compliance — MTD submissions, mileage and year-end figures.",
+  '/routes':       "Route planner — optimise your daily drive and log mileage for HMRC.",
+  '/scaling':      "Cadi AI — growth strategies, pricing analysis and AI-powered insights.",
+  '/business-lab': "Business Lab — tools and experiments to grow your margins.",
+  '/staff':        "Team management — staff profiles, skills, availability and job assignments.",
+  '/review':       "Annual Review — 90-day sprint goals and year-on-year progress.",
+  '/settings':     "Settings — update your profile, hourly rate, services and preferences.",
 };
 
 const PRO_TAB_REASONS = {
-  '/money':    'Track income, expenses, tax reserve and P&L — your full financial picture in one place.',
-  '/accounts': 'File MTD submissions, claim mileage and see your year-end figures ready to go.',
-  '/scaling':  'Growth strategies, pricing analysis and AI-powered insights to scale your business.',
-  '/staff':    'Manage staff profiles, skills, availability and job assignments.',
-  '/review':   'Set 90-day sprint goals and track performance year on year.',
+  '/money':        'Track income, expenses, tax reserve and P&L — your full financial picture.',
+  '/accounts':     'File MTD submissions, claim mileage and see your year-end figures ready to go.',
+  '/scaling':      'Growth strategies, pricing analysis and AI-powered insights.',
+  '/business-lab': 'Business Lab tools to grow your margins.',
+  '/staff':        'Manage staff profiles, skills, availability and job assignments.',
+  '/review':       'Set 90-day sprint goals and track performance year on year.',
 };
 
-const navItems = [
-  { path: '/dashboard',  label: 'Dashboard',      icon: LayoutDashboard },
-  { path: '/calculator', label: 'Pricing',         icon: Calculator },
-  { path: '/scheduler',  label: 'Scheduler',       icon: CalendarDays },
-  { path: '/customers',  label: 'Customers',       icon: Users },
-  { path: '/inventory',  label: 'Inventory',       icon: Package },
-  { path: '/money',      label: 'Money',           icon: PoundSterling },
-  { path: '/invoices',   label: 'Invoices',        icon: FileText },
-  { path: '/quotes',     label: 'Quotes',          icon: ClipboardCheck },
-  { path: '/accounts',   label: 'Accounts',        icon: PoundSterling },
-  { path: '/routes',     label: 'Routes',          icon: MapPin },
-  { path: '/scaling',    label: 'Business Lab',    icon: TrendingUp },
-  { path: '/staff',      label: 'Staff',           icon: GraduationCap },
-  { path: '/review',     label: 'Annual Review',   icon: ClipboardList },
-  { path: '/settings',   label: 'Settings',        icon: Settings },
-];
+// Section persistence key
+const SECTION_STATE_KEY = 'cadi_nav_sections';
 
-const BOTTOM_NAV_ITEMS = navItems.slice(0, 5);
-const MORE_NAV_ITEMS = navItems.slice(5);
+function getSectionState() {
+  try { return JSON.parse(localStorage.getItem(SECTION_STATE_KEY)) || {}; } catch { return {}; }
+}
+function saveSectionState(s) {
+  try { localStorage.setItem(SECTION_STATE_KEY, JSON.stringify(s)); } catch {}
+}
+
+// Last-viewed sub-tab per section
+const LAST_TAB_KEY = 'cadi_last_tab';
+function getLastTabs() {
+  try { return JSON.parse(localStorage.getItem(LAST_TAB_KEY)) || {}; } catch { return {}; }
+}
+function saveLastTab(sectionId, path) {
+  const t = getLastTabs(); t[sectionId] = path;
+  try { localStorage.setItem(LAST_TAB_KEY, JSON.stringify(t)); } catch {}
+}
 
 export default function AppLayout() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [hoveredNav, setHoveredNav] = useState(null);
-  const [upgradeModalReason, setUpgradeModalReason] = useState(null); // null = closed
-  const [upgradeBanner, setUpgradeBanner] = useState(null); // { message }
-  const moreMenuRef = useRef(null);
-  const location = useLocation();
-  const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen]         = useState(false);
+  const [hoveredNav, setHoveredNav]                 = useState(null);
+  const [upgradeModalReason, setUpgradeModalReason] = useState(null);
+  const [upgradeBanner, setUpgradeBanner]           = useState(null);
+  const [mobileSectionId, setMobileSectionId]       = useState('run'); // active mobile section
+  const [collapsed, setCollapsed]                   = useState(() => getSectionState());
+  const [pendingActions, setPendingActions]          = useState(0);
+
+  const location  = useLocation();
+  const navigate  = useNavigate();
   const { user, profile, signOut, refreshProfile } = useAuth();
   const { isPro, isTabLocked } = usePlan();
   const [logoUrl, setLogoUrl] = useState('');
@@ -77,29 +142,45 @@ export default function AppLayout() {
       try {
         const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).single();
         setLogoUrl(data?.setup_data?.logo_url || '');
-      } catch { /* non-critical */ }
+      } catch {}
     })();
   }, [user, location.pathname]);
 
-  // Close "More" menu when clicking outside or navigating
+  // Poll pending agent actions count
   useEffect(() => {
-    const handler = (e) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
-        setMoreMenuOpen(false);
-      }
+    if (!user || user.id === 'demo-user') return;
+    const loadPending = async () => {
+      try {
+        const { data: biz } = await supabase.from('businesses').select('id').eq('owner_user_id', user.id).single();
+        if (!biz) return;
+        const { count } = await supabase
+          .from('agent_actions')
+          .select('id', { count: 'exact', head: true })
+          .eq('business_id', biz.id)
+          .eq('status', 'pending_approval');
+        setPendingActions(count ?? 0);
+      } catch {}
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+    loadPending();
+    const interval = setInterval(loadPending, 60_000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
-  useEffect(() => { setMoreMenuOpen(false); }, [location.pathname]);
+  // Track last-viewed tab per section and active mobile section
+  useEffect(() => {
+    const active = NAV_SECTIONS.find(s => s.items.some(i => location.pathname.startsWith(i.path)));
+    if (active) {
+      const item = active.items.find(i => location.pathname.startsWith(i.path));
+      if (item) saveLastTab(active.id, item.path);
+      setMobileSectionId(active.id);
+    }
+  }, [location.pathname]);
 
-  // Handle return from Stripe checkout (?upgraded=1)
+  // Stripe upgrade confirmation
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (!params.has('upgraded')) return;
     window.history.replaceState({}, '', window.location.pathname);
-
     setUpgradeBanner({ message: 'Confirming your payment…' });
     let attempts = 0;
     const interval = setInterval(async () => {
@@ -118,16 +199,7 @@ export default function AppLayout() {
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const currentPage = navItems.find(item =>
-    location.pathname.startsWith(item.path)
-  )?.label || 'Dashboard';
-
-  const isMoreActive = MORE_NAV_ITEMS.some(item => location.pathname.startsWith(item.path));
-
-  const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
-  };
+  const handleSignOut = async () => { await signOut(); navigate('/login'); };
 
   const handleNavClick = useCallback((path, e) => {
     if (isTabLocked(path)) {
@@ -137,33 +209,158 @@ export default function AppLayout() {
     }
   }, [isTabLocked]);
 
+  const toggleSection = (id) => {
+    setCollapsed(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      saveSectionState(next);
+      return next;
+    });
+  };
+
+  const currentLabel =
+    location.pathname === '/dashboard' ? 'Dashboard' :
+    ALL_NAV_ITEMS.find(i => location.pathname.startsWith(i.path))?.label || 'Cadi';
+
   const userInitial = profile?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U';
-  const userName = profile?.business_name || profile?.first_name || 'Your Business';
-  const planLabel = isPro ? 'Cadi Pro' : 'Free plan';
+  const userName    = profile?.business_name || profile?.first_name || 'Your Business';
+  const planLabel   = isPro ? 'Cadi Pro' : 'Free plan';
+
+  // ── Sidebar section renderer ────────────────────────────────────────────────
+  function SidebarSection({ section, onNavigate }) {
+    const isOpen = !collapsed[section.id];
+    const isSectionActive = section.items.some(i => location.pathname.startsWith(i.path));
+    const isTourActive = !profile?.dashboard_tour_complete;
+
+    return (
+      <div className="mb-1">
+        {/* Section header */}
+        <button
+          onClick={() => toggleSection(section.id)}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors group"
+        >
+          <span
+            className="w-1.5 h-4 rounded-full shrink-0"
+            style={{ backgroundColor: section.accentColor }}
+          />
+          <span className="flex-1 text-left">
+            <span className="flex items-center gap-1.5">
+              <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: section.accentColor }}>
+                {section.tagline}
+              </span>
+              {section.id === 'earn' && (
+                <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full tracking-wider"
+                  style={{ background: 'rgba(194,65,12,0.25)', color: '#C2410C' }}>
+                  COMING SOON
+                </span>
+              )}
+            </span>
+            <span className="block text-[10px] text-[#99c5ff]/40 leading-tight">{section.label}</span>
+          </span>
+          <ChevronDown
+            size={12}
+            className={`text-[#99c5ff]/30 transition-transform duration-200 ${isOpen ? 'rotate-0' : '-rotate-90'}`}
+          />
+        </button>
+
+        {/* Section items */}
+        {isOpen && (
+          <div className="mt-0.5 space-y-0.5 pl-2">
+            {section.items.map(({ path, label, icon: Icon, comingSoon, badge }) => {
+              const badgeCount = badge === 'pendingActions' ? pendingActions : 0;
+              const locked = isTabLocked(path);
+              const guide  = TAB_GUIDES[path];
+              const isHovered = hoveredNav === path;
+              const isActive  = location.pathname.startsWith(path);
+
+              return (
+                <div
+                  key={path}
+                  className="relative"
+                  onMouseEnter={() => setHoveredNav(path)}
+                  onMouseLeave={() => setHoveredNav(null)}
+                >
+                  <NavLink
+                    to={comingSoon ? '/earn' : path}
+                    onClick={(e) => {
+                      if (comingSoon) { e.preventDefault(); navigate('/earn'); return; }
+                      handleNavClick(path, e);
+                      onNavigate?.();
+                    }}
+                    className={({ isActive: navActive }) => {
+                      const active = navActive || (comingSoon && location.pathname === '/earn' && isActive);
+                      return `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                        locked
+                          ? 'text-[#99c5ff]/40 hover:bg-white/5'
+                          : active
+                            ? 'text-white shadow-md'
+                            : 'text-[#99c5ff] hover:bg-white/10 hover:text-white'
+                      }`;
+                    }}
+                    style={({ isActive: navActive }) => {
+                      const active = navActive && !comingSoon;
+                      return active ? { backgroundColor: section.accentColor + '33', borderLeft: `2px solid ${section.accentColor}` } : {};
+                    }}
+                  >
+                    <Icon size={16} className="shrink-0" />
+                    <span className="flex-1 truncate">{label}</span>
+                    {badgeCount > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-amber-400 text-[#010a4f]">
+                        {badgeCount}
+                      </span>
+                    )}
+                    {comingSoon && (
+                      <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded-full"
+                        style={{ backgroundColor: EARN_COLOR + '33', color: EARN_COLOR }}>
+                        SOON
+                      </span>
+                    )}
+                    {locked && !comingSoon && <Lock size={10} className="shrink-0 opacity-40" />}
+                    {isTourActive && !locked && !comingSoon && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#4f78ff]/60 animate-pulse shrink-0" />
+                    )}
+                  </NavLink>
+
+                  {isTourActive && isHovered && guide && !locked && !comingSoon && (
+                    <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 w-52 bg-[#0d1e78] border border-[#4f78ff]/30 rounded-xl p-3 shadow-2xl pointer-events-none">
+                      <p className="text-[11px] text-[#99c5ff]/80 leading-relaxed">{guide}</p>
+                      <div className="absolute right-full top-1/2 -translate-y-1/2 border-8 border-transparent border-r-[#0d1e78]" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Mobile bottom section picker ─────────────────────────────────────────────
+  const MOBILE_SECTIONS = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+    { id: 'run',   label: 'Run',   icon: CalendarDays, color: '#4f78ff' },
+    { id: 'grow',  label: 'Grow',  icon: TrendingUp,  color: GROW_COLOR },
+    { id: 'earn',  label: 'Earn',  icon: Star,        color: EARN_COLOR },
+  ];
 
   return (
     <div className="flex h-full min-h-screen bg-[#f0f4ff]">
 
-      {/* Upgrade modal */}
       {upgradeModalReason && (
-        <UpgradeModal
-          reason={upgradeModalReason}
-          onClose={() => setUpgradeModalReason(null)}
-        />
+        <UpgradeModal reason={upgradeModalReason} onClose={() => setUpgradeModalReason(null)} />
       )}
 
-      {/* Payment confirmation banner */}
       {upgradeBanner && (
         <div className={`fixed top-0 inset-x-0 z-50 px-4 py-3 text-center text-sm font-semibold ${upgradeBanner.warn ? 'bg-amber-500 text-white' : 'bg-[#1f48ff] text-white'}`}>
           {upgradeBanner.message}
         </div>
       )}
 
-      {/* ── SIDEBAR (desktop) ── */}
+      {/* ── DESKTOP SIDEBAR ── */}
       <aside className="hidden md:flex flex-col w-64 min-h-screen bg-[#010a4f] text-white fixed left-0 top-0 bottom-0 z-40">
 
-        {/* Logo / brand */}
-        <div className="px-6 py-5 border-b border-white/10">
+        {/* Brand */}
+        <div className="px-5 py-5 border-b border-white/10">
           {logoUrl ? (
             <div className="flex items-center gap-3">
               <img src={logoUrl} alt="Business logo" className="h-9 w-9 rounded-xl object-contain bg-white/10 p-0.5 shrink-0" />
@@ -180,73 +377,56 @@ export default function AppLayout() {
           )}
         </div>
 
-        {/* Nav links */}
-        <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
-          {navItems.map(({ path, label, icon: Icon }) => {
-            const locked = isTabLocked(path);
-            const isTourActive = !profile?.dashboard_tour_complete;
-            const guide = TAB_GUIDES[path];
-            const isHovered = hoveredNav === path;
-            return (
-              <div
-                key={path}
-                className="relative"
-                onMouseEnter={() => setHoveredNav(path)}
-                onMouseLeave={() => setHoveredNav(null)}
-              >
-                <NavLink
-                  to={path}
-                  onClick={(e) => handleNavClick(path, e)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${
-                      locked
-                        ? 'text-[#99c5ff]/40 hover:bg-white/5 hover:text-[#99c5ff]/60'
-                        : isActive
-                          ? 'bg-[#1f48ff] text-white shadow-lg shadow-blue-900/40'
-                          : 'text-[#99c5ff] hover:bg-white/10 hover:text-white'
-                    }`
-                  }
-                >
-                  <Icon size={18} />
-                  <span className="flex-1">{label}</span>
-                  {locked
-                    ? <Lock size={11} className="shrink-0 opacity-40" />
-                    : isTourActive && <span className="w-2 h-2 rounded-full bg-brand-skyblue/60 animate-pulse shrink-0" />
-                  }
-                </NavLink>
-                {isTourActive && isHovered && guide && !locked && (
-                  <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 w-52 bg-[#0d1e78] border border-brand-blue/30 rounded-xl p-3 shadow-2xl pointer-events-none">
-                    <p className="text-[11px] text-brand-skyblue/80 leading-relaxed">{guide}</p>
-                    <div className="absolute right-full top-1/2 -translate-y-1/2 border-8 border-transparent border-r-[#0d1e78]" />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-1">
+
+          {/* Dashboard — always visible above sections */}
+          <div
+            onMouseEnter={() => setHoveredNav('/dashboard')}
+            onMouseLeave={() => setHoveredNav(null)}
+            className="relative mb-3"
+          >
+            <NavLink
+              to="/dashboard"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                  isActive
+                    ? 'bg-[#1f48ff] text-white shadow-lg shadow-blue-900/40'
+                    : 'text-[#99c5ff] hover:bg-white/10 hover:text-white'
+                }`
+              }
+            >
+              <LayoutDashboard size={16} />
+              <span>Dashboard</span>
+            </NavLink>
+          </div>
+
+          <div className="border-t border-white/10 mb-3" />
+
+          {NAV_SECTIONS.map(section => (
+            <SidebarSection key={section.id} section={section} />
+          ))}
         </nav>
 
-        {/* Upgrade CTA for free users */}
         {!isPro && (
           <div className="px-4 pb-4">
             <button
               onClick={() => setUpgradeModalReason('Unlock every feature in Cadi — money tracking, HMRC MTD, open banking, GoCardless and more.')}
-              className="w-full py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors text-center"
+              className="w-full py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors"
             >
               Upgrade to Pro — £29/mo
             </button>
           </div>
         )}
 
-        {/* User block */}
-        <div className="px-4 py-5 border-t border-white/10">
+        <div className="px-4 py-4 border-t border-white/10">
           <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-white/5">
             {logoUrl
               ? <img src={logoUrl} alt="" className="w-8 h-8 rounded-full object-contain bg-white/10 p-0.5 shrink-0" />
-              : <div className="w-8 h-8 rounded-full bg-[#1f48ff] flex items-center justify-center text-xs font-bold text-white shrink-0">{userInitial}</div>
+              : <div className="w-8 h-8 rounded-full bg-[#1f48ff] flex items-center justify-center text-xs font-bold shrink-0">{userInitial}</div>
             }
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white truncate">{userName}</p>
-              <p className="text-xs text-[#99c5ff] truncate">{planLabel}</p>
+              <p className="text-xs text-[#99c5ff]">{planLabel}</p>
             </div>
           </div>
         </div>
@@ -255,29 +435,24 @@ export default function AppLayout() {
       {/* ── MAIN CONTENT ── */}
       <div className="flex-1 flex flex-col md:pl-64 min-w-0">
 
-        {/* Top header */}
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-[#99c5ff]/30 px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              className="md:hidden p-2 -ml-1 rounded-lg hover:bg-[#f0f4ff] active:bg-[#e0e8ff]"
+              className="md:hidden p-2 -ml-1 rounded-lg hover:bg-[#f0f4ff]"
               onClick={() => setMobileMenuOpen(true)}
             >
               <Menu size={20} className="text-[#010a4f]" />
             </button>
-            <h1 className="text-base md:text-lg font-bold text-[#010a4f]">{currentPage}</h1>
+            <h1 className="text-base md:text-lg font-bold text-[#010a4f]">{currentLabel}</h1>
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
-            <span className={`hidden sm:block text-xs font-semibold px-3 py-1.5 rounded-full ${
-              isPro
-                ? 'bg-[#99c5ff]/30 text-[#1f48ff]'
-                : 'bg-gray-100 text-gray-500'
-            }`}>
+            <span className={`hidden sm:block text-xs font-semibold px-3 py-1.5 rounded-full ${isPro ? 'bg-[#99c5ff]/30 text-[#1f48ff]' : 'bg-gray-100 text-gray-500'}`}>
               {planLabel}
             </span>
             {!isPro && (
               <button
-                onClick={() => setUpgradeModalReason('Unlock every feature in Cadi — money tracking, HMRC MTD, open banking, GoCardless and more.')}
+                onClick={() => setUpgradeModalReason('Unlock every feature in Cadi.')}
                 className="hidden sm:block text-xs font-black px-4 py-2 rounded-lg bg-[#1f48ff] text-white hover:bg-[#3a5eff] transition-colors"
               >
                 Upgrade to Pro
@@ -292,7 +467,6 @@ export default function AppLayout() {
           </div>
         </header>
 
-        {/* Page content — blocked for free users on pro-only routes */}
         <main className="flex-1 px-4 md:px-8 py-6 pb-24 md:pb-6">
           {isTabLocked(location.pathname) ? (
             <div className="flex items-center justify-center min-h-[60vh]">
@@ -325,12 +499,9 @@ export default function AppLayout() {
       {/* ── MOBILE SIDEBAR OVERLAY ── */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setMobileMenuOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
           <aside className="absolute left-0 top-0 bottom-0 w-72 bg-[#010a4f] text-white flex flex-col">
-            <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
+            <div className="px-5 py-5 border-b border-white/10 flex items-center justify-between">
               <div>
                 <CadiWordmark height={24} />
                 <p className="text-[10px] text-[#99c5ff] mt-1 tracking-wide">Business OS</p>
@@ -340,54 +511,39 @@ export default function AppLayout() {
               </button>
             </div>
 
-            <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
-              {navItems.map(({ path, label, icon: Icon }) => {
-                const locked = isTabLocked(path);
-                return (
-                  <NavLink
-                    key={path}
-                    to={path}
-                    onClick={(e) => {
-                      handleNavClick(path, e);
-                      if (!locked) setMobileMenuOpen(false);
-                    }}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                        locked
-                          ? 'text-[#99c5ff]/40'
-                          : isActive
-                            ? 'bg-[#1f48ff] text-white'
-                            : 'text-[#99c5ff] hover:bg-white/10 hover:text-white'
-                      }`
-                    }
-                  >
-                    <Icon size={18} />
-                    <span className="flex-1">{label}</span>
-                    {locked && <Lock size={11} className="shrink-0 opacity-40" />}
-                  </NavLink>
-                );
-              })}
+            <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+              <div className="mb-3">
+                <NavLink
+                  to="/dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${isActive ? 'bg-[#1f48ff] text-white' : 'text-[#99c5ff] hover:bg-white/10 hover:text-white'}`
+                  }
+                >
+                  <LayoutDashboard size={16} />
+                  <span>Dashboard</span>
+                </NavLink>
+              </div>
+              <div className="border-t border-white/10 mb-3" />
+              {NAV_SECTIONS.map(section => (
+                <SidebarSection key={section.id} section={section} onNavigate={() => setMobileMenuOpen(false)} />
+              ))}
             </nav>
 
             {!isPro && (
               <div className="px-4 pb-4">
                 <button
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    setUpgradeModalReason('Unlock every feature in Cadi — money tracking, HMRC MTD, open banking, GoCardless and more.');
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors"
+                  onClick={() => { setMobileMenuOpen(false); setUpgradeModalReason('Unlock every feature in Cadi.'); }}
+                  className="w-full py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black"
                 >
                   Upgrade to Pro — £29/mo
                 </button>
               </div>
             )}
 
-            <div className="px-4 py-5 border-t border-white/10">
+            <div className="px-4 py-4 border-t border-white/10">
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-white/5">
-                <div className="w-8 h-8 rounded-full bg-[#1f48ff] flex items-center justify-center text-xs font-bold">
-                  {userInitial}
-                </div>
+                <div className="w-8 h-8 rounded-full bg-[#1f48ff] flex items-center justify-center text-xs font-bold">{userInitial}</div>
                 <div>
                   <p className="text-sm font-semibold text-white">{userName}</p>
                   <p className="text-xs text-[#99c5ff]">{planLabel}</p>
@@ -401,76 +557,38 @@ export default function AppLayout() {
       {/* ── MOBILE BOTTOM NAV ── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#010a4f] border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
         <div className="flex">
-          {BOTTOM_NAV_ITEMS.map(({ path, label, icon: Icon }) => {
-            const locked = isTabLocked(path);
+          {MOBILE_SECTIONS.map(({ id, label, icon: Icon, path, color }) => {
+            const isDashboard = id === 'dashboard';
+            const sectionItems = !isDashboard ? NAV_SECTIONS.find(s => s.id === id)?.items || [] : [];
+            const isSectionActive = isDashboard
+              ? location.pathname === '/dashboard'
+              : sectionItems.some(i => location.pathname.startsWith(i.path)) ||
+                (id === 'earn' && location.pathname.startsWith('/earn'));
+
+            const lastTabs = getLastTabs();
+            const dest = isDashboard ? '/dashboard' : (lastTabs[id] || sectionItems[0]?.path || '/earn');
+
             return (
-              <NavLink
-                key={path}
-                to={path}
-                onClick={(e) => handleNavClick(path, e)}
-                className={({ isActive }) =>
-                  `flex-1 flex flex-col items-center justify-center py-3 gap-1 text-[10px] font-medium transition-colors ${
-                    isActive ? 'text-white' : locked ? 'text-[#99c5ff]/30' : 'text-[#99c5ff]/60 hover:text-[#99c5ff]'
-                  }`
-                }
+              <button
+                key={id}
+                onClick={() => {
+                  if (isDashboard) navigate('/dashboard');
+                  else if (id === 'earn') navigate('/earn');
+                  else navigate(dest);
+                  setMobileMenuOpen(false);
+                }}
+                className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 text-[10px] font-medium transition-colors ${
+                  isSectionActive ? 'text-white' : 'text-[#99c5ff]/60'
+                }`}
               >
-                {({ isActive }) => (
-                  <>
-                    <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-[#1f48ff]' : ''}`}>
-                      <Icon size={16} />
-                    </div>
-                    {label}
-                  </>
-                )}
-              </NavLink>
+                <div className={`p-1.5 rounded-lg transition-colors`}
+                  style={isSectionActive ? { backgroundColor: color || '#1f48ff' } : {}}>
+                  <Icon size={16} />
+                </div>
+                <span>{label}</span>
+              </button>
             );
           })}
-
-          {/* More button */}
-          <div className="flex-1 relative" ref={moreMenuRef}>
-            <button
-              onClick={() => setMoreMenuOpen(v => !v)}
-              className={`w-full flex flex-col items-center justify-center py-3 gap-1 text-[10px] font-medium transition-colors ${
-                isMoreActive || moreMenuOpen ? 'text-white' : 'text-[#99c5ff]/60 hover:text-[#99c5ff]'
-              }`}
-            >
-              <div className={`p-1.5 rounded-lg transition-colors ${isMoreActive ? 'bg-[#1f48ff]' : ''}`}>
-                <MoreHorizontal size={16} />
-              </div>
-              More
-            </button>
-
-            {moreMenuOpen && (
-              <div className="absolute bottom-full right-0 mb-2 mr-1 w-56 bg-[#010a4f] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
-                {MORE_NAV_ITEMS.map(({ path, label, icon: Icon }) => {
-                  const locked = isTabLocked(path);
-                  return (
-                    <NavLink
-                      key={path}
-                      to={path}
-                      onClick={(e) => {
-                        handleNavClick(path, e);
-                        if (!locked) setMoreMenuOpen(false);
-                      }}
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
-                          locked
-                            ? 'text-[#99c5ff]/40'
-                            : isActive
-                              ? 'bg-[#1f48ff] text-white'
-                              : 'text-[#99c5ff] hover:bg-white/10 hover:text-white'
-                        }`
-                      }
-                    >
-                      <Icon size={16} />
-                      <span className="flex-1">{label}</span>
-                      {locked && <Lock size={11} className="opacity-40" />}
-                    </NavLink>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </div>
       </nav>
     </div>

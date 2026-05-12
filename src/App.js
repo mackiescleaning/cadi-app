@@ -25,14 +25,24 @@ import Confirm from './pages/auth/Confirm';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 
-
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import ProUpgradePage from './components/ui/ProUpgrade';
+import InboxPage from './pages/Inbox';
 import TrainingStaff from './pages/TrainingStaff';
 import AnnualReview from './pages/AnnualReview';
 import AccountsTab from './components/AccountsTab';
 import Onboarding from './pages/Onboarding';
+import EarnLanding      from './pages/EarnLanding';
+import EarnMarketplace  from './pages/earn/EarnMarketplace';
+import EarnPipeline     from './pages/earn/EarnPipeline';
+import EarnCompletion   from './pages/earn/EarnCompletion';
+import EarnConnections  from './pages/earn/EarnConnections';
+import EarnReputation   from './pages/earn/EarnReputation';
+import EarnEarnings     from './pages/earn/EarnEarnings';
+import EarnComms        from './pages/earn/EarnComms';
+import FmDemoApp from './pages/fm-demo/FmDemoApp';
+import ClientDemoApp from './pages/client-demo/ClientDemoApp';
 import { DataProvider } from './context/DataContext';
 import { InvoiceProvider } from './context/InvoiceContext';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -64,6 +74,10 @@ function App() {
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
 
+        {/* Demo portals — public, no auth, separate apps */}
+        <Route path="/fm-demo/*" element={<FmDemoApp />} />
+        <Route path="/client-demo/*" element={<ClientDemoApp />} />
+
         {/* Scheduler redesign preview — static mock, no auth required */}
         <Route path="/scheduler-preview" element={<SchedulerPreview />} />
 
@@ -80,6 +94,7 @@ function App() {
           <Route path="customers" element={<Customers />} />
           <Route path="money" element={<MoneyTracker />} />
           <Route path="scaling" element={<BusinessLab />} />
+          <Route path="business-lab" element={<BusinessLab />} />
           <Route path="routes" element={<RoutePlanner />} />
           <Route path="invoices" element={<InvoiceGenerator />} />
           <Route path="quotes" element={<Quotes />} />
@@ -88,7 +103,17 @@ function App() {
           <Route path="review" element={<AnnualReview />} />
           <Route path="accounts" element={<AccountsTab />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="inbox" element={<InboxPage />} />
           <Route path="upgrade" element={<ProUpgradePage />} />
+          {/* Earn */}
+          <Route path="earn"             element={<EarnLanding />} />
+          <Route path="earn/marketplace" element={<EarnMarketplace />} />
+          <Route path="earn/pipeline"    element={<EarnPipeline />} />
+          <Route path="earn/completion"  element={<EarnCompletion />} />
+          <Route path="earn/connections" element={<EarnConnections />} />
+          <Route path="earn/reputation"  element={<EarnReputation />} />
+          <Route path="earn/earnings"    element={<EarnEarnings />} />
+          <Route path="earn/comms"       element={<EarnComms />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

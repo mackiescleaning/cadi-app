@@ -1,0 +1,325 @@
+import { useEffect, useState, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
+import { useBusinessId } from '../hooks/useBusinessId';
+import { approveAgentAction, rejectAgentAction, AGENTS } from '../lib/agentFramework';
+import {
+  Check, X, Clock, Send, AlertTriangle, Inbox,
+  MessageSquare, Star, CalendarDays, ChevronDown, ChevronRight,
+  RefreshCw, Eye
+} from 'lucide-react';
+
+// ─── Static maps ──────────────────────────────────────────────────────────────
+
+const ACTION_LABELS = {
+  send_quote:           'Quote',
+  send_review_request:  'Review request',
+  send_followup:        'Follow-up',
+  send_invoice:         'Invoice',
+  book_job:             'Job booked',
+  cancel_job:           'Job cancelled',
+  issue_refund:         'Refund',
+  send_complaint_reply: 'Complaint reply',
+};
+
+const STATUS_CONFIG = {
+  pending_approval: { label: 'Needs approval', color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200', dot: 'bg-amber-400' },
+  approved:         { label: 'Approved',        color: 'text-green-600',  bg: 'bg-green-50',  border: 'border-green-200', dot: 'bg-green-400' },
+  rejected:         { label: 'Rejected',        color: 'text-red-500',    bg: 'bg-red-50',    border: 'border-red-200',   dot: 'bg-red-400'   },
+  sent:             { label: 'Sent',            color: 'text-[#1f48ff]',  bg: 'bg-[#f0f4ff]', border: 'border-[#1f48ff]/20', dot: 'bg-[#1f48ff]' },
+  auto_sent:        { label: 'Auto-sent',       color: 'text-[#1f48ff]',  bg: 'bg-[#f0f4ff]', border: 'border-[#1f48ff]/20', dot: 'bg-[#99c5ff]' },
+  failed:           { label: 'Failed',          color: 'text-red-500',    bg: 'bg-red-50',    border: 'border-red-200',   dot: 'bg-red-400'   },
+  superseded:       { label: 'Superseded',      color: 'text-gray-400',   bg: 'bg-gray-50',   border: 'border-gray-200',  dot: 'bg-gray-300'  },
+};
+
+const AGENT_ICONS = {
+  front_desk: MessageSquare,
+  reviews:    Star,
+  scheduler:  CalendarDays,
+};
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins  = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days  = Math.floor(diff / 86_400_000);
+  if (mins  < 1)  return 'just now';
+  if (mins  < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+}
+
+// ─── Action card ──────────────────────────────────────────────────────────────
+
+function ActionCard({ action, onApprove, onReject, onRefresh }) {
+  const [expanded, setExpanded] = useState(false);
+  const [working,  setWorking]  = useState(false);
+  const { user } = useAuth();
+
+  const isPending = action.status === 'pending_approval';
+  const st  = STATUS_CONFIG[action.status] ?? STATUS_CONFIG.sent;
+  const AgentIcon = AGENT_ICONS[action.agent] ?? MessageSquare;
+  const agentLabel = AGENTS[action.agent]?.label ?? action.agent;
+  const actionLabel = ACTION_LABELS[action.action_type] ?? action.action_type?.replace(/_/g, ' ');
+
+  const payload = action.proposed_payload ?? {};
+
+  const handleApprove = async () => {
+    setWorking(true);
+    await approveAgentAction(action.id, user?.id);
+
+    // For review requests, fire the send edge function
+    if (action.action_type === 'send_review_request') {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await supabase.functions.invoke('send-review-request', {
+          body:    { action_id: action.id },
+          headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+        });
+      } catch (e) {
+        console.error('send-review-request failed:', e);
+      }
+    }
+
+    onRefresh();
+  };
+
+  const handleReject = async () => {
+    setWorking(true);
+    await rejectAgentAction(action.id, user?.id);
+    onRefresh();
+  };
+
+  return (
+    <div className={`rounded-2xl border overflow-hidden transition-all ${
+      isPending ? 'border-amber-200 bg-amber-50/50' : 'border-[#99c5ff]/20 bg-white'
+    }`}>
+      {/* Header row */}
+      <div className="px-4 py-3.5 flex items-start gap-3">
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+          isPending ? 'bg-amber-100' : 'bg-[#f0f4ff]'
+        }`}>
+          <AgentIcon size={15} className={isPending ? 'text-amber-600' : 'text-[#1f48ff]'} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-[#010a4f]">{agentLabel}</span>
+            <span className="text-xs text-gray-400">·</span>
+            <span className="text-xs text-gray-600">{actionLabel}</span>
+            {action.customers && (
+              <>
+                <span className="text-xs text-gray-400">·</span>
+                <span className="text-xs font-medium text-[#010a4f]">
+                  {action.customers.first_name} {action.customers.last_name}
+                </span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${st.color}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+              {st.label}
+            </span>
+            <span className="text-[10px] text-gray-400">{timeAgo(action.created_at)}</span>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+        >
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+      </div>
+
+      {/* Preview — first line of message */}
+      {!expanded && payload.message && (
+        <div className="px-4 pb-3 -mt-1">
+          <p className="text-xs text-gray-500 truncate">{payload.message}</p>
+        </div>
+      )}
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="border-t border-gray-100 px-4 py-3 space-y-3">
+          {payload.message && (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Proposed message</p>
+              <div className="bg-white rounded-xl border border-[#99c5ff]/20 px-3 py-2.5 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {payload.message}
+              </div>
+            </div>
+          )}
+          {payload.subject && (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Subject</p>
+              <p className="text-xs text-gray-600">{payload.subject}</p>
+            </div>
+          )}
+          {payload.channel && (
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Channel</p>
+              <span className="text-xs text-gray-600 capitalize">{payload.channel}</span>
+            </div>
+          )}
+          {action.reasoning && (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Why Cadi chose this</p>
+              <p className="text-xs text-gray-500 italic">{action.reasoning}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Approval buttons */}
+      {isPending && (
+        <div className="px-4 pb-4 flex gap-2">
+          <button
+            onClick={handleApprove}
+            disabled={working}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-black rounded-xl transition-colors disabled:opacity-50"
+          >
+            <Check size={12} />
+            Approve & send
+          </button>
+          <button
+            onClick={handleReject}
+            disabled={working}
+            className="px-4 py-2 bg-white border border-red-200 text-red-500 hover:bg-red-50 text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Empty state ──────────────────────────────────────────────────────────────
+
+function EmptyState({ tab }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-[#f0f4ff] flex items-center justify-center mb-4">
+        {tab === 'pending' ? <Clock size={22} className="text-[#1f48ff]" /> : <Eye size={22} className="text-[#1f48ff]" />}
+      </div>
+      <p className="text-sm font-bold text-[#010a4f] mb-1">
+        {tab === 'pending' ? 'No pending approvals' : 'No activity yet'}
+      </p>
+      <p className="text-xs text-gray-400 max-w-xs">
+        {tab === 'pending'
+          ? "Cadi has nothing waiting for your approval. When Front Desk or Reviews drafts an action, it'll appear here."
+          : "Once Cadi starts taking actions — sending quotes, requesting reviews — you'll see the full history here."}
+      </p>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export default function InboxPage() {
+  const businessId = useBusinessId();
+  const [tab, setTab] = useState('pending');
+  const [pending, setPending] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!businessId) return;
+    setLoading(true);
+
+    const base = supabase
+      .from('agent_actions')
+      .select(`
+        id, agent, action_type, status, proposed_payload, reasoning,
+        created_at, sent_at, approved_at, expires_at,
+        customers ( first_name, last_name )
+      `)
+      .eq('business_id', businessId);
+
+    const [{ data: pendingData }, { data: historyData }] = await Promise.all([
+      base.eq('status', 'pending_approval').order('created_at', { ascending: false }),
+      base.neq('status', 'pending_approval').order('created_at', { ascending: false }).limit(50),
+    ]);
+
+    setPending(pendingData ?? []);
+    setHistory(historyData ?? []);
+    setLoading(false);
+  }, [businessId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const items = tab === 'pending' ? pending : history;
+
+  return (
+    <div className="min-h-screen bg-[#f5f7ff]">
+      <div className="max-w-2xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-black text-[#010a4f]">AI Inbox</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Review and approve what Cadi wants to send</p>
+          </div>
+          <button
+            onClick={load}
+            className="p-2 rounded-xl hover:bg-white border border-transparent hover:border-[#99c5ff]/20 text-gray-400 hover:text-[#1f48ff] transition-all"
+          >
+            <RefreshCw size={16} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex items-center gap-1 p-1 bg-white rounded-xl border border-[#99c5ff]/20 shadow-sm mb-5">
+          <button
+            onClick={() => setTab('pending')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
+              tab === 'pending' ? 'bg-[#010a4f] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Clock size={14} />
+            Needs approval
+            {pending.length > 0 && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                tab === 'pending' ? 'bg-amber-400 text-[#010a4f]' : 'bg-amber-100 text-amber-700'
+              }`}>
+                {pending.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setTab('history')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
+              tab === 'history' ? 'bg-[#010a4f] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Eye size={14} />
+            History
+          </button>
+        </div>
+
+        {/* Content */}
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-20 rounded-2xl bg-white border border-[#99c5ff]/20 animate-pulse" />
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <EmptyState tab={tab} />
+        ) : (
+          <div className="space-y-3">
+            {items.map(action => (
+              <ActionCard
+                key={action.id}
+                action={action}
+                onRefresh={load}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

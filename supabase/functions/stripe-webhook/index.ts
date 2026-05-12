@@ -2,23 +2,18 @@
  * supabase/functions/stripe-webhook/index.ts
  * Cadi — Stripe webhook handler.
  *
- * Flips profiles.plan between "free" and "pro" based on subscription lifecycle.
- * Idempotent: handles retries from Stripe without side-effects.
+ * Updates profiles.plan (legacy) and profiles.subscription_tier based on
+ * subscription lifecycle events. Tier is read from subscription metadata
+ * (set by create-checkout). Falls back to 'pro' if metadata is absent.
  *
- * IMPORTANT: deploy with verify_jwt: false. Stripe authenticates via its own
- * signing secret in the Stripe-Signature header; no Supabase JWT is sent.
+ * IMPORTANT: deploy with verify_jwt: false.
  *
  * Events handled:
- *   checkout.session.completed      — user finished checkout → mark pro, save subscription id
- *   customer.subscription.updated   — status changed (trialing, active, past_due, canceled, ...)
- *   customer.subscription.deleted   — subscription ended → revert to free
- *   invoice.payment_failed          — card declined / payment failed → revert to free
- *
- * Environment variables:
- *   STRIPE_SECRET_KEY          — sk_test_... or sk_live_...
- *   STRIPE_WEBHOOK_SECRET      — whsec_... (from Stripe Dashboard → Webhooks)
- *   SUPABASE_URL               — auto-injected
- *   SUPABASE_SERVICE_ROLE_KEY  — auto-injected
+ *   checkout.session.completed      — new subscription → set tier
+ *   customer.subscription.updated   — status or plan changed
+ *   customer.subscription.created   — created via API
+ *   customer.subscription.deleted   — ended → revert to lite
+ *   invoice.payment_failed          — card declined → revert to lite
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -37,25 +32,34 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
-/** "trialing" and "active" count as paid Pro. Anything else falls back to free. */
-function planForStatus(status: string): "pro" | "free" {
-  return status === "active" || status === "trialing" ? "pro" : "free";
+type Tier = "lite" | "pro" | "max";
+
+function tierFromMetadata(metadata: Record<string, string> | null): Tier {
+  const t = metadata?.tier;
+  if (t === "pro" || t === "max") return t;
+  return "pro"; // safe default for any subscription without metadata
 }
 
-async function updatePlanByCustomer(
+function tierForStatus(status: string, tier: Tier): Tier | "lite" {
+  return status === "active" || status === "trialing" ? tier : "lite";
+}
+
+async function updateProfileByCustomer(
   customerId: string,
-  plan: "pro" | "free",
+  tier: Tier | "lite",
   subscriptionId: string | null,
   renewsAt: string | null,
 ) {
   const { error } = await sb
     .from("profiles")
     .update({
-      plan,
+      plan:                       tier === "lite" ? "free" : tier, // keep legacy plan field in sync
+      subscription_tier:          tier,
       stripe_subscription_id:     subscriptionId,
       stripe_subscription_renews: renewsAt,
     })
     .eq("stripe_customer_id", customerId);
+
   if (error) console.error("profiles update failed:", error.message);
 }
 
@@ -68,7 +72,6 @@ serve(async (req: Request) => {
   const rawBody = await req.text();
   let event: Stripe.Event;
   try {
-    // constructEventAsync is required in Deno (crypto is async)
     event = await stripe.webhooks.constructEventAsync(rawBody, signature, STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -79,41 +82,42 @@ serve(async (req: Request) => {
   try {
     switch (event.type) {
       case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const customerId = session.customer as string;
+        const session      = event.data.object as Stripe.Checkout.Session;
+        const customerId   = session.customer as string;
         const subscriptionId = session.subscription as string | null;
         if (subscriptionId) {
-          // Pull the subscription to get status + current_period_end
-          const sub = await stripe.subscriptions.retrieve(subscriptionId);
+          const sub      = await stripe.subscriptions.retrieve(subscriptionId);
+          const tier     = tierFromMetadata(sub.metadata as Record<string, string>);
+          const active   = tierForStatus(sub.status, tier);
           const renewsAt = new Date(sub.current_period_end * 1000).toISOString();
-          await updatePlanByCustomer(customerId, planForStatus(sub.status), sub.id, renewsAt);
+          await updateProfileByCustomer(customerId, active, sub.id, renewsAt);
         }
         break;
       }
       case "customer.subscription.updated":
       case "customer.subscription.created": {
-        const sub = event.data.object as Stripe.Subscription;
+        const sub      = event.data.object as Stripe.Subscription;
+        const tier     = tierFromMetadata(sub.metadata as Record<string, string>);
+        const active   = tierForStatus(sub.status, tier);
         const renewsAt = new Date(sub.current_period_end * 1000).toISOString();
-        await updatePlanByCustomer(sub.customer as string, planForStatus(sub.status), sub.id, renewsAt);
+        await updateProfileByCustomer(sub.customer as string, active, sub.id, renewsAt);
         break;
       }
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
-        await updatePlanByCustomer(sub.customer as string, "free", null, null);
+        await updateProfileByCustomer(sub.customer as string, "lite", null, null);
         break;
       }
       case "invoice.payment_failed": {
-        // Card declined or payment couldn't be collected — revert to free so the
-        // user can't keep accessing Pro features while payment is unresolved.
-        const invoice = event.data.object as Stripe.Invoice;
+        const invoice    = event.data.object as Stripe.Invoice;
         const customerId = invoice.customer as string;
-        await updatePlanByCustomer(customerId, "free", null, null);
+        await updateProfileByCustomer(customerId, "lite", null, null);
         break;
       }
       default:
-        // Ignore other events — subscribe only to what we handle above
         break;
     }
+
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -121,7 +125,6 @@ serve(async (req: Request) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`stripe-webhook error on ${event.type}:`, msg);
-    // Return 200 anyway to stop Stripe from retrying on our bug — we logged it
     return new Response(JSON.stringify({ received: true, handlerError: msg }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
