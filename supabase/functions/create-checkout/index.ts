@@ -28,15 +28,26 @@ const stripe = new Stripe(STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
 });
 
-const CORS = {
-  "Access-Control-Allow-Origin":  Deno.env.get("APP_ORIGIN") ?? "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-const json = (data: unknown, status = 200) =>
+const ALLOWED_ORIGINS = new Set([
+  "https://app.cadi.cleaning",
+  "https://cadi.cleaning",
+  Deno.env.get("APP_ORIGIN"),
+  Deno.env.get("APP_URL"),
+].filter(Boolean) as string[]);
+
+function corsHeaders(req: Request) {
+  const origin = req.headers.get("Origin") ?? "";
+  return {
+    "Access-Control-Allow-Origin":  ALLOWED_ORIGINS.has(origin) ? origin : "https://app.cadi.cleaning",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
+
+const json = (data: unknown, status: number, req: Request) =>
   new Response(JSON.stringify(data), {
     status,
-    headers: { ...CORS, "Content-Type": "application/json" },
+    headers: { ...corsHeaders(req), "Content-Type": "application/json" },
   });
 
 function priceIdForTier(tier: string): string | null {
@@ -46,7 +57,7 @@ function priceIdForTier(tier: string): string | null {
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
 
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -55,7 +66,7 @@ serve(async (req: Request) => {
 
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
     const { data: { user }, error: authErr } = await sb.auth.getUser(token);
-    if (authErr || !user) return json({ error: "Unauthorized" }, 401);
+    if (authErr || !user) return json({ error: "Unauthorized" }, 401, req);
 
     const body      = await req.json().catch(() => ({}));
     const tier      = (body.tier as string) ?? "pro";
@@ -63,7 +74,7 @@ serve(async (req: Request) => {
 
     const priceId = priceIdForTier(tier);
     if (!priceId) {
-      return json({ error: `No price configured for tier: ${tier}` }, 400);
+      return json({ error: `No price configured for tier: ${tier}` }, 400, req);
     }
 
     const { data: profile } = await sb
@@ -98,10 +109,10 @@ serve(async (req: Request) => {
       },
     });
 
-    return json({ url: session.url });
+    return json({ url: session.url }, 200, req);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("create-checkout error:", msg);
-    return json({ error: msg }, 500);
+    return json({ error: msg }, 500, req);
   }
 });

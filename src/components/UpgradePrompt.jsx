@@ -17,6 +17,15 @@ const PRO_FEATURES = [
   'Full leaderboard & community',
 ];
 
+// Extract a readable error message from a Supabase FunctionsHttpError
+async function checkoutErrMsg(fnError) {
+  try {
+    const body = await fnError?.context?.json?.();
+    if (body?.error) return body.error;
+  } catch {}
+  return fnError?.message ?? 'Unknown error';
+}
+
 // Full-page overlay modal — use for tab locks and hard limits
 export function UpgradeModal({ onClose, reason }) {
   const { priceMonthly } = usePlan();
@@ -30,11 +39,16 @@ export function UpgradeModal({ onClose, reason }) {
       const { data, error: fnError } = await supabase.functions.invoke('create-checkout', {
         body: { tier: 'pro', returnUrl: window.location.origin },
       });
-      if (fnError) throw fnError;
+      if (fnError) {
+        const msg = await checkoutErrMsg(fnError);
+        console.error('create-checkout fnError:', msg);
+        throw new Error(msg);
+      }
       if (data?.url) window.location.href = data.url;
-      else throw new Error('No checkout URL');
-    } catch {
-      setError('Could not open checkout. Please try again or contact support@cadi.cleaning');
+      else throw new Error(`No checkout URL returned. Response: ${JSON.stringify(data)}`);
+    } catch (err) {
+      console.error('checkout error:', err?.message);
+      setError(err?.message || 'Could not open checkout. Please try again or contact support@cadi.cleaning');
       setLoading(false);
     }
   };
@@ -112,11 +126,20 @@ export function UpgradeBanner({ reason, compact = false }) {
   const handleUpgrade = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase.functions.invoke('create-checkout', {
+      const { data, error: fnError } = await supabase.functions.invoke('create-checkout', {
         body: { tier: 'pro', returnUrl: window.location.origin },
       });
+      if (fnError) {
+        const msg = await checkoutErrMsg(fnError);
+        console.error('create-checkout error:', msg);
+        alert(`Checkout error: ${msg}`);
+        setLoading(false);
+        return;
+      }
       if (data?.url) window.location.href = data.url;
-    } catch {
+      else { console.error('No URL in response:', data); setLoading(false); }
+    } catch (err) {
+      console.error('checkout error:', err?.message);
       setLoading(false);
     }
   };
