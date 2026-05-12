@@ -33,44 +33,10 @@ const ACCREDITATION_OPTIONS = ['BICSc', 'CHAS', 'Safe Contractor', 'Construction
 
 const TURNS = [
   {
-    id: 'firstName',
-    cadi: "Hi! I'm Cadi — your cleaning business co-pilot 🧹\n\nI'll ask you a few questions to get your account set up. Takes about 4 minutes, and every answer shapes how Cadi works for you.\n\nLet's start — what's your first name?",
-    type: 'text',
-    field: 'firstName',
-    placeholder: 'Your first name',
-    required: true,
-    chapter: 1,
-  },
-  {
-    id: 'lastName',
-    cadi: f => `Nice to meet you, ${f.firstName}! 👋 And your last name?`,
-    type: 'text',
-    field: 'lastName',
-    placeholder: 'Your last name',
-    required: true,
-    chapter: 1,
-  },
-  {
-    id: 'bizName',
-    cadi: 'What\'s the name of your cleaning business?',
-    type: 'text',
-    field: 'bizName',
-    placeholder: 'e.g. Spotless Pro Cleaning',
-    required: true,
-    chapter: 1,
-  },
-  {
-    id: 'bizEmail',
-    cadi: f => `What's the best business email for ${f.bizName}?`,
-    type: 'email',
-    field: 'bizEmail',
-    placeholder: 'hello@yourbusiness.co.uk',
-    required: true,
-    chapter: 1,
-  },
-  {
     id: 'confirm',
-    cadi: f => `Just to confirm — I've pulled your details from signup. Does everything look right?`,
+    cadi: f => f.firstName
+      ? `Hi ${f.firstName}! 👋 I've pulled your details from signup — just confirm everything looks right and we'll get started. Takes about 2 minutes.`
+      : `Hi! I'm Cadi — your cleaning business co-pilot 🧹\n\nLet's get your account set up. Takes about 2 minutes.`,
     type: 'confirm',
     chapter: 1,
   },
@@ -296,25 +262,18 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
     setIsTyping(true);
     const delay = setTimeout(() => {
       setIsTyping(false);
-      // If signup already captured name + business, skip the individual text questions
       const hasSignupData = profile?.first_name && profile?.business_name;
-      if (hasSignupData) {
-        const confirmIdx = TURNS.findIndex(t => t.id === 'confirm');
-        setTurnIndex(confirmIdx);
-        setForm(prev => ({
-          ...prev,
-          firstName: profile.first_name,
-          lastName:  profile.last_name || '',
-          bizName:   profile.business_name,
-          bizEmail:  user?.email || prev.bizEmail,
-        }));
-        setMessages([{
-          id: 'cadi-0', role: 'cadi',
-          text: `Hi ${profile.first_name}! 👋 Welcome to Cadi.\n\nI've pulled your details from signup — just confirm they're right and we'll get your account set up. Takes about 2 minutes.`,
-        }]);
-      } else {
-        setMessages([{ id: 'cadi-0', role: 'cadi', text: cadiText(TURNS[0]) }]);
-      }
+      const prefilledForm = {
+        firstName: profile?.first_name || '',
+        lastName:  profile?.last_name  || '',
+        bizName:   profile?.business_name || '',
+        bizEmail:  user?.email || '',
+      };
+      setForm(prev => ({ ...prev, ...prefilledForm }));
+      // confirm is always turn 0 — open edit fields immediately if nothing to confirm
+      if (!hasSignupData) setConfirmEditing(true);
+      setTurnIndex(0);
+      setMessages([{ id: 'cadi-0', role: 'cadi', text: cadiText(TURNS[0], { ...prefilledForm }) }]);
       scrollDown();
     }, 900);
     return () => clearTimeout(delay);
