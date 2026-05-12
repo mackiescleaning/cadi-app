@@ -514,7 +514,8 @@ function StarRating({ value = 0, onChange, size = "sm" }) {
 }
 
 // ─── Customer card (list row) ─────────────────────────────────────────────────
-function CustomerRow({ customer, onClick, selected }) {
+function CustomerRow({ customer, onClick, selected, onArchive }) {
+  const [confirmArchive, setConfirmArchive] = useState(false);
   const suggestions    = useMemo(() => generateSuggestions(customer), [customer]);
   const daysSince      = customer.lastJobDate
     ? Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000)
@@ -605,6 +606,34 @@ function CustomerRow({ customer, onClick, selected }) {
           </div>
         </div>
       </div>
+
+      {/* Quick-archive — shown on hover (desktop) or tap the × */}
+      {onArchive && (
+        <div
+          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={e => e.stopPropagation()}
+        >
+          {confirmArchive ? (
+            <div className="flex items-center gap-1 bg-[#010a4f] border border-red-500/30 rounded-lg px-2 py-1">
+              <span className="text-[10px] text-red-400 font-bold">Remove?</span>
+              <button
+                onClick={() => { onArchive(customer.id); setConfirmArchive(false); }}
+                className="text-[10px] font-black text-red-400 hover:text-red-300 px-1"
+              >Yes</button>
+              <button
+                onClick={() => setConfirmArchive(false)}
+                className="text-[10px] font-black text-[rgba(153,197,255,0.5)] hover:text-white px-1"
+              >No</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmArchive(true)}
+              className="w-6 h-6 rounded-full bg-[rgba(255,80,80,0.15)] hover:bg-[rgba(255,80,80,0.3)] border border-red-500/20 hover:border-red-500/50 flex items-center justify-center text-red-400/70 hover:text-red-400 transition-all text-xs font-bold"
+              title="Remove customer"
+            >×</button>
+          )}
+        </div>
+      )}
     </button>
   );
 }
@@ -1150,6 +1179,41 @@ function SecureVault({ customer, ownerId }) {
   );
 }
 
+// ─── Inline archive/remove confirmation ──────────────────────────────────────
+function ArchiveButton({ onConfirm, name }) {
+  const [confirming, setConfirming] = useState(false);
+  if (confirming) {
+    return (
+      <div className="px-5 py-4 border-t border-[rgba(153,197,255,0.08)]">
+        <p className="text-xs text-[rgba(153,197,255,0.6)] mb-3 text-center">
+          Remove <span className="font-bold text-white">{name}</span> from your customer list?
+          <br /><span className="text-[rgba(153,197,255,0.4)]">Their data is kept — you can find them under Archived.</span>
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setConfirming(false)}
+            className="flex-1 py-2.5 text-xs font-bold text-[rgba(153,197,255,0.6)] border border-[rgba(153,197,255,0.15)] rounded-xl hover:bg-white/5 transition-all"
+          >Keep</button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-2.5 text-xs font-bold text-red-400 border border-red-500/30 rounded-xl hover:bg-red-500/10 transition-all"
+          >Remove</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="px-5 py-4 border-t border-[rgba(153,197,255,0.08)]">
+      <button
+        onClick={() => setConfirming(true)}
+        className="w-full py-2.5 text-xs font-bold text-red-400/60 border border-red-500/15 rounded-xl hover:bg-red-500/8 hover:text-red-400 hover:border-red-500/30 transition-all"
+      >
+        Remove customer
+      </button>
+    </div>
+  );
+}
+
 // ─── Customer detail panel ────────────────────────────────────────────────────
 function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCustomer, onDeleteCustomer, ownerId }) {
   const suggestions  = useMemo(() => generateSuggestions(customer), [customer]);
@@ -1629,19 +1693,8 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
           </div>
         </GlassCard>
 
-        {/* Danger zone — archive customer */}
-        <div className="px-5 py-4 border-t border-[rgba(153,197,255,0.08)]">
-          <button
-            onClick={() => {
-              if (window.confirm(`Archive ${customer.name}? They'll be hidden from your customer list but data will be kept.`)) {
-                onDeleteCustomer?.(customer.id);
-              }
-            }}
-            className="w-full py-2.5 text-xs font-bold uppercase tracking-wide text-red-400/70 border border-red-500/20 rounded-xl hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/40 transition-all"
-          >
-            Archive customer
-          </button>
-        </div>
+        {/* Remove customer */}
+        <ArchiveButton onConfirm={() => onDeleteCustomer?.(customer.id)} name={customer.name} />
       </div>
     </div>
   );
@@ -1888,15 +1941,18 @@ export default function CustomerTab() {
 
   // ── Filtering + sorting — O(n) — handles thousands of records ───────────────
   const filtered = useMemo(() => {
-    let list = customers;
+    // Always hide archived unless explicitly viewing them
+    let list = statusFilter === 'archived'
+      ? customers.filter(c => c.status === 'archived')
+      : customers.filter(c => c.status !== 'archived');
 
     // Job type filter
     if (jobTypeFilter !== "all") {
       list = list.filter(c => c.services.some(s => s.type === jobTypeFilter));
     }
 
-    // Status filter
-    if (statusFilter !== "all") {
+    // Status filter (archived already handled above)
+    if (statusFilter !== "all" && statusFilter !== "archived") {
       list = list.filter(c => c.status === statusFilter);
     }
 
@@ -2094,6 +2150,7 @@ export default function CustomerTab() {
             <option value="active">Active</option>
             <option value="lapsed">Lapsed</option>
             <option value="at-risk">At risk</option>
+            <option value="archived">Archived</option>
           </select>
           <select
             value={sortBy}
@@ -2130,6 +2187,7 @@ export default function CustomerTab() {
                 customer={customer}
                 onClick={handleSelectCustomer}
                 selected={selected?.id === customer.id}
+                onArchive={(id) => { deleteCustomer(id); if (selected?.id === id) { setShowDetail(false); setSelected(null); } }}
               />
             ))
           )}
