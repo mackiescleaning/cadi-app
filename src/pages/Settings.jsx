@@ -155,7 +155,7 @@ const TABS = [
 export default function Settings() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, profile: authProfile, updateProfile, signOut } = useAuth();
+  const { user, profile: authProfile, updateProfile, signOut, refreshProfile } = useAuth();
   const { isPro, priceMonthly } = usePlan();
   const [activeTab, setActiveTab] = useState(() => {
     if (searchParams.get('upgraded') === '1') return 'subscription';
@@ -166,10 +166,19 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // After returning from Stripe, poll until the webhook has updated subscription_tier
   useEffect(() => {
-    if (searchParams.get('upgraded') === '1') {
-      setSearchParams({}, { replace: true });
-    }
+    if (searchParams.get('upgraded') !== '1') return;
+    setSearchParams({}, { replace: true });
+    if (isPro) return; // already updated before we even started
+
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts++;
+      await refreshProfile();
+      if (isPro || attempts >= 10) clearInterval(interval);
+    }, 1500);
+    return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Profile state — no hardcoded defaults; populated from Supabase in useEffect
