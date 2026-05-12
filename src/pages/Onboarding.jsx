@@ -414,54 +414,62 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
       );
   }
 
+  // Upsert helper — creates or updates the profiles row, never silently fails
+  async function saveProfile(fields) {
+    const { error } = await supabase
+      .from('profiles')
+      .upsert({ id: user.id, ...fields }, { onConflict: 'id' });
+    if (error) throw error;
+  }
+
   // Save is batched at chapter boundaries — called before advancing on key turns
   async function saveChapter(id) {
     if (!user || user.id === 'demo-user') return;
     try {
       if (id === 'confirm') {
-        await supabase.from('profiles').update({
+        await saveProfile({
           first_name: form.firstName.trim(),
           last_name: form.lastName.trim(),
           business_name: form.bizName.trim(),
           onboarding_step: 1,
-        }).eq('id', user.id);
+        });
         await mergeSetupData({ business_email: form.bizEmail.trim() });
       }
       if (id === 'logo') {
         if (form.logoUrl) await mergeSetupData({ logo_url: form.logoUrl });
       }
       if (id === 'contact') {
-        await supabase.from('profiles').update({
+        await saveProfile({
           first_name: form.firstName.trim(),
           last_name: form.lastName.trim(),
           business_name: form.bizName.trim(),
           phone: form.bizPhone.trim(),
           postcode: form.bizPostcode.trim(),
           onboarding_step: 2,
-        }).eq('id', user.id);
+        });
         await mergeSetupData({ business_email: form.bizEmail.trim() });
       }
       if (id === 'sectors') {
         const primary = form.cleanerSectors[0] || null;
-        await supabase.from('profiles').update({ cleaner_type: primary, onboarding_step: 3 }).eq('id', user.id);
+        await saveProfile({ cleaner_type: primary, onboarding_step: 3 });
         await mergeSetupData({ cleaner_sectors: form.cleanerSectors });
       }
       if (id === 'bizStructure') {
-        await supabase.from('profiles').update({ biz_structure: form.bizStructure, onboarding_step: 4 }).eq('id', user.id);
+        await saveProfile({ biz_structure: form.bizStructure, onboarding_step: 4 });
         await mergeSetupData({ company_number: form.companyNumber, fy_end: form.fyEnd || null });
       }
       if (id === 'vatRegistered') {
         await supabase.from('business_settings').upsert({ owner_id: user.id, vat_registered: form.vatRegistered }, { onConflict: 'owner_id' });
         await mergeSetupData({ vat_number: form.vatNumber, vat_scheme: form.vatScheme || null });
-        await supabase.from('profiles').update({ onboarding_step: 5 }).eq('id', user.id);
+        await saveProfile({ onboarding_step: 5 });
       }
       if (id === 'teamStructure') {
-        await supabase.from('profiles').update({ team_structure: form.teamStructure, onboarding_step: 6 }).eq('id', user.id);
+        await saveProfile({ team_structure: form.teamStructure, onboarding_step: 6 });
         await mergeSetupData({ employment_types: form.employmentTypes });
       }
       if (id === 'services') {
         await mergeSetupData({ services: form.services, custom_service: form.customService.trim() });
-        await supabase.from('profiles').update({ onboarding_step: 7 }).eq('id', user.id);
+        await saveProfile({ onboarding_step: 7 });
       }
       if (id === 'pricing') {
         const hr = Number(form.hourlyRate || 0);
@@ -476,10 +484,10 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           start_time: form.startTime,
           finish_time: form.finishTime,
         });
-        await supabase.from('profiles').update({ onboarding_step: 8 }).eq('id', user.id);
+        await saveProfile({ onboarding_step: 8 });
       }
       if (id === 'widget') {
-        await supabase.from('profiles').update({ onboarding_step: 9 }).eq('id', user.id);
+        await saveProfile({ onboarding_step: 9 });
       }
       if (id === 'goals') {
         const annual = Number(form.targetRevenue || 0) * 12;
@@ -492,7 +500,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           target_date: form.targetDate || null,
           ambition: form.ambition,
         });
-        await supabase.from('profiles').update({ onboarding_step: 10 }).eq('id', user.id);
+        await saveProfile({ onboarding_step: 10 });
       }
       if (id === 'compliance') {
         await mergeSetupData({
@@ -500,15 +508,15 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           dbs: form.dbs, ico: form.ico, coshh: form.coshh,
           accreditations: form.accreditations,
         });
-        await supabase.from('profiles').update({ onboarding_step: 11 }).eq('id', user.id);
+        await saveProfile({ onboarding_step: 11 });
       }
       if (id === 'marketplace_interest') {
         const interested = form.marketplaceInterest === true;
-        await supabase.from('profiles').update({
-          marketplace_interest:    interested,
+        await saveProfile({
+          marketplace_interest: interested,
           marketplace_interest_at: interested ? new Date().toISOString() : null,
           onboarding_step: 12,
-        }).eq('id', user.id);
+        });
       }
     } catch (e) {
       flash(e.message || 'Save failed', 'error');
@@ -523,8 +531,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
     // incrementally, so a hang here should never trap the user on this screen.
     if (user?.id !== 'demo-user') {
       supabase.from('profiles')
-        .update({ onboarding_complete: true, onboarding_step: 13 })
-        .eq('id', user.id)
+        .upsert({ id: user.id, onboarding_complete: true, onboarding_step: 13 }, { onConflict: 'id' })
         .then(() => {}).catch(() => {});
     }
 
@@ -601,21 +608,29 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
 
     // Confirm pre-filled signup details
     if (type === 'confirm') {
+      const displayEmail = form.bizEmail || user?.email || '';
       return (
         <div className="space-y-3">
           {!confirmEditing ? (
-            <div className="rounded-xl border border-[rgba(153,197,255,0.15)] bg-[#091660] divide-y divide-[rgba(153,197,255,0.08)]">
-              {[
-                { label: 'Your name', value: `${form.firstName} ${form.lastName}`.trim() || form.firstName },
-                { label: 'Business name', value: form.bizName },
-                { label: 'Email', value: form.bizEmail || user?.email },
-              ].map(row => (
-                <div key={row.label} className="flex items-center justify-between px-4 py-3">
-                  <span className="text-xs text-[rgba(153,197,255,0.5)] uppercase tracking-wide">{row.label}</span>
-                  <span className="text-sm font-semibold text-white">{row.value}</span>
+            <>
+              <div className="rounded-xl border border-[rgba(153,197,255,0.15)] bg-[#091660] divide-y divide-[rgba(153,197,255,0.08)]">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-[rgba(153,197,255,0.5)] uppercase tracking-wide">Your name</span>
+                  <span className="text-sm font-semibold text-white">{`${form.firstName} ${form.lastName}`.trim() || form.firstName}</span>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-[rgba(153,197,255,0.5)] uppercase tracking-wide">Business name</span>
+                  <span className="text-sm font-semibold text-white">{form.bizName}</span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-[rgba(153,197,255,0.2)] bg-[#091660] px-4 py-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[rgba(153,197,255,0.5)] uppercase tracking-wide">Email address</span>
+                  <span className="text-sm font-semibold text-white">{displayEmail}</span>
+                </div>
+                <p className="text-xs text-[rgba(153,197,255,0.4)]">This is your login email. Tap "Edit details" below if it needs changing.</p>
+              </div>
+            </>
           ) : (
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
@@ -633,8 +648,9 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
                 <input className={inputCls} value={form.bizName} onChange={e => patch({ bizName: e.target.value })} placeholder="Your business name" />
               </div>
               <div>
-                <label className={labelCls}>Business email</label>
-                <input className={inputCls} type="email" value={form.bizEmail} onChange={e => patch({ bizEmail: e.target.value })} placeholder="hello@yourbusiness.co.uk" />
+                <label className={labelCls}>Email address</label>
+                <input className={inputCls} type="email" value={form.bizEmail || user?.email || ''} onChange={e => patch({ bizEmail: e.target.value })} placeholder="hello@yourbusiness.co.uk" />
+                <p className="mt-1 text-xs text-[rgba(153,197,255,0.35)]">Changing your email here updates it in Settings — you may need to reverify.</p>
               </div>
             </div>
           )}
