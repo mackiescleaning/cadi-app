@@ -136,7 +136,7 @@ const TURNS = [
   },
   {
     id: 'widget',
-    cadi: f => `Pricing done — now let's get ${f.bizName} its first online lead. 🌐\n\nCadi's chat widget goes on your website in 30 seconds. Visitors get instant quotes, you get their name and email. No extra software, no monthly fees.\n\nPaste this one line just before the </body> tag on your site — I've pre-filled your business ID:`,
+    cadi: f => `Pricing done — now let's get ${f.bizName} its first online lead. 🌐\n\nThis is Cadi's chat widget. It sits on your website as a small button. Visitors click it, get an instant quote, and their details land straight in your Cadi account.\n\nTap the blue button below to see exactly what your customers would see — then I'll show you how to add it to your site in 30 seconds.`,
     type: 'widget',
     chapter: 4,
     skippable: true,
@@ -229,6 +229,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
   const [saving, setSaving] = useState(false);
   const [notif, setNotif] = useState(null);
   const [confirmEditing, setConfirmEditing] = useState(false);
+  const [widgetDemoOpen, setWidgetDemoOpen] = useState(false);
 
   // Input state (local to current turn — cleared on advance)
   const [textValue, setTextValue] = useState('');
@@ -1274,21 +1275,136 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
       const snippet = form.businessId
         ? `<script src="https://widget.cadi.cleaning/widget.js" data-business-id="${form.businessId}" async></script>`
         : `<script src="https://widget.cadi.cleaning/widget.js" data-business-id="…" async></script>`;
+      const bizName = form.bizName || 'Your Business';
+      const slugDomain = bizName.toLowerCase().replace(/[^a-z0-9]/g, '');
       return (
         <div className="space-y-3">
+
+          {/* ── Interactive browser mockup ── */}
+          <div className="rounded-xl overflow-hidden border border-[rgba(153,197,255,0.15)] shadow-lg">
+            {/* Browser chrome */}
+            <div className="bg-[#06091f] px-3 py-2 flex items-center gap-2 border-b border-[rgba(153,197,255,0.08)]">
+              <div className="flex gap-1.5 shrink-0">
+                <div className="w-2.5 h-2.5 rounded-full bg-[rgba(255,80,80,0.5)]" />
+                <div className="w-2.5 h-2.5 rounded-full bg-[rgba(255,200,50,0.5)]" />
+                <div className="w-2.5 h-2.5 rounded-full bg-[rgba(50,200,80,0.5)]" />
+              </div>
+              <div className="flex-1 bg-white/5 rounded px-3 py-[3px] text-[10px] text-white/25 font-mono truncate">
+                www.{slugDomain}.co.uk
+              </div>
+            </div>
+
+            {/* Fake website */}
+            <div className="relative bg-gray-50" style={{ height: 200 }}>
+              {/* Fake nav */}
+              <div className="bg-white border-b border-gray-100 px-4 py-2.5 flex items-center justify-between">
+                <span className="text-[#010a4f] font-black text-sm">{bizName}</span>
+                <div className="flex gap-3">
+                  {['Services', 'Areas', 'Contact'].map(l => (
+                    <span key={l} className="text-gray-400 text-[10px]">{l}</span>
+                  ))}
+                </div>
+              </div>
+              {/* Fake hero content */}
+              <div className="px-4 pt-4 pb-2">
+                <div className="h-3 bg-gray-300 rounded-full w-40 mb-2.5" />
+                <div className="h-2 bg-gray-200 rounded-full w-full mb-1.5" />
+                <div className="h-2 bg-gray-200 rounded-full w-5/6 mb-1.5" />
+                <div className="h-2 bg-gray-200 rounded-full w-3/4 mb-3" />
+                <div className="h-7 bg-[#010a4f] rounded-lg w-28" />
+              </div>
+
+              {/* Chat bubble */}
+              <button
+                type="button"
+                onClick={() => setWidgetDemoOpen(v => !v)}
+                className="absolute bottom-3 right-3 w-12 h-12 rounded-full bg-[#1f48ff] shadow-xl flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                style={{ boxShadow: '0 4px 20px rgba(31,72,255,0.5)' }}
+              >
+                {widgetDemoOpen
+                  ? <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                  : <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                }
+              </button>
+
+              {/* Widget chat panel */}
+              {widgetDemoOpen && (
+                <div className="absolute bottom-[68px] right-3 w-60 rounded-xl shadow-2xl overflow-hidden border border-gray-200 bg-white"
+                  style={{ animation: 'fadeSlideUp 0.18s ease-out' }}>
+                  <div className="bg-[#010a4f] px-4 py-3">
+                    <p className="text-white font-bold text-[11px]">{bizName}</p>
+                    <p className="text-white/50 text-[10px]">Instant quotes · Book online</p>
+                  </div>
+                  <div className="px-3 py-3 space-y-2.5 bg-gray-50">
+                    <div className="flex gap-2 items-start">
+                      <div className="w-6 h-6 rounded-full bg-[#1f48ff] shrink-0 flex items-center justify-center text-white text-[8px] font-black mt-0.5">C</div>
+                      <div className="bg-white rounded-xl rounded-tl-none px-3 py-2 text-[11px] text-gray-800 shadow-sm leading-relaxed">
+                        Hi! 👋 I can get you a quote in under a minute. What type of clean are you looking for?
+                      </div>
+                    </div>
+                    <div className="flex gap-1 flex-wrap pl-8">
+                      {['Regular clean ✓', 'Deep clean', 'End of tenancy'].map(opt => (
+                        <span key={opt} className="px-2 py-1 rounded-full border border-[#1f48ff]/40 bg-white text-[#1f48ff] text-[10px] font-semibold">{opt}</span>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 items-start pl-8">
+                      <div className="bg-[#1f48ff]/10 rounded-xl rounded-tl-none px-3 py-2 text-[11px] text-[#1f48ff] font-semibold shadow-sm">
+                        Regular clean ✓
+                      </div>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <div className="w-6 h-6 rounded-full bg-[#1f48ff] shrink-0 flex items-center justify-center text-white text-[8px] font-black mt-0.5">C</div>
+                      <div className="bg-white rounded-xl rounded-tl-none px-3 py-2 text-[11px] text-gray-800 shadow-sm leading-relaxed">
+                        Great choice! How many bedrooms?
+                      </div>
+                    </div>
+                  </div>
+                  <div className="px-3 py-2 bg-white border-t border-gray-100 flex items-center gap-2">
+                    <span className="flex-1 text-[11px] text-gray-300">Type a message…</span>
+                    <div className="w-6 h-6 rounded-full bg-[#1f48ff] flex items-center justify-center">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Tap prompt / what it does */}
+          {!widgetDemoOpen && (
+            <p className="text-center text-xs text-[rgba(153,197,255,0.45)]">👆 Tap the blue button to see your customers' experience</p>
+          )}
+          {widgetDemoOpen && (
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { emoji: '⚡', label: 'Instant quotes', desc: 'No back-and-forth' },
+                { emoji: '📩', label: 'Lead capture', desc: 'Name + email every time' },
+                { emoji: '📅', label: 'Book direct', desc: 'Lands in your Cadi' },
+              ].map(b => (
+                <div key={b.label} className="rounded-xl bg-[#091660] border border-[rgba(153,197,255,0.1)] px-2 py-3 text-center">
+                  <div className="text-base mb-1">{b.emoji}</div>
+                  <div className="text-[10px] font-bold text-white leading-tight">{b.label}</div>
+                  <div className="text-[10px] text-[rgba(153,197,255,0.4)] mt-0.5">{b.desc}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Code snippet */}
           <div className="rounded-xl bg-[#020d3a] border border-[rgba(153,197,255,0.15)] px-4 py-3 pr-14 font-mono text-[11px] text-[#99c5ff] break-all leading-relaxed relative">
             {snippet}
             <button
               type="button"
-              onClick={() => { try { navigator.clipboard.writeText(snippet); } catch {} }}
+              onClick={() => { try { navigator.clipboard.writeText(snippet); flash('Copied!'); } catch {} }}
               className="absolute right-2 top-2 px-2 py-1 rounded-lg bg-[#1f48ff] text-white text-[10px] font-bold hover:bg-[#3a5eff] transition"
             >
               Copy
             </button>
           </div>
-          <p className="text-[11px] text-[rgba(153,197,255,0.4)]">Paste this just before &lt;/body&gt; on your website. Takes 30 seconds — you can also do it later in Settings → Front Desk.</p>
+          <p className="text-[11px] text-[rgba(153,197,255,0.4)]">Paste this just before &lt;/body&gt; on your site. 30 seconds — or do it later in Settings → Front Desk.</p>
+
           <div className="flex gap-2">
-            <button type="button" onClick={() => advance('Done later', form)} className="rounded-[10px] border border-[rgba(153,197,255,0.15)] px-4 py-[11px] text-sm text-[rgba(153,197,255,0.5)] hover:text-white transition">
+            <button type="button" onClick={() => advance('Do it later', form)} className="rounded-[10px] border border-[rgba(153,197,255,0.15)] px-4 py-[11px] text-sm text-[rgba(153,197,255,0.5)] hover:text-white transition">
               Do it later
             </button>
             <button
