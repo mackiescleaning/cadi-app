@@ -22,6 +22,7 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { usePlan, FREE_CUSTOMER_LIMIT } from "../hooks/usePlan";
 import { UpgradeModal } from "../components/UpgradePrompt";
+import CustomerImport from "../components/CustomerImport";
 
 // ─── Job type taxonomy ────────────────────────────────────────────────────────
 // Used for filtering, tagging, and AI suggestion logic.
@@ -1879,6 +1880,7 @@ export default function CustomerTab() {
   const [composing,     setComposing]    = useState(null);
   const [showDetail,    setShowDetail]   = useState(false);
   const [showAddModal,  setShowAddModal] = useState(false);
+  const [showImport,    setShowImport]   = useState(false);
   const [showUpgrade,   setShowUpgrade]  = useState(false);
 
   const activeCustomers = useMemo(() => customers.filter(c => c.status !== 'archived'), [customers]);
@@ -1979,12 +1981,19 @@ export default function CustomerTab() {
               <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-0.5">Cadi</p>
               <h2 className="text-2xl font-black text-white">Customers</h2>
             </div>
-            <button
-              onClick={() => atLimit ? setShowUpgrade(true) : setShowAddModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-bold transition-all rounded-xl shadow-lg shadow-[#1f48ff]/30 active:scale-95">
-              <span className="text-lg leading-none">{atLimit ? '🔒' : '+'}</span>
-              {atLimit ? `${activeCustomers.length}/${FREE_CUSTOMER_LIMIT}` : 'Add'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowImport(true)}
+                className="flex items-center gap-1.5 px-3 py-2.5 bg-[rgba(153,197,255,0.1)] hover:bg-[rgba(153,197,255,0.18)] text-[#99c5ff] text-sm font-bold transition-all rounded-xl border border-[rgba(153,197,255,0.2)] active:scale-95">
+                Import
+              </button>
+              <button
+                onClick={() => atLimit ? setShowUpgrade(true) : setShowAddModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-bold transition-all rounded-xl shadow-lg shadow-[#1f48ff]/30 active:scale-95">
+                <span className="text-lg leading-none">{atLimit ? '🔒' : '+'}</span>
+                {atLimit ? `${activeCustomers.length}/${FREE_CUSTOMER_LIMIT}` : 'Add'}
+              </button>
+            </div>
           </div>
           {/* Status filter chips — below header on all screens */}
           <div className="flex gap-1.5 mt-3 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
@@ -2175,6 +2184,17 @@ export default function CustomerTab() {
         <AddCustomerModal
           onClose={() => setShowAddModal(false)}
           onSave={handleAddSave}
+        />
+      )}
+
+      {/* ── Import customers modal ── */}
+      {showImport && (
+        <CustomerImport
+          onClose={() => setShowImport(false)}
+          existingCustomers={customers}
+          onImported={() => {
+            setShowImport(false);
+          }}
         />
       )}
     </div>
