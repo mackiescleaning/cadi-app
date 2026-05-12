@@ -115,13 +115,6 @@ const TURNS = [
     skippable: true,
   },
   {
-    id: 'compliance',
-    cadi: 'Any compliance to log? Cadi tracks renewal dates and sends reminders so nothing lapses. Skip for now if you want.',
-    type: 'compliance',
-    chapter: 5,
-    skippable: true,
-  },
-  {
     id: 'marketplace_interest',
     cadi: f => `One last thing, ${f.firstName} — we're building a marketplace that connects Cadi cleaners to commercial FM aggregators across the UK.\n\nWould you be interested in receiving commercial work through Cadi when the marketplace launches?`,
     type: 'marketplace-interest',
@@ -461,14 +454,6 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           ambition: form.ambition,
         });
         await saveProfile({ onboarding_step: 10 });
-      }
-      if (id === 'compliance') {
-        await mergeSetupData({
-          pli: form.pli, pli_policy: form.pliPolicy, pli_renewal: form.pliRenewal || null,
-          dbs: form.dbs, ico: form.ico, coshh: form.coshh,
-          accreditations: form.accreditations,
-        });
-        await saveProfile({ onboarding_step: 11 });
       }
       if (id === 'marketplace_interest') {
         const interested = form.marketplaceInterest === true;
@@ -1102,51 +1087,6 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
       );
     }
 
-    // Compliance
-    if (type === 'compliance') {
-      return (
-        <div className="space-y-2">
-          <ToggleRow checked={form.pli} onChange={v => patch({ pli: v })} label="Public Liability Insurance" hint="Required by most commercial clients" />
-          {form.pli && (
-            <div className="grid grid-cols-2 gap-3 rounded-xl border border-[rgba(153,197,255,0.1)] bg-[#091660] p-3">
-              <div>
-                <label className={labelCls}>Policy Number</label>
-                <input className={inputCls} value={form.pliPolicy} onChange={e => patch({ pliPolicy: e.target.value })} placeholder="PLI-2024-001" />
-              </div>
-              <div>
-                <label className={labelCls}>Renewal Date</label>
-                <input type="date" className={inputCls} value={form.pliRenewal} onChange={e => patch({ pliRenewal: e.target.value })} />
-              </div>
-            </div>
-          )}
-          <ToggleRow checked={form.dbs} onChange={v => patch({ dbs: v })} label="DBS Check" hint="Required for residential and care environments" />
-          <ToggleRow checked={form.ico} onChange={v => patch({ ico: v })} label="ICO Registered" hint="Required if storing client data digitally" />
-          <ToggleRow checked={form.coshh} onChange={v => patch({ coshh: v })} label="COSHH Trained" hint="Control of Substances Hazardous to Health" />
-          <div>
-            <label className={labelCls}>Accreditations</label>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {ACCREDITATION_OPTIONS.map(a => (
-                <Chip key={a} selected={form.accreditations.includes(a)} onClick={() => toggleArr('accreditations', a)}>{a}</Chip>
-              ))}
-            </div>
-          </div>
-          <div className="flex gap-2 pt-1">
-            {skippable && <button type="button" onClick={() => advance('Skipped', form)} className="rounded-[10px] border border-[rgba(153,197,255,0.15)] px-4 py-[11px] text-sm text-[rgba(153,197,255,0.5)] hover:text-white transition">Skip</button>}
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => {
-                const items = [form.pli && 'PLI', form.dbs && 'DBS', form.ico && 'ICO', form.coshh && 'COSHH'].filter(Boolean);
-                handleAnswer(id, items.length ? items.join(' · ') : 'Added compliance', items.join(' · ') || 'Done');
-              }}
-              className="flex-1 rounded-[10px] bg-[#1f48ff] py-3 text-sm font-bold text-white shadow-[0_4px_16px_rgba(31,72,255,0.4)] hover:bg-[#3a5eff] transition disabled:opacity-60"
-            >
-              {saving ? 'Saving…' : 'Continue →'}
-            </button>
-          </div>
-        </div>
-      );
-    }
 
     // Summary — what's been pre-built for them
     if (type === 'summary') {
