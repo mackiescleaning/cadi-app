@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import {
   Plus, MoreHorizontal, Lock, ChevronDown, ChevronUp, X, AlertCircle, Check,
   Pencil, Copy, Trash2, Eye, EyeOff,
@@ -11,7 +12,7 @@ import {
   listServices, createService, updateService, deleteService,
   setServiceActive, duplicateService,
   formatPricingSummary, formatDuration, getFrequencyLabels, serviceHasPricing,
-  countServicesNeedingPricing,
+  countServicesNeedingPricing, seedServicesFromOnboarding,
 } from '../lib/db/servicesDb';
 import { supabase } from '../lib/supabase';
 
@@ -971,6 +972,7 @@ function Toast({ message, onDismiss }) {
 
 export default function Services() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('residential');
@@ -993,6 +995,27 @@ export default function Services() {
         listServices({ includeInactive: true }),
         countServicesNeedingPricing(),
       ]);
+
+      // If the user has no services yet but picked some during onboarding,
+      // seed them automatically so they don't have to re-enter their choices.
+      if (all.length === 0 && user?.id && user.id !== 'demo-user') {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('setup_data')
+          .eq('id', user.id)
+          .single();
+        const onboardingServices = profile?.setup_data?.services ?? [];
+        const customService = profile?.setup_data?.custom_service ?? '';
+        if (onboardingServices.length > 0 || customService) {
+          await seedServicesFromOnboarding(onboardingServices, customService);
+          const seeded = await listServices({ includeInactive: true });
+          setServices(seeded);
+          setAttentionCount(seeded.filter(s => s.is_active && !serviceHasPricing(s)).length);
+          if (seeded.length > 0) setToast(`${seeded.length} service${seeded.length !== 1 ? 's' : ''} imported from your setup. Add pricing to activate them.`);
+          return;
+        }
+      }
+
       setServices(all);
       setAttentionCount(needsPricing);
     } catch (e) {
@@ -1000,7 +1023,7 @@ export default function Services() {
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, [navigate, user]);
 
   useEffect(() => {
     load();
