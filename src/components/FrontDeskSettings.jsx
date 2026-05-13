@@ -57,7 +57,7 @@ export default function FrontDeskSettings() {
           .select('mode')
           .eq('business_id', businessId)
           .eq('agent', 'front_desk')
-          .single(),
+          .maybeSingle(),
         supabase
           .from('conversations')
           .select('*', { count: 'exact', head: true })
@@ -70,7 +70,7 @@ export default function FrontDeskSettings() {
           .eq('channel', 'web_chat')
           .order('last_message_at', { ascending: false })
           .limit(1)
-          .single(),
+          .maybeSingle(),
       ]);
 
       if (!mounted) return;

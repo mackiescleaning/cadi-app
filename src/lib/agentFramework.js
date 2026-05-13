@@ -181,7 +181,7 @@ export async function loadAgentSettings(businessId, agentName) {
     .select('mode, config')
     .eq('business_id', businessId)
     .eq('agent', agentName)
-    .single();
+    .maybeSingle();
   return data ?? { mode: 'approval', config: {} };
 }
 

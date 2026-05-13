@@ -220,7 +220,7 @@ export default function SetupWizard({ onAllDone }) {
     if (!monthly || !user) return;
     setGoalSaving(true);
     try {
-      const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).single();
+      const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).maybeSingle();
       const existing = data?.setup_data ?? {};
       await supabase.from('business_settings').upsert(
         { owner_id: user.id, annual_target: monthly * 12, setup_data: { ...existing, target_revenue: monthly } },

@@ -2248,7 +2248,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     setReadyBannerDismissed(true);
     if (!user || user.id === 'demo-user') return;
     try {
-      const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).single();
+      const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).maybeSingle();
       const existing = data?.setup_data || {};
       await supabase.from('business_settings').update({ setup_data: { ...existing, welcome_banner_dismissed: true } }).eq('owner_id', user.id);
     } catch { /* non-critical */ }

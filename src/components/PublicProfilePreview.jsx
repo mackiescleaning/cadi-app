@@ -36,7 +36,7 @@ export default function PublicProfilePreview() {
     if (!user) return;
     (async () => {
       const [{ data: biz }, leaderboard] = await Promise.all([
-        supabase.from('business_settings').select('setup_data,vat_registered,hourly_rate').eq('owner_id', user.id).single(),
+        supabase.from('business_settings').select('setup_data,vat_registered,hourly_rate').eq('owner_id', user.id).maybeSingle(),
         listLeaderboard(),
       ]);
       setSettings(biz);

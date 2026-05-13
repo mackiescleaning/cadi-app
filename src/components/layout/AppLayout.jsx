@@ -141,7 +141,7 @@ export default function AppLayout() {
     if (!user || user.id === 'demo-user') return;
     (async () => {
       try {
-        const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).single();
+        const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).maybeSingle();
         setLogoUrl(data?.setup_data?.logo_url || '');
       } catch {}
     })();
