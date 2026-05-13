@@ -48,11 +48,20 @@ const CATEGORIES = [
 ];
 
 const PRICING_TYPES = [
-  { value: 'hourly',   label: 'Hourly rate'           },
-  { value: 'fixed',    label: 'Fixed price'            },
-  { value: 'per_sqm',  label: 'Per square metre'       },
-  { value: 'per_room', label: 'Per room'               },
-  { value: 'custom',   label: 'Custom (quote each one)' },
+  { value: 'per_size', label: 'By property size (2 bed, 3 bed…)' },
+  { value: 'hourly',   label: 'Hourly rate'                       },
+  { value: 'fixed',    label: 'Single fixed price'                },
+  { value: 'per_sqm',  label: 'Per square metre'                  },
+  { value: 'per_room', label: 'Per room'                          },
+  { value: 'custom',   label: 'Custom (quote each job)'           },
+];
+
+const DEFAULT_SIZE_TIERS = [
+  { label: 'Studio / 1 bed', price: '' },
+  { label: '2 bed',          price: '' },
+  { label: '3 bed',          price: '' },
+  { label: '4 bed',          price: '' },
+  { label: '5 bed+',         price: '' },
 ];
 
 const FREQ_OPTIONS = [
@@ -69,7 +78,8 @@ const EMPTY_FORM = {
   name: '',
   description_included: '',
   description_excluded: '',
-  pricing_type: 'hourly',
+  pricing_type: 'per_size',
+  pricing_matrix: DEFAULT_SIZE_TIERS.map(t => ({ ...t })),
   price_hourly_rate: '',
   price_hourly_minimum_hours: '',
   price_fixed_basic: '',
@@ -103,12 +113,16 @@ function numericField(val) {
 }
 
 function formToRecord(form) {
+  const matrix = form.pricing_type === 'per_size'
+    ? (form.pricing_matrix ?? []).filter(r => r.label?.trim() && r.price !== '').map(r => ({ label: r.label.trim(), price: parseFloat(r.price) })).filter(r => !isNaN(r.price))
+    : null;
   return {
     category: form.category,
     name: form.name.trim(),
     description_included: form.description_included.trim() || null,
     description_excluded: form.description_excluded.trim() || null,
     pricing_type: form.pricing_type,
+    pricing_matrix: matrix,
     price_hourly_rate: numericField(form.price_hourly_rate),
     price_hourly_minimum_hours: numericField(form.price_hourly_minimum_hours),
     price_fixed_basic: numericField(form.price_fixed_basic),
@@ -136,9 +150,13 @@ function formToRecord(form) {
 }
 
 function recordToForm(record) {
+  const matrix = record.pricing_matrix?.length
+    ? record.pricing_matrix.map(r => ({ label: r.label, price: String(r.price) }))
+    : DEFAULT_SIZE_TIERS.map(t => ({ ...t }));
   return {
     ...EMPTY_FORM,
     ...record,
+    pricing_matrix: matrix,
     price_hourly_rate: record.price_hourly_rate ?? '',
     price_hourly_minimum_hours: record.price_hourly_minimum_hours ?? '',
     price_fixed_basic: record.price_fixed_basic ?? '',
@@ -254,7 +272,70 @@ function NumberInput({ value, onChange, placeholder, prefix, suffix, className =
 
 // ── Pricing fields (conditional on type) ─────────────────────────────────────
 
+function PricingMatrixEditor({ rows, onChange }) {
+  const updateRow = (i, field, val) => {
+    const next = rows.map((r, idx) => idx === i ? { ...r, [field]: val } : r);
+    onChange(next);
+  };
+  const addRow = () => onChange([...rows, { label: '', price: '' }]);
+  const removeRow = (i) => onChange(rows.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-[rgba(153,197,255,0.5)]">
+        Set a price for each size you offer. Front Desk will ask the customer how many bedrooms and quote the right price automatically.
+      </p>
+      <div className="space-y-2">
+        {rows.map((row, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={row.label}
+              onChange={e => updateRow(i, 'label', e.target.value)}
+              placeholder="e.g. 2 bed"
+              className="flex-1 px-3 py-2 rounded-lg bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.2)] text-white text-sm placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#4f78ff]"
+            />
+            <div className="flex items-center bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.2)] rounded-lg overflow-hidden focus-within:border-[#4f78ff] w-28">
+              <span className="px-2 text-sm text-[rgba(153,197,255,0.6)] border-r border-[rgba(153,197,255,0.2)]">£</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={row.price}
+                onChange={e => updateRow(i, 'price', e.target.value)}
+                placeholder="0.00"
+                className="flex-1 px-2 py-2 bg-transparent text-white text-sm placeholder-[rgba(153,197,255,0.3)] focus:outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => removeRow(i)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-[rgba(153,197,255,0.4)] hover:text-red-400 hover:bg-red-400/10 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={addRow}
+        className="text-xs text-[#4f78ff] hover:text-[#99c5ff] font-semibold flex items-center gap-1 mt-1"
+      >
+        <Plus size={12} /> Add another size
+      </button>
+    </div>
+  );
+}
+
 function PricingFields({ form, patch }) {
+  if (form.pricing_type === 'per_size') return (
+    <PricingMatrixEditor
+      rows={form.pricing_matrix ?? DEFAULT_SIZE_TIERS.map(t => ({ ...t }))}
+      onChange={matrix => patch({ pricing_matrix: matrix })}
+    />
+  );
+
   if (form.pricing_type === 'hourly') return (
     <div className="grid grid-cols-2 gap-3">
       <div>
@@ -270,15 +351,8 @@ function PricingFields({ form, patch }) {
 
   if (form.pricing_type === 'fixed') return (
     <div className="space-y-3">
-      <p className="text-xs text-[rgba(153,197,255,0.5)]">Add up to three tiers — Basic, Standard, Premium. Fill the ones that apply.</p>
-      <div className="grid grid-cols-3 gap-3">
-        {[['price_fixed_basic','Basic'],['price_fixed_standard','Standard'],['price_fixed_premium','Premium']].map(([field, label]) => (
-          <div key={field}>
-            <FieldLabel>{label}</FieldLabel>
-            <NumberInput prefix="£" value={form[field]} onChange={v => patch({ [field]: v })} placeholder="0.00" />
-          </div>
-        ))}
-      </div>
+      <p className="text-xs text-[rgba(153,197,255,0.5)]">One fixed price regardless of size. Use "By property size" if you charge differently per bedroom.</p>
+      <NumberInput prefix="£" value={form.price_fixed_basic} onChange={v => patch({ price_fixed_basic: v })} placeholder="0.00" />
     </div>
   );
 
@@ -310,7 +384,7 @@ function PricingFields({ form, patch }) {
 
   if (form.pricing_type === 'custom') return (
     <div className="p-3 rounded-lg bg-[rgba(79,120,255,0.1)] border border-[rgba(79,120,255,0.25)]">
-      <p className="text-xs text-[#99c5ff]">Front Desk will gather inquiry details and flag this for you to quote manually.</p>
+      <p className="text-xs text-[#99c5ff]">Front Desk will gather enquiry details and flag this job for you to quote manually.</p>
     </div>
   );
 

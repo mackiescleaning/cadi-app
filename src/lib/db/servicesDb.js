@@ -34,7 +34,7 @@ export async function listServicesForFrontDesk() {
     .select([
       'id', 'category', 'name',
       'description_included', 'description_excluded',
-      'pricing_type',
+      'pricing_type', 'pricing_matrix',
       'price_hourly_rate', 'price_hourly_minimum_hours',
       'price_fixed_basic', 'price_fixed_standard', 'price_fixed_premium',
       'price_per_sqm', 'price_per_sqm_minimum',
@@ -85,7 +85,8 @@ export async function countServicesNeedingPricing() {
 }
 
 export function serviceHasPricing(s) {
-  if (s.pricing_type === 'custom') return true; // custom = quote manually, no price needed
+  if (s.pricing_type === 'custom') return true;
+  if (s.pricing_type === 'per_size') return !!(s.pricing_matrix?.some(r => r.price > 0));
   if (s.pricing_type === 'hourly') return !!s.price_hourly_rate;
   if (s.pricing_type === 'fixed') return !!(s.price_fixed_basic || s.price_fixed_standard || s.price_fixed_premium);
   if (s.pricing_type === 'per_sqm') return !!s.price_per_sqm;
@@ -94,6 +95,13 @@ export function serviceHasPricing(s) {
 }
 
 export function formatPricingSummary(s) {
+  if (s.pricing_type === 'per_size') {
+    const priced = (s.pricing_matrix ?? []).filter(r => r.price > 0);
+    if (!priced.length) return 'Price needed';
+    const prices = priced.map(r => r.price);
+    const min = Math.min(...prices), max = Math.max(...prices);
+    return min === max ? `£${min} by size` : `£${min} – £${max} by size`;
+  }
   if (s.pricing_type === 'hourly') {
     if (!s.price_hourly_rate) return 'Price needed';
     let str = `£${s.price_hourly_rate}/hr`;

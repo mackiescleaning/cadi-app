@@ -38,8 +38,32 @@ function buildSystemPrompt(ctx: BusinessContext): string {
     return `You are a chat assistant. The business has disabled automated chat. Politely tell the visitor that online chat isn't currently available and invite them to call or email. Keep it brief.`;
   }
 
+  const formatServiceLine = (s: ServiceRecord): string => {
+    if (s.pricing_type === "per_size" && s.pricing_matrix?.length) {
+      const tiers = s.pricing_matrix.map(t => `${t.label}: £${t.price}`).join(" / ");
+      return `- ${s.name} — priced by size: ${tiers} (ask the customer how many bedrooms)`;
+    }
+    if (s.pricing_type === "hourly" && s.price_hourly_rate) {
+      let line = `- ${s.name} — £${s.price_hourly_rate}/hr`;
+      if (s.price_hourly_minimum_hours) line += `, minimum ${s.price_hourly_minimum_hours}hr`;
+      return line;
+    }
+    if (s.pricing_type === "fixed" && s.price_fixed_basic) {
+      return `- ${s.name} — £${s.price_fixed_basic} fixed`;
+    }
+    if (s.pricing_type === "per_sqm" && s.price_per_sqm) {
+      return `- ${s.name} — £${s.price_per_sqm}/m²`;
+    }
+    if (s.pricing_type === "per_room" && s.price_per_room) {
+      let line = `- ${s.name} — £${s.price_per_room}/room`;
+      if (s.price_per_bathroom) line += ` + £${s.price_per_bathroom}/bathroom`;
+      return line;
+    }
+    return `- ${s.name} — pricing to be confirmed, collect enquiry details`;
+  };
+
   const serviceList = services.length > 0
-    ? services.map(s => `- ${s.service_label}: ${s.pricing_method?.replace(/_/g, " ")}`).join("\n")
+    ? services.map(formatServiceLine).join("\n")
     : "- General cleaning services (pricing configured separately)";
 
   const toneMap: Record<string, string> = {
@@ -197,11 +221,32 @@ function quickQuote(rule: PricingRule, bedrooms: number, frequency: string): { p
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface SizeTier { label: string; price: number; }
+
+interface ServiceRecord {
+  id: string;
+  name: string;
+  pricing_type: string;
+  pricing_matrix?: SizeTier[] | null;
+  price_hourly_rate?: number | null;
+  price_hourly_minimum_hours?: number | null;
+  price_fixed_basic?: number | null;
+  price_per_sqm?: number | null;
+  price_per_room?: number | null;
+  price_per_bathroom?: number | null;
+  pricing_notes?: string | null;
+  frequency_one_off?: boolean;
+  frequency_weekly?: boolean;
+  frequency_fortnightly?: boolean;
+  frequency_monthly?: boolean;
+}
+
 interface BusinessContext {
   businessId:   string;
   businessName: string;
   serviceArea:  string[];
-  services:     Array<{ service: string; service_label: string; pricing_method: string; base_amounts: Record<string, unknown>; frequency_modifiers?: Record<string, number>; minimum_price?: number }>;
+  services:     ServiceRecord[];
+  legacyRules:  Array<{ service: string; service_label: string; pricing_method: string; base_amounts: Record<string, unknown>; frequency_modifiers?: Record<string, number>; minimum_price?: number }>;
   brandVoice:   Record<string, string> | null;
   agentMode:    string;
 }
@@ -217,11 +262,11 @@ async function loadBusinessContext(sb: ReturnType<typeof createClient>, business
 
   if (!biz) return null;
 
-  const [{ data: profile }, { data: pricingRules }, { data: agentSetting }] = await Promise.all([
+  const [{ data: profile }, { data: pricingRules }, { data: agentSetting }, { data: serviceRows }] = await Promise.all([
     sb.from("profiles")
       .select("display_name, brand_voice, service_postcodes, trust_level")
       .eq("id", biz.owner_user_id)
-      .single(),
+      .maybeSingle(),
     sb.from("pricing_rules")
       .select("service, service_label, pricing_method, base_amounts, frequency_modifiers, minimum_price")
       .eq("business_id", businessId)
@@ -230,7 +275,12 @@ async function loadBusinessContext(sb: ReturnType<typeof createClient>, business
       .select("mode")
       .eq("business_id", businessId)
       .eq("agent", "front_desk")
-      .single(),
+      .maybeSingle(),
+    sb.from("services")
+      .select("id, name, pricing_type, pricing_matrix, price_hourly_rate, price_hourly_minimum_hours, price_fixed_basic, price_per_sqm, price_per_room, price_per_bathroom, pricing_notes, frequency_one_off, frequency_weekly, frequency_fortnightly, frequency_monthly")
+      .eq("business_id", businessId)
+      .eq("is_active", true)
+      .order("display_order", { ascending: true }),
   ]);
 
   const brandVoice = profile?.brand_voice as Record<string, string> | null;
@@ -239,7 +289,8 @@ async function loadBusinessContext(sb: ReturnType<typeof createClient>, business
     businessId,
     businessName: brandVoice?.business_name ?? profile?.display_name ?? "Cleaning Services",
     serviceArea:  (profile?.service_postcodes as string[]) ?? [],
-    services:     (pricingRules ?? []) as BusinessContext["services"],
+    services:     (serviceRows ?? []) as ServiceRecord[],
+    legacyRules:  (pricingRules ?? []) as BusinessContext["legacyRules"],
     brandVoice,
     agentMode:    agentSetting?.mode ?? "approval",
   };
@@ -374,12 +425,36 @@ serve(async (req: Request) => {
   // Calculate quote if requested
   let quote: ReturnType<typeof quickQuote> | null = null;
   if (quoteRequest) {
-    const rule = ctx.services.find(s =>
-      s.service === quoteRequest.service ||
-      s.service_label?.toLowerCase().includes(quoteRequest.service?.toLowerCase() ?? "")
-    );
-    if (rule) {
-      quote = quickQuote(rule, quoteRequest.bedrooms ?? 3, quoteRequest.frequency ?? "fortnightly");
+    const serviceName = (quoteRequest.service ?? "").toLowerCase();
+
+    // Try services table first (per_size matrix)
+    const svc = ctx.services.find(s => s.name.toLowerCase().includes(serviceName) || serviceName.includes(s.name.toLowerCase()));
+    if (svc) {
+      if (svc.pricing_type === "per_size" && svc.pricing_matrix?.length) {
+        const bedrooms = quoteRequest.bedrooms ?? 3;
+        // Match label containing bedroom count, fall back to closest
+        const match = svc.pricing_matrix.find(t => t.label.includes(String(bedrooms)))
+          ?? svc.pricing_matrix[svc.pricing_matrix.length - 1];
+        if (match) {
+          quote = { price: match.price, confidence: "high", breakdown: [{ label: match.label, amount: match.price }] };
+        }
+      } else {
+        // Build a legacy-style rule from services record for quickQuote
+        const legacyRule = {
+          pricing_method: svc.pricing_type === "hourly" ? "flat_rate_fixed" : "flat_rate_fixed",
+          base_amounts: { price: svc.price_fixed_basic ?? svc.price_hourly_rate ?? 0 },
+        };
+        quote = quickQuote(legacyRule, quoteRequest.bedrooms ?? 3, quoteRequest.frequency ?? "fortnightly");
+      }
+    } else {
+      // Fall back to legacy pricing_rules
+      const rule = ctx.legacyRules.find(s =>
+        s.service === quoteRequest.service ||
+        s.service_label?.toLowerCase().includes(serviceName)
+      );
+      if (rule) {
+        quote = quickQuote(rule, quoteRequest.bedrooms ?? 3, quoteRequest.frequency ?? "fortnightly");
+      }
     }
   }
 
