@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Plus, MoreHorizontal, Lock, ChevronDown, ChevronUp, X, AlertCircle, Check,
-  Pencil, Copy, Trash2, Eye, EyeOff,
+  Pencil, Copy, Trash2, MessageSquare,
 } from 'lucide-react';
 import {
   listServices, createService, updateService, deleteService,
@@ -15,6 +15,7 @@ import {
   countServicesNeedingPricing, seedServicesFromOnboarding,
 } from '../lib/db/servicesDb';
 import { supabase } from '../lib/supabase';
+import ServiceChat from '../components/ServiceChat';
 
 // ── Service catalogue (same groups as onboarding) ────────────────────────────
 
@@ -952,7 +953,7 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
                   <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                   <div className="absolute right-0 top-9 z-20 bg-white border border-gray-200 rounded-xl shadow-xl w-40 py-1 overflow-hidden">
                     <button onClick={() => { setMenuOpen(false); onEdit(service); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                      <Pencil size={13} className="text-gray-400" /> Edit
+                      <MessageSquare size={13} className="text-gray-400" /> Edit with Cadi
                     </button>
                     <button onClick={() => { setMenuOpen(false); onDuplicate(service.id); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                       <Copy size={13} className="text-gray-400" /> Duplicate
@@ -1057,6 +1058,8 @@ export default function Services() {
   const [toast, setToast] = useState(null);
   const [attentionCount, setAttentionCount] = useState(0);
   const [firstVisitBanner, setFirstVisitBanner] = useState(false);
+  // Chat-based service builder — null when closed, or { context, editService?, editField?, onboardingServices? }
+  const [chatSession, setChatSession] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -1085,7 +1088,17 @@ export default function Services() {
           const seeded = await listServices({ includeInactive: true });
           setServices(seeded);
           setAttentionCount(seeded.filter(s => s.is_active && !serviceHasPricing(s)).length);
-          if (seeded.length > 0) setToast(`${seeded.length} service${seeded.length !== 1 ? 's' : ''} imported from your setup. Add pricing to activate them.`);
+          if (seeded.length > 0) {
+            // Open the conversational builder automatically for first-time setup
+            const chatAlreadyOpened = localStorage.getItem('cadi_services_chat_opened');
+            if (!chatAlreadyOpened) {
+              localStorage.setItem('cadi_services_chat_opened', '1');
+              const serviceNames = seeded.map(s => s.name);
+              setChatSession({ context: 'first_setup', onboardingServices: serviceNames });
+            } else {
+              setToast(`${seeded.length} service${seeded.length !== 1 ? 's' : ''} imported. Add pricing so Front Desk can quote them.`);
+            }
+          }
           return;
         }
       }
@@ -1108,9 +1121,9 @@ export default function Services() {
     }
   }, [load]);
 
-  const openAdd = () => setCatalogueOpen(true);
+  const openAdd = () => setChatSession({ context: 'add_new' });
   const openCustomAdd = (category = activeCategory) => { setCatalogueOpen(false); setModal({ mode: 'add', data: { category } }); };
-  const openEdit = (service) => setModal({ mode: 'edit', data: service });
+  const openEdit = (service) => setChatSession({ context: 'edit', editService: service });
 
   const handleCatalogueAdd = async (names) => {
     try {
@@ -1175,6 +1188,12 @@ export default function Services() {
     load();
   };
 
+  const handleChatDone = (serviceName) => {
+    setChatSession(null);
+    if (serviceName) setToast(`${serviceName} saved.`);
+    load();
+  };
+
   const byCategory = (cat) => services.filter(s => s.category === cat);
   const countByCategory = (cat) => services.filter(s => s.category === cat).length;
   const visible = byCategory(activeCategory);
@@ -1218,9 +1237,18 @@ export default function Services() {
       {attentionCount > 0 && (
         <div className="mx-5 mt-3 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
           <AlertCircle size={14} className="text-amber-500 shrink-0" />
-          <p className="text-sm text-amber-800">
+          <p className="text-sm text-amber-800 flex-1">
             You have <span className="font-bold">{attentionCount} service{attentionCount !== 1 ? 's' : ''}</span> that need pricing added before Front Desk can quote them.
           </p>
+          <button
+            onClick={() => {
+              const unpricedNames = services.filter(s => s.is_active && !serviceHasPricing(s)).map(s => s.name);
+              setChatSession({ context: 'first_setup', onboardingServices: unpricedNames });
+            }}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-700 text-white text-xs font-bold hover:bg-amber-800 transition-colors"
+          >
+            <MessageSquare size={11} /> Set up with Cadi
+          </button>
         </div>
       )}
 
@@ -1302,6 +1330,29 @@ export default function Services() {
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteTarget(null)}
           deleting={deleting}
+        />
+      )}
+
+      {/* Conversational service builder */}
+      {chatSession && (
+        <ServiceChat
+          context={chatSession.context}
+          onboardingServices={chatSession.onboardingServices || []}
+          editService={chatSession.editService || null}
+          editField={chatSession.editField || null}
+          onDone={() => {
+            const name = chatSession.editService?.name;
+            handleChatDone(name);
+          }}
+          onUseForm={() => {
+            const ctx = chatSession;
+            setChatSession(null);
+            if (ctx.context === 'edit' && ctx.editService) {
+              setModal({ mode: 'edit', data: ctx.editService });
+            } else {
+              setCatalogueOpen(true);
+            }
+          }}
         />
       )}
 
