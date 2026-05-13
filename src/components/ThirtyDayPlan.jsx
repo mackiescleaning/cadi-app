@@ -15,7 +15,7 @@ const PHASE1_STEPS = [
     key: 'services_menu',
     title: 'Set up your services menu',
     incompleteSub: 'Tell Cadi what you sell so it can quote, schedule, and bill correctly.',
-    completeSub: (meta) => `Services menu live.`,
+    completeSub: () => 'Services menu live.',
     cta: 'Open services menu',
     path: '/services',
   },
@@ -23,17 +23,9 @@ const PHASE1_STEPS = [
     key: 'add_customers',
     title: 'Add your customers',
     incompleteSub: 'Bring your customer list into Cadi. Upload a CSV or add them one at a time.',
-    completeSub: (meta) => `Customers in Cadi.`,
+    completeSub: () => 'Customers in Cadi.',
     cta: 'Add customers',
     path: '/customers',
-  },
-  {
-    key: 'activate_front_desk',
-    title: 'Activate Front Desk',
-    incompleteSub: 'Switch on the AI that handles your inquiries, quotes them, and books them in.',
-    completeSub: () => 'Front Desk is live and answering inquiries.',
-    cta: 'Activate Front Desk',
-    path: '/settings',
   },
   {
     key: 'first_job',
@@ -43,12 +35,20 @@ const PHASE1_STEPS = [
     cta: 'Open schedule',
     path: '/scheduler',
   },
+  {
+    key: 'activate_front_desk',
+    title: 'Activate Front Desk',
+    incompleteSub: 'Switch on the AI that handles your enquiries, quotes, and bookings — optional but powerful.',
+    completeSub: () => 'Front Desk is live and answering enquiries.',
+    cta: 'Activate Front Desk',
+    path: '/settings',
+    optional: true,
+  },
 ];
 
 const SUBHEADS = [
   "Let's get your business set up. This takes about 20 minutes.",
-  "Nice start. Three to go.",
-  "Halfway through Phase 1. Keep going.",
+  "Good start. Two more to go.",
   "One step away from Phase 1 complete.",
   "", // handled by celebration
 ];
@@ -146,14 +146,16 @@ function Phase1Celebration({ stats, onClose }) {
                 <p className="text-xs text-[rgba(153,197,255,0.6)] mt-1">customers in Cadi</p>
               </div>
             )}
-            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
-              <p className="text-lg font-black text-emerald-400">LIVE</p>
-              <p className="text-xs text-[rgba(153,197,255,0.6)] mt-1">Front Desk</p>
-            </div>
             {stats.firstJobDate && (
               <div className="rounded-xl bg-white/5 border border-white/10 p-4">
                 <p className="text-sm font-black text-white">{stats.firstJobDate}</p>
                 <p className="text-xs text-[rgba(153,197,255,0.6)] mt-1">first job</p>
+              </div>
+            )}
+            {stats.frontDeskLive && (
+              <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                <p className="text-lg font-black text-emerald-400">LIVE</p>
+                <p className="text-xs text-[rgba(153,197,255,0.6)] mt-1">Front Desk</p>
               </div>
             )}
           </div>
@@ -204,16 +206,14 @@ export default function ThirtyDayPlan({ onRefresh }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       // Fetch live counts to auto-complete steps
-      const [{ data: customerData }, serviceCount, { data: frontDeskData }, { data: jobData }] = await Promise.all([
-        supabase.from('customers').select('id', { count: 'exact', head: true }),
+      const [{ count: customerCount }, serviceCount, { data: frontDeskData }, { count: jobCount }] = await Promise.all([
+        supabase.from('customers').select('*', { count: 'exact', head: true }),
         countActiveServices(),
         supabase.from('agent_settings').select('mode').eq('agent', 'front_desk').maybeSingle(),
-        supabase.from('jobs').select('id', { count: 'exact', head: true }),
+        supabase.from('jobs').select('*', { count: 'exact', head: true }),
       ]);
 
-      const customerCount = customerData?.length ?? 0;
       const frontDeskActive = frontDeskData?.mode === 'autonomous' || frontDeskData?.mode === 'approval';
-      const jobCount = jobData?.length ?? 0;
 
       const result = await syncPhase1Steps({ serviceCount, customerCount, frontDeskActive, jobCount });
 
@@ -239,8 +239,9 @@ export default function ThirtyDayPlan({ onRefresh }) {
   const phase1Done = progress?.phase_1_completed_at != null;
   const currentPhase = progress?.current_phase ?? 1;
 
-  const completedCount = steps.filter(s => s.status === 'completed').length;
-  const subhead = SUBHEADS[Math.min(completedCount, 4)];
+  const requiredKeys = ['services_menu', 'add_customers', 'first_job'];
+  const requiredCompleted = steps.filter(s => requiredKeys.includes(s.step_key) && s.status === 'completed').length;
+  const subhead = SUBHEADS[Math.min(requiredCompleted, 3)];
 
   const getStepObj = (key) => steps.find(s => s.step_key === key);
   const getStepDef = (key) => PHASE1_STEPS.find(s => s.key === key);
@@ -313,10 +314,11 @@ export default function ThirtyDayPlan({ onRefresh }) {
 
             {/* Steps */}
             <div className="px-5 sm:px-6 pb-5 space-y-2">
-              {PHASE1_STEPS.map((def, i) => {
+              {PHASE1_STEPS.map((def) => {
                 const stepRow = getStepObj(def.key);
                 const status = stepRow?.status ?? 'available';
                 const done = status === 'completed';
+                const isOptional = def.optional === true;
 
                 return (
                   <div
@@ -324,17 +326,26 @@ export default function ThirtyDayPlan({ onRefresh }) {
                     className={`flex items-start gap-3 p-3 rounded-xl transition-all cursor-pointer group ${
                       done
                         ? 'bg-emerald-500/10 border border-emerald-500/20'
-                        : 'bg-white/4 border border-[rgba(153,197,255,0.1)] hover:bg-white/8 hover:border-[rgba(79,120,255,0.3)]'
+                        : isOptional
+                          ? 'bg-white/3 border border-[rgba(153,197,255,0.07)] hover:bg-white/6 hover:border-[rgba(79,120,255,0.2)]'
+                          : 'bg-white/4 border border-[rgba(153,197,255,0.1)] hover:bg-white/8 hover:border-[rgba(79,120,255,0.3)]'
                     }`}
                     onClick={() => !done && navigate(def.path)}
                   >
                     <StepDot status={status} />
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-bold leading-tight ${
-                        done ? 'line-through text-[rgba(153,197,255,0.4)]' : 'text-white'
-                      }`}>{def.title}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className={`text-sm font-bold leading-tight ${
+                          done ? 'line-through text-[rgba(153,197,255,0.4)]' : isOptional ? 'text-[rgba(153,197,255,0.6)]' : 'text-white'
+                        }`}>{def.title}</p>
+                        {isOptional && (
+                          <span className="text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded bg-[rgba(79,120,255,0.15)] text-[#4f78ff]">
+                            optional
+                          </span>
+                        )}
+                      </div>
                       <p className={`text-xs mt-0.5 ${
-                        done ? 'text-[rgba(153,197,255,0.3)]' : 'text-[rgba(153,197,255,0.5)]'
+                        done ? 'text-[rgba(153,197,255,0.3)]' : isOptional ? 'text-[rgba(153,197,255,0.35)]' : 'text-[rgba(153,197,255,0.5)]'
                       }`}>
                         {done
                           ? def.completeSub(stepRow?.metadata)
@@ -345,7 +356,11 @@ export default function ThirtyDayPlan({ onRefresh }) {
                     {!done && (
                       <button
                         onClick={e => { e.stopPropagation(); navigate(def.path); }}
-                        className="shrink-0 px-3 py-1.5 rounded-lg bg-[#4f78ff] hover:bg-[#3d68ff] text-white text-xs font-bold transition-colors whitespace-nowrap"
+                        className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
+                          isOptional
+                            ? 'bg-white/8 hover:bg-white/12 text-[rgba(153,197,255,0.7)]'
+                            : 'bg-[#4f78ff] hover:bg-[#3d68ff] text-white'
+                        }`}
                       >
                         {def.cta}
                       </button>
@@ -355,14 +370,24 @@ export default function ThirtyDayPlan({ onRefresh }) {
               })}
             </div>
 
-            {/* Phase 2 locked preview */}
-            <div className="mx-5 sm:mx-6 mb-5 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
-              <Lock size={12} className="text-[rgba(153,197,255,0.2)] shrink-0" />
-              <div>
-                <p className="text-xs font-bold text-[rgba(153,197,255,0.3)]">Phase 2 unlocks when you complete Phase 1</p>
-                <p className="text-[10px] text-[rgba(153,197,255,0.2)] mt-0.5">See what's really going on inside your business.</p>
+            {/* Phase 2 locked / unlocked preview */}
+            {phase1Done ? (
+              <div className="mx-5 sm:mx-6 mb-5 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                <ArrowRight size={12} className="text-emerald-400 shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-emerald-400">Phase 2 unlocked</p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.4)] mt-0.5">See what's really going on inside your business.</p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mx-5 sm:mx-6 mb-5 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
+                <Lock size={12} className="text-[rgba(153,197,255,0.2)] shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-[rgba(153,197,255,0.3)]">Phase 2 unlocks after the first 3 steps</p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.2)] mt-0.5">Front Desk is optional — it won't hold you back.</p>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

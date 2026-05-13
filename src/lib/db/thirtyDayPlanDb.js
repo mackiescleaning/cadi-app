@@ -2,7 +2,7 @@
 
 import { supabase } from '../supabase';
 
-const PHASE_1_STEPS = ['services_menu', 'add_customers', 'activate_front_desk', 'first_job'];
+const PHASE_1_STEPS = ['services_menu', 'add_customers', 'first_job'];
 
 // ── Read ──────────────────────────────────────────────────────────────────────
 
