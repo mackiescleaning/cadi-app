@@ -16,6 +16,7 @@ import {
 } from '../lib/db/servicesDb';
 import { supabase } from '../lib/supabase';
 import ServiceChat from '../components/ServiceChat';
+import FrontDeskPreview from '../components/FrontDeskPreview';
 
 // ── Service catalogue (same groups as onboarding) ────────────────────────────
 
@@ -1060,6 +1061,7 @@ export default function Services() {
   const [firstVisitBanner, setFirstVisitBanner] = useState(false);
   // Chat-based service builder — null when closed, or { context, editService?, editField?, onboardingServices? }
   const [chatSession, setChatSession] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -1211,12 +1213,20 @@ export default function Services() {
               Like a restaurant menu, but for the services you sell. This is what Front Desk uses to quote your customers.
             </p>
           </div>
-          <button
-            onClick={() => openAdd()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] text-white font-bold text-sm transition-colors shrink-0"
-          >
-            <Plus size={16} /> Add a service
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowPreview(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[rgba(153,197,255,0.3)] text-[#99c5ff] font-bold text-sm transition-colors hover:bg-[rgba(153,197,255,0.08)] shrink-0"
+            >
+              <MessageSquare size={15} /> Try Front Desk
+            </button>
+            <button
+              onClick={() => openAdd()}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] text-white font-bold text-sm transition-colors shrink-0"
+            >
+              <Plus size={16} /> Add a service
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1355,6 +1365,9 @@ export default function Services() {
           }}
         />
       )}
+
+      {/* Front Desk preview */}
+      {showPreview && <FrontDeskPreview onClose={() => setShowPreview(false)} />}
 
       {/* Toast */}
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}

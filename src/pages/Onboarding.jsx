@@ -115,8 +115,15 @@ const TURNS = [
     chapter: 5,
   },
   {
+    id: 'services_builder_handoff',
+    cadi: f => `Last bit — let's get your services properly set up so Cadi knows exactly what you offer. 🛠️\n\nThis takes about 5 minutes and means your job cards, quotes, and invoices are pre-filled from day one.\n\nWhen you're ready, tap below and we'll build your menu together.`,
+    type: 'services-builder-handoff',
+    chapter: 5,
+    skippable: true,
+  },
+  {
     id: 'summary',
-    cadi: f => `You're all set, ${f.firstName}! 🎉\n\nHere's everything I've built for ${f.bizName || 'your account'} — ready to go the moment you walk in.\n\nYour first 3 actions inside Cadi:\n📅 Add your first job in Scheduler\n👥 Add your first customer\n📄 Send your first invoice\n\nAsk Cadi anything if you get stuck — I'm on every tab.`,
+    cadi: f => `You're all set, ${f.firstName}! 🎉\n\nHere's everything I've built for ${f.bizName || 'your account'} — ready to go the moment you walk in.\n\nYour first 3 actions inside Cadi:\n👥 Add your customers\n📅 Schedule your first job\n🧾 Make your invoice yours\n\nAsk Cadi anything if you get stuck — I'm on every tab.`,
     type: 'summary',
     chapter: 5,
   },
@@ -183,6 +190,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
   const [notif, setNotif] = useState(null);
   const [confirmEditing, setConfirmEditing] = useState(false);
   const [widgetDemoOpen, setWidgetDemoOpen] = useState(false);
+  const [goToServices, setGoToServices] = useState(false);
 
   // Input state (local to current turn — cleared on advance)
   const [textValue, setTextValue] = useState('');
@@ -468,7 +476,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
     }
 
     if (isModal) onComplete?.();
-    else navigate('/dashboard', { replace: true });
+    else navigate(goToServices ? '/services' : '/dashboard', { replace: true });
   }
 
   // ── Validate + handle answer submission ─────────────────────────────────────
@@ -1242,6 +1250,49 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
                 <div className="text-xs text-[rgba(153,197,255,0.5)]">{opt.hint}</div>
               </button>
             ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Services builder handoff
+    if (type === 'services-builder-handoff') {
+      return (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-[rgba(153,197,255,0.12)] bg-[#091660] px-4 py-4 space-y-2">
+            {[
+              { emoji: '⚡', label: 'Pre-fills job cards', desc: 'No typing from scratch' },
+              { emoji: '🧾', label: 'Speeds up invoicing', desc: 'Services drop in automatically' },
+              { emoji: '🤖', label: 'Powers Front Desk', desc: 'Cadi quotes correctly from day one' },
+            ].map(b => (
+              <div key={b.label} className="flex items-center gap-3">
+                <span className="text-base shrink-0">{b.emoji}</span>
+                <div>
+                  <p className="text-sm font-bold text-white leading-tight">{b.label}</p>
+                  <p className="text-xs text-[rgba(153,197,255,0.45)]">{b.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => advance('I\'ll do it later', form)}
+              className="rounded-[10px] border border-[rgba(153,197,255,0.15)] px-4 py-[11px] text-sm text-[rgba(153,197,255,0.5)] hover:text-white transition"
+            >
+              I'll do it later
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                setGoToServices(true);
+                handleAnswer(id, 'Set up services now ✓', 'Services setup');
+              }}
+              className="flex-1 rounded-[10px] bg-[#1f48ff] py-[11px] text-sm font-bold text-white shadow-[0_4px_16px_rgba(31,72,255,0.4)] hover:bg-[#3a5eff] transition disabled:opacity-60"
+            >
+              {saving ? 'Saving…' : 'Set up my services →'}
+            </button>
           </div>
         </div>
       );

@@ -44,6 +44,9 @@ import EarnEarnings     from './pages/earn/EarnEarnings';
 import EarnComms        from './pages/earn/EarnComms';
 import FmDemoApp from './pages/fm-demo/FmDemoApp';
 import ClientDemoApp from './pages/client-demo/ClientDemoApp';
+import InvoiceSettings from './pages/InvoiceSettings';
+import StripeCallback from './pages/StripeCallback';
+import GoCardlessPaymentCallback from './pages/GoCardlessPaymentCallback';
 import { DataProvider } from './context/DataContext';
 import { InvoiceProvider } from './context/InvoiceContext';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -69,6 +72,8 @@ function App() {
         <Route path="/auth/confirm" element={<Confirm />} />
         <Route path="/hmrc/callback" element={<HmrcCallback />} />
         <Route path="/gocardless/callback" element={<GocardlessCallback />} />
+        <Route path="/gocardless/payment-callback" element={<GoCardlessPaymentCallback />} />
+        <Route path="/stripe/callback" element={<StripeCallback />} />
         <Route path="/truelayer/callback" element={<TruelayerCallback />} />
 
         {/* Legal — public, no auth required */}
@@ -104,6 +109,7 @@ function App() {
           <Route path="review" element={<AnnualReview />} />
           <Route path="accounts" element={<AccountsTab />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="settings/invoice" element={<InvoiceSettings />} />
           <Route path="inbox" element={<InboxPage />} />
           <Route path="services" element={<Services />} />
           <Route path="upgrade" element={<ProUpgradePage />} />

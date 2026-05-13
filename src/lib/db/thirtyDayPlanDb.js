@@ -2,7 +2,7 @@
 
 import { supabase } from '../supabase';
 
-const PHASE_1_STEPS = ['services_menu', 'add_customers', 'first_job'];
+const PHASE_1_STEPS = ['add_customers', 'first_job', 'invoice_template'];
 
 // ── Read ──────────────────────────────────────────────────────────────────────
 
@@ -79,16 +79,13 @@ export async function checkAndCompletePhase1() {
     .eq('id', progress.id);
   if (error) throw error;
 
-  const firstJobStep = steps.find(s => s.step_key === 'first_job');
-  const frontDeskSourced = firstJobStep?.metadata?.front_desk_sourced === true;
-
-  return { completed: true, alreadyDone: false, frontDeskSourced };
+  return { completed: true, alreadyDone: false };
 }
 
 // ── Auto-complete steps based on live data ────────────────────────────────────
 // Called on dashboard load to sync step status with actual DB state.
 
-export async function syncPhase1Steps({ serviceCount, customerCount, frontDeskActive, jobCount }) {
+export async function syncPhase1Steps({ customerCount, jobCount, templateSaved }) {
   const steps = await getSteps(1);
   const updates = [];
 
@@ -98,17 +95,14 @@ export async function syncPhase1Steps({ serviceCount, customerCount, frontDeskAc
     return condition;
   };
 
-  if (shouldComplete('services_menu', serviceCount >= 1)) {
-    updates.push(markStepComplete('services_menu'));
-  }
   if (shouldComplete('add_customers', customerCount >= 1)) {
     updates.push(markStepComplete('add_customers'));
   }
-  if (shouldComplete('activate_front_desk', frontDeskActive)) {
-    updates.push(markStepComplete('activate_front_desk'));
-  }
   if (shouldComplete('first_job', jobCount >= 1)) {
     updates.push(markStepComplete('first_job'));
+  }
+  if (shouldComplete('invoice_template', templateSaved)) {
+    updates.push(markStepComplete('invoice_template'));
   }
 
   if (updates.length) await Promise.all(updates);
@@ -122,10 +116,16 @@ export async function getPhase1Stats() {
   const steps = await getSteps(1);
   const progress = await getProgress();
 
-  const servicesStep = steps.find(s => s.step_key === 'services_menu');
-  const customersStep = steps.find(s => s.step_key === 'add_customers');
-  const frontDeskStep = steps.find(s => s.step_key === 'activate_front_desk');
-  const firstJobStep  = steps.find(s => s.step_key === 'first_job');
+  const customersStep     = steps.find(s => s.step_key === 'add_customers');
+  const firstJobStep      = steps.find(s => s.step_key === 'first_job');
+
+  // Check for connected payment processor
+  const { data: connections } = await supabase
+    .from('payment_connections')
+    .select('provider, is_connected, provider_account_name')
+    .eq('is_connected', true)
+    .limit(1)
+    .maybeSingle();
 
   const started = progress?.phase_1_started_at ? new Date(progress.phase_1_started_at) : null;
   const completed = progress?.phase_1_completed_at ? new Date(progress.phase_1_completed_at) : null;
@@ -136,13 +136,19 @@ export async function getPhase1Stats() {
     else durationLabel = `${Math.round(mins / 60)} hours`;
   }
 
+  let processorConnected = null;
+  if (connections?.is_connected) {
+    processorConnected = connections.provider === 'stripe' ? 'Stripe' : 'GoCardless';
+    if (connections.provider_account_name) {
+      processorConnected = connections.provider_account_name;
+    }
+  }
+
   return {
-    serviceCount: servicesStep?.metadata?.count ?? null,
     customerCount: customersStep?.metadata?.count ?? null,
-    frontDeskLive: frontDeskStep?.status === 'completed',
     firstJobDate: firstJobStep?.metadata?.date ?? null,
     firstJobCustomer: firstJobStep?.metadata?.customer_name ?? null,
-    frontDeskSourced: firstJobStep?.metadata?.front_desk_sourced === true,
+    processorConnected,
     durationLabel,
   };
 }

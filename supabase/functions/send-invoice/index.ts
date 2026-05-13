@@ -2,10 +2,9 @@
  * supabase/functions/send-invoice/index.ts
  * Cadi — sends a fully-rendered HTML invoice email via Resend.
  *
- * The HTML email matches the style customers expect from professional invoicing
- * tools: personalised greeting, line items with dates, balance due, business
- * contact block. reply-to is set to the business owner's email so customers
- * can reply directly.
+ * Reads from invoice_templates for per-business branding: brand_colour,
+ * logo_position, payment_terms_note, bank_details, footer_message,
+ * invoice_number_format, and increments next_invoice_number on send.
  *
  * Environment variables:
  *   RESEND_API_KEY             — re_...
@@ -42,6 +41,26 @@ function fmtDate(s: string) {
   return new Date(s).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
 
+function renderInvoiceNumber(format: string, seq: number): string {
+  const year  = new Date().getFullYear();
+  const month = String(new Date().getMonth() + 1).padStart(2, "0");
+  return format
+    .replace("{seq}",   String(seq).padStart(3, "0"))
+    .replace("{year}",  String(year))
+    .replace("{month}", month);
+}
+
+interface InvoiceTemplate {
+  id: string;
+  brand_colour: string;
+  logo_position: "top_left" | "top_centre" | "top_right";
+  payment_terms_note: string | null;
+  bank_details: string | null;
+  footer_message: string | null;
+  invoice_number_format: string;
+  next_invoice_number: number;
+}
+
 function buildHtml({
   personalMessage,
   invoiceNum,
@@ -55,9 +74,7 @@ function buildHtml({
   businessName,
   businessAddress,
   businessEmail,
-  bankName,
-  sortCode,
-  accountNum,
+  tmpl,
 }: {
   personalMessage: string;
   invoiceNum: string;
@@ -71,10 +88,24 @@ function buildHtml({
   businessName: string;
   businessAddress?: string;
   businessEmail?: string;
-  bankName?: string;
-  sortCode?: string;
-  accountNum?: string;
+  tmpl: Partial<InvoiceTemplate> | null;
 }) {
+  const brandColour = tmpl?.brand_colour || "#010a4f";
+  const bankBlock   = tmpl?.bank_details
+    ? `
+    <div style="margin-top:24px;padding:16px;background:#f8f9ff;border-radius:8px;border:1px solid #e8ecff">
+      <p style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#888;margin:0 0 8px">Bank details</p>
+      <pre style="font-size:13px;color:#1a1a2e;margin:0;font-family:inherit;white-space:pre-wrap">${tmpl.bank_details.replace(/</g, "&lt;")}</pre>
+      <p style="font-size:13px;color:#1a1a2e;margin:6px 0 0">Reference: <strong>${invoiceNum}</strong></p>
+    </div>`
+    : "";
+
+  const footerMsg = tmpl?.footer_message
+    ? `<p style="font-size:12px;color:#888;margin:3px 0">${tmpl.footer_message.replace(/</g, "&lt;")}</p>`
+    : "";
+
+  const effectiveTerms = tmpl?.payment_terms_note || terms || "Net 14";
+
   const lineRows = lines
     .filter(l => l.desc && l.rate)
     .map(l => {
@@ -92,16 +123,6 @@ function buildHtml({
     })
     .join("");
 
-  const bankBlock = (bankName || sortCode || accountNum)
-    ? `
-    <div style="margin-top:24px;padding:16px;background:#f8f9ff;border-radius:8px;border:1px solid #e8ecff">
-      <p style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#888;margin:0 0 8px">Bank details</p>
-      ${bankName   ? `<p style="font-size:13px;color:#1a1a2e;margin:3px 0">${bankName}</p>` : ""}
-      ${sortCode   ? `<p style="font-size:13px;color:#1a1a2e;margin:3px 0">Sort code: <strong>${sortCode}</strong></p>` : ""}
-      ${accountNum ? `<p style="font-size:13px;color:#1a1a2e;margin:3px 0">Account: <strong>${accountNum}</strong></p>` : ""}
-      <p style="font-size:13px;color:#1a1a2e;margin:3px 0">Reference: <strong>${invoiceNum}</strong></p>
-    </div>` : "";
-
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -115,10 +136,10 @@ function buildHtml({
 
     <!-- Header -->
     <tr><td style="padding:0 0 8px">
-      <div style="background:#010a4f;border-radius:12px 12px 0 0;padding:28px 32px">
+      <div style="background:${brandColour};border-radius:12px 12px 0 0;padding:28px 32px">
         <p style="color:#99c5ff;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;margin:0 0 4px">Invoice</p>
         <p style="color:#fff;font-size:24px;font-weight:900;margin:0 0 2px">${invoiceNum}</p>
-        <p style="color:rgba(153,197,255,0.7);font-size:13px;margin:0">from ${businessName}</p>
+        <p style="color:rgba(255,255,255,0.6);font-size:13px;margin:0">from ${businessName}</p>
       </div>
     </td></tr>
 
@@ -142,7 +163,7 @@ function buildHtml({
           </div>
           <div>
             <p style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#888;margin:0 0 6px">Terms</p>
-            <p style="font-size:14px;color:#1a1a2e;font-weight:600;margin:0 0 2px">${terms || "Net 14"}</p>
+            <p style="font-size:14px;color:#1a1a2e;font-weight:600;margin:0 0 2px">${effectiveTerms}</p>
             ${dueDate ? `<p style="font-size:13px;color:#555;margin:0">Due ${fmtDate(dueDate)}</p>` : ""}
           </div>
         </div>
@@ -160,7 +181,7 @@ function buildHtml({
         <!-- Balance due -->
         <div style="background:#f0f4ff;border-radius:10px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <p style="font-size:14px;font-weight:700;color:#1a1a2e;margin:0">Balance due</p>
-          <p style="font-size:26px;font-weight:900;color:#010a4f;margin:0;font-variant-numeric:tabular-nums">${fmt2(total)}</p>
+          <p style="font-size:26px;font-weight:900;color:${brandColour};margin:0;font-variant-numeric:tabular-nums">${fmt2(total)}</p>
         </div>
 
         ${bankBlock}
@@ -170,9 +191,10 @@ function buildHtml({
         <div>
           <p style="font-size:13px;font-weight:700;color:#1a1a2e;margin:0 0 2px">${businessName}</p>
           ${businessAddress ? `<p style="font-size:12px;color:#888;margin:0 0 2px">${businessAddress}</p>` : ""}
-          ${businessEmail   ? `<p style="font-size:12px;color:#888;margin:0"><a href="mailto:${businessEmail}" style="color:#1f48ff;text-decoration:none">${businessEmail}</a></p>` : ""}
+          ${businessEmail   ? `<p style="font-size:12px;color:#888;margin:0"><a href="mailto:${businessEmail}" style="color:${brandColour};text-decoration:none">${businessEmail}</a></p>` : ""}
+          ${footerMsg}
         </div>
-        <p style="font-size:11px;color:#bbb;margin:16px 0 0">Sent via <a href="https://cadi.cleaning" style="color:#1f48ff;text-decoration:none">Cadi</a></p>
+        <p style="font-size:11px;color:#bbb;margin:16px 0 0">Sent via <a href="https://cadi.cleaning" style="color:${brandColour};text-decoration:none">Cadi</a></p>
       </div>
     </td></tr>
   </table>
@@ -200,7 +222,6 @@ serve(async (req: Request) => {
       to,
       subject,
       personalMessage = "Here's your invoice! We appreciate your prompt payment.",
-      invoiceNum,
       customer = {},
       lines = [],
       subtotal = 0,
@@ -211,13 +232,42 @@ serve(async (req: Request) => {
       businessName,
       businessAddress,
       replyTo,
-      bankName,
-      sortCode,
-      accountNum,
     } = body;
 
     if (!to || !subject) {
       return json({ error: "Missing required fields: to, subject" }, 400);
+    }
+
+    // ── Fetch invoice template for this business ────────────────────────────
+    const { data: biz } = await sb
+      .from("businesses")
+      .select("id")
+      .eq("owner_user_id", user.id)
+      .single();
+
+    let tmpl: Partial<InvoiceTemplate> | null = null;
+    let invoiceNum = body.invoiceNum || `INV-${Date.now()}`;
+
+    if (biz) {
+      const { data: templateRow } = await sb
+        .from("invoice_templates")
+        .select("*")
+        .eq("business_id", biz.id)
+        .maybeSingle();
+
+      if (templateRow) {
+        tmpl = templateRow as InvoiceTemplate;
+        // Use format + current seq for the invoice number
+        invoiceNum = renderInvoiceNumber(
+          tmpl.invoice_number_format || "INV-{seq}",
+          tmpl.next_invoice_number || 1,
+        );
+        // Increment the sequence counter
+        await sb
+          .from("invoice_templates")
+          .update({ next_invoice_number: (tmpl.next_invoice_number || 1) + 1 })
+          .eq("id", tmpl.id);
+      }
     }
 
     // ── Build plain-text fallback ───────────────────────────────────────────
@@ -229,6 +279,9 @@ serve(async (req: Request) => {
       })
       .join("\n");
 
+    const effectiveTerms = tmpl?.payment_terms_note || terms || "Net 14";
+    const bankBlock = tmpl?.bank_details ? `\nBank details:\n${tmpl.bank_details}\nReference: ${invoiceNum}` : "";
+
     const plainText = [
       personalMessage,
       "",
@@ -238,16 +291,14 @@ serve(async (req: Request) => {
       customer.address ? customer.address : "",
       "",
       `Invoice: ${invoiceNum}`,
-      terms ? `Terms: ${terms}` : "",
+      effectiveTerms ? `Terms: ${effectiveTerms}` : "",
       dueDate ? `Due: ${fmtDate(dueDate)}` : "",
       "",
       lineText,
       "",
       `Balance due: £${total.toFixed(2)}`,
-      bankName   ? `\nBank: ${bankName}` : "",
-      sortCode   ? `Sort code: ${sortCode}` : "",
-      accountNum ? `Account: ${accountNum}` : "",
-      accountNum ? `Reference: ${invoiceNum}` : "",
+      bankBlock,
+      tmpl?.footer_message ? `\n${tmpl.footer_message}` : "",
     ].filter(l => l !== undefined).join("\n");
 
     // ── Build HTML ──────────────────────────────────────────────────────────
@@ -264,9 +315,7 @@ serve(async (req: Request) => {
       businessName,
       businessAddress,
       businessEmail: replyTo,
-      bankName,
-      sortCode,
-      accountNum,
+      tmpl,
     });
 
     // ── Send via Resend ─────────────────────────────────────────────────────
@@ -308,7 +357,7 @@ serve(async (req: Request) => {
         .eq("owner_id", user.id);
     }
 
-    return json({ ok: true });
+    return json({ ok: true, invoiceNum });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("send-invoice error:", msg);

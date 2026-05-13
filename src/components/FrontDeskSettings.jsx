@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, Check, MessageSquare, ExternalLink, Settings } from 'lucide-react';
+import { Copy, Check, MessageSquare, Settings, Play } from 'lucide-react';
+import FrontDeskPreview from './FrontDeskPreview';
 import { supabase } from '../lib/supabase';
 import { useBusinessId } from '../hooks/useBusinessId';
 
@@ -36,6 +37,7 @@ export default function FrontDeskSettings() {
   const navigate = useNavigate();
   const businessId = useBusinessId();
   const [copied, setCopied] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [chatCount, setChatCount] = useState(null);
@@ -205,19 +207,23 @@ export default function FrontDeskSettings() {
         </button>
       </div>
 
-      {/* Preview hint */}
-      <div className="rounded-2xl border border-dashed border-[#99c5ff]/30 p-5 text-center space-y-2">
-        <p className="text-sm text-gray-500">Want to see the widget in action?</p>
-        <a
-          href={businessId ? `https://cufgozpwbinjhjnkimmn.supabase.co/functions/v1/front-desk-chat?business_id=${businessId}` : '#'}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-xs font-bold text-[#1f48ff] hover:underline"
+      {/* Try Front Desk */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-bold text-[#010a4f]">Try Front Desk</p>
+          <p className="text-xs text-gray-400 mt-0.5">See exactly what your customers will see — using your real services and pricing</p>
+        </div>
+        <button
+          onClick={() => setShowPreview(true)}
+          disabled={!businessId}
+          className="shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-[#1f48ff] rounded-xl hover:bg-[#3a5eff] transition-colors disabled:opacity-40"
         >
-          <ExternalLink size={12} />
-          Test the API response
-        </a>
+          <Play size={13} />
+          Preview
+        </button>
       </div>
+
+      {showPreview && <FrontDeskPreview onClose={() => setShowPreview(false)} />}
     </div>
   );
 }
