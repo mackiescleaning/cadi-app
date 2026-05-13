@@ -201,12 +201,13 @@ export default function ThirtyDayPlan({ onRefresh }) {
 
   const load = useCallback(async () => {
     try {
-      await supabase.auth.refreshSession(); // ensure fresh JWT before any DB calls
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       // Fetch live counts to auto-complete steps
       const [{ data: customerData }, serviceCount, { data: frontDeskData }, { data: jobData }] = await Promise.all([
         supabase.from('customers').select('id', { count: 'exact', head: true }),
         countActiveServices(),
-        supabase.from('agent_settings').select('mode').eq('agent', 'front_desk').single(),
+        supabase.from('agent_settings').select('mode').eq('agent', 'front_desk').maybeSingle(),
         supabase.from('jobs').select('id', { count: 'exact', head: true }),
       ]);
 

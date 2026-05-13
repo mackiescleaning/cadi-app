@@ -476,8 +476,8 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true);
     try {
-      const { error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
         navigate('/login');
         return;
       }
@@ -986,8 +986,8 @@ export default function Services() {
 
   const load = useCallback(async () => {
     try {
-      const { error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
         navigate('/login');
         return;
       }
@@ -1040,8 +1040,8 @@ export default function Services() {
 
   const handleCatalogueAdd = async (names) => {
     try {
-      const { error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
         navigate('/login');
         return;
       }

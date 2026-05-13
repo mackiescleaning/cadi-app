@@ -4,10 +4,6 @@
 import { supabase } from '../supabase';
 
 async function getBusinessId() {
-  // Explicitly refresh the session before the RPC call.
-  // When the JWT is expired, auth.uid() returns null inside my_business_id()
-  // even though PostgREST still returns HTTP 200 — so we get null silently.
-  await supabase.auth.refreshSession();
   const { data } = await supabase.rpc('my_business_id');
   return data;
 }
