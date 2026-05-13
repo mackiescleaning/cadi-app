@@ -166,17 +166,20 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // After returning from Stripe, poll until the webhook has updated subscription_tier
+  // After returning from Stripe, poll the DB directly (avoids stale closure on isPro)
   useEffect(() => {
     if (searchParams.get('upgraded') !== '1') return;
     setSearchParams({}, { replace: true });
-    if (isPro) return; // already updated before we even started
 
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
-      await refreshProfile();
-      if (isPro || attempts >= 10) clearInterval(interval);
+      const { data } = await supabase.from('profiles').select('subscription_tier, plan').eq('id', user.id).single();
+      const activated = data?.subscription_tier === 'pro' || data?.subscription_tier === 'max' || data?.plan === 'pro';
+      if (activated || attempts >= 20) {
+        clearInterval(interval);
+        if (activated) window.location.reload();
+      }
     }, 1500);
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

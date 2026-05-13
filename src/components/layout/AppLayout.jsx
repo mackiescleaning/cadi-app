@@ -6,7 +6,7 @@ import {
   TrendingUp, MapPin, FileText, ClipboardCheck,
   GraduationCap, ClipboardList, Package, Lock,
   Briefcase, Star, Network, CheckSquare,
-  ShoppingBag, GitBranch, MessageSquare, Bell, Inbox
+  ShoppingBag, GitBranch, MessageSquare, Bell, Inbox, UtensilsCrossed,
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -28,9 +28,10 @@ const NAV_SECTIONS = [
     color: EARN_COLOR,   // accent only; bg stays navy
     accent: '#3b5bdb',
     items: [
-      { path: '/inbox',      label: 'AI Inbox',        icon: Inbox,       badge: 'pendingActions' },
-      { path: '/scheduler',  label: 'Scheduler',       icon: CalendarDays },
-      { path: '/customers',  label: 'Customers',       icon: Users },
+      { path: '/inbox',      label: 'AI Inbox',        icon: Inbox,           badge: 'pendingActions' },
+      { path: '/services',   label: 'Services Menu',   icon: UtensilsCrossed  },
+      { path: '/scheduler',  label: 'Scheduler',       icon: CalendarDays     },
+      { path: '/customers',  label: 'Customers',       icon: Users            },
       { path: '/quotes',     label: 'Quotes',          icon: ClipboardCheck },
       { path: '/invoices',   label: 'Invoices',        icon: FileText },
       { path: '/routes',     label: 'Route Planner',   icon: MapPin },
@@ -185,17 +186,16 @@ export default function AppLayout() {
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
-      const { data } = await supabase.from('profiles').select('plan').single();
-      if (data?.plan === 'pro') {
+      const { data } = await supabase.from('profiles').select('plan, subscription_tier').single();
+      const activated = data?.subscription_tier === 'pro' || data?.subscription_tier === 'max' || data?.plan === 'pro';
+      if (activated) {
         clearInterval(interval);
-        refreshProfile();
-        setUpgradeBanner({ message: '🎉 Welcome to Cadi Pro! All features are now unlocked.' });
-        setTimeout(() => setUpgradeBanner(null), 5000);
-      } else if (attempts >= 15) {
+        window.location.reload();
+      } else if (attempts >= 20) {
         clearInterval(interval);
-        setUpgradeBanner({ message: 'Payment received — activation may take a minute. Refresh if features are still locked.', warn: true });
+        setUpgradeBanner({ message: 'Payment received — tap here to activate.', warn: true, reload: true });
       }
-    }, 2000);
+    }, 1500);
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -351,7 +351,10 @@ export default function AppLayout() {
       )}
 
       {upgradeBanner && (
-        <div className={`fixed top-0 inset-x-0 z-50 px-4 py-3 text-center text-sm font-semibold ${upgradeBanner.warn ? 'bg-amber-500 text-white' : 'bg-[#1f48ff] text-white'}`}>
+        <div
+          onClick={upgradeBanner.reload ? () => window.location.reload() : undefined}
+          className={`fixed top-0 inset-x-0 z-50 px-4 py-3 text-center text-sm font-semibold ${upgradeBanner.warn ? 'bg-amber-500 text-white' : 'bg-[#1f48ff] text-white'} ${upgradeBanner.reload ? 'cursor-pointer hover:opacity-90' : ''}`}
+        >
           {upgradeBanner.message}
         </div>
       )}
@@ -413,7 +416,7 @@ export default function AppLayout() {
               onClick={() => setUpgradeModalReason('Unlock every feature in Cadi — money tracking, HMRC MTD, open banking, GoCardless and more.')}
               className="w-full py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors"
             >
-              Upgrade to Pro — £29/mo
+              Upgrade to Pro — £39/mo
             </button>
           </div>
         )}
@@ -483,7 +486,7 @@ export default function AppLayout() {
                       onClick={() => setUpgradeModalReason(PRO_TAB_REASONS[Object.keys(PRO_TAB_REASONS).find(k => location.pathname.startsWith(k))] || 'Upgrade to Cadi Pro.')}
                       className="px-6 py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black text-sm rounded-xl transition-all shadow-lg"
                     >
-                      Upgrade to Pro — £29/month
+                      Upgrade to Pro — £39/month
                     </button>
                     <p className="text-[10px] text-white/25 mt-3">Cancel anytime · Powered by Stripe</p>
                   </div>
@@ -536,7 +539,7 @@ export default function AppLayout() {
                   onClick={() => { setMobileMenuOpen(false); setUpgradeModalReason('Unlock every feature in Cadi.'); }}
                   className="w-full py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black"
                 >
-                  Upgrade to Pro — £29/mo
+                  Upgrade to Pro — £39/mo
                 </button>
               </div>
             )}

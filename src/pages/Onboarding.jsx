@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { seedServicesFromOnboarding } from '../lib/db/servicesDb';
 
 // ── Service catalogue (unchanged) ─────────────────────────────────────────────
 
@@ -94,15 +95,8 @@ const TURNS = [
     skippable: true,
   },
   {
-    id: 'pricing',
-    cadi: 'What\'s your base hourly rate? These become your defaults across all quotes and job cards — you can override per job at any time.',
-    type: 'pricing',
-    chapter: 3,
-    skippable: true,
-  },
-  {
     id: 'widget',
-    cadi: f => `Pricing done — now let's get ${f.bizName} its first online lead. 🌐\n\nThis is Cadi's chat widget. It sits on your website as a small button. Visitors click it, get an instant quote, and their details land straight in your Cadi account.\n\nTap the blue button below to see exactly what your customers would see — then I'll show you how to add it to your site in 30 seconds.`,
+    cadi: f => `Nice — now let's get ${f.bizName} its first online lead. 🌐\n\nThis is Cadi's chat widget. It sits on your website as a small button. Visitors click it, get an instant quote, and their details land straight in your Cadi account.\n\nTap the blue button below to see exactly what your customers would see — then I'll show you how to add it to your site in 30 seconds.`,
     type: 'widget',
     chapter: 4,
     skippable: true,
@@ -204,10 +198,6 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
     vatRegistered: false, vatNumber: '', vatScheme: '',
     teamStructure: null, employmentTypes: [],
     services: [], customService: '',
-    hourlyRate: '', minJobRate: '', minJobMins: '120',
-    quoteType: 'inc_vat', paymentTerms: '0',
-    workingDays: { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false },
-    startTime: '08:00', finishTime: '18:00',
     currentRevenue: '', targetRevenue: '',
     currentClients: '', targetClients: '',
     targetDate: '', ambition: 'growing_fast',
@@ -255,12 +245,15 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
     setIsTyping(true);
     const delay = setTimeout(() => {
       setIsTyping(false);
-      const hasSignupData = profile?.first_name && profile?.business_name;
+      const firstName = profile?.first_name || user?.user_metadata?.first_name || '';
+      const lastName  = profile?.last_name  || user?.user_metadata?.last_name  || '';
+      const bizName   = profile?.business_name || user?.user_metadata?.business_name || '';
+      const hasSignupData = !!(firstName && bizName);
       const prefilledForm = {
-        firstName: profile?.first_name || '',
-        lastName:  profile?.last_name  || '',
-        bizName:   profile?.business_name || '',
-        bizEmail:  user?.email || '',
+        firstName,
+        lastName,
+        bizName,
+        bizEmail: user?.email || '',
       };
       setForm(prev => ({ ...prev, ...prefilledForm }));
       // confirm is always turn 0 — open edit fields immediately if nothing to confirm
@@ -301,8 +294,6 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
       vatScheme: sd?.vat_scheme || prev.vatScheme,
       services: sd?.services || prev.services,
       customService: sd?.custom_service || prev.customService,
-      hourlyRate: sd?.hourly_rate?.toString() || prev.hourlyRate,
-      minJobRate: sd?.min_job_rate?.toString() || prev.minJobRate,
       currentRevenue: sd?.current_revenue?.toString() || prev.currentRevenue,
       targetRevenue: sd?.target_revenue?.toString() || prev.targetRevenue,
       currentClients: sd?.current_clients?.toString() || prev.currentClients,
@@ -423,21 +414,10 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
       if (id === 'services') {
         await mergeSetupData({ services: form.services, custom_service: form.customService.trim() });
         await saveProfile({ onboarding_step: 7 });
-      }
-      if (id === 'pricing') {
-        const hr = Number(form.hourlyRate || 0);
-        await supabase.from('business_settings').upsert({ owner_id: user.id, hourly_rate: hr || 20 }, { onConflict: 'owner_id' });
-        await mergeSetupData({
-          hourly_rate: hr || null,
-          min_job_rate: Number(form.minJobRate || 0) || null,
-          min_job_mins: Number(form.minJobMins || 120),
-          quote_type: form.quoteType,
-          payment_terms: Number(form.paymentTerms || 0),
-          working_days: form.workingDays,
-          start_time: form.startTime,
-          finish_time: form.finishTime,
-        });
-        await saveProfile({ onboarding_step: 8 });
+        // Seed draft service records — skeleton only, pricing added via Services Menu
+        if (form.services.length > 0 || form.customService.trim()) {
+          seedServicesFromOnboarding(form.services, form.customService.trim()).catch(() => {});
+        }
       }
       if (id === 'widget') {
         await saveProfile({ onboarding_step: 9 });
@@ -944,93 +924,6 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
       );
     }
 
-    // Pricing
-    if (type === 'pricing') {
-      const DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
-      const DAY_LABELS = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
-      return (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Hourly Rate (£)</label>
-              <input type="number" className={inputCls} value={form.hourlyRate} onChange={e => patch({ hourlyRate: e.target.value })} placeholder="e.g. 22" min="0" />
-            </div>
-            <div>
-              <label className={labelCls}>Minimum Job Price (£)</label>
-              <input type="number" className={inputCls} value={form.minJobRate} onChange={e => patch({ minJobRate: e.target.value })} placeholder="e.g. 45" min="0" />
-            </div>
-            <div>
-              <label className={labelCls}>Minimum Duration</label>
-              <select className={inputCls} value={form.minJobMins} onChange={e => patch({ minJobMins: e.target.value })}>
-                <option value="0">No minimum</option>
-                <option value="60">1 hour</option>
-                <option value="90">1.5 hours</option>
-                <option value="120">2 hours</option>
-                <option value="180">3 hours</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Quote Type</label>
-              <select className={inputCls} value={form.quoteType} onChange={e => patch({ quoteType: e.target.value })}>
-                <option value="inc_vat">Inc. VAT</option>
-                <option value="ex_vat">Ex. VAT</option>
-                <option value="no_vat">No VAT</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Payment Terms</label>
-              <select className={inputCls} value={form.paymentTerms} onChange={e => patch({ paymentTerms: e.target.value })}>
-                <option value="0">On completion</option>
-                <option value="7">7 days</option>
-                <option value="14">14 days</option>
-                <option value="30">30 days</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className={labelCls}>Working Days</label>
-            <div className="flex gap-1.5 flex-wrap mt-1">
-              {DAYS.map(d => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => patch({ workingDays: { ...form.workingDays, [d]: !form.workingDays[d] } })}
-                  className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
-                    form.workingDays[d]
-                      ? 'border-[#99c5ff] bg-[rgba(31,72,255,0.25)] text-white'
-                      : 'border-[rgba(153,197,255,0.12)] bg-[#091660] text-[rgba(153,197,255,0.4)] hover:text-white'
-                  }`}
-                >
-                  {DAY_LABELS[d]}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Opening Time</label>
-              <input type="time" className={inputCls} value={form.startTime} onChange={e => patch({ startTime: e.target.value })} />
-            </div>
-            <div>
-              <label className={labelCls}>Closing Time</label>
-              <input type="time" className={inputCls} value={form.finishTime} onChange={e => patch({ finishTime: e.target.value })} />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            {skippable && <button type="button" onClick={() => advance('Skipped', form)} className="rounded-[10px] border border-[rgba(153,197,255,0.15)] px-4 py-[11px] text-sm text-[rgba(153,197,255,0.5)] hover:text-white transition">Skip</button>}
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => handleAnswer(id, form.hourlyRate ? `£${form.hourlyRate}/hr${form.minJobRate ? ` · min £${form.minJobRate}` : ''}` : 'Pricing set', form.hourlyRate ? `£${form.hourlyRate}/hr` : 'Set')}
-              className="flex-1 rounded-[10px] bg-[#1f48ff] py-3 text-sm font-bold text-white shadow-[0_4px_16px_rgba(31,72,255,0.4)] hover:bg-[#3a5eff] transition disabled:opacity-60"
-            >
-              {saving ? 'Saving…' : 'Continue →'}
-            </button>
-          </div>
-        </div>
-      );
-    }
-
     // Goals
     if (type === 'goals') {
       const ambitionOptions = [
@@ -1099,9 +992,6 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
         },
         form.services.length && {
           icon: '✅', label: 'Service menu built', detail: `${form.services.length} service${form.services.length !== 1 ? 's' : ''} ready as quick-picks on every job card, quote and invoice`,
-        },
-        form.hourlyRate && {
-          icon: '💷', label: 'Pricing pre-loaded', detail: `£${form.hourlyRate}/hr flows into your pricing calculator, quote builder and job cards automatically`,
         },
         form.targetRevenue && {
           icon: '🎯', label: 'Sprint target set', detail: `£${Number(form.targetRevenue).toLocaleString()}/mo target pinned to your dashboard — Cadi tracks every job against it`,

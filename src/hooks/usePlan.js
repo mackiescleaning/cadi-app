@@ -62,10 +62,11 @@ const PRICES = {
 };
 
 function resolveTier(profile) {
-  // subscription_tier is the canonical field post-migration
-  if (profile?.subscription_tier) return profile.subscription_tier;
-  // fall back to legacy plan field for any users not yet migrated
-  if (profile?.plan === 'pro') return 'pro';
+  // subscription_tier is canonical — but only trust it if it's an upgraded tier
+  const tier = profile?.subscription_tier;
+  if (tier === 'pro' || tier === 'max') return tier;
+  // fall back to legacy plan field (set by Stripe webhook alongside subscription_tier)
+  if (profile?.plan === 'pro' || profile?.plan === 'max') return profile.plan;
   return 'lite';
 }
 

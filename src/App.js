@@ -29,6 +29,7 @@ import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import ProUpgradePage from './components/ui/ProUpgrade';
 import InboxPage from './pages/Inbox';
+import Services from './pages/Services';
 import TrainingStaff from './pages/TrainingStaff';
 import AnnualReview from './pages/AnnualReview';
 import AccountsTab from './components/AccountsTab';
@@ -104,6 +105,7 @@ function App() {
           <Route path="accounts" element={<AccountsTab />} />
           <Route path="settings" element={<Settings />} />
           <Route path="inbox" element={<InboxPage />} />
+          <Route path="services" element={<Services />} />
           <Route path="upgrade" element={<ProUpgradePage />} />
           {/* Earn */}
           <Route path="earn"             element={<EarnLanding />} />

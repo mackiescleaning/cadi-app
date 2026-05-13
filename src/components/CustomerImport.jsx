@@ -5,9 +5,12 @@
 // Steps: source → upload → map columns → preview → done
 
 import { useState, useRef, useCallback } from 'react';
-import { X, Upload, ArrowRight, ArrowLeft, Check, AlertCircle, ChevronDown } from 'lucide-react';
+import { X, Upload, ArrowRight, ArrowLeft, Check, AlertCircle, ChevronDown, Crown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { upsertCustomer } from '../lib/db/customersDb';
+import { supabase } from '../lib/supabase';
+
+const LITE_CAP = 50;
 
 // ─── Cadi fields that imports can fill ────────────────────────────────────────
 const CADI_FIELDS = [
@@ -497,21 +500,185 @@ function StepDone({ imported, onClose }) {
   );
 }
 
+// ─── 50-customer cap modal ────────────────────────────────────────────────────
+function CapModal({ total, onUpgrade, onPick, onImportRecent }) {
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+      <div
+        className="relative w-full max-w-md rounded-2xl overflow-hidden border border-[rgba(153,197,255,0.15)]"
+        style={{ background: 'linear-gradient(160deg, #010b52 0%, #040e3e 60%, #0d1e78 100%)' }}
+      >
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
+          backgroundImage: 'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)',
+          backgroundSize: '28px 28px',
+        }} />
+        <div className="relative p-6">
+          <div className="text-3xl mb-4">🏢</div>
+          <h2 className="text-xl font-black text-white mb-2">You've got {total} customers — that's a real business.</h2>
+          <p className="text-sm text-[rgba(153,197,255,0.7)] leading-relaxed mb-6">
+            Cadi Lite holds your first {LITE_CAP} to get you started. Pro unlocks the rest plus automated reminders, recurring invoices, and profit tracking per customer.
+            <br /><br />
+            What would you like to do?
+          </p>
+
+          <div className="space-y-2.5">
+            {/* Path A — Upgrade */}
+            <button
+              onClick={onUpgrade}
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] transition-colors text-left group"
+            >
+              <Crown size={18} className="text-white shrink-0" />
+              <div>
+                <p className="text-sm font-black text-white">Upgrade to Pro — £29/month</p>
+                <p className="text-xs text-[rgba(255,255,255,0.7)] mt-0.5">Unlock all {total} customers and everything else.</p>
+              </div>
+            </button>
+
+            {/* Path B — Pick 50 */}
+            <button
+              onClick={onPick}
+              className="w-full flex items-center gap-3 p-4 rounded-xl border border-[rgba(153,197,255,0.2)] bg-[rgba(153,197,255,0.05)] hover:bg-[rgba(153,197,255,0.1)] transition-colors text-left"
+            >
+              <div className="w-9 h-9 rounded-lg bg-[rgba(153,197,255,0.1)] flex items-center justify-center shrink-0 text-sm font-black text-[#99c5ff]">50</div>
+              <div>
+                <p className="text-sm font-bold text-white">Choose my first {LITE_CAP}</p>
+                <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">Pick which customers to bring in now. Upgrade later when you're ready.</p>
+              </div>
+            </button>
+
+            {/* Path C — Later */}
+            <button
+              onClick={onImportRecent}
+              className="w-full py-3 text-sm text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] font-semibold transition-colors"
+            >
+              Remind me later — import my {LITE_CAP} most recent
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Customer picker (Path B) ─────────────────────────────────────────────────
+function CustomerPicker({ customers, onConfirm, onBack }) {
+  const [selected, setSelected] = useState(new Set());
+  const [sort, setSort] = useState('name');
+
+  const sorted = [...customers].sort((a, b) => {
+    if (sort === 'name') return (a.data.name ?? '').localeCompare(b.data.name ?? '');
+    return 0;
+  });
+
+  const toggle = (i) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) { next.delete(i); return next; }
+      if (next.size >= LITE_CAP) return prev; // cap reached
+      next.add(i);
+      return next;
+    });
+  };
+
+  return (
+    <div className="flex flex-col overflow-hidden max-h-[85vh]">
+      <div className="p-5 border-b border-[rgba(153,197,255,0.1)] shrink-0">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-3 transition-colors">
+          <ArrowLeft size={12} /> Back
+        </button>
+        <h2 className="text-lg font-black text-white">Which {LITE_CAP} customers do you want in Cadi first?</h2>
+        <p className="text-xs text-[rgba(153,197,255,0.5)] mt-1">The rest stay safe and load in when you upgrade.</p>
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-sm font-bold text-[#4f78ff]">{selected.size} of {LITE_CAP} selected</span>
+          <select
+            value={sort}
+            onChange={e => setSort(e.target.value)}
+            className="text-xs px-2 py-1.5 rounded-lg bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.15)] text-white"
+          >
+            <option value="name">Alphabetical</option>
+          </select>
+        </div>
+        <div className="h-1.5 bg-[rgba(153,197,255,0.1)] rounded-full mt-2">
+          <div className="h-full bg-[#4f78ff] rounded-full transition-all" style={{ width: `${(selected.size / LITE_CAP) * 100}%` }} />
+        </div>
+      </div>
+
+      <div className="overflow-y-auto flex-1 px-5 py-3 space-y-1.5">
+        {sorted.map((c, i) => {
+          const originalIndex = customers.indexOf(c);
+          const isSelected = selected.has(originalIndex);
+          const atCap = selected.size >= LITE_CAP && !isSelected;
+          return (
+            <button
+              key={i}
+              onClick={() => toggle(originalIndex)}
+              disabled={atCap}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left ${
+                isSelected
+                  ? 'bg-[#4f78ff]/15 border-[#4f78ff]/40'
+                  : atCap
+                  ? 'opacity-30 border-transparent cursor-not-allowed'
+                  : 'border-[rgba(153,197,255,0.1)] hover:bg-[rgba(153,197,255,0.05)] hover:border-[rgba(153,197,255,0.2)]'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                isSelected ? 'bg-[#4f78ff] border-[#4f78ff]' : 'border-[rgba(153,197,255,0.3)]'
+              }`}>
+                {isSelected && <Check size={9} className="text-white" strokeWidth={3} />}
+              </div>
+              <div className="w-7 h-7 rounded-full bg-[rgba(31,72,255,0.2)] flex items-center justify-center shrink-0 text-xs font-bold text-[#99c5ff]">
+                {c.data.name?.[0]?.toUpperCase() ?? '?'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white truncate">{c.data.name}</p>
+                {(c.data.email || c.data.postcode) && (
+                  <p className="text-[10px] text-[rgba(153,197,255,0.4)] truncate">{[c.data.email, c.data.postcode].filter(Boolean).join(' · ')}</p>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="p-5 border-t border-[rgba(153,197,255,0.1)] shrink-0">
+        <button
+          onClick={() => onConfirm([...selected])}
+          disabled={selected.size === 0}
+          className="w-full py-3 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] text-white font-black text-sm transition-colors disabled:opacity-50"
+        >
+          Confirm my {selected.size > 0 ? selected.size : LITE_CAP}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Pending customers helper ─────────────────────────────────────────────────
+async function storePendingCustomers(customers) {
+  const { data: bizId } = await supabase.rpc('my_business_id');
+  if (!bizId || !customers.length) return;
+  const rows = customers.map(c => ({ business_id: bizId, customer_data: c.data }));
+  await supabase.from('pending_customers').insert(rows);
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 export default function CustomerImport({ onClose, onImported, existingCustomers = [] }) {
-  const [step, setStep] = useState('source'); // source | upload | map | preview | done
+  const [step, setStep] = useState('source'); // source | upload | map | preview | cap | pick | done
   const [source, setSource] = useState(null);
   const [csvData, setCsvData] = useState(null); // { headers, rows, fileName }
   const [mapping, setMapping] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
   const [importError, setImportError] = useState(null);
+  const [pendingCustomers, setPendingCustomers] = useState([]); // full parsed list when cap fires
+  const [showCap, setShowCap] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
 
   const existingEmails = new Set(
     existingCustomers.map(c => c.email?.toLowerCase()).filter(Boolean)
   );
 
-  const handleImport = async (customers) => {
+  const doImport = async (customers, overflow = []) => {
     setImporting(true);
     setImportError(null);
     let count = 0;
@@ -525,6 +692,10 @@ export default function CustomerImport({ onClose, onImported, existingCustomers 
         failures.push(err?.message || 'Unknown error');
       }
     }
+    // Store overflow in pending_customers
+    if (overflow.length > 0) {
+      try { await storePendingCustomers(overflow); } catch (e) { console.warn('pending_customers store failed', e); }
+    }
     setImporting(false);
     if (count > 0) {
       setImportedCount(count);
@@ -536,51 +707,116 @@ export default function CustomerImport({ onClose, onImported, existingCustomers 
     }
   };
 
+  const handleImport = async (customers) => {
+    const freshCustomers = customers.filter(c => !c.isDupe);
+    if (freshCustomers.length > LITE_CAP) {
+      setPendingCustomers(customers);
+      setShowCap(true);
+      return;
+    }
+    await doImport(customers);
+  };
+
+  const handleCapUpgrade = () => {
+    setShowCap(false);
+    window.location.href = '/upgrade';
+  };
+
+  const handleCapPick = () => {
+    setShowCap(false);
+    setShowPicker(true);
+  };
+
+  const handleCapImportRecent = async () => {
+    setShowCap(false);
+    const toImport = pendingCustomers.slice(0, LITE_CAP);
+    const overflow = pendingCustomers.slice(LITE_CAP);
+    await doImport(toImport, overflow);
+  };
+
+  const handlePickerConfirm = async (selectedIndices) => {
+    setShowPicker(false);
+    const toImport = selectedIndices.map(i => pendingCustomers[i]);
+    const overflow = pendingCustomers.filter((_, i) => !selectedIndices.includes(i));
+    await doImport(toImport, overflow);
+  };
+
   return (
-    <ModalShell onClose={onClose}>
-      {step === 'source' && (
-        <StepSource
-          onSelect={(src) => { setSource(src); setStep('upload'); }}
-        />
-      )}
-      {step === 'upload' && (
-        <StepUpload
-          source={source}
-          onBack={() => setStep('source')}
-          onParsed={(data) => { setCsvData(data); setStep('map'); }}
-        />
-      )}
-      {step === 'map' && (
-        <StepMap
-          headers={csvData.headers}
-          rows={csvData.rows}
-          onBack={() => setStep('upload')}
-          onConfirm={(m) => { setMapping(m); setStep('preview'); }}
-        />
-      )}
-      {step === 'preview' && (
-        <>
-          <StepPreview
-            rows={csvData.rows}
-            mapping={mapping}
-            existingEmails={existingEmails}
-            onBack={() => setStep('map')}
-            onImport={handleImport}
-            importing={importing}
+    <>
+      <ModalShell onClose={onClose}>
+        {step === 'source' && (
+          <StepSource
+            onSelect={(src) => { setSource(src); setStep('upload'); }}
           />
-          {importError && (
-            <div className="px-6 pb-4">
-              <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-                <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                {importError}
+        )}
+        {step === 'upload' && (
+          <StepUpload
+            source={source}
+            onBack={() => setStep('source')}
+            onParsed={(data) => { setCsvData(data); setStep('map'); }}
+          />
+        )}
+        {step === 'map' && (
+          <StepMap
+            headers={csvData.headers}
+            rows={csvData.rows}
+            onBack={() => setStep('upload')}
+            onConfirm={(m) => { setMapping(m); setStep('preview'); }}
+          />
+        )}
+        {step === 'preview' && (
+          <>
+            <StepPreview
+              rows={csvData.rows}
+              mapping={mapping}
+              existingEmails={existingEmails}
+              onBack={() => setStep('map')}
+              onImport={handleImport}
+              importing={importing}
+            />
+            {importError && (
+              <div className="px-6 pb-4">
+                <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                  {importError}
+                </div>
               </div>
-            </div>
-          )}
-        </>
+            )}
+          </>
+        )}
+        {step === 'done' && (
+          <StepDone imported={importedCount} onClose={onClose} />
+        )}
+      </ModalShell>
+
+      {/* 50-cap modal — renders outside ModalShell so it's above everything */}
+      {showCap && (
+        <CapModal
+          total={pendingCustomers.length}
+          onUpgrade={handleCapUpgrade}
+          onPick={handleCapPick}
+          onImportRecent={handleCapImportRecent}
+        />
       )}
-      {step === 'done' && (
-        <StepDone imported={importedCount} onClose={onClose} />
+
+      {/* Customer picker (Path B) */}
+      {showPicker && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-4">
+          <div
+            className="relative w-full max-w-md max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-[rgba(153,197,255,0.15)] overflow-hidden"
+            style={{ background: 'linear-gradient(145deg, #010a4f 0%, #05124a 50%, #0d1e78 100%)' }}
+          >
+            <button onClick={() => setShowPicker(false)} className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+              <X size={14} className="text-white" />
+            </button>
+            <CustomerPicker
+              customers={pendingCustomers}
+              onConfirm={handlePickerConfirm}
+              onBack={() => { setShowPicker(false); setShowCap(true); }}
+            />
+          </div>
+        </div>
       )}
-    </ModalShell>
+    </>
   );
 }

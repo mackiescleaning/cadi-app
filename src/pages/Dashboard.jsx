@@ -67,6 +67,7 @@ import SetupWizard from "../components/SetupWizard";
 import CadiWordmark from "../components/CadiWordmark";
 import SpotlightTour from "../components/SpotlightTour";
 import Onboarding from "./Onboarding";
+import ThirtyDayPlan from "../components/ThirtyDayPlan";
 import { usePlan, PRO_TABS } from "../hooks/usePlan";
 import { UpgradeModal } from "../components/UpgradePrompt";
 
@@ -2347,6 +2348,9 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
       {dashUpgradeReason && (
         <UpgradeModal reason={dashUpgradeReason} onClose={() => setDashUpgradeReason(null)} />
       )}
+
+      {/* ── 30 Day Plan — full-width at top, visible until Phase 4 complete ── */}
+      <ThirtyDayPlan onRefresh={() => {}} />
 
       {/* ── Header ── */}
       <div className="bg-brand-navy text-white px-4 sm:px-6 py-4">
