@@ -1,6 +1,6 @@
 /**
  * Cadi Agent Framework
- * Shared utilities for all AI agents (Front Desk, Reviews, Scheduler).
+ * Shared utilities for all AI agents (Sales Manager, Review Agent, Operations Manager, Scheduler).
  * Pure functions where possible — no side effects except the Supabase calls.
  */
 
@@ -47,9 +47,13 @@ export const AGENT_MODES = {
 };
 
 export const AGENTS = {
-  front_desk: { label: 'Front Desk', desc: 'Handles inbound enquiries and quotes.' },
-  reviews:    { label: 'Reviews',    desc: 'Sends review requests after completed jobs.' },
-  scheduler:  { label: 'Scheduler', desc: 'Suggests job bookings and reschedules.' },
+  sales_manager:       { label: 'Sales Manager',       desc: 'Handles inbound enquiries and quotes.' },
+  review_agent:        { label: 'Review Agent',         desc: 'Sends review requests after completed jobs.' },
+  operations_manager:  { label: 'Operations Manager',   desc: 'Runs the schedule, reminders, and payment matching.' },
+  scheduler:           { label: 'Scheduler',            desc: 'Suggests job bookings and reschedules.' },
+  // Legacy keys kept for backwards compatibility with existing rows
+  front_desk:          { label: 'Sales Manager',        desc: 'Handles inbound enquiries and quotes.' },
+  reviews:             { label: 'Review Agent',          desc: 'Sends review requests after completed jobs.' },
 };
 
 // ─── Brand voice ──────────────────────────────────────────────────────────────
@@ -83,7 +87,7 @@ export function buildBrandVoicePrompt(brandVoice) {
  * Returns the created row id, or null on error.
  *
  * @param {string}  businessId
- * @param {string}  agent         - 'front_desk' | 'reviews' | 'scheduler'
+ * @param {string}  agent         - 'sales_manager' | 'review_agent' | 'operations_manager' | 'scheduler'
  * @param {string}  actionType    - e.g. 'send_quote', 'send_review_request'
  * @param {object}  payload       - the proposed message/content
  * @param {object}  options

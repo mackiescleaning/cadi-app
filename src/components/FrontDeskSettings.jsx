@@ -117,7 +117,7 @@ export default function FrontDeskSettings() {
               <MessageSquare size={18} className="text-[#1f48ff]" />
             </div>
             <div>
-              <h3 className="font-bold text-[#010a4f]">Front Desk — web chat</h3>
+              <h3 className="font-bold text-[#010a4f]">Sales Manager — web chat</h3>
               <p className="text-xs text-gray-400 mt-0.5">AI chat widget for your website · instant quotes · lead capture</p>
             </div>
           </div>
@@ -210,7 +210,7 @@ export default function FrontDeskSettings() {
       {/* Try Front Desk */}
       <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6 flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-bold text-[#010a4f]">Try Front Desk</p>
+          <p className="text-sm font-bold text-[#010a4f]">Try your Sales Manager</p>
           <p className="text-xs text-gray-400 mt-0.5">See exactly what your customers will see — using your real services and pricing</p>
         </div>
         <button

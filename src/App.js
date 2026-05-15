@@ -29,6 +29,9 @@ import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import ProUpgradePage from './components/ui/ProUpgrade';
 import InboxPage from './pages/Inbox';
+import SalesManagerPage      from './pages/front-desk/SalesManagerPage';
+import ReviewAgentPage       from './pages/front-desk/ReviewAgentPage';
+import OperationsManagerPage from './pages/front-desk/OperationsManagerPage';
 import Services from './pages/Services';
 import TrainingStaff from './pages/TrainingStaff';
 import AnnualReview from './pages/AnnualReview';
@@ -113,7 +116,13 @@ function App() {
           <Route path="accounts" element={<AccountsTab />} />
           <Route path="settings" element={<Settings />} />
           <Route path="settings/invoice" element={<InvoiceSettings />} />
-          <Route path="inbox" element={<InboxPage />} />
+          {/* Front Desk hub */}
+          <Route path="front-desk" element={<InboxPage />} />
+          <Route path="front-desk/sales-manager"      element={<SalesManagerPage />} />
+          <Route path="front-desk/review-agent"       element={<ReviewAgentPage />} />
+          <Route path="front-desk/operations-manager" element={<OperationsManagerPage />} />
+          {/* Legacy /inbox redirect */}
+          <Route path="inbox" element={<Navigate to="/front-desk" replace />} />
           <Route path="services" element={<Services />} />
           <Route path="upgrade" element={<ProUpgradePage />} />
           {/* Earn */}

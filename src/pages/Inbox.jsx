@@ -5,7 +5,7 @@ import { useBusinessId } from '../hooks/useBusinessId';
 import { approveAgentAction, rejectAgentAction, AGENTS } from '../lib/agentFramework';
 import {
   Check, X, Clock, Send, AlertTriangle, Inbox,
-  MessageSquare, Star, CalendarDays, ChevronDown, ChevronRight,
+  MessageSquare, Star, CalendarDays, CalendarClock, ChevronDown, ChevronRight,
   RefreshCw, Eye
 } from 'lucide-react';
 
@@ -32,11 +32,23 @@ const STATUS_CONFIG = {
   superseded:       { label: 'Superseded',      color: 'text-gray-400',   bg: 'bg-gray-50',   border: 'border-gray-200',  dot: 'bg-gray-300'  },
 };
 
-const AGENT_ICONS = {
-  front_desk: MessageSquare,
-  reviews:    Star,
-  scheduler:  CalendarDays,
+// Maps agent DB key → display config (includes legacy keys for old rows)
+const AGENT_CONFIG = {
+  sales_manager:      { label: 'Sales Manager',      icon: MessageSquare,  accent: '#3b5bdb' },
+  front_desk:         { label: 'Sales Manager',      icon: MessageSquare,  accent: '#3b5bdb' },
+  review_agent:       { label: 'Review Agent',        icon: Star,           accent: '#059669' },
+  reviews:            { label: 'Review Agent',        icon: Star,           accent: '#059669' },
+  operations_manager: { label: 'Operations Manager',  icon: CalendarClock,  accent: '#C2410C' },
+  scheduler:          { label: 'Scheduler',           icon: CalendarDays,   accent: '#7c3aed' },
 };
+
+// Filter tabs — null means "all"
+const FILTER_TABS = [
+  { key: null,                label: 'All' },
+  { key: 'sales_manager',     label: 'Sales Manager',     agents: ['sales_manager', 'front_desk'] },
+  { key: 'review_agent',      label: 'Review Agent',       agents: ['review_agent', 'reviews'] },
+  { key: 'operations_manager',label: 'Operations Manager', agents: ['operations_manager'] },
+];
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
@@ -52,15 +64,16 @@ function timeAgo(dateStr) {
 
 // ─── Action card ──────────────────────────────────────────────────────────────
 
-function ActionCard({ action, onApprove, onReject, onRefresh }) {
+function ActionCard({ action, onRefresh }) {
   const [expanded, setExpanded] = useState(false);
   const [working,  setWorking]  = useState(false);
   const { user } = useAuth();
 
   const isPending = action.status === 'pending_approval';
-  const st  = STATUS_CONFIG[action.status] ?? STATUS_CONFIG.sent;
-  const AgentIcon = AGENT_ICONS[action.agent] ?? MessageSquare;
-  const agentLabel = AGENTS[action.agent]?.label ?? action.agent;
+  const st        = STATUS_CONFIG[action.status] ?? STATUS_CONFIG.sent;
+  const cfg       = AGENT_CONFIG[action.agent] ?? AGENT_CONFIG.scheduler;
+  const AgentIcon = cfg.icon;
+  const agentLabel = cfg.label;
   const actionLabel = ACTION_LABELS[action.action_type] ?? action.action_type?.replace(/_/g, ' ');
 
   const payload = action.proposed_payload ?? {};
@@ -69,7 +82,6 @@ function ActionCard({ action, onApprove, onReject, onRefresh }) {
     setWorking(true);
     await approveAgentAction(action.id, user?.id);
 
-    // For review requests, fire the send edge function
     if (action.action_type === 'send_review_request') {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -97,16 +109,18 @@ function ActionCard({ action, onApprove, onReject, onRefresh }) {
     }`}>
       {/* Header row */}
       <div className="px-4 py-3.5 flex items-start gap-3">
-        <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-          isPending ? 'bg-amber-100' : 'bg-[#f0f4ff]'
-        }`}>
-          <AgentIcon size={15} className={isPending ? 'text-amber-600' : 'text-[#1f48ff]'} />
+        {/* Agent badge */}
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: cfg.accent + '18' }}>
+          <AgentIcon size={15} style={{ color: cfg.accent }} />
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-[#010a4f]">{agentLabel}</span>
-            <span className="text-xs text-gray-400">·</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md"
+              style={{ backgroundColor: cfg.accent + '18', color: cfg.accent }}>
+              {agentLabel}
+            </span>
             <span className="text-xs text-gray-600">{actionLabel}</span>
             {action.customers && (
               <>
@@ -199,19 +213,20 @@ function ActionCard({ action, onApprove, onReject, onRefresh }) {
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-function EmptyState({ tab }) {
+function EmptyState({ tab, agentFilter }) {
+  const agentName = FILTER_TABS.find(t => t.key === agentFilter)?.label ?? 'your agents';
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="w-14 h-14 rounded-2xl bg-[#f0f4ff] flex items-center justify-center mb-4">
         {tab === 'pending' ? <Clock size={22} className="text-[#1f48ff]" /> : <Eye size={22} className="text-[#1f48ff]" />}
       </div>
       <p className="text-sm font-bold text-[#010a4f] mb-1">
-        {tab === 'pending' ? 'No pending approvals' : 'No activity yet'}
+        {tab === 'pending' ? 'Nothing on your desk' : 'No activity yet'}
       </p>
       <p className="text-xs text-gray-400 max-w-xs">
         {tab === 'pending'
-          ? "Cadi has nothing waiting for your approval. When Front Desk or Reviews drafts an action, it'll appear here."
-          : "Once Cadi starts taking actions — sending quotes, requesting reviews — you'll see the full history here."}
+          ? `Your Front Desk staff are handling things. When ${agentName} needs your input, it'll appear here.`
+          : `Once your agents start taking actions — quotes, review requests, reminders — the full history appears here.`}
       </p>
     </div>
   );
@@ -221,10 +236,11 @@ function EmptyState({ tab }) {
 
 export default function InboxPage() {
   const businessId = useBusinessId();
-  const [tab, setTab] = useState('pending');
-  const [pending, setPending] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [tab,         setTab]         = useState('pending');
+  const [agentFilter, setAgentFilter] = useState(null); // null = all
+  const [pending,     setPending]     = useState([]);
+  const [history,     setHistory]     = useState([]);
+  const [loading,     setLoading]     = useState(true);
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -251,16 +267,31 @@ export default function InboxPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const items = tab === 'pending' ? pending : history;
+  const filterItems = (items) => {
+    if (!agentFilter) return items;
+    const allowed = FILTER_TABS.find(t => t.key === agentFilter)?.agents ?? [agentFilter];
+    return items.filter(a => allowed.includes(a.agent));
+  };
+
+  const allItems     = tab === 'pending' ? pending : history;
+  const items        = filterItems(allItems);
+
+  // Count pending per agent filter for badges
+  const pendingCount = (key) => {
+    if (!key) return pending.length;
+    const allowed = FILTER_TABS.find(t => t.key === key)?.agents ?? [key];
+    return pending.filter(a => allowed.includes(a.agent)).length;
+  };
 
   return (
     <div className="min-h-screen bg-[#f5f7ff]">
       <div className="max-w-2xl mx-auto px-4 py-8">
+
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-black text-[#010a4f]">AI Inbox</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Review and approve what Cadi wants to send</p>
+            <h1 className="text-2xl font-black text-[#010a4f]">Front Desk</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Items from your AI staff that need your input</p>
           </div>
           <button
             onClick={load}
@@ -270,8 +301,8 @@ export default function InboxPage() {
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 p-1 bg-white rounded-xl border border-[#99c5ff]/20 shadow-sm mb-5">
+        {/* Pending / History tabs */}
+        <div className="flex items-center gap-1 p-1 bg-white rounded-xl border border-[#99c5ff]/20 shadow-sm mb-3">
           <button
             onClick={() => setTab('pending')}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
@@ -299,6 +330,34 @@ export default function InboxPage() {
           </button>
         </div>
 
+        {/* Agent filter tabs */}
+        <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1">
+          {FILTER_TABS.map(({ key, label }) => {
+            const count = pendingCount(key);
+            const active = agentFilter === key;
+            return (
+              <button
+                key={String(key)}
+                onClick={() => setAgentFilter(key)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  active
+                    ? 'bg-[#010a4f] text-white'
+                    : 'bg-white border border-[#99c5ff]/30 text-gray-500 hover:text-[#010a4f] hover:border-[#99c5ff]/60'
+                }`}
+              >
+                {label}
+                {count > 0 && tab === 'pending' && (
+                  <span className={`px-1 py-0.5 rounded-full text-[9px] font-black ${
+                    active ? 'bg-amber-400 text-[#010a4f]' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Content */}
         {loading ? (
           <div className="space-y-3">
@@ -307,7 +366,7 @@ export default function InboxPage() {
             ))}
           </div>
         ) : items.length === 0 ? (
-          <EmptyState tab={tab} />
+          <EmptyState tab={tab} agentFilter={agentFilter} />
         ) : (
           <div className="space-y-3">
             {items.map(action => (

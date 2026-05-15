@@ -7,6 +7,7 @@ import {
   GraduationCap, ClipboardList, Package, Lock,
   Briefcase, Star, Network, CheckSquare,
   ShoppingBag, GitBranch, MessageSquare, Bell, Inbox, UtensilsCrossed,
+  CalendarClock, ChevronRight,
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -28,7 +29,6 @@ const NAV_SECTIONS = [
     color: EARN_COLOR,   // accent only; bg stays navy
     accent: '#3b5bdb',
     items: [
-      { path: '/inbox',      label: 'AI Inbox',        icon: Inbox,           badge: 'pendingActions' },
       { path: '/services',   label: 'Services Menu',   icon: UtensilsCrossed  },
       { path: '/scheduler',  label: 'Scheduler',       icon: CalendarDays     },
       { path: '/customers',  label: 'Customers',       icon: Users            },
@@ -76,6 +76,10 @@ const NAV_SECTIONS = [
 const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap(s => s.items);
 
 const TAB_GUIDES = {
+  '/front-desk':                     "Your Front Desk inbox — review and approve actions from your three AI agents.",
+  '/front-desk/sales-manager':       "Sales Manager — handles inbound enquiries, quotes and bookings.",
+  '/front-desk/review-agent':        "Review Agent — sends review requests after every completed job.",
+  '/front-desk/operations-manager':  "Operations Manager — reminders, team schedules, check-ins and payment matching.",
   '/dashboard':    "Your mission control — health score, leaderboard, badges and daily activity all in one place.",
   '/calculator':   "Pricing engine — generate instant quotes using UK market data.",
   '/scheduler':    "Book and manage every job — daily schedule, status tracking and team assignment.",
@@ -219,11 +223,93 @@ export default function AppLayout() {
 
   const currentLabel =
     location.pathname === '/dashboard' ? 'Dashboard' :
+    location.pathname === '/front-desk' ? 'Front Desk' :
+    location.pathname.startsWith('/front-desk/sales-manager') ? 'Sales Manager' :
+    location.pathname.startsWith('/front-desk/review-agent') ? 'Review Agent' :
+    location.pathname.startsWith('/front-desk/operations-manager') ? 'Operations Manager' :
     ALL_NAV_ITEMS.find(i => location.pathname.startsWith(i.path))?.label || 'Cadi';
 
   const userInitial = profile?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U';
   const userName    = profile?.business_name || profile?.first_name || 'Your Business';
   const planLabel   = isPro ? 'Cadi Pro' : 'Free plan';
+
+  // ── Front Desk expandable nav group ─────────────────────────────────────────
+  function FrontDeskNavGroup({ onNavigate }) {
+    const [open, setOpen] = useState(() => {
+      try { return localStorage.getItem('cadi_fd_nav_open') !== '0'; } catch { return true; }
+    });
+    const isFrontDeskActive = location.pathname.startsWith('/front-desk');
+
+    const toggle = () => setOpen(v => {
+      const next = !v;
+      try { localStorage.setItem('cadi_fd_nav_open', next ? '1' : '0'); } catch {}
+      return next;
+    });
+
+    const items = [
+      { path: '/front-desk',                    label: 'Inbox',               badge: pendingActions, icon: Inbox },
+      { path: '/front-desk/sales-manager',      label: 'Sales Manager',       icon: MessageSquare,  accent: '#3b5bdb' },
+      { path: '/front-desk/review-agent',       label: 'Review Agent',        icon: Star,           accent: '#059669' },
+      { path: '/front-desk/operations-manager', label: 'Operations Manager',  icon: CalendarClock,  accent: '#C2410C', proOnly: true },
+    ];
+
+    return (
+      <div className="mb-1">
+        <button
+          onClick={toggle}
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors ${isFrontDeskActive ? 'bg-white/5' : ''}`}
+        >
+          <span className="w-1.5 h-4 rounded-full shrink-0" style={{ backgroundColor: '#4f78ff' }} />
+          <span className="flex-1 text-left">
+            <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: '#4f78ff' }}>FRONT DESK</span>
+            <span className="block text-[10px] text-[#99c5ff]/40 leading-tight">Your AI staff</span>
+          </span>
+          {pendingActions > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-amber-400 text-[#010a4f]">
+              {pendingActions}
+            </span>
+          )}
+          <ChevronDown
+            size={12}
+            className={`text-[#99c5ff]/30 transition-transform duration-200 ${open ? 'rotate-0' : '-rotate-90'}`}
+          />
+        </button>
+
+        {open && (
+          <div className="mt-0.5 space-y-0.5 pl-2">
+            {items.map(({ path, label, badge, icon: Icon, accent, proOnly }) => {
+              const locked    = proOnly && !isPro;
+              const isActive  = location.pathname === path || (path !== '/front-desk' && location.pathname.startsWith(path));
+              return (
+                <NavLink
+                  key={path}
+                  to={locked ? '/upgrade' : path}
+                  onClick={() => onNavigate?.()}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                    locked
+                      ? 'text-[#99c5ff]/40 hover:bg-white/5'
+                      : isActive
+                        ? 'text-white'
+                        : 'text-[#99c5ff] hover:bg-white/10 hover:text-white'
+                  }`}
+                  style={isActive ? { backgroundColor: '#4f78ff33', borderLeft: '2px solid #4f78ff' } : {}}
+                >
+                  <Icon size={15} className="shrink-0" />
+                  <span className="flex-1 truncate">{label}</span>
+                  {badge > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-amber-400 text-[#010a4f]">
+                      {badge}
+                    </span>
+                  )}
+                  {locked && <Lock size={10} className="shrink-0 opacity-40" />}
+                </NavLink>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // ── Sidebar section renderer ────────────────────────────────────────────────
   function SidebarSection({ section, onNavigate }) {
@@ -405,6 +491,11 @@ export default function AppLayout() {
 
           <div className="border-t border-white/10 mb-3" />
 
+          {/* Front Desk — expandable agent hub */}
+          <FrontDeskNavGroup />
+
+          <div className="border-t border-white/10 my-2" />
+
           {NAV_SECTIONS.map(section => (
             <SidebarSection key={section.id} section={section} />
           ))}
@@ -528,6 +619,8 @@ export default function AppLayout() {
                 </NavLink>
               </div>
               <div className="border-t border-white/10 mb-3" />
+              <FrontDeskNavGroup onNavigate={() => setMobileMenuOpen(false)} />
+              <div className="border-t border-white/10 my-2" />
               {NAV_SECTIONS.map(section => (
                 <SidebarSection key={section.id} section={section} onNavigate={() => setMobileMenuOpen(false)} />
               ))}
