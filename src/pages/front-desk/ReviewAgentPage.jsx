@@ -2,7 +2,8 @@
 // Review Agent profile page — /front-desk/review-agent
 
 import { useEffect, useState } from 'react';
-import { Star, Settings } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Star, Settings, ArrowRight } from 'lucide-react';
 import ReviewsSettings from '../../components/ReviewsSettings';
 import { supabase } from '../../lib/supabase';
 import { useBusinessId } from '../../hooks/useBusinessId';
@@ -11,6 +12,9 @@ import { useAuth } from '../../context/AuthContext';
 export default function ReviewAgentPage() {
   const businessId = useBusinessId();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const fromPhase3 = searchParams.get('from') === 'phase3';
+  const [introDismissed, setIntroDismissed] = useState(false);
   const [stats, setStats] = useState({ requestsSent: null, reviewsReceived: null, avgRating: null });
 
   useEffect(() => {
@@ -42,8 +46,40 @@ export default function ReviewAgentPage() {
     })();
   }, [businessId, user]);
 
+  function dismissIntro() {
+    setIntroDismissed(true);
+    setSearchParams({});
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
+
+      {/* Phase 3 intro framing */}
+      {fromPhase3 && !introDismissed && (
+        <div
+          className="rounded-2xl overflow-hidden border border-emerald-500/30 p-6"
+          style={{ background: 'linear-gradient(135deg, #064e3b 0%, #065f46 100%)' }}
+        >
+          <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-emerald-300/50 mb-2">Phase 3 · Step 2</p>
+          <h2 className="text-xl font-black text-white mb-3 leading-snug">Meet your Review Agent.</h2>
+          <p className="text-sm text-white/60 leading-relaxed mb-3">
+            Now the agent who builds your reputation.
+          </p>
+          <p className="text-sm text-white/60 leading-relaxed mb-3">
+            Every time a job's completed, your Review Agent sends a polite request asking the customer for a review. You'd never get round to asking — they will. Every time. On cue.
+          </p>
+          <p className="text-sm text-white/60 leading-relaxed mb-5">
+            Over weeks and months this is how a cleaning business gets known. Reviews stack up. Front Desk enquiries convert better because there's proof.
+          </p>
+          <p className="text-sm font-bold text-white mb-5">Let's hire them.</p>
+          <button
+            onClick={dismissIntro}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors"
+          >
+            Set up Review Agent <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Agent header */}
       <div className="bg-white rounded-2xl border border-[#99c5ff]/20 overflow-hidden">

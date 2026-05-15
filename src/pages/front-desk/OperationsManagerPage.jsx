@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { usePlan } from '../../hooks/usePlan';
 import { useBusinessId } from '../../hooks/useBusinessId';
 import { supabase } from '../../lib/supabase';
+import { markStepComplete } from '../../lib/db/thirtyDayPlanDb';
 import ActivateOperationsManager from '../../components/ActivateOperationsManager';
 import TeamMembersUI from '../../components/TeamMembersUI';
 import {
   CalendarClock, Bell, Users, CreditCard,
-  CheckCircle, Lock, ArrowRight, Sparkles,
+  CheckCircle, Lock, ArrowRight, Sparkles, X,
 } from 'lucide-react';
 
 const FEATURES = [
@@ -73,6 +74,10 @@ function Toggle({ enabled, onChange, disabled }) {
 export default function OperationsManagerPage() {
   const navigate = useNavigate();
   const businessId = useBusinessId();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const fromPhase3 = searchParams.get('from') === 'phase3';
+  const [introDismissed, setIntroDismissed] = useState(false);
+  const [showFreePreview, setShowFreePreview] = useState(false);
   const { isPro, canUseOperationsManager } = usePlan();
 
   const [showWizard, setShowWizard] = useState(false);
@@ -132,8 +137,131 @@ export default function OperationsManagerPage() {
     setOmEnabled(true);
   }
 
+  async function handleFreeSkip() {
+    try {
+      await markStepComplete('hire_operations_manager', 3, { acknowledged_free: true });
+    } catch { /* non-fatal */ }
+    setShowFreePreview(false);
+    setIntroDismissed(true);
+    setSearchParams({});
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
+
+      {/* Phase 3 intro framing (all users) */}
+      {fromPhase3 && !introDismissed && !showFreePreview && (
+        <div
+          className="rounded-2xl overflow-hidden border border-amber-500/30 p-6"
+          style={{ background: 'linear-gradient(135deg, #78350f 0%, #92400e 100%)' }}
+        >
+          <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-amber-300/50 mb-2">Phase 3 · Step 3</p>
+          <h2 className="text-xl font-black text-white mb-3 leading-snug">Meet your Operations Manager.</h2>
+          <p className="text-sm text-white/60 leading-relaxed mb-3">
+            The third agent at your Front Desk — and probably the one that'll change your week the most.
+          </p>
+          <ul className="space-y-1.5 mb-4">
+            {[
+              'Customer reminders 24 hours before each clean',
+              "Your team's daily schedule sent every morning",
+              '"I\'m here / I\'ve left" check-ins for your team',
+              'Matching customer payments to invoices automatically',
+            ].map(item => (
+              <li key={item} className="flex items-start gap-2 text-sm text-white/60">
+                <span className="text-amber-400 mt-0.5 shrink-0">·</span>
+                {item}
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-white/60 leading-relaxed mb-4">
+            Most cleaning software makes you tick off every completed job by hand. Your Operations Manager assumes jobs happened and only flags you when something didn't go to plan.
+          </p>
+          {!canUseOperationsManager && (
+            <p className="text-sm font-bold text-amber-300 mb-5">This one's a Pro feature.</p>
+          )}
+          <div className="flex gap-3">
+            {canUseOperationsManager ? (
+              <button
+                onClick={() => { setIntroDismissed(true); setSearchParams({}); }}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-[#C2410C] rounded-xl hover:bg-[#b03a0b] transition-colors"
+              >
+                Hire your Operations Manager <ArrowRight size={14} />
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => setShowFreePreview(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-[#C2410C] rounded-xl hover:bg-[#b03a0b] transition-colors"
+                >
+                  See what Pro unlocks <ArrowRight size={14} />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Free tier "See what Pro unlocks" screen */}
+      {showFreePreview && (
+        <div className="rounded-2xl border border-amber-200/30 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <p className="text-sm font-bold text-[#010a4f]">What Pro's Operations Manager looks like in practice</p>
+            <button onClick={() => setShowFreePreview(false)} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+              <X size={16} className="text-gray-400" />
+            </button>
+          </div>
+          <div className="p-6 space-y-4">
+            {[
+              {
+                icon: '📱',
+                label: 'Customer reminder',
+                text: '"Hi Mrs Patel, just a reminder your weekly clean is booked for tomorrow at 2pm. See you then. — Mackies Cleaning"',
+                sub: 'Sent automatically 24 hours before every job.',
+              },
+              {
+                icon: '📋',
+                label: 'Team daily schedule',
+                text: '"Tomorrow, Sam:\n9:00 — Mrs Patel, Weekly Clean (2h) — 👉 tap to check in\n11:00 — Office Park (3h) — 👉 tap to check in\n14:00 — Mrs Henderson (1.5h) — 👉 tap to check in\nAbout 6.5 hours. Have a good one."',
+                sub: "Each link is tap-through 'I'm here / I've left'. Jobs auto-complete from those taps. You stop ticking off jobs entirely.",
+              },
+              {
+                icon: '💷',
+                label: 'Payment matched',
+                text: '"£45 from \'PATEL R\' — match to Mrs Patel\'s outstanding £45 invoice?"',
+                sub: 'High-confidence matches happen silently. Anything uncertain comes to you.',
+              },
+            ].map(({ icon, label, text, sub }) => (
+              <div key={label} className="rounded-xl border border-gray-100 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-base">{icon}</span>
+                  <span className="text-xs font-bold text-[#010a4f]">{label}</span>
+                </div>
+                <div className="bg-[#f8f9ff] rounded-lg px-3 py-2.5 mb-2">
+                  <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed font-mono">{text}</p>
+                </div>
+                <p className="text-[11px] text-gray-400">{sub}</p>
+              </div>
+            ))}
+            <p className="text-sm text-gray-600 leading-relaxed">
+              That's Operations Manager working. The system that finally makes "set and forget" actually true for your cleaning business.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                onClick={() => navigate('/upgrade')}
+                className="flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white bg-[#1f48ff] rounded-xl hover:bg-[#3a5eff] transition-colors"
+              >
+                Upgrade to Pro — £39/month
+              </button>
+              <button
+                onClick={handleFreeSkip}
+                className="px-5 py-3 text-sm font-bold text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                I'll come back to this
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Agent header */}
       <div className="rounded-2xl overflow-hidden border border-[#99c5ff]/20">

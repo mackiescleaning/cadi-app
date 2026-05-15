@@ -2,7 +2,8 @@
 // Sales Manager agent profile page — /front-desk/sales-manager
 
 import { useEffect, useState } from 'react';
-import { MessageSquare, Settings } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { MessageSquare, Settings, ArrowRight } from 'lucide-react';
 import FrontDeskSettings from '../../components/FrontDeskSettings';
 import { supabase } from '../../lib/supabase';
 import { useBusinessId } from '../../hooks/useBusinessId';
@@ -19,6 +20,9 @@ function StatCard({ label, value, sub }) {
 
 export default function SalesManagerPage() {
   const businessId = useBusinessId();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const fromPhase3 = searchParams.get('from') === 'phase3';
+  const [introDismissed, setIntroDismissed] = useState(false);
   const [stats, setStats] = useState({ conversations: null, quotesThisMonth: null, lastActive: null });
 
   useEffect(() => {
@@ -41,8 +45,37 @@ export default function SalesManagerPage() {
     })();
   }, [businessId]);
 
+  function dismissIntro() {
+    setIntroDismissed(true);
+    setSearchParams({});
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
+
+      {/* Phase 3 intro framing */}
+      {fromPhase3 && !introDismissed && (
+        <div
+          className="rounded-2xl overflow-hidden border border-[#4f78ff]/30 p-6"
+          style={{ background: 'linear-gradient(135deg, #010a4f 0%, #0d1e78 100%)' }}
+        >
+          <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#99c5ff]/50 mb-2">Phase 3 · Step 1</p>
+          <h2 className="text-xl font-black text-white mb-3 leading-snug">Meet your Sales Manager.</h2>
+          <p className="text-sm text-white/60 leading-relaxed mb-4">
+            This is the agent at your Front Desk who handles incoming enquiries — quoting, booking, answering questions while you're working.
+          </p>
+          <p className="text-sm text-white/60 leading-relaxed mb-5">
+            Front Desk gets the enquiry. Your Sales Manager replies using your services menu and your tone of voice. New work books itself in without you lifting a finger.
+          </p>
+          <p className="text-sm font-bold text-white mb-5">Let's hire them.</p>
+          <button
+            onClick={dismissIntro}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-[#4f78ff] rounded-xl hover:bg-[#3d68ff] transition-colors"
+          >
+            Set up Sales Manager <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Agent header */}
       <div className="bg-white rounded-2xl border border-[#99c5ff]/20 overflow-hidden">
