@@ -50,17 +50,34 @@ async function updateProfileByCustomer(
   subscriptionId: string | null,
   renewsAt: string | null,
 ) {
-  const { error } = await sb
-    .from("profiles")
-    .update({
-      plan:                       tier === "lite" ? "free" : tier, // keep legacy plan field in sync
-      subscription_tier:          tier,
-      stripe_subscription_id:     subscriptionId,
-      stripe_subscription_renews: renewsAt,
-    })
-    .eq("stripe_customer_id", customerId);
+  const payload = {
+    plan:                       tier === "lite" ? "free" : tier,
+    subscription_tier:          tier,
+    stripe_subscription_id:     subscriptionId,
+    stripe_subscription_renews: renewsAt,
+  };
 
-  if (error) console.error("profiles update failed:", error.message);
+  console.log(`updateProfileByCustomer: customerId=${customerId} tier=${tier}`, JSON.stringify(payload));
+
+  const { data, error } = await sb
+    .from("profiles")
+    .update(payload)
+    .eq("stripe_customer_id", customerId)
+    .select("id, plan, subscription_tier");
+
+  if (error) {
+    console.error("profiles update failed:", error.message, error.details);
+  } else {
+    console.log(`profiles updated: ${data?.length ?? 0} row(s)`, JSON.stringify(data));
+    if (!data?.length) {
+      // No row matched — log what's in the DB for this customer to help diagnose
+      const { data: lookup } = await sb
+        .from("profiles")
+        .select("id, stripe_customer_id, subscription_tier")
+        .eq("stripe_customer_id", customerId);
+      console.warn("no match for customerId — lookup result:", JSON.stringify(lookup));
+    }
+  }
 }
 
 serve(async (req: Request) => {

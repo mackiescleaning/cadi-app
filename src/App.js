@@ -47,6 +47,9 @@ import ClientDemoApp from './pages/client-demo/ClientDemoApp';
 import InvoiceSettings from './pages/InvoiceSettings';
 import StripeCallback from './pages/StripeCallback';
 import GoCardlessPaymentCallback from './pages/GoCardlessPaymentCallback';
+import BankingSettings from './pages/BankingSettings';
+import FinancialWalkthrough from './pages/FinancialWalkthrough';
+import WeeklyReport from './pages/WeeklyReport';
 import { DataProvider } from './context/DataContext';
 import { InvoiceProvider } from './context/InvoiceContext';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -122,6 +125,10 @@ function App() {
           <Route path="earn/reputation"  element={<EarnReputation />} />
           <Route path="earn/earnings"    element={<EarnEarnings />} />
           <Route path="earn/comms"       element={<EarnComms />} />
+          {/* Phase 2 */}
+          <Route path="banking/connect"  element={<BankingSettings />} />
+          <Route path="walkthrough"      element={<FinancialWalkthrough />} />
+          <Route path="reports/:id"      element={<WeeklyReport />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
