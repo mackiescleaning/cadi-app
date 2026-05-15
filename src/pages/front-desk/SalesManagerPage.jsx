@@ -2,7 +2,7 @@
 // Sales Manager agent profile page — /front-desk/sales-manager
 
 import { useEffect, useState } from 'react';
-import { MessageSquare, Activity, Settings, ToggleLeft, ToggleRight } from 'lucide-react';
+import { MessageSquare, Settings } from 'lucide-react';
 import FrontDeskSettings from '../../components/FrontDeskSettings';
 import { supabase } from '../../lib/supabase';
 import { useBusinessId } from '../../hooks/useBusinessId';

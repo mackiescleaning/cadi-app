@@ -1,34 +1,35 @@
-// src/pages/front-desk/OperationsManagerPage.jsx
-// Operations Manager agent profile page — /front-desk/operations-manager
-// Placeholder: full build covered by the Operations Manager / Autobooking brief.
-
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePlan } from '../../hooks/usePlan';
+import { useBusinessId } from '../../hooks/useBusinessId';
+import { supabase } from '../../lib/supabase';
+import ActivateOperationsManager from '../../components/ActivateOperationsManager';
+import TeamMembersUI from '../../components/TeamMembersUI';
 import {
   CalendarClock, Bell, Users, CreditCard,
-  CheckCircle, Lock, ArrowRight
+  CheckCircle, Lock, ArrowRight, Sparkles,
 } from 'lucide-react';
 
 const FEATURES = [
   {
     icon: Bell,
     title: 'Customer reminders',
-    body: 'Texts or emails customers 24 hours before every job. Replies drop in your inbox for one-tap approval.',
+    body: 'Texts customers 24 hours before every job. Replies drop in your Front Desk for one-tap approval.',
   },
   {
     icon: Users,
     title: 'Team daily schedules',
-    body: 'Every evening your team gets tomorrow\'s jobs by SMS — with tap-through "I\'m here / I\'ve left" links.',
+    body: "Every morning your team gets today's jobs by SMS — with tap-through check-in links.",
   },
   {
     icon: CheckCircle,
     title: 'Job auto-completion',
-    body: 'Jobs complete automatically from staff check-ins. Stop ticking off 400 jobs by hand.',
+    body: 'Jobs complete automatically from staff check-ins, payments, and reviews. Stop ticking off jobs by hand.',
   },
   {
     icon: CreditCard,
     title: 'Payment matching',
-    body: 'Matches incoming bank payments to outstanding invoices automatically. High-confidence matches are silent.',
+    body: 'Matches incoming payments to outstanding invoices. High-confidence matches are silent.',
   },
 ];
 
@@ -36,14 +37,14 @@ const EXAMPLE_ITEMS = [
   {
     icon: '📱',
     label: 'Customer reminder',
-    text: '"Hi Mrs Patel, just a reminder your weekly clean is booked for tomorrow at 2pm. See you then. — Mackies Cleaning"',
+    text: '"Hi Mrs Patel, just a reminder your weekly clean is tomorrow at 2pm. See you then. — Mackies Cleaning"',
     sub: 'Sent automatically 24h before every job.',
   },
   {
     icon: '📋',
     label: 'Team daily schedule',
-    text: '"Tomorrow, Sam:\n9:00 — Mrs Patel, Weekly Clean (2h) 👉 cadi.io/c/…\n11:00 — Office Park, Commercial (3h) 👉 cadi.io/c/…\nAbout 5 hours total. Have a good one."',
-    sub: 'Each link is tap-through "I\'m here / I\'ve left". Jobs auto-complete.',
+    text: '"Tomorrow, Sam:\n9:00 — Mrs Patel, Weekly Clean (2h) 👉 tap to check in\n11:00 — Office Park (3h) 👉 tap to check in\nAbout 5 hours total. Have a good one."',
+    sub: "Each link lets staff tap 'I'm here / I've left'. Jobs auto-complete.",
   },
   {
     icon: '💷',
@@ -53,9 +54,83 @@ const EXAMPLE_ITEMS = [
   },
 ];
 
+function Toggle({ enabled, onChange, disabled }) {
+  return (
+    <button
+      onClick={() => !disabled && onChange(!enabled)}
+      disabled={disabled}
+      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${
+        enabled ? 'bg-[#C2410C]' : 'bg-gray-200'
+      }`}
+    >
+      <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+        enabled ? 'translate-x-5' : 'translate-x-0'
+      }`} />
+    </button>
+  );
+}
+
 export default function OperationsManagerPage() {
   const navigate = useNavigate();
-  const { isPro } = usePlan();
+  const businessId = useBusinessId();
+  const { isPro, canUseOperationsManager } = usePlan();
+
+  const [showWizard, setShowWizard] = useState(false);
+  const [activated, setActivated] = useState(false);
+  const [omEnabled, setOmEnabled] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [omSettings, setOmSettings] = useState(null);
+
+  useEffect(() => {
+    if (!businessId || !canUseOperationsManager) {
+      setLoading(false);
+      return;
+    }
+    let mounted = true;
+
+    Promise.all([
+      supabase
+        .from('agent_settings')
+        .select('mode')
+        .eq('business_id', businessId)
+        .eq('agent', 'operations_manager')
+        .maybeSingle(),
+      supabase
+        .from('autobooking_settings')
+        .select('*')
+        .eq('business_id', businessId)
+        .maybeSingle(),
+    ]).then(([{ data: agentRow }, { data: omRow }]) => {
+      if (!mounted) return;
+      const isActivated = !!omRow;
+      setActivated(isActivated);
+      setOmEnabled(agentRow?.mode === 'auto' || agentRow?.mode === 'approval');
+      setOmSettings(omRow ?? null);
+      setLoading(false);
+    });
+
+    return () => { mounted = false; };
+  }, [businessId, canUseOperationsManager]);
+
+  async function handleToggle(val) {
+    if (!businessId) return;
+    setSaving(true);
+    setOmEnabled(val);
+    await supabase
+      .from('agent_settings')
+      .upsert(
+        { business_id: businessId, agent: 'operations_manager', mode: val ? 'auto' : 'off' },
+        { onConflict: 'business_id,agent' }
+      );
+    setSaving(false);
+  }
+
+  function handleWizardComplete() {
+    setShowWizard(false);
+    setActivated(true);
+    setOmEnabled(true);
+  }
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -74,7 +149,7 @@ export default function OperationsManagerPage() {
                 Runs your schedule, reminders, and payment matching — so you stop manually ticking off jobs.
               </p>
             </div>
-            {!isPro && (
+            {!canUseOperationsManager && (
               <span className="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/15 text-white">
                 Pro
               </span>
@@ -84,23 +159,58 @@ export default function OperationsManagerPage() {
 
         {/* Status bar */}
         <div className="bg-white px-6 py-4 flex items-center justify-between border-t border-[#99c5ff]/20">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-gray-300" />
-            <span className="text-sm font-semibold text-gray-500">
-              {isPro ? 'Not yet activated — coming soon' : 'Pro feature — not activated'}
-            </span>
-          </div>
-          {!isPro && (
-            <button
-              onClick={() => navigate('/upgrade')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-bold rounded-lg transition-colors"
-            >
-              Upgrade to Pro
-              <ArrowRight size={11} />
-            </button>
+          {loading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <div className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-[#C2410C] animate-spin" />
+              Loading…
+            </div>
+          ) : !canUseOperationsManager ? (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-gray-300" />
+                <span className="text-sm font-semibold text-gray-500">Pro feature — not activated</span>
+              </div>
+              <button
+                onClick={() => navigate('/upgrade')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-bold rounded-lg transition-colors"
+              >
+                Upgrade to Pro <ArrowRight size={11} />
+              </button>
+            </>
+          ) : activated ? (
+            <>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${omEnabled ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <span className={`text-sm font-semibold ${omEnabled ? 'text-green-700' : 'text-gray-500'}`}>
+                  {omEnabled ? 'Active' : 'Paused'}
+                </span>
+              </div>
+              <Toggle enabled={omEnabled} onChange={handleToggle} disabled={saving} />
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-gray-300" />
+                <span className="text-sm font-semibold text-gray-500">Not yet activated</span>
+              </div>
+              <button
+                onClick={() => setShowWizard(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#C2410C] hover:bg-[#b03a0b] text-white text-xs font-bold rounded-lg transition-colors"
+              >
+                <Sparkles size={12} />
+                Activate
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {/* When activated: show team members + feature toggles */}
+      {activated && canUseOperationsManager && omSettings && (
+        <div className="bg-white rounded-2xl border border-[#99c5ff]/20 p-6">
+          <TeamMembersUI />
+        </div>
+      )}
 
       {/* What it does */}
       <div>
@@ -109,8 +219,8 @@ export default function OperationsManagerPage() {
           {FEATURES.map(({ icon: Icon, title, body }) => (
             <div key={title} className="bg-white rounded-xl border border-[#99c5ff]/20 p-4">
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#f0f4ff] flex items-center justify-center shrink-0">
-                  <Icon size={15} className="text-[#1f48ff]" />
+                <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+                  <Icon size={15} className="text-[#C2410C]" />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-[#010a4f]">{title}</p>
@@ -141,8 +251,8 @@ export default function OperationsManagerPage() {
         </div>
       </div>
 
-      {/* CTA */}
-      {!isPro ? (
+      {/* Bottom CTA for non-Pro */}
+      {!canUseOperationsManager && (
         <div className="rounded-2xl border border-[#1f48ff]/20 p-6 text-center"
           style={{ background: 'linear-gradient(135deg, #010a4f 0%, #0d1e78 100%)' }}>
           <Lock size={24} className="text-[#99c5ff]/50 mx-auto mb-3" />
@@ -158,15 +268,15 @@ export default function OperationsManagerPage() {
           </button>
           <p className="text-[10px] text-white/25 mt-3">Cancel anytime · Powered by Stripe</p>
         </div>
-      ) : (
-        <div className="rounded-2xl border border-amber-200/40 bg-amber-50/50 p-5 text-center">
-          <p className="text-sm font-bold text-amber-800 mb-1">Activation coming soon</p>
-          <p className="text-xs text-amber-700/70">
-            Operations Manager is being built as part of the Autobooking feature. It will appear here when ready.
-          </p>
-        </div>
       )}
 
+      {/* Activation wizard modal */}
+      {showWizard && (
+        <ActivateOperationsManager
+          onComplete={handleWizardComplete}
+          onClose={() => setShowWizard(false)}
+        />
+      )}
     </div>
   );
 }
