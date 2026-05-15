@@ -70,10 +70,13 @@ function buildHtml({
   vatAmount,
   total,
   terms,
+  issueDate,
   dueDate,
   businessName,
   businessAddress,
   businessEmail,
+  logoUrl,
+  logoPosition,
   tmpl,
 }: {
   personalMessage: string;
@@ -84,117 +87,174 @@ function buildHtml({
   vatAmount: number;
   total: number;
   terms: string;
+  issueDate?: string;
   dueDate: string;
   businessName: string;
   businessAddress?: string;
   businessEmail?: string;
+  logoUrl?: string;
+  logoPosition?: string;
   tmpl: Partial<InvoiceTemplate> | null;
 }) {
-  const brandColour = tmpl?.brand_colour || "#010a4f";
-  const bankBlock   = tmpl?.bank_details
-    ? `
-    <div style="margin-top:24px;padding:16px;background:#f8f9ff;border-radius:8px;border:1px solid #e8ecff">
-      <p style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#888;margin:0 0 8px">Bank details</p>
-      <pre style="font-size:13px;color:#1a1a2e;margin:0;font-family:inherit;white-space:pre-wrap">${tmpl.bank_details.replace(/</g, "&lt;")}</pre>
-      <p style="font-size:13px;color:#1a1a2e;margin:6px 0 0">Reference: <strong>${invoiceNum}</strong></p>
-    </div>`
-    : "";
-
-  const footerMsg = tmpl?.footer_message
-    ? `<p style="font-size:12px;color:#888;margin:3px 0">${tmpl.footer_message.replace(/</g, "&lt;")}</p>`
-    : "";
-
+  const brandColour    = tmpl?.brand_colour || "#010a4f";
   const effectiveTerms = tmpl?.payment_terms_note || terms || "Net 14";
+  const issueDateStr   = issueDate ? fmtDate(issueDate) : fmtDate(new Date().toISOString());
+  const dueDateStr     = dueDate   ? fmtDate(dueDate)   : "";
 
+  // Logo alignment
+  const logoAlign = logoPosition === "top_right" ? "right" : logoPosition === "top_centre" ? "center" : "left";
+  const logoBlock = logoUrl
+    ? `<div style="text-align:${logoAlign};margin-bottom:4px"><img src="${logoUrl}" alt="${businessName}" style="height:44px;max-width:160px;object-fit:contain" /></div>`
+    : "";
+
+  // Line items rows
   const lineRows = lines
     .filter(l => l.desc && l.rate)
     .map(l => {
-      const amount = (l.qty || 1) * l.rate;
+      const qty    = l.qty || 1;
+      const amount = qty * l.rate;
       return `
-      <tr>
-        <td style="padding:10px 0;border-bottom:1px solid #f0f0f5;vertical-align:top">
-          <div style="font-size:14px;color:#1a1a2e;font-weight:600">${l.desc}</div>
-          ${l.serviceDate ? `<div style="font-size:12px;color:#888;margin-top:2px">${fmtDate(l.serviceDate)}</div>` : ""}
-        </td>
-        <td style="padding:10px 0;border-bottom:1px solid #f0f0f5;text-align:right;font-size:14px;color:#1a1a2e;font-weight:600;white-space:nowrap;vertical-align:top">
-          ${fmt2(amount)}
-        </td>
-      </tr>`;
+        <tr>
+          <td style="padding:11px 8px 11px 0;border-bottom:1px solid #f0f0f5;font-size:13px;color:#1a1a2e;vertical-align:top">
+            ${l.desc}
+            ${l.serviceDate ? `<div style="font-size:11px;color:#aaa;margin-top:2px">${fmtDate(l.serviceDate)}</div>` : ""}
+          </td>
+          <td style="padding:11px 8px;border-bottom:1px solid #f0f0f5;font-size:13px;color:#888;text-align:center;vertical-align:top">${qty}</td>
+          <td style="padding:11px 8px;border-bottom:1px solid #f0f0f5;font-size:13px;color:#888;text-align:right;white-space:nowrap;vertical-align:top">${fmt2(l.rate)}</td>
+          <td style="padding:11px 0 11px 8px;border-bottom:1px solid #f0f0f5;font-size:13px;color:#1a1a2e;font-weight:600;text-align:right;white-space:nowrap;vertical-align:top">${fmt2(amount)}</td>
+        </tr>`;
     })
     .join("");
+
+  // Bank / payment details block
+  const bankBlock = tmpl?.bank_details
+    ? `<tr><td colspan="2">
+        <div style="margin-top:20px;padding:14px 16px;background:#f8f9fc;border-radius:8px;border:1px solid #eaeef8">
+          <p style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;margin:0 0 8px">Payment details</p>
+          <pre style="font-size:12px;color:#444;margin:0;font-family:inherit;white-space:pre-wrap;line-height:1.6">${tmpl.bank_details.replace(/</g, "&lt;")}</pre>
+          <p style="font-size:12px;color:#888;margin:8px 0 0">Reference: <strong style="color:#1a1a2e">${invoiceNum}</strong></p>
+        </div>
+      </td></tr>`
+    : "";
+
+  const footerMsg = tmpl?.footer_message
+    ? `<p style="font-size:12px;color:#aaa;text-align:center;margin:0">${tmpl.footer_message.replace(/</g, "&lt;")}</p>`
+    : "";
 
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Invoice ${invoiceNum}</title>
+  <title>Invoice ${invoiceNum} from ${businessName}</title>
 </head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#f5f7fa;margin:0;padding:24px 0">
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#f0f2f7;margin:0;padding:32px 16px">
 
-  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto">
-
-    <!-- Header -->
-    <tr><td style="padding:0 0 8px">
-      <div style="background:${brandColour};border-radius:12px 12px 0 0;padding:28px 32px">
-        <p style="color:#99c5ff;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;margin:0 0 4px">Invoice</p>
-        <p style="color:#fff;font-size:24px;font-weight:900;margin:0 0 2px">${invoiceNum}</p>
-        <p style="color:rgba(255,255,255,0.6);font-size:13px;margin:0">from ${businessName}</p>
-      </div>
-    </td></tr>
-
-    <!-- Body card -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto">
     <tr><td>
-      <div style="background:#fff;border-radius:0 0 12px 12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,0.06)">
 
-        <!-- Personal message -->
-        <p style="font-size:15px;color:#1a1a2e;line-height:1.6;margin:0 0 24px;white-space:pre-wrap">${personalMessage.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</p>
-        <p style="font-size:14px;color:#555;margin:0 0 28px">Have a great day,<br><strong style="color:#1a1a2e">${businessName}</strong></p>
+      <!-- Card -->
+      <div style="background:#fff;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,0.08);overflow:hidden">
 
-        <!-- Divider -->
-        <hr style="border:none;border-top:1px solid #eef0f8;margin:0 0 24px">
+        <!-- Brand accent bar -->
+        <div style="height:5px;background:${brandColour}"></div>
 
-        <!-- Invoice to + Terms -->
-        <div style="display:flex;gap:32px;margin-bottom:24px;flex-wrap:wrap">
-          <div>
-            <p style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#888;margin:0 0 6px">Invoice to</p>
-            <p style="font-size:14px;color:#1a1a2e;font-weight:600;margin:0 0 2px">${customer.name}</p>
-            ${customer.address ? `<p style="font-size:13px;color:#555;margin:0;white-space:pre-wrap">${customer.address.replace(/</g,"&lt;")}</p>` : ""}
-          </div>
-          <div>
-            <p style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#888;margin:0 0 6px">Terms</p>
-            <p style="font-size:14px;color:#1a1a2e;font-weight:600;margin:0 0 2px">${effectiveTerms}</p>
-            ${dueDate ? `<p style="font-size:13px;color:#555;margin:0">Due ${fmtDate(dueDate)}</p>` : ""}
-          </div>
-        </div>
-
-        <!-- Line items -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px">
-          ${lineRows}
-          ${vatAmount > 0 ? `
+        <!-- Header: logo/biz left, INVOICE right -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="padding:28px 32px 20px">
           <tr>
-            <td style="padding:8px 0;text-align:right;font-size:13px;color:#888" colspan="1">VAT (20%)</td>
-            <td style="padding:8px 0;text-align:right;font-size:13px;color:#888;white-space:nowrap">${fmt2(vatAmount)}</td>
-          </tr>` : ""}
+            <td style="vertical-align:top">
+              ${logoBlock}
+              <p style="font-size:${logoUrl ? 12 : 16}px;font-weight:${logoUrl ? 700 : 800};color:${logoUrl ? '#555' : brandColour};margin:0 0 2px">${businessName}</p>
+              ${businessAddress ? `<p style="font-size:11px;color:#aaa;margin:0;white-space:pre-wrap">${businessAddress.replace(/</g,"&lt;")}</p>` : ""}
+              ${businessEmail   ? `<p style="font-size:11px;color:#aaa;margin:2px 0 0"><a href="mailto:${businessEmail}" style="color:${brandColour};text-decoration:none">${businessEmail}</a></p>` : ""}
+            </td>
+            <td style="vertical-align:top;text-align:right">
+              <p style="font-size:28px;font-weight:900;color:${brandColour};margin:0 0 4px;letter-spacing:-0.5px">INVOICE</p>
+              <p style="font-size:14px;font-weight:700;color:#444;margin:0">${invoiceNum}</p>
+            </td>
+          </tr>
         </table>
 
-        <!-- Balance due -->
-        <div style="background:#f0f4ff;border-radius:10px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <p style="font-size:14px;font-weight:700;color:#1a1a2e;margin:0">Balance due</p>
-          <p style="font-size:26px;font-weight:900;color:${brandColour};margin:0;font-variant-numeric:tabular-nums">${fmt2(total)}</p>
-        </div>
+        <!-- Invoice meta strip -->
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr><td style="padding:0 32px 20px">
+            <table cellpadding="0" cellspacing="0" style="background:#f8f9fc;border-radius:10px;padding:12px 18px;width:100%">
+              <tr>
+                <td style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;padding-bottom:3px">Date issued</td>
+                <td style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;padding-bottom:3px">Due date</td>
+                ${effectiveTerms ? `<td style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;padding-bottom:3px">Terms</td>` : ""}
+              </tr>
+              <tr>
+                <td style="font-size:13px;font-weight:600;color:#1a1a2e;padding-right:32px">${issueDateStr}</td>
+                <td style="font-size:13px;font-weight:700;color:${brandColour}">${dueDateStr}</td>
+                ${effectiveTerms ? `<td style="font-size:13px;font-weight:600;color:#1a1a2e">${effectiveTerms}</td>` : ""}
+              </tr>
+            </table>
+          </td></tr>
+        </table>
 
-        ${bankBlock}
+        <!-- Bill to + personal message -->
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="padding:0 32px 20px;vertical-align:top;width:50%">
+              <p style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;margin:0 0 6px">Bill to</p>
+              <p style="font-size:14px;font-weight:700;color:#1a1a2e;margin:0 0 2px">${customer.name}</p>
+              ${customer.address ? `<p style="font-size:12px;color:#888;margin:0;white-space:pre-wrap">${customer.address.replace(/</g,"&lt;")}</p>` : ""}
+              ${customer.email   ? `<p style="font-size:12px;color:#aaa;margin:2px 0 0">${customer.email}</p>` : ""}
+            </td>
+            <td style="padding:0 32px 20px;vertical-align:top">
+              <p style="font-size:13px;color:#555;line-height:1.65;margin:0;white-space:pre-wrap">${personalMessage.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Line items -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="padding:0 32px">
+          <tr><td colspan="4" style="padding:0 0 2px">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <thead>
+                <tr style="border-bottom:2px solid ${brandColour}">
+                  <th style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;text-align:left;padding:0 8px 8px 0">Description</th>
+                  <th style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;text-align:center;padding:0 8px 8px;width:40px">Qty</th>
+                  <th style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;text-align:right;padding:0 8px 8px;width:70px">Rate</th>
+                  <th style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#aaa;text-align:right;padding:0 0 8px 8px;width:70px">Amount</th>
+                </tr>
+              </thead>
+              <tbody>${lineRows}</tbody>
+            </table>
+          </td></tr>
+        </table>
+
+        <!-- Totals -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="padding:16px 32px 8px">
+          <tr>
+            <td></td>
+            <td style="width:220px">
+              ${subtotal !== total ? `
+              <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f5">
+                <span style="font-size:12px;color:#888">Subtotal</span>
+                <span style="font-size:12px;font-weight:600;color:#1a1a2e">${fmt2(subtotal)}</span>
+              </div>` : ""}
+              ${vatAmount > 0 ? `
+              <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f5">
+                <span style="font-size:12px;color:#888">VAT (20%)</span>
+                <span style="font-size:12px;font-weight:600;color:#1a1a2e">${fmt2(vatAmount)}</span>
+              </div>` : ""}
+              <div style="display:flex;justify-content:space-between;align-items:center;background:${brandColour};border-radius:8px;padding:12px 16px;margin-top:10px">
+                <span style="font-size:13px;font-weight:700;color:#fff">Total due</span>
+                <span style="font-size:22px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums">${fmt2(total)}</span>
+              </div>
+            </td>
+          </tr>
+          ${bankBlock}
+        </table>
 
         <!-- Footer -->
-        <hr style="border:none;border-top:1px solid #eef0f8;margin:28px 0 20px">
-        <div>
-          <p style="font-size:13px;font-weight:700;color:#1a1a2e;margin:0 0 2px">${businessName}</p>
-          ${businessAddress ? `<p style="font-size:12px;color:#888;margin:0 0 2px">${businessAddress}</p>` : ""}
-          ${businessEmail   ? `<p style="font-size:12px;color:#888;margin:0"><a href="mailto:${businessEmail}" style="color:${brandColour};text-decoration:none">${businessEmail}</a></p>` : ""}
+        <div style="padding:20px 32px 28px;border-top:1px solid #f2f2f7;margin-top:20px;text-align:center">
           ${footerMsg}
+          <p style="font-size:11px;color:#ccc;margin:${tmpl?.footer_message ? "8px" : "0"} 0 0">Sent via <a href="https://cadi.cleaning" style="color:${brandColour};text-decoration:none">Cadi</a></p>
         </div>
-        <p style="font-size:11px;color:#bbb;margin:16px 0 0">Sent via <a href="https://cadi.cleaning" style="color:${brandColour};text-decoration:none">Cadi</a></p>
+
       </div>
     </td></tr>
   </table>

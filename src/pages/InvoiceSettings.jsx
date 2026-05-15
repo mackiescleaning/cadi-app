@@ -22,72 +22,130 @@ function renderInvoiceNumber(format, seq) {
     .replace('{month}', month);
 }
 
-// ── Invoice preview ───────────────────────────────────────────────────────────
+// ── Invoice preview — QuickBooks-style clean white layout ────────────────────
 
 function InvoicePreview({ template, logoUrl, businessName }) {
   const invNum = renderInvoiceNumber(template.invoice_number_format || 'INV-{seq}', template.next_invoice_number || 1);
   const colour = template.brand_colour || '#010a4f';
   const logoPos = template.logo_position || 'top_left';
+  const today = new Date();
+  const dueDate = new Date(today); dueDate.setDate(dueDate.getDate() + 14);
+  const fmtDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const logoAlign = logoPos === 'top_left' ? 'flex-start' : logoPos === 'top_right' ? 'flex-end' : 'center';
+  const logoJustify = logoPos === 'top_left' ? 'flex-start' : logoPos === 'top_right' ? 'flex-end' : 'center';
+
+  const s = {
+    label:  { fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#999', margin: '0 0 3px' },
+    val:    { fontSize: 12, fontWeight: 600, color: '#1a1a2e', margin: 0 },
+    th:     { fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#aaa', padding: '6px 0', borderBottom: `2px solid ${colour}` },
+    td:     { fontSize: 12, color: '#1a1a2e', padding: '9px 0', borderBottom: '1px solid #f2f2f7', verticalAlign: 'top' },
+    tdR:    { fontSize: 12, color: '#1a1a2e', padding: '9px 0', borderBottom: '1px solid #f2f2f7', textAlign: 'right', fontWeight: 600 },
+  };
 
   return (
-    <div className="bg-white rounded-2xl shadow-2xl overflow-hidden text-[#1a1a2e] max-w-sm w-full text-sm">
-      {/* Header band */}
-      <div style={{ background: colour, padding: '20px 24px' }}>
-        {logoUrl && (
-          <div style={{ display: 'flex', justifyContent: logoAlign, marginBottom: 10 }}>
-            <img src={logoUrl} alt="Logo" style={{ height: 32, objectFit: 'contain', borderRadius: 6 }} />
-          </div>
-        )}
-        <p style={{ color: 'rgba(153,197,255,0.8)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 2px' }}>Invoice</p>
-        <p style={{ color: '#fff', fontSize: 20, fontWeight: 900, margin: '0 0 2px' }}>{invNum}</p>
-        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, margin: 0 }}>from {businessName || 'Your Business'}</p>
+    <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 8px 40px rgba(0,0,0,0.12)', overflow: 'hidden', maxWidth: 420, width: '100%', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', color: '#1a1a2e' }}>
+
+      {/* Brand accent bar */}
+      <div style={{ height: 5, background: colour }} />
+
+      {/* Header: logo/business left, INVOICE label right */}
+      <div style={{ padding: '24px 28px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+        {/* Left: logo + business name */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: logoJustify === 'flex-end' ? 'flex-end' : logoJustify === 'center' ? 'center' : 'flex-start' }}>
+          {logoUrl
+            ? <img src={logoUrl} alt="Logo" style={{ height: 36, maxWidth: 120, objectFit: 'contain' }} />
+            : <p style={{ fontSize: 15, fontWeight: 800, color: colour, margin: 0 }}>{businessName || 'Your Business'}</p>
+          }
+          {logoUrl && <p style={{ fontSize: 11, fontWeight: 700, color: '#444', margin: 0 }}>{businessName || 'Your Business'}</p>}
+        </div>
+        {/* Right: INVOICE heading */}
+        <div style={{ textAlign: 'right' }}>
+          <p style={{ fontSize: 22, fontWeight: 900, color: colour, margin: '0 0 4px', letterSpacing: '-0.5px' }}>INVOICE</p>
+          <p style={{ fontSize: 13, fontWeight: 700, color: '#444', margin: 0 }}>{invNum}</p>
+        </div>
       </div>
 
-      {/* Body */}
-      <div style={{ padding: '20px 24px' }}>
-        {/* To + Terms */}
-        <div style={{ display: 'flex', gap: 24, marginBottom: 16 }}>
+      {/* Invoice meta strip */}
+      <div style={{ margin: '0 28px', padding: '12px 16px', background: '#f8f9fc', borderRadius: 10, display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div>
+          <p style={s.label}>Date</p>
+          <p style={s.val}>{fmtDate(today)}</p>
+        </div>
+        <div>
+          <p style={s.label}>Due date</p>
+          <p style={{ ...s.val, color: colour, fontWeight: 700 }}>{fmtDate(dueDate)}</p>
+        </div>
+        {template.payment_terms_note && (
           <div>
-            <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888', margin: '0 0 4px' }}>Invoice to</p>
-            <p style={{ fontSize: 12, fontWeight: 700, margin: 0 }}>Sample Customer</p>
-          </div>
-          <div>
-            <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888', margin: '0 0 4px' }}>Terms</p>
-            <p style={{ fontSize: 12, fontWeight: 700, margin: 0 }}>{template.payment_terms_note || 'Net 14 days'}</p>
-          </div>
-        </div>
-
-        {/* Line item */}
-        <div style={{ borderTop: '1px solid #f0f0f5', borderBottom: '1px solid #f0f0f5', padding: '10px 0', marginBottom: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontWeight: 600, fontSize: 12 }}>Weekly clean</span>
-            <span style={{ fontWeight: 700, fontSize: 12 }}>£45.00</span>
-          </div>
-        </div>
-
-        {/* Balance due */}
-        <div style={{ background: '#f0f4ff', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: 12, fontWeight: 700 }}>Balance due</span>
-          <span style={{ fontSize: 20, fontWeight: 900, color: colour }}>£45.00</span>
-        </div>
-
-        {/* Bank details */}
-        {template.bank_details && (
-          <div style={{ background: '#f8f9ff', borderRadius: 6, border: '1px solid #e8ecff', padding: '10px 12px', marginBottom: 12 }}>
-            <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888', margin: '0 0 4px' }}>Bank details</p>
-            <pre style={{ fontSize: 11, color: '#1a1a2e', margin: 0, fontFamily: 'inherit', whiteSpace: 'pre-wrap' }}>{template.bank_details}</pre>
+            <p style={s.label}>Terms</p>
+            <p style={s.val}>{template.payment_terms_note}</p>
           </div>
         )}
+      </div>
 
-        {/* Footer */}
-        <div style={{ borderTop: '1px solid #eef0f8', paddingTop: 12, marginTop: 4 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, margin: '0 0 2px' }}>{businessName || 'Your Business'}</p>
-          {template.footer_message && (
-            <p style={{ fontSize: 11, color: '#888', margin: 0 }}>{template.footer_message}</p>
-          )}
+      {/* Bill To */}
+      <div style={{ padding: '0 28px 16px' }}>
+        <p style={s.label}>Bill to</p>
+        <p style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', margin: '0 0 1px' }}>Sample Customer</p>
+        <p style={{ fontSize: 11, color: '#888', margin: 0 }}>sample@customer.com</p>
+      </div>
+
+      {/* Line items table */}
+      <div style={{ padding: '0 28px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ ...s.th, textAlign: 'left', width: '50%' }}>Description</th>
+              <th style={{ ...s.th, textAlign: 'center' }}>Qty</th>
+              <th style={{ ...s.th, textAlign: 'right' }}>Rate</th>
+              <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={s.td}>Weekly clean</td>
+              <td style={{ ...s.td, textAlign: 'center', color: '#888' }}>1</td>
+              <td style={{ ...s.td, textAlign: 'right', color: '#888' }}>£45.00</td>
+              <td style={s.tdR}>£45.00</td>
+            </tr>
+            <tr>
+              <td style={{ ...s.td, color: '#aaa', fontSize: 11 }}>Oven clean add-on</td>
+              <td style={{ ...s.td, textAlign: 'center', color: '#bbb', fontSize: 11 }}>1</td>
+              <td style={{ ...s.td, textAlign: 'right', color: '#bbb', fontSize: 11 }}>£20.00</td>
+              <td style={{ ...s.tdR, color: '#aaa', fontSize: 11 }}>£20.00</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Totals */}
+      <div style={{ padding: '12px 28px 0', display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ minWidth: 180 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f2f2f7' }}>
+            <span style={{ fontSize: 11, color: '#888' }}>Subtotal</span>
+            <span style={{ fontSize: 11, fontWeight: 600 }}>£65.00</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', marginTop: 8, background: colour, borderRadius: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>Total due</span>
+            <span style={{ fontSize: 18, fontWeight: 900, color: '#fff' }}>£65.00</span>
+          </div>
         </div>
+      </div>
+
+      {/* Bank details */}
+      {template.bank_details && (
+        <div style={{ margin: '16px 28px 0', padding: '12px 14px', background: '#f8f9fc', borderRadius: 8, border: '1px solid #eaeef8' }}>
+          <p style={{ ...s.label, marginBottom: 6 }}>Payment details</p>
+          <pre style={{ fontSize: 11, color: '#444', margin: 0, fontFamily: 'inherit', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{template.bank_details}</pre>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{ padding: '16px 28px 24px', borderTop: '1px solid #f2f2f7', marginTop: 16 }}>
+        {template.footer_message
+          ? <p style={{ fontSize: 11, color: '#888', margin: 0, textAlign: 'center' }}>{template.footer_message}</p>
+          : <p style={{ fontSize: 11, color: '#ccc', margin: 0, textAlign: 'center' }}>Sent via Cadi</p>
+        }
       </div>
     </div>
   );
