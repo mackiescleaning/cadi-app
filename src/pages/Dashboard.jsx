@@ -63,7 +63,6 @@ import { supabase } from "../lib/supabase";
 import { createMoneyEntry } from "../lib/db/moneyDb";
 import { listLeaderboard, upsertMyEntry, deleteMyEntry } from "../lib/db/leaderboardDb";
 import AskCadi from "../components/AskCadi";
-import SetupWizard from "../components/SetupWizard";
 import CadiWordmark from "../components/CadiWordmark";
 import SpotlightTour from "../components/SpotlightTour";
 import Onboarding from "./Onboarding";
@@ -1284,124 +1283,6 @@ function BadgesShelf({ badges, onShare }) {
 }
 
 // ─── Cadi Setup Journey ────────────────────────────────────────────────────────
-// ─── Onboarding scorecard — shown to new users until they've used the core tabs ──
-function OnboardingScorecard({ steps, onNavigate, onPreview }) {
-  const done = steps.filter(s => s.done).length;
-  const total = steps.length;
-  const pts = steps.filter(s => s.done).reduce((sum, s) => sum + s.pts, 0);
-  const totalPts = steps.reduce((sum, s) => sum + s.pts, 0);
-  const pct = Math.round((done / total) * 100);
-
-  return (
-    <div className="relative overflow-hidden rounded-sm shadow-2xl shadow-brand-navy/50" style={{ background: 'linear-gradient(145deg, #010a4f 0%, #05124a 50%, #0d1e78 100%)' }}>
-      {/* Grid texture */}
-      <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)', backgroundSize: '28px 28px' }} />
-      <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-brand-blue/30 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-16 -left-12 w-40 h-40 rounded-full bg-brand-skyblue/10 blur-3xl pointer-events-none" />
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-skyblue/60 to-transparent" />
-
-      <div className="relative p-5 sm:p-6">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div>
-            <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-brand-skyblue/70 mb-1">Welcome to Cadi 🌱</p>
-            <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">Let's warm up your score</h2>
-            <p className="text-xs sm:text-sm text-brand-skyblue/60 mt-1">Complete these steps to unlock the community leaderboard and get an accurate health score.</p>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-3xl sm:text-4xl font-black text-white tabular-nums">{pts}<span className="text-base text-brand-skyblue/50">/{totalPts}</span></p>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-brand-skyblue/50">pts earned</p>
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div className="mb-5">
-          <div className="flex items-center justify-between text-[11px] font-bold mb-1.5">
-            <span className="text-brand-skyblue/70">{done} of {total} complete</span>
-            <span className="text-brand-skyblue">{pct}%</span>
-          </div>
-          <div className="h-2 rounded-full bg-white/5 overflow-hidden">
-            <div className="h-full rounded-full bg-gradient-to-r from-brand-skyblue to-emerald-400 transition-all duration-500" style={{ width: `${pct}%` }} />
-          </div>
-        </div>
-
-        {/* Steps */}
-        <div className="space-y-2">
-          {steps.map(step => (
-            <button
-              key={step.id}
-              onClick={() => step.done ? null : onNavigate?.(step.tab)}
-              disabled={step.done}
-              className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                step.done
-                  ? "bg-emerald-500/10 border-emerald-400/30 cursor-default"
-                  : "bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-brand-skyblue/30 active:scale-[0.99]"
-              }`}
-            >
-              <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-base ${
-                step.done ? "bg-emerald-500/20" : "bg-white/5"
-              }`}>
-                {step.done ? <span className="text-emerald-400 font-black">✓</span> : step.emoji}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-bold ${step.done ? "text-emerald-300 line-through" : "text-white"}`}>{step.title}</p>
-                <p className="text-[11px] text-brand-skyblue/50 truncate">{step.body}</p>
-              </div>
-              <span className={`shrink-0 text-xs font-black tabular-nums ${step.done ? "text-emerald-400" : "text-brand-skyblue/70"}`}>+{step.pts}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Footer */}
-        <div className="mt-5 pt-4 border-t border-white/10 flex items-center justify-between">
-          <p className="text-[11px] text-brand-skyblue/50">
-            🔒 Complete all {total} steps to unlock the leaderboard
-          </p>
-          {onPreview && (
-            <button onClick={onPreview} className="text-xs font-bold text-brand-skyblue hover:text-white transition-colors">
-              Preview leaderboard →
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Remaining tasks banner (shown above leaderboard when 3–4/5 done) ────────
-function RemainingTasksBanner({ steps, onNavigate }) {
-  const remaining = steps.filter(s => !s.done);
-  if (remaining.length === 0) return null;
-
-  return (
-    <div className="rounded-2xl border border-[rgba(153,197,255,0.15)] mb-3 overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #010a4f 0%, #05124a 100%)' }}>
-      <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm">🚀</span>
-          <p className="text-xs font-bold text-white">
-            {remaining.length} task{remaining.length > 1 ? 's' : ''} left to complete your setup
-          </p>
-        </div>
-        <p className="text-[10px] text-[rgba(153,197,255,0.4)] font-semibold">+{remaining.reduce((a, s) => a + s.pts, 0)} pts available</p>
-      </div>
-      <div className="flex flex-wrap gap-2 p-3">
-        {remaining.map(step => (
-          <button
-            key={step.id}
-            onClick={() => onNavigate?.(step.tab)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-[rgba(153,197,255,0.3)] transition-all text-xs font-semibold text-white/80"
-          >
-            <span>{step.emoji}</span>
-            {step.title}
-            <span className="text-[rgba(153,197,255,0.5)] font-bold ml-1">+{step.pts}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─── Leaderboard panel ────────────────────────────────────────────────────────
 function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, onOptIn, healthDelta = 0, entries, isPreview = false }) {
   const [filter, setFilter] = useState("all");
@@ -2023,7 +1904,6 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
       return count;
     } catch { return 99; }
   });
-  const isNewUser = dashVisitCount <= 3 && !profile?.dashboard_tour_complete;
   const hasJobs     = (weekJobs || []).some(d => d.jobs > 0) || (jobsToday || []).length > 0;
   const hasInvoices = (invoices || []).length > 0;
   const hasBusinessData = hasJobs || hasInvoices || (accounts?.ytdIncome ?? 0) > 0;
@@ -2081,33 +1961,6 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     try { localStorage.setItem('cadi_prev_health_score', String(score.total)); } catch {}
   }, [score.total]);
 
-  // Onboarding scorecard — show for new users until they've used core tabs
-  const onboardingSteps = useMemo(() => {
-    const jobsAny = (weekJobs || []).some(d => d.jobs > 0) || (jobsToday || []).length > 0;
-    const invoicesAny = (invoices || []).length > 0;
-    const revenueAny = (accounts?.ytdIncome ?? 0) > 0;
-    const customersAny = (liveCustomerCount ?? 0) > 0;
-    return [
-      { id: "profile",   emoji: "👋", title: "Complete your profile",     body: "Name, business, type — set in signup & onboarding", pts: 10, tab: "settings",  done: Boolean(profile?.onboarding_complete) },
-      { id: "customer",  emoji: "👤", title: "Add your first customer",   body: "Log names, addresses and contact info",              pts: 10, tab: "customers", done: customersAny },
-      { id: "job",       emoji: "🧹", title: "Log your first job",        body: "Schedule a clean — customer, date, price",           pts: 10, tab: "scheduler", done: jobsAny },
-      { id: "invoice",   emoji: "📄", title: "Create your first invoice", body: "Turn a completed job into an invoice",               pts: 10, tab: "invoices",  done: invoicesAny },
-      { id: "payment",   emoji: "💷", title: "Receive your first payment",body: "Log income in the Money tab",                        pts: 10, tab: "money",     done: revenueAny },
-    ];
-  }, [profile?.onboarding_complete, liveCustomerCount, weekJobs, jobsToday, invoices, accounts?.ytdIncome]);
-
-  const leaderboardUnlocked = useMemo(() => {
-    const doneCount = onboardingSteps.filter(s => s.done).length;
-    try {
-      if (localStorage.getItem('cadi_lb_preview') === '1') return true;
-    } catch {}
-    return doneCount >= onboardingSteps.length;
-  }, [onboardingSteps]);
-
-  const previewLeaderboard = () => {
-    try { localStorage.setItem('cadi_lb_preview', '1'); } catch {}
-    window.location.reload();
-  };
 
   // Fetch live leaderboard on mount + whenever the user's own score changes
   useEffect(() => {
@@ -2398,7 +2251,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold px-2 py-0.5 bg-white/20 text-white rounded-sm">✨ GUIDED TOUR</span>
             <p className="text-xs font-semibold text-white/80">
-              Hover over any section to find out what it does — then work through your Setup Guide below to get started.
+              Hover over any section to find out what it does — then follow your 30 Day Plan at the top to get started.
             </p>
           </div>
           <button
@@ -2552,68 +2405,45 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           {mode === "solo" && (
             <div className="space-y-4">
 
-              {/* ── Setup guide — shown for real users until wizard is complete ── */}
-              {isLive && profile?.onboarding_complete && (
-                <SetupWizard onAllDone={() => {}} />
-              )}
-
-              {/* ── LEADERBOARD HERO — front and centre (or onboarding scorecard for new users) ── */}
+              {/* ── LEADERBOARD HERO — front and centre ── */}
               <div id="tour-leaderboard" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="lg:col-span-2">
-                  {!isLive || leaderboardUnlocked ? (
-                    demoMode ? (
-                      <DemoHint label="🏆 Cadi Leaderboard — see how your business ranks nationally">
-                        <LeaderboardPanel
-                          userScore={score.total}
-                          userBizName={profile?.business_name || displayName}
-                          userSector={profile?.cleaner_type || "residential"}
-                          communityOptIn={communityOptIn}
-                          onOptIn={handleCommunityOptIn}
-                          entries={leaderboardEntries}
-                          isPreview={isPreviewBoard}
-                        />
-                      </DemoHint>
-                    ) : (
-                      <>
-                        <LeaderboardPanel
-                          userScore={score.total}
-                          userBizName={profile?.business_name || displayName}
-                          userSector={profile?.cleaner_type || "residential"}
-                          communityOptIn={communityOptIn}
-                          onOptIn={handleCommunityOptIn}
-                          healthDelta={healthDelta}
-                          entries={leaderboardEntries}
-                          isPreview={isPreviewBoard}
-                        />
-                      </>
-                    )
+                  {demoMode ? (
+                    <DemoHint label="🏆 Cadi Leaderboard — see how your business ranks nationally">
+                      <LeaderboardPanel
+                        userScore={score.total}
+                        userBizName={profile?.business_name || displayName}
+                        userSector={profile?.cleaner_type || "residential"}
+                        communityOptIn={communityOptIn}
+                        onOptIn={handleCommunityOptIn}
+                        entries={leaderboardEntries}
+                        isPreview={isPreviewBoard}
+                      />
+                    </DemoHint>
                   ) : (
-                    <OnboardingScorecard steps={onboardingSteps} onNavigate={onNavigate} onPreview={previewLeaderboard} />
+                    <LeaderboardPanel
+                      userScore={score.total}
+                      userBizName={profile?.business_name || displayName}
+                      userSector={profile?.cleaner_type || "residential"}
+                      communityOptIn={communityOptIn}
+                      onOptIn={handleCommunityOptIn}
+                      healthDelta={healthDelta}
+                      entries={leaderboardEntries}
+                      isPreview={isPreviewBoard}
+                    />
                   )}
                 </div>
 
                 {/* Right column: Score + AI boost */}
                 <div className="space-y-4">
-                  {/* Health score */}
-                  {profile?.dashboard_tour_complete ? (
-                    demoMode ? (
-                      <DemoHint label="📊 Business health score — tracks 5 dimensions of your business">
-                        <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
-                      </DemoHint>
-                    ) : (
+                  {demoMode ? (
+                    <DemoHint label="📊 Business health score — tracks 5 dimensions of your business">
                       <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
-                    )
+                    </DemoHint>
                   ) : (
-                    <Card className="overflow-hidden flex items-center justify-center min-h-[180px] border-dashed">
-                      <div className="text-center px-6 py-8">
-                        <div className="text-3xl mb-3">📊</div>
-                        <p className="text-sm font-bold text-gray-700 mb-1">Business Health Score</p>
-                        <p className="text-xs text-gray-400 mb-4">Complete your setup guide to unlock your live health score.</p>
-                      </div>
-                    </Card>
+                    <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
                   )}
 
-                  {/* AI panel — journey until core setup done, then data-driven tips */}
                   {demoMode ? (
                     <DemoHint label="🤖 Cadi AI — personalised tasks to boost your score">
                       <AskCadi tab="dashboard" score={score} onNavigate={onNavigate} />
@@ -2652,59 +2482,43 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           {mode === "team" && (
             <div className="space-y-4">
 
-              {/* ── LEADERBOARD HERO — front and centre (or onboarding scorecard for new users) ── */}
+              {/* ── LEADERBOARD HERO — front and centre ── */}
               <div id="tour-leaderboard" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="lg:col-span-2">
-                  {!isLive || leaderboardUnlocked ? (
-                    demoMode ? (
-                      <DemoHint label="🏆 Cadi Leaderboard — see how your business ranks nationally">
-                        <LeaderboardPanel
-                          userScore={score.total}
-                          userBizName={profile?.business_name || displayName}
-                          userSector={profile?.cleaner_type || "residential"}
-                          communityOptIn={communityOptIn}
-                          onOptIn={handleCommunityOptIn}
-                          entries={leaderboardEntries}
-                          isPreview={isPreviewBoard}
-                        />
-                      </DemoHint>
-                    ) : (
-                      <>
-                        <LeaderboardPanel
-                          userScore={score.total}
-                          userBizName={profile?.business_name || displayName}
-                          userSector={profile?.cleaner_type || "residential"}
-                          communityOptIn={communityOptIn}
-                          onOptIn={handleCommunityOptIn}
-                          healthDelta={healthDelta}
-                          entries={leaderboardEntries}
-                          isPreview={isPreviewBoard}
-                        />
-                      </>
-                    )
+                  {demoMode ? (
+                    <DemoHint label="🏆 Cadi Leaderboard — see how your business ranks nationally">
+                      <LeaderboardPanel
+                        userScore={score.total}
+                        userBizName={profile?.business_name || displayName}
+                        userSector={profile?.cleaner_type || "residential"}
+                        communityOptIn={communityOptIn}
+                        onOptIn={handleCommunityOptIn}
+                        entries={leaderboardEntries}
+                        isPreview={isPreviewBoard}
+                      />
+                    </DemoHint>
                   ) : (
-                    <OnboardingScorecard steps={onboardingSteps} onNavigate={onNavigate} onPreview={previewLeaderboard} />
+                    <LeaderboardPanel
+                      userScore={score.total}
+                      userBizName={profile?.business_name || displayName}
+                      userSector={profile?.cleaner_type || "residential"}
+                      communityOptIn={communityOptIn}
+                      onOptIn={handleCommunityOptIn}
+                      healthDelta={healthDelta}
+                      entries={leaderboardEntries}
+                      isPreview={isPreviewBoard}
+                    />
                   )}
                 </div>
 
                 {/* Right column: Score + AI boost */}
                 <div className="space-y-4">
-                  {profile?.dashboard_tour_complete ? (
-                    demoMode ? (
-                      <DemoHint label="📊 Business health score — tracks 5 dimensions of your business">
-                        <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
-                      </DemoHint>
-                    ) : (
+                  {demoMode ? (
+                    <DemoHint label="📊 Business health score — tracks 5 dimensions of your business">
                       <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
-                    )
+                    </DemoHint>
                   ) : (
-                    <Card className="overflow-hidden flex items-center justify-center min-h-[180px] border-dashed">
-                      <div className="text-center px-6 py-8">
-                        <div className="text-3xl mb-3">📊</div>
-                        <p className="text-sm font-bold text-gray-700 mb-1">Business Health Score</p>
-                        <p className="text-xs text-gray-400 mb-4">Complete your setup guide to unlock your live health score.</p>
-                      </div>
-                    </Card>
+                    <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
                   )}
 
                   {demoMode ? (
