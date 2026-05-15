@@ -22,97 +22,88 @@ function renderInvoiceNumber(format, seq) {
     .replace('{month}', month);
 }
 
-// ── Invoice preview — QuickBooks-style clean white layout ────────────────────
+// ── Invoice preview ───────────────────────────────────────────────────────────
 
 function InvoicePreview({ template, logoUrl, businessName }) {
-  const invNum = renderInvoiceNumber(template.invoice_number_format || 'INV-{seq}', template.next_invoice_number || 1);
-  const colour = template.brand_colour || '#010a4f';
-  const logoPos = template.logo_position || 'top_left';
-  const today = new Date();
+  const invNum  = renderInvoiceNumber(template.invoice_number_format || 'INV-{seq}', template.next_invoice_number || 1);
+  const colour  = template.brand_colour || '#010a4f';
+  const today   = new Date();
   const dueDate = new Date(today); dueDate.setDate(dueDate.getDate() + 14);
   const fmtDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const logoJustify = logoPos === 'top_left' ? 'flex-start' : logoPos === 'top_right' ? 'flex-end' : 'center';
-
-  const s = {
-    label:  { fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#999', margin: '0 0 3px' },
-    val:    { fontSize: 12, fontWeight: 600, color: '#1a1a2e', margin: 0 },
-    th:     { fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#aaa', padding: '6px 0', borderBottom: `2px solid ${colour}` },
-    td:     { fontSize: 12, color: '#1a1a2e', padding: '9px 0', borderBottom: '1px solid #f2f2f7', verticalAlign: 'top' },
-    tdR:    { fontSize: 12, color: '#1a1a2e', padding: '9px 0', borderBottom: '1px solid #f2f2f7', textAlign: 'right', fontWeight: 600 },
-  };
+  const font  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  const label = { fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#b0b0be', margin: '0 0 3px' };
 
   return (
-    <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 8px 40px rgba(0,0,0,0.12)', overflow: 'hidden', maxWidth: 420, width: '100%', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', color: '#1a1a2e' }}>
+    <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 4px 32px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden', maxWidth: 420, width: '100%', fontFamily: font, color: '#111' }}>
 
-      {/* Brand accent bar */}
-      <div style={{ height: 5, background: colour }} />
+      {/* Glassmorphism header */}
+      <div style={{ background: colour, padding: '26px 28px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', overflow: 'hidden' }}>
+        {/* Glass shimmer */}
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.08) 100%)', pointerEvents: 'none' }} />
+        {/* Top highlight line */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.3)', pointerEvents: 'none' }} />
 
-      {/* Header: logo/business left, INVOICE label right */}
-      <div style={{ padding: '24px 28px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-        {/* Left: logo + business name */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: logoJustify === 'flex-end' ? 'flex-end' : logoJustify === 'center' ? 'center' : 'flex-start' }}>
+        {/* Business name / logo */}
+        <div style={{ position: 'relative', zIndex: 1 }}>
           {logoUrl
-            ? <img src={logoUrl} alt="Logo" style={{ height: 36, maxWidth: 120, objectFit: 'contain' }} />
-            : <p style={{ fontSize: 15, fontWeight: 800, color: colour, margin: 0 }}>{businessName || 'Your Business'}</p>
+            ? <>
+                <img src={logoUrl} alt="Logo" style={{ height: 30, maxWidth: 110, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+                <p style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.65)', margin: '5px 0 0' }}>{businessName || 'Your Business'}</p>
+              </>
+            : <p style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0, letterSpacing: '-0.2px' }}>{businessName || 'Your Business'}</p>
           }
-          {logoUrl && <p style={{ fontSize: 11, fontWeight: 700, color: '#444', margin: 0 }}>{businessName || 'Your Business'}</p>}
         </div>
-        {/* Right: INVOICE heading */}
+
+        {/* Invoice label + number */}
+        <div style={{ textAlign: 'right', position: 'relative', zIndex: 1 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)', margin: '0 0 5px' }}>Invoice</p>
+          <p style={{ fontSize: 17, fontWeight: 700, color: '#fff', margin: 0, letterSpacing: '-0.2px' }}>{invNum}</p>
+        </div>
+      </div>
+
+      {/* Bill to + dates */}
+      <div style={{ padding: '20px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f0f0f5' }}>
+        <div>
+          <p style={label}>Bill to</p>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: '0 0 2px' }}>Sample Customer</p>
+          <p style={{ fontSize: 11, color: '#999', margin: 0 }}>sample@customer.com</p>
+        </div>
         <div style={{ textAlign: 'right' }}>
-          <p style={{ fontSize: 22, fontWeight: 900, color: colour, margin: '0 0 4px', letterSpacing: '-0.5px' }}>INVOICE</p>
-          <p style={{ fontSize: 13, fontWeight: 700, color: '#444', margin: 0 }}>{invNum}</p>
-        </div>
-      </div>
-
-      {/* Invoice meta strip */}
-      <div style={{ margin: '0 28px', padding: '12px 16px', background: '#f8f9fc', borderRadius: 10, display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 20 }}>
-        <div>
-          <p style={s.label}>Date</p>
-          <p style={s.val}>{fmtDate(today)}</p>
-        </div>
-        <div>
-          <p style={s.label}>Due date</p>
-          <p style={{ ...s.val, color: colour, fontWeight: 700 }}>{fmtDate(dueDate)}</p>
-        </div>
-        {template.payment_terms_note && (
-          <div>
-            <p style={s.label}>Terms</p>
-            <p style={s.val}>{template.payment_terms_note}</p>
+          <div style={{ marginBottom: 10 }}>
+            <p style={label}>Date issued</p>
+            <p style={{ fontSize: 12, fontWeight: 500, color: '#444', margin: 0 }}>{fmtDate(today)}</p>
           </div>
-        )}
+          <div>
+            <p style={label}>Due date</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: colour, margin: 0 }}>{fmtDate(dueDate)}</p>
+          </div>
+        </div>
       </div>
 
-      {/* Bill To */}
-      <div style={{ padding: '0 28px 16px' }}>
-        <p style={s.label}>Bill to</p>
-        <p style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', margin: '0 0 1px' }}>Sample Customer</p>
-        <p style={{ fontSize: 11, color: '#888', margin: 0 }}>sample@customer.com</p>
-      </div>
-
-      {/* Line items table */}
-      <div style={{ padding: '0 28px' }}>
+      {/* Line items */}
+      <div style={{ padding: '4px 28px 0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ ...s.th, textAlign: 'left', width: '50%' }}>Description</th>
-              <th style={{ ...s.th, textAlign: 'center' }}>Qty</th>
-              <th style={{ ...s.th, textAlign: 'right' }}>Rate</th>
-              <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
+              <th style={{ ...label, padding: '12px 0 8px', textAlign: 'left', width: '50%' }}>Description</th>
+              <th style={{ ...label, padding: '12px 0 8px', textAlign: 'center' }}>Qty</th>
+              <th style={{ ...label, padding: '12px 0 8px', textAlign: 'right' }}>Rate</th>
+              <th style={{ ...label, padding: '12px 0 8px', textAlign: 'right' }}>Amount</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td style={s.td}>Weekly clean</td>
-              <td style={{ ...s.td, textAlign: 'center', color: '#888' }}>1</td>
-              <td style={{ ...s.td, textAlign: 'right', color: '#888' }}>£45.00</td>
-              <td style={s.tdR}>£45.00</td>
+              <td style={{ fontSize: 13, color: '#222', padding: '11px 0', borderTop: '1px solid #f0f0f5' }}>Weekly clean</td>
+              <td style={{ fontSize: 12, color: '#999', padding: '11px 0', borderTop: '1px solid #f0f0f5', textAlign: 'center' }}>1</td>
+              <td style={{ fontSize: 12, color: '#999', padding: '11px 0', borderTop: '1px solid #f0f0f5', textAlign: 'right' }}>£45.00</td>
+              <td style={{ fontSize: 13, color: '#222', fontWeight: 600, padding: '11px 0', borderTop: '1px solid #f0f0f5', textAlign: 'right' }}>£45.00</td>
             </tr>
             <tr>
-              <td style={{ ...s.td, color: '#aaa', fontSize: 11 }}>Oven clean add-on</td>
-              <td style={{ ...s.td, textAlign: 'center', color: '#bbb', fontSize: 11 }}>1</td>
-              <td style={{ ...s.td, textAlign: 'right', color: '#bbb', fontSize: 11 }}>£20.00</td>
-              <td style={{ ...s.tdR, color: '#aaa', fontSize: 11 }}>£20.00</td>
+              <td style={{ fontSize: 12, color: '#888', padding: '11px 0', borderTop: '1px solid #f0f0f5' }}>Oven clean add-on</td>
+              <td style={{ fontSize: 12, color: '#bbb', padding: '11px 0', borderTop: '1px solid #f0f0f5', textAlign: 'center' }}>1</td>
+              <td style={{ fontSize: 12, color: '#bbb', padding: '11px 0', borderTop: '1px solid #f0f0f5', textAlign: 'right' }}>£20.00</td>
+              <td style={{ fontSize: 12, color: '#888', fontWeight: 600, padding: '11px 0', borderTop: '1px solid #f0f0f5', textAlign: 'right' }}>£20.00</td>
             </tr>
           </tbody>
         </table>
@@ -120,32 +111,38 @@ function InvoicePreview({ template, logoUrl, businessName }) {
 
       {/* Totals */}
       <div style={{ padding: '12px 28px 0', display: 'flex', justifyContent: 'flex-end' }}>
-        <div style={{ minWidth: 180 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f2f2f7' }}>
-            <span style={{ fontSize: 11, color: '#888' }}>Subtotal</span>
-            <span style={{ fontSize: 11, fontWeight: 600 }}>£65.00</span>
+        <div style={{ minWidth: 200 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
+            <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>Subtotal</span>
+            <span style={{ fontSize: 12, color: '#555', fontWeight: 500 }}>£65.00</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', marginTop: 8, background: colour, borderRadius: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>Total due</span>
-            <span style={{ fontSize: 18, fontWeight: 900, color: '#fff' }}>£65.00</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 0 4px', borderTop: `2px solid ${colour}`, marginTop: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#222' }}>Total due</span>
+            <span style={{ fontSize: 22, fontWeight: 700, color: colour, letterSpacing: '-0.5px' }}>£65.00</span>
           </div>
         </div>
       </div>
 
-      {/* Bank details */}
-      {template.bank_details && (
-        <div style={{ margin: '16px 28px 0', padding: '12px 14px', background: '#f8f9fc', borderRadius: 8, border: '1px solid #eaeef8' }}>
-          <p style={{ ...s.label, marginBottom: 6 }}>Payment details</p>
-          <pre style={{ fontSize: 11, color: '#444', margin: 0, fontFamily: 'inherit', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{template.bank_details}</pre>
+      {/* Payment details + terms */}
+      {(template.bank_details || template.payment_terms_note) && (
+        <div style={{ margin: '14px 28px 0', padding: '13px 14px', background: '#f8f8fb', borderRadius: 8, borderLeft: `3px solid ${colour}40` }}>
+          {template.payment_terms_note && (
+            <p style={{ fontSize: 11, color: '#777', margin: template.bank_details ? '0 0 8px' : 0 }}>{template.payment_terms_note}</p>
+          )}
+          {template.bank_details && (
+            <>
+              <p style={{ ...label, marginBottom: 4 }}>Payment details</p>
+              <pre style={{ fontSize: 11, color: '#555', margin: 0, fontFamily: font, whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>{template.bank_details}</pre>
+            </>
+          )}
         </div>
       )}
 
       {/* Footer */}
-      <div style={{ padding: '16px 28px 24px', borderTop: '1px solid #f2f2f7', marginTop: 16 }}>
-        {template.footer_message
-          ? <p style={{ fontSize: 11, color: '#888', margin: 0, textAlign: 'center' }}>{template.footer_message}</p>
-          : <p style={{ fontSize: 11, color: '#ccc', margin: 0, textAlign: 'center' }}>Sent via Cadi</p>
-        }
+      <div style={{ padding: '16px 28px 22px', marginTop: 14, borderTop: '1px solid #f0f0f5' }}>
+        <p style={{ fontSize: 11, color: '#c0c0cc', margin: 0, textAlign: 'center' }}>
+          {template.footer_message || 'Thank you for your business.'}
+        </p>
       </div>
     </div>
   );
