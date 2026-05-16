@@ -105,6 +105,7 @@ const EMPTY_FORM = {
   materials_equipment_notes: '',
   private_notes: '',
   is_active: true,
+  site_visit_required: false,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ function formToRecord(form) {
     materials_equipment_notes: form.materials_equipment_notes.trim() || null,
     private_notes: form.private_notes.trim() || null,
     is_active: form.is_active,
+    site_visit_required: form.site_visit_required ?? false,
   };
 }
 
@@ -835,6 +837,27 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
               onClick={() => patch({ is_active: !form.is_active })}
               className={`w-12 h-6 rounded-full flex items-center transition-all px-0.5 ${
                 form.is_active ? 'bg-[#4f78ff] justify-end' : 'bg-[rgba(153,197,255,0.15)] justify-start'
+              }`}
+            >
+              <div className="w-5 h-5 rounded-full bg-white shadow-sm" />
+            </button>
+          </div>
+
+          {/* Site visit required toggle */}
+          <div className="flex items-center justify-between p-3 rounded-xl border border-[rgba(153,197,255,0.12)] bg-[rgba(153,197,255,0.04)]">
+            <div>
+              <p className="text-sm font-bold text-white">Needs a site visit</p>
+              <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">
+                {form.site_visit_required
+                  ? 'Front Desk will collect contact details and request a visit — no instant quote.'
+                  : 'Front Desk will quote this service instantly.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => patch({ site_visit_required: !form.site_visit_required })}
+              className={`w-12 h-6 rounded-full flex items-center transition-all px-0.5 ${
+                form.site_visit_required ? 'bg-[#4f78ff] justify-end' : 'bg-[rgba(153,197,255,0.15)] justify-start'
               }`}
             >
               <div className="w-5 h-5 rounded-full bg-white shadow-sm" />

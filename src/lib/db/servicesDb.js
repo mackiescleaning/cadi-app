@@ -44,7 +44,7 @@ export async function listServicesForFrontDesk() {
       'frequency_one_off', 'frequency_weekly', 'frequency_fortnightly',
       'frequency_monthly', 'frequency_quarterly', 'frequency_annually',
       'service_area_uses_default', 'service_area_custom',
-      'materials_equipment_notes',
+      'materials_equipment_notes', 'site_visit_required',
     ].join(','))
     .eq('is_active', true)
     .order('display_order', { ascending: true })

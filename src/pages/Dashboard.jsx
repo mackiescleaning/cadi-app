@@ -478,13 +478,19 @@ function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
   const [showExplainer, setShowExplainer] = useState(false);
 
   return (
-    <div className="rounded-2xl overflow-hidden shadow-sm border border-gray-200">
-      {/* Dark navy hero */}
-      <div className="bg-brand-navy px-5 py-5">
+    <div
+      className="rounded-2xl overflow-hidden border border-[rgba(79,120,255,0.15)]"
+      style={{ background: 'linear-gradient(135deg, #040810 0%, #06103c 50%, #080d28 100%)' }}
+    >
+      {/* Header */}
+      <div className="px-5 py-5">
         <div className="flex items-center gap-5">
           <ScoreRing score={total} size={112} />
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/70 mb-1">Cadi Score</p>
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="w-1.5 h-4 rounded-full bg-[#4f78ff] shadow-[0_0_8px_2px_rgba(79,120,255,0.5)]" />
+              <p className="text-xs font-black uppercase tracking-[0.15em] text-[#99c5ff]">Cadi Score</p>
+            </div>
             <p className={`text-2xl font-black leading-tight ${tierColor}`}>{tier}</p>
             <p className="text-xs text-white/50 mt-1.5 leading-relaxed">
               {scoreDelta !== 0 && (
@@ -519,8 +525,8 @@ function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
         </div>
       </div>
 
-      {/* Dimension bars — dark */}
-      <div className="bg-brand-navy px-5 py-4 border-t border-white/10">
+      {/* Dimension bars */}
+      <div className="px-5 py-4 border-t border-[rgba(79,120,255,0.12)]">
         <div className="flex items-center justify-between mb-3">
           <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/50">Score breakdown</p>
           <button onClick={() => setShowExplainer(true)} className="text-xs font-bold text-brand-skyblue hover:text-white transition-colors">
@@ -559,46 +565,73 @@ function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
 
 // ─── Priority actions panel ────────────────────────────────────────────────────
 function ActionsPanel({ actions, onNavigate }) {
-  const borderColor = { red: "border-l-red-500", amber: "border-l-amber-400", green: "border-l-emerald-500", blue: "border-l-brand-blue" };
-  const bgColor     = { red: "hover:bg-red-50/50", amber: "hover:bg-amber-50/50", green: "hover:bg-emerald-50/50", blue: "hover:bg-blue-50/50" };
-  const btnColor    = { red: "bg-red-600 hover:bg-red-700", amber: "bg-amber-500 hover:bg-amber-600", green: "bg-emerald-600 hover:bg-emerald-700", blue: "bg-brand-blue hover:bg-brand-navy" };
+  const needsAttention = actions.filter(a => a.pts > 0).length;
+
+  const levelCfg = {
+    red:   { glow: "rgba(239,68,68,0.15)",  border: "rgba(239,68,68,0.4)",   bar: "#ef4444", badge: "bg-red-500/20 text-red-300 border-red-500/30",   btn: "bg-red-500 hover:bg-red-400",   dot: "bg-red-400 shadow-[0_0_8px_2px_rgba(239,68,68,0.6)]" },
+    amber: { glow: "rgba(251,191,36,0.12)", border: "rgba(251,191,36,0.35)", bar: "#fbbf24", badge: "bg-amber-500/20 text-amber-300 border-amber-500/30", btn: "bg-amber-500 hover:bg-amber-400", dot: "bg-amber-400 shadow-[0_0_8px_2px_rgba(251,191,36,0.6)]" },
+    green: { glow: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.35)", bar: "#34d399", badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30", btn: "bg-emerald-600 hover:bg-emerald-500", dot: "bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.6)]" },
+    blue:  { glow: "rgba(79,120,255,0.12)", border: "rgba(79,120,255,0.35)", bar: "#4f78ff", badge: "bg-blue-500/20 text-blue-300 border-blue-500/30",   btn: "bg-[#4f78ff] hover:bg-[#3d68ff]", dot: "bg-[#4f78ff] shadow-[0_0_8px_2px_rgba(79,120,255,0.6)]" },
+  };
 
   return (
-    <Card className="overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <SL>Priority actions</SL>
-        <span className="text-xs text-gray-400">{actions.filter(a=>a.pts>0).length} things need attention</span>
+    <div
+      className="rounded-2xl overflow-hidden border border-[rgba(79,120,255,0.15)]"
+      style={{ background: 'linear-gradient(135deg, #040810 0%, #06103c 50%, #080d28 100%)' }}
+    >
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-[rgba(79,120,255,0.12)] flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-1.5 h-4 rounded-full bg-[#4f78ff] shadow-[0_0_8px_2px_rgba(79,120,255,0.5)]" />
+          <p className="text-xs font-black uppercase tracking-[0.15em] text-[#99c5ff]">Priority actions</p>
+        </div>
+        {needsAttention > 0 && (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+            {needsAttention} need attention
+          </span>
+        )}
       </div>
-      <div className="divide-y divide-gray-100">
-        {actions.map((a, i) => (
-          <div
-            key={i}
-            className={`flex items-start gap-3 px-4 py-3.5 border-l-2 ${borderColor[a.level] ?? "border-l-gray-200"} ${bgColor[a.level]} transition-colors`}
-          >
-            <span className="text-sm shrink-0 mt-0.5">{a.icon}</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800 leading-tight">{a.title}</p>
-              <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{a.body}</p>
+
+      {/* Action rows */}
+      <div className="divide-y divide-[rgba(79,120,255,0.08)]">
+        {actions.map((a, i) => {
+          const cfg = levelCfg[a.level] ?? levelCfg.blue;
+          return (
+            <div
+              key={i}
+              className="flex items-center gap-4 px-5 py-4 transition-all duration-200 hover:bg-white/[0.03] cursor-default"
+              style={{ background: i === 0 && a.pts > 0 ? `linear-gradient(90deg, ${cfg.glow} 0%, transparent 60%)` : undefined }}
+            >
+              {/* Severity dot */}
+              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${cfg.dot}`} />
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white leading-tight">{a.title}</p>
+                <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5 leading-relaxed">{a.body}</p>
+              </div>
+
+              {/* Right side */}
+              <div className="shrink-0 flex items-center gap-2">
+                {a.pts > 0 && (
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${cfg.badge}`}>
+                    +{a.pts}pts
+                  </span>
+                )}
+                {a.action && a.tab && (
+                  <button
+                    onClick={() => onNavigate?.(a.tab)}
+                    className={`px-3.5 py-1.5 text-white text-xs font-black rounded-lg transition-colors whitespace-nowrap ${cfg.btn}`}
+                  >
+                    {a.action}
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="shrink-0 flex flex-col items-end gap-1.5">
-              {a.pts > 0 && (
-                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-sm">
-                  +{a.pts}pts
-                </span>
-              )}
-              {a.action && a.tab && (
-                <button
-                  onClick={() => onNavigate?.(a.tab)}
-                  className={`px-3 py-1 text-white text-xs font-bold rounded-sm transition-colors whitespace-nowrap ${btnColor[a.level]}`}
-                >
-                  {a.action}
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -610,83 +643,175 @@ function WeekGrid({ weekJobs }) {
   const weekPct    = weekTotal > 0 ? Math.round((weekEarned / weekTotal) * 100) : 0;
 
   return (
-    <Card className="overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <SL>This week — day by day</SL>
-        <span className="text-xs text-gray-400">{fmt(weekEarned)} earned · {weekPct}% of target</span>
+    <div
+      className="rounded-2xl overflow-hidden border border-[rgba(79,120,255,0.15)]"
+      style={{ background: 'linear-gradient(135deg, #040810 0%, #06103c 50%, #080d28 100%)' }}
+    >
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-[rgba(79,120,255,0.12)] flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-1.5 h-4 rounded-full bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.5)]" />
+          <p className="text-xs font-black uppercase tracking-[0.15em] text-[#99c5ff]">This week</p>
+        </div>
+        <span className="text-xs font-bold text-emerald-400">{fmt(weekEarned)} earned · {weekPct}%</span>
       </div>
-      <div className="grid grid-cols-7 gap-px bg-gray-100">
-        {weekJobs.map(d => (
-          <div key={d.day} className={`flex flex-col items-center py-3 ${
-            d.isToday ? "bg-brand-navy" : d.done ? "bg-emerald-50" : d.revenue > 0 ? "bg-white" : "bg-gray-50/50"
-          }`}>
-            <p className={`text-xs font-bold tracking-widest uppercase mb-2 ${
-              d.isToday ? "text-brand-skyblue" : d.done ? "text-emerald-600" : "text-gray-400"
-            }`}>{d.day}</p>
-            <div className="w-full h-14 flex items-end justify-center mb-2">
-              {d.revenue > 0
-                ? <div
-                    className={`w-4 rounded-sm ${d.isToday ? "bg-brand-skyblue" : d.done ? "bg-emerald-400" : "bg-brand-blue/30"}`}
-                    style={{ height: `${Math.max((d.revenue / maxRevenue) * 52, 5)}px` }}
+
+      {/* Day columns */}
+      <div className="grid grid-cols-7 gap-px px-3 pt-4 pb-2">
+        {weekJobs.map(d => {
+          const barH = d.revenue > 0 ? Math.max((d.revenue / maxRevenue) * 56, 6) : 0;
+          return (
+            <div key={d.day} className="flex flex-col items-center gap-1.5">
+              {/* Day label */}
+              <p className={`text-[10px] font-black uppercase tracking-widest ${
+                d.isToday ? "text-[#99c5ff]" : d.done ? "text-emerald-400" : "text-[rgba(153,197,255,0.3)]"
+              }`}>{d.day}</p>
+
+              {/* Bar container */}
+              <div className="w-full h-14 flex items-end justify-center">
+                {d.revenue > 0 ? (
+                  <div
+                    className="w-5 rounded-t-md transition-all duration-500"
+                    style={{
+                      height: `${barH}px`,
+                      background: d.isToday
+                        ? 'linear-gradient(180deg, #99c5ff 0%, #4f78ff 100%)'
+                        : d.done
+                        ? 'linear-gradient(180deg, #6ee7b7 0%, #059669 100%)'
+                        : 'rgba(79,120,255,0.2)',
+                      boxShadow: d.isToday
+                        ? '0 0 10px 2px rgba(99,179,255,0.4)'
+                        : d.done
+                        ? '0 0 8px 1px rgba(52,211,153,0.3)'
+                        : 'none',
+                    }}
                   />
-                : <div className="w-4 h-1.5 bg-gray-200 rounded-sm" />
-              }
+                ) : (
+                  <div className="w-5 h-1 rounded-full bg-white/5" />
+                )}
+              </div>
+
+              {/* Revenue */}
+              <p className={`text-[11px] font-black tabular-nums leading-none ${
+                d.isToday ? "text-white" : d.done ? "text-emerald-300" : d.revenue > 0 ? "text-[rgba(153,197,255,0.6)]" : "text-[rgba(153,197,255,0.2)]"
+              }`}>{d.revenue > 0 ? fmt(d.revenue) : "—"}</p>
+
+              {/* Sub label */}
+              <p className={`text-[9px] font-bold ${
+                d.isToday ? "text-[#4f78ff]" : d.done ? "text-emerald-500" : "text-[rgba(153,197,255,0.25)]"
+              }`}>
+                {d.isToday ? "today" : d.done ? "✓" : d.jobs > 0 ? `${d.jobs}j` : "—"}
+              </p>
             </div>
-            <p className={`text-sm font-bold tabular-nums ${
-              d.isToday ? "text-white" : d.done ? "text-emerald-700" : d.revenue > 0 ? "text-brand-navy" : "text-gray-300"
-            }`}>{d.revenue > 0 ? fmt(d.revenue) : "—"}</p>
-            <p className={`text-xs mt-0.5 ${d.isToday ? "text-brand-skyblue" : "text-gray-400"}`}>
-              {d.isToday ? "today" : d.done ? "✓" : d.jobs > 0 ? `${d.jobs}j` : "—"}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
-      <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50">
-        <div className="flex justify-between text-xs text-gray-400 mb-1">
-          <span>Week progress</span>
-          <span className="font-semibold text-brand-navy">{fmt(weekEarned)} of {fmt(weekTotal)} scheduled</span>
+
+      {/* Progress bar footer */}
+      <div className="px-5 py-3 border-t border-[rgba(79,120,255,0.1)] mt-1">
+        <div className="flex justify-between text-[10px] font-bold mb-1.5">
+          <span className="text-[rgba(153,197,255,0.4)] uppercase tracking-widest">Week progress</span>
+          <span className="text-[rgba(153,197,255,0.6)]">{fmt(weekEarned)} of {fmt(weekTotal)}</span>
         </div>
-        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${weekPct}%` }} />
+        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${weekPct}%`,
+              background: 'linear-gradient(90deg, #34d399, #059669)',
+              boxShadow: '0 0 8px 2px rgba(52,211,153,0.4)',
+            }}
+          />
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
 // ─── Today's jobs ──────────────────────────────────────────────────────────────
 function TodaysJobs({ jobs, onNavigate }) {
-  const TYPE_DOT = { residential: "bg-emerald-500", commercial: "bg-brand-blue", exterior: "bg-orange-500" };
-  const STATUS_CHIP = {
-    complete:     <Chip color="green">Done</Chip>,
-    "in-progress":<Chip color="blue">In progress</Chip>,
-    scheduled:    <Chip color="gray">Scheduled</Chip>,
-    unassigned:   <Chip color="warn">Assign</Chip>,
+  const TYPE_COLOR = {
+    residential: { bar: '#34d399', glow: 'rgba(52,211,153,0.6)' },
+    commercial:  { bar: '#4f78ff', glow: 'rgba(79,120,255,0.6)' },
+    exterior:    { bar: '#f97316', glow: 'rgba(249,115,22,0.6)'  },
   };
 
+  const STATUS_CFG = {
+    complete:      { label: 'Done',        bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+    'in-progress': { label: 'In progress', bg: 'bg-[#4f78ff]/20',   text: 'text-[#99c5ff]',  border: 'border-[#4f78ff]/30'  },
+    scheduled:     { label: 'Scheduled',   bg: 'bg-white/5',        text: 'text-[rgba(153,197,255,0.5)]', border: 'border-white/10' },
+    unassigned:    { label: 'Assign',      bg: 'bg-red-500/20',     text: 'text-red-300',    border: 'border-red-500/30'    },
+  };
+
+  const doneCount = jobs.filter(j => j.status === 'complete').length;
+
   return (
-    <Card className="overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <SL>Today's jobs</SL>
-        <button onClick={() => onNavigate?.("scheduler")} className="text-xs font-bold text-brand-blue hover:underline">Full schedule →</button>
+    <div
+      className="rounded-2xl overflow-hidden border border-[rgba(79,120,255,0.15)]"
+      style={{ background: 'linear-gradient(135deg, #040810 0%, #06103c 50%, #080d28 100%)' }}
+    >
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-[rgba(79,120,255,0.12)] flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-1.5 h-4 rounded-full bg-[#4f78ff] shadow-[0_0_8px_2px_rgba(79,120,255,0.5)]" />
+          <p className="text-xs font-black uppercase tracking-[0.15em] text-[#99c5ff]">Today's jobs</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {jobs.length > 0 && (
+            <span className="text-xs font-bold text-[rgba(153,197,255,0.5)]">{doneCount}/{jobs.length} done</span>
+          )}
+          <button
+            onClick={() => onNavigate?.("scheduler")}
+            className="text-xs font-bold text-[#4f78ff] hover:text-[#99c5ff] transition-colors"
+          >
+            Full schedule →
+          </button>
+        </div>
       </div>
+
       {jobs.length === 0 && (
-        <div className="px-4 py-6 text-sm text-gray-400">No jobs yet for today.</div>
+        <div className="px-5 py-8 text-center">
+          <p className="text-sm text-[rgba(153,197,255,0.4)]">No jobs yet for today.</p>
+        </div>
       )}
-      <div className="divide-y divide-gray-100">
-        {jobs.map(j => (
-          <div key={j.id} className={`flex items-center gap-3 px-4 py-3 ${j.status==="complete"?"opacity-60":""}`}>
-            <div className={`w-1.5 self-stretch rounded-full shrink-0 ${TYPE_DOT[j.type] ?? "bg-gray-300"}`} />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800 truncate">{j.customer}</p>
-              <p className="text-xs text-gray-400">{j.time} · {j.postcode} · {j.service}</p>
+
+      <div className="divide-y divide-[rgba(79,120,255,0.08)]">
+        {jobs.map(j => {
+          const typeColor = TYPE_COLOR[j.type] ?? TYPE_COLOR.residential;
+          const statusCfg = STATUS_CFG[j.status] ?? STATUS_CFG.scheduled;
+          const isDone    = j.status === 'complete';
+
+          return (
+            <div
+              key={j.id}
+              className={`flex items-center gap-3.5 px-5 py-3.5 transition-all duration-200 hover:bg-white/[0.02] ${isDone ? 'opacity-50' : ''}`}
+            >
+              {/* Type bar */}
+              <div
+                className="w-1 self-stretch rounded-full shrink-0 min-h-[32px]"
+                style={{ background: typeColor.bar, boxShadow: `0 0 6px 1px ${typeColor.glow}` }}
+              />
+
+              {/* Job info */}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white truncate leading-tight">{j.customer}</p>
+                <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">{j.time} · {j.postcode} · {j.service}</p>
+              </div>
+
+              {/* Price */}
+              <p className={`text-sm font-black tabular-nums shrink-0 ${isDone ? 'text-emerald-400' : 'text-white'}`}>
+                {fmt(j.price)}
+              </p>
+
+              {/* Status chip */}
+              <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border shrink-0 ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}>
+                {statusCfg.label}
+              </span>
             </div>
-            <p className={`text-sm font-bold tabular-nums shrink-0 ${j.status==="complete"?"text-emerald-600":"text-brand-navy"}`}>{fmt(j.price)}</p>
-            {STATUS_CHIP[j.status]}
-          </div>
-        ))}
+          );
+        })}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -727,32 +852,61 @@ function TeamPanel({ team, jobsToday, onNavigate }) {
 
 // ─── Activity feed ─────────────────────────────────────────────────────────────
 function ActivityFeed({ feed }) {
+  // Map legacy bg classes to dark-mode glass equivalents
+  const iconCfg = (bg, icon) => {
+    if (bg.includes('emerald')) return { ring: 'border-emerald-500/40', iconBg: 'bg-emerald-500/20', glow: 'rgba(52,211,153,0.5)', text: 'text-emerald-300' };
+    if (bg.includes('red'))     return { ring: 'border-red-500/40',     iconBg: 'bg-red-500/20',     glow: 'rgba(239,68,68,0.5)',  text: 'text-red-300'     };
+    if (bg.includes('blue'))    return { ring: 'border-[#4f78ff]/40',   iconBg: 'bg-[#4f78ff]/20',   glow: 'rgba(79,120,255,0.5)',  text: 'text-[#99c5ff]'  };
+    if (bg.includes('amber'))   return { ring: 'border-amber-500/40',   iconBg: 'bg-amber-500/20',   glow: 'rgba(251,191,36,0.5)', text: 'text-amber-300'   };
+    return { ring: 'border-white/20', iconBg: 'bg-white/10', glow: 'rgba(255,255,255,0.2)', text: 'text-white/70' };
+  };
+
   return (
-    <Card className="overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100">
-        <SL>Recent activity</SL>
+    <div
+      className="rounded-2xl overflow-hidden border border-[rgba(79,120,255,0.15)]"
+      style={{ background: 'linear-gradient(135deg, #040810 0%, #06103c 50%, #080d28 100%)' }}
+    >
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-[rgba(79,120,255,0.12)]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-1.5 h-4 rounded-full bg-violet-400 shadow-[0_0_8px_2px_rgba(167,139,250,0.5)]" />
+          <p className="text-xs font-black uppercase tracking-[0.15em] text-[#99c5ff]">Recent activity</p>
+        </div>
       </div>
+
       {feed.length === 0 && (
-        <div className="px-4 py-8 text-center">
-          <p className="text-sm text-gray-400">No activity yet</p>
-          <p className="text-xs text-gray-300 mt-1">Payments, invoices and completed jobs will appear here.</p>
+        <div className="px-5 py-10 text-center">
+          <p className="text-sm text-[rgba(153,197,255,0.4)]">No activity yet</p>
+          <p className="text-xs text-[rgba(153,197,255,0.25)] mt-1">Payments, invoices and completed jobs will appear here.</p>
         </div>
       )}
-      <div className="divide-y divide-gray-100">
-        {feed.map(item => (
-          <div key={item.id} className="flex items-start gap-3 px-4 py-3">
-            <div className={`w-7 h-7 rounded-full ${item.bg} flex items-center justify-center text-xs font-bold shrink-0 mt-0.5`}>
-              {item.icon}
+
+      <div className="divide-y divide-[rgba(79,120,255,0.08)]">
+        {feed.map(item => {
+          const cfg = iconCfg(item.bg, item.icon);
+          return (
+            <div key={item.id} className="flex items-center gap-3.5 px-5 py-3.5 hover:bg-white/[0.02] transition-all duration-200">
+              {/* Icon bubble */}
+              <div
+                className={`w-8 h-8 rounded-xl border ${cfg.ring} ${cfg.iconBg} flex items-center justify-center text-sm shrink-0`}
+                style={{ boxShadow: `0 0 10px 1px ${cfg.glow}` }}
+              >
+                {item.icon}
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white leading-tight truncate">{item.title}</p>
+                <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5 truncate">{item.sub}</p>
+              </div>
+
+              {/* Time */}
+              <span className="text-[10px] font-bold text-[rgba(153,197,255,0.3)] shrink-0 tabular-nums">{item.time}</span>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800 leading-tight">{item.title}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{item.sub}</p>
-            </div>
-            <span className="text-xs text-gray-400 shrink-0 mt-0.5">{item.time}</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
-    </Card>
+    </div>
   );
 }
 

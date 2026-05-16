@@ -2,10 +2,13 @@
 // Cadi — Accounts · glassmorphism redesign
 // HMRC Connect · MTD ITSA · live InvoiceContext data · SA103 mapping
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useInvoices, invTotal, invCustomerName } from "../context/InvoiceContext";
 import { useHmrc } from "../hooks/useHmrc";
+import { supabase } from "../lib/supabase";
+import { useBusinessId } from "../hooks/useBusinessId";
+import { getBusinessSettings } from "../lib/db/settingsDb";
 
 // ─── Calculator logic (unchanged) ────────────────────────────────────────────
 const FRS_RATES = {
@@ -29,6 +32,13 @@ function calculateVAT({ turnover, businessType, goods, otherInput, firstYear }) 
   const saving      = standardPay - frsPay;
   return { gross, vatCharged, totalInput, standardPay, frsRate, frsPay, saving, isLimited, goodsPct, annualSaving: saving * 4 };
 }
+function calculateCT(profit) {
+  if (profit <= 0) return 0;
+  if (profit <= 50000) return profit * 0.19;
+  if (profit >= 250000) return profit * 0.25;
+  return profit * 0.265 - 3750; // marginal relief band
+}
+
 function calculatePension(monthly, profit) {
   const annual        = monthly * 12;
   const govTopup      = annual * 0.25;
@@ -168,35 +178,47 @@ function SectionDivider({ label, right }) {
 }
 
 // ─── TAB: Overview ────────────────────────────────────────────────────────────
-function OverviewTab({ setActiveTab }) {
+function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {} }) {
   const { invoices } = useInvoices();
   const { user } = useAuth();
-  const isDemo = user?.id === 'demo-user';
+  const isDemo  = user?.id === 'demo-user';
+  const isLtd   = entityType === 'limited_company';
 
-  // Live figures from InvoiceContext
-  const YTD_START = "2026-04-06";
-  const ytdPaid    = invoices.filter(i => i.status === "paid" && (i.paidAt ?? "").slice(0, 10) >= YTD_START);
-  const ytdIncome  = ytdPaid.reduce((s, i) => s + invTotal(i), 0);
+  const YTD_START   = "2026-04-06";
+  const ytdPaid     = invoices.filter(i => i.status === "paid" && (i.paidAt ?? "").slice(0, 10) >= YTD_START);
+  const ytdIncome   = ytdPaid.reduce((s, i) => s + invTotal(i), 0);
   const outstanding = invoices.filter(i => i.status !== "paid" && i.status !== "draft")
                                .reduce((s, i) => s + invTotal(i), 0);
   const overdue     = invoices.filter(i => i.status === "overdue")
                                .reduce((s, i) => s + invTotal(i), 0);
 
-  // Expenses, tax reserve and targets: demo-only preview values until MoneyTracker context is unified
-  const ytdExpenses = isDemo ? 557 : 0;
-  const taxRate     = 0.20;
-  const netProfit   = Math.max(0, ytdIncome - ytdExpenses);
-  const taxEst      = netProfit * taxRate;
-  const taxReserve  = isDemo ? 4260 : 0;
+  const ytdExpenses  = isDemo ? 557 : 0;
+  const netProfit    = Math.max(0, ytdIncome - ytdExpenses);
   const annualTarget = 65000;
   const ytdAll       = isDemo ? 41820 : ytdIncome;
   const ytdPct       = annualTarget > 0 ? Math.round((ytdAll / annualTarget) * 100) : 0;
 
-  const INSIGHTS = isDemo ? [
-    { emoji: "🚐", title: "Log 1,620 unlogged miles — save £729", body: "At HMRC's 45p/mile rate you have £729 of unclaimed relief sitting idle.", action: "mileage" },
-    { emoji: "🎯", title: "Pension contributions save £820/yr",   body: "£4,100 into a SIPP = £820 tax relief. Money for retirement AND off your bill.", action: "tax-tools" },
-    { emoji: "⚙️", title: "Claim AIA on new equipment",           body: "WFP brush head, carpet cleaner — Annual Investment Allowance = 100% first-year relief." },
-    { emoji: "🏛️", title: "Q1 MTD update due 5 Aug 2026",        body: "You're 6 days into Q1 2026/27. Your submission data is ready to preview.", action: "hmrc" },
+  // ── Tax estimate — branches on entity type ───────────────────────────────
+  const directorSalary     = isLtd ? (bizSettings.director_salary_annual ?? 12570) : 0;
+  const annualisedProfit   = isLtd ? Math.max(0, (ytdAll * (12 / 1.5)) - directorSalary) : netProfit; // rough annualised
+  const ctEst              = isLtd ? calculateCT(annualisedProfit) : 0;
+  const itRate             = 0.20;
+  const itEst              = isLtd ? 0 : netProfit * itRate;
+  const taxEst             = isLtd ? ctEst / (12 / 1.5) : itEst; // scaled back to YTD period
+  const taxReserve         = isDemo ? 4260 : 0;
+  const taxLabel           = isLtd ? "CT estimate (YTD)" : "Tax estimate";
+  const taxSub             = isLtd ? `19% / 25% CT · £${Math.round(directorSalary / 1000)}k director salary` : `${(itRate*100).toFixed(0)}% of net profit`;
+
+  const INSIGHTS = isLtd ? [
+    { emoji: "💰", title: "Director salary vs dividends",          body: "Pay yourself up to £9,100 as salary (no NI), then extract remaining profits as dividends at 8.75%.", action: "tax-tools" },
+    { emoji: "📦", title: "Claim AIA on company equipment",        body: "£1m Annual Investment Allowance — WFP, carpet cleaner, vans. Reduces your CT bill.", },
+    { emoji: "🏛️", title: "CT600 — file within 12 months",         body: "Your CT600 must be filed within 12 months of your accounting year end. Cadi tracks the deadline.", action: "year-end" },
+    { emoji: "🏢", title: "Companies House annual accounts",        body: "Private companies must file accounts 9 months after the year end. Missing the deadline is a £150 fine.", action: "year-end" },
+  ] : isDemo ? [
+    { emoji: "🚐", title: "Log 1,620 unlogged miles — save £729",  body: "At HMRC's 45p/mile rate you have £729 of unclaimed relief sitting idle.", action: "mileage" },
+    { emoji: "🎯", title: "Pension contributions save £820/yr",    body: "£4,100 into a SIPP = £820 tax relief. Money for retirement AND off your bill.", action: "tax-tools" },
+    { emoji: "⚙️", title: "Claim AIA on new equipment",            body: "WFP brush head, carpet cleaner — Annual Investment Allowance = 100% first-year relief." },
+    { emoji: "🏛️", title: "Q1 MTD update due 5 Aug 2026",          body: "You're 6 days into Q1 2026/27. Your submission data is ready to preview.", action: "hmrc" },
   ] : [
     { emoji: "🚐", title: "Log every mile — 45p/mile HMRC relief", body: "Record business journeys in the Routes tab. Every mile cuts your tax bill.", action: "mileage" },
     { emoji: "🎯", title: "Pension contributions cut your tax",    body: "SIPP contributions get 20% tax relief on top. Save for retirement, pay less now.", action: "tax-tools" },
@@ -204,25 +226,65 @@ function OverviewTab({ setActiveTab }) {
     { emoji: "🏛️", title: "MTD ITSA quarterly updates",            body: "Cadi tracks your quarterly submission windows and maps spend to SA103 boxes.", action: "hmrc" },
   ];
 
-  const asOfLabel = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const asOfLabel  = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const expensesSub = isDemo ? "Demo · connect Money tab" : "Log expenses in the Money tab";
-  const headerSub = isDemo ? "Live from your invoices · demo expenses" : "Live from your invoices · connect Money tab for expenses";
+  const headerSub  = isLtd
+    ? "Corporation tax · director salary & dividends"
+    : isDemo ? "Live from your invoices · demo expenses" : "Live from your invoices · connect Money tab for expenses";
+  const periodLabel = isLtd ? `Accounting year · as of ${asOfLabel}` : `Tax year 2026/27 · As of ${asOfLabel}`;
 
   return (
     <div className="space-y-5">
       <div>
-        <SL className="mb-0.5">Tax year 2026/27 · As of {asOfLabel}</SL>
-        <h2 className="text-2xl font-black text-white">Tax Dashboard</h2>
+        <SL className="mb-0.5">{periodLabel}</SL>
+        <h2 className="text-2xl font-black text-white">
+          {isLtd ? "Company Tax Dashboard" : "Tax Dashboard"}
+        </h2>
         <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">{headerSub}</p>
       </div>
 
+      {/* Entity badge */}
+      {isLtd && (
+        <GAlert type="blue">
+          <strong>Limited company</strong> — Corporation Tax applies. Director salary & dividends shown below.
+          MTD ITSA does not apply to your company. CT600 is filed via HMRC online or your accountant.
+        </GAlert>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
-        <GStatCard label="YTD income received"  value={fmt(ytdIncome)}  valueColor="text-emerald-400" sub={`${ytdPaid.length} paid invoices · 2026/27`} />
+        <GStatCard label="YTD income received"  value={fmt(ytdIncome)}  valueColor="text-emerald-400" sub={`${ytdPaid.length} paid invoices`} />
         <GStatCard label="Outstanding"          value={fmt(outstanding)} valueColor={outstanding > 0 ? "text-amber-400" : "text-emerald-400"} sub={overdue > 0 ? `${fmt(overdue)} overdue` : "Nothing overdue"} />
         <GStatCard label="YTD expenses"         value={fmt(ytdExpenses)} valueColor="text-red-400"    sub={expensesSub} />
-        <GStatCard label="Tax estimate"         value={fmt(taxEst)}      valueColor="text-amber-400"  sub={`${(taxRate*100).toFixed(0)}% of net profit`} />
+        <GStatCard label={taxLabel}             value={fmt(taxEst)}      valueColor="text-amber-400"  sub={taxSub} />
       </div>
+
+      {/* Ltd: Director salary & dividend plan */}
+      {isLtd && (
+        <GCard className="p-4 space-y-3">
+          <SL>Director salary & dividend planning</SL>
+          <p className="text-[11px] text-[rgba(153,197,255,0.45)] leading-relaxed">
+            Optimal structure: salary up to the secondary NI threshold (no NI for company or director), then pay remaining profits as dividends.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: "Director salary",    val: fmt(directorSalary),                     color: "text-white",       sub: "No NI either side" },
+              { label: "Remaining profit",   val: fmt(Math.max(0, annualisedProfit)),       color: "text-emerald-400", sub: "Available as dividends" },
+              { label: "Corporation Tax",    val: fmt(annualisedProfit > 0 ? ctEst : 0),   color: "text-amber-400",   sub: annualisedProfit <= 50000 ? "19% small profits" : "Marginal relief" },
+            ].map(({ label, val, color, sub }) => (
+              <div key={label} className="p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
+                <SL className="mb-1">{label}</SL>
+                <p className={`text-lg font-black tabular-nums ${color}`}>{val}</p>
+                <p className="text-[10px] text-[rgba(153,197,255,0.3)] mt-0.5">{sub}</p>
+              </div>
+            ))}
+          </div>
+          <GAlert type="gold">
+            Dividend allowance is £500/yr — above that, basic-rate dividends are taxed at 8.75%.
+            Your accountant can confirm the optimal salary/dividend split for your personal circumstances.
+          </GAlert>
+        </GCard>
+      )}
 
       {/* Annual target */}
       <GCard className="p-4">
@@ -247,10 +309,13 @@ function OverviewTab({ setActiveTab }) {
         </div>
         <div className="flex items-baseline gap-2 mb-2">
           <span className="text-2xl font-black text-yellow-400 tabular-nums">{fmt(taxReserve)}</span>
-          <span className="text-xs text-[rgba(153,197,255,0.4)]">saved of {fmt(Math.max(taxEst, 5118))} needed</span>
+          <span className="text-xs text-[rgba(153,197,255,0.4)]">saved of {fmt(Math.max(taxEst, isLtd ? 3000 : 5118))} needed</span>
         </div>
         <GAlert type="gold">
-          Set aside <strong>25% of every invoice</strong> from day one. Every £100 banked now is one less surprise in January.
+          {isLtd
+            ? <>Set aside <strong>19–25% of company profit</strong> every quarter. CT is due 9 months after your year end — don't let it creep up.</>
+            : <>Set aside <strong>25% of every invoice</strong> from day one. Every £100 banked now is one less surprise in January.</>
+          }
         </GAlert>
       </GCard>
 
@@ -283,7 +348,7 @@ function OverviewTab({ setActiveTab }) {
         ))}
       </GCard>
 
-      {/* AI-style insights */}
+      {/* Insights */}
       <SectionDivider label="Smart tax insights" />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {INSIGHTS.map(({ emoji, title, body, action }) => (
@@ -408,7 +473,7 @@ function CalcResult({ calc }) {
 }
 
 // ─── TAB: HMRC Connect ────────────────────────────────────────────────────────
-function HmrcTab() {
+function HmrcTab({ entityType = 'sole_trader' }) {
   const { invoices } = useInvoices();
   const { user }     = useAuth();
   const isDemo       = user?.id === 'demo-user';
@@ -490,6 +555,47 @@ function HmrcTab() {
     if (obligations.length > 0) return obligationMap[qId] ?? 'future';
     return qId === 'Q1' ? 'active' : 'future';
   };
+
+  if (entityType === 'limited_company') {
+    return (
+      <div className="space-y-5">
+        <div>
+          <SL className="mb-0.5">Making Tax Digital · Corporation Tax</SL>
+          <h2 className="text-2xl font-black text-white">HMRC Connect</h2>
+        </div>
+        <GCard className="p-5 space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="text-3xl">🏢</div>
+            <div>
+              <p className="text-sm font-black text-white mb-1">MTD for Corporation Tax — not yet mandated</p>
+              <p className="text-[11px] text-[rgba(153,197,255,0.55)] leading-relaxed">
+                Making Tax Digital for Corporation Tax is confirmed by HMRC but has not yet been mandated.
+                Your CT600 continues to be filed via HMRC Online Services or through your accountant.
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2 pt-2 border-t border-[rgba(153,197,255,0.08)]">
+            {[
+              { icon: "📅", title: "CT600 deadline",          body: "File within 12 months of your accounting period end date." },
+              { icon: "💷", title: "Corporation tax payment",  body: "Pay within 9 months and 1 day of your accounting period end." },
+              { icon: "🏢", title: "Companies House accounts", body: "File annual accounts within 9 months of your period end." },
+            ].map(({ icon, title, body }) => (
+              <div key={title} className="flex gap-3 p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.06)]">
+                <span className="text-base shrink-0">{icon}</span>
+                <div>
+                  <p className="text-xs font-black text-white">{title}</p>
+                  <p className="text-[11px] text-[rgba(153,197,255,0.45)]">{body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <GAlert type="blue">
+            Cadi will support MTD for Corporation Tax when it becomes available. Until then, use the <strong>Year End</strong> tab to track your CT filing deadlines.
+          </GAlert>
+        </GCard>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -1150,19 +1256,74 @@ function ExpensesTab() {
 }
 
 // ─── TAB: VAT Planner ─────────────────────────────────────────────────────────
-function VATTab() {
-  const [turnover,     setTurnover]     = useState(13670);
+function VATTab({ bizSettings = {}, saveSettings }) {
+  const { invoices } = useInvoices();
+  const { user }     = useAuth();
+  const isDemo       = user?.id === 'demo-user';
+
+  // ── Rolling 12-month taxable turnover (VAT uses rolling 12mo, not tax year) ──
+  const VAT_THRESHOLD = 90000;
+  const rolling12Turnover = useMemo(() => {
+    const now   = new Date();
+    const start = new Date(now);
+    start.setFullYear(start.getFullYear() - 1);
+    const startStr = start.toISOString().slice(0, 10);
+    const todayStr = now.toISOString().slice(0, 10);
+    return invoices
+      .filter(i => i.status === 'paid' && (i.paidAt ?? '').slice(0, 10) >= startStr && (i.paidAt ?? '').slice(0, 10) <= todayStr)
+      .reduce((s, i) => s + invTotal(i), 0);
+  }, [invoices]);
+
+  // Run-rate projection: annualise from months with data
+  const monthlyRunRate = useMemo(() => {
+    const counts = {};
+    invoices.filter(i => i.status === 'paid' && i.paidAt).forEach(i => {
+      const mo = i.paidAt.slice(0, 7);
+      counts[mo] = (counts[mo] ?? 0) + invTotal(i);
+    });
+    const vals = Object.values(counts);
+    if (!vals.length) return 0;
+    return vals.reduce((s, v) => s + v, 0) / vals.length;
+  }, [invoices]);
+
+  const liveTotal   = isDemo ? 41820 : rolling12Turnover;
+  const runRate     = isDemo ? 3485  : monthlyRunRate;
+  const headroom    = Math.max(0, VAT_THRESHOLD - liveTotal);
+  const monthsToThreshold = runRate > 0 ? Math.ceil(headroom / runRate) : null;
+  const threshPct   = Math.min(100, Math.round((liveTotal / VAT_THRESHOLD) * 100));
+
+  // Seed the quarterly simulator from live run-rate (user can override)
+  const [turnover,     setTurnover]     = useState(0);
   const [businessType, setBusinessType] = useState("cleaning-domestic");
   const [goods,        setGoods]        = useState(480);
   const [otherInput,   setOtherInput]   = useState(360);
   const [firstYear,    setFirstYear]    = useState(false);
 
+  // Once run-rate is known, seed the simulator (only on first load)
+  useEffect(() => {
+    if (runRate > 0 && turnover === 0) setTurnover(Math.round(runRate));
+  }, [runRate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // VRN / scheme — seeded from DB, saved back on blur
+  const [vrn,        setVrn]       = useState(bizSettings.vat_number ?? "");
+  const [vatScheme,  setVatScheme] = useState(bizSettings.vat_scheme ?? "none");
+  const [vrnSaving,  setVrnSaving] = useState(false);
+
+  // Sync if bizSettings load after mount
+  useEffect(() => {
+    if (bizSettings.vat_number != null) setVrn(bizSettings.vat_number);
+    if (bizSettings.vat_scheme != null) setVatScheme(bizSettings.vat_scheme);
+  }, [bizSettings.vat_number, bizSettings.vat_scheme]);
+
+  async function persistVatFields(patch) {
+    if (!saveSettings) return;
+    setVrnSaving(true);
+    await saveSettings(patch).finally(() => setVrnSaving(false));
+  }
+
   const r      = calculateVAT({ turnover, businessType, goods, otherInput, firstYear });
   const frsWins = r.saving > 0;
   const fmtV   = (n) => `£${Math.abs(Math.round(n)).toLocaleString()}`;
-  const ytdTurnover = 41820;
-  const threshold   = 90000;
-  const threshPct   = Math.round((ytdTurnover / threshold) * 100);
 
   return (
     <div className="space-y-5">
@@ -1172,22 +1333,100 @@ function VATTab() {
         <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">Threshold tracker · Flat Rate Scheme comparison · FRS rate: 12%</p>
       </div>
 
+      {/* VAT Registration details */}
+      <GCard className="p-4 space-y-3">
+        <SL>VAT registration</SL>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <GInput
+              label="VAT Registration Number (VRN)"
+              placeholder="GB 123 4567 89"
+              value={vrn}
+              onChange={e => setVrn(e.target.value)}
+              onBlur={() => persistVatFields({ vat_number: vrn.trim() || null })}
+            />
+            <p className="text-[10px] text-[rgba(153,197,255,0.3)] mt-1">
+              GB format — saved automatically when you click away{vrnSaving ? " · Saving…" : ""}
+            </p>
+          </div>
+          <div>
+            <GSelect
+              label="VAT scheme"
+              value={vatScheme}
+              onChange={e => { setVatScheme(e.target.value); persistVatFields({ vat_scheme: e.target.value }); }}
+            >
+              <option value="none">Not VAT registered</option>
+              <option value="standard">Standard rate</option>
+              <option value="flat_rate">Flat Rate Scheme (FRS)</option>
+              <option value="cash">Cash Accounting</option>
+              <option value="annual">Annual Accounting</option>
+            </GSelect>
+          </div>
+        </div>
+        {vatScheme === 'none' && (
+          <GAlert type="blue">VAT API support coming — when you register, Cadi will be able to prepare and submit your VAT returns directly to HMRC.</GAlert>
+        )}
+        {vatScheme !== 'none' && (
+          <GAlert type="green">VAT scheme saved. Direct VAT return submission to HMRC is coming soon — Cadi will connect via the <strong>read:vat write:vat</strong> MTD scope.</GAlert>
+        )}
+      </GCard>
+
       {/* Threshold */}
-      <GCard className="p-4">
-        <div className="flex items-center justify-between mb-2">
+      <GCard className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
           <SL>VAT registration threshold (£90,000)</SL>
-          <GChip color={threshPct > 85 ? "amber" : "ghost"}>{threshPct}% of threshold</GChip>
+          <GChip color={threshPct >= 100 ? "red" : threshPct > 85 ? "amber" : "ghost"}>
+            {threshPct >= 100 ? "⚠ Exceeded" : `${threshPct}% of threshold`}
+          </GChip>
         </div>
-        <p className="text-2xl font-black text-white tabular-nums mb-2">{fmtV(ytdTurnover)} <span className="text-sm text-[rgba(153,197,255,0.4)] font-normal">YTD</span></p>
-        <div className="h-2 rounded-full bg-[rgba(153,197,255,0.08)] overflow-hidden mb-1">
-          <div className={`h-full rounded-full transition-all ${threshPct > 85 ? "bg-amber-500" : "bg-[#1f48ff]"}`} style={{ width: `${threshPct}%` }} />
+        <div>
+          <p className="text-2xl font-black text-white tabular-nums mb-2">
+            {fmtV(liveTotal)}{" "}
+            <span className="text-sm text-[rgba(153,197,255,0.4)] font-normal">rolling 12 months</span>
+          </p>
+          <div className="h-2 rounded-full bg-[rgba(153,197,255,0.08)] overflow-hidden mb-1">
+            <div
+              className={`h-full rounded-full transition-all ${threshPct >= 100 ? "bg-red-500" : threshPct > 85 ? "bg-amber-500" : "bg-[#1f48ff]"}`}
+              style={{ width: `${Math.min(threshPct, 100)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[10px] text-[rgba(153,197,255,0.35)]">
+            <span>{fmtV(headroom)} headroom remaining</span>
+            <span>{fmtV(VAT_THRESHOLD)} threshold</span>
+          </div>
         </div>
-        <p className="text-[10px] text-[rgba(153,197,255,0.35)]">{fmtV(threshold - ytdTurnover)} headroom remaining before mandatory registration</p>
+        {threshPct < 100 && monthsToThreshold !== null && (
+          <div className="flex items-center gap-2 pt-1 border-t border-[rgba(153,197,255,0.06)]">
+            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${monthsToThreshold <= 3 ? "bg-red-400" : monthsToThreshold <= 6 ? "bg-amber-400" : "bg-emerald-400"}`} />
+            <p className="text-[11px] text-[rgba(153,197,255,0.5)]">
+              At your current run rate of {fmtV(runRate)}/mo, you'd cross the threshold in{" "}
+              <span className={`font-black ${monthsToThreshold <= 3 ? "text-red-400" : monthsToThreshold <= 6 ? "text-amber-400" : "text-emerald-400"}`}>
+                ~{monthsToThreshold} month{monthsToThreshold !== 1 ? "s" : ""}
+              </span>
+            </p>
+          </div>
+        )}
+        {threshPct >= 100 && (
+          <GAlert type="red">
+            <strong>Your rolling 12-month turnover has exceeded £90,000.</strong> You must register for VAT within 30 days of the month end when you crossed the threshold.
+          </GAlert>
+        )}
+        {threshPct > 85 && threshPct < 100 && (
+          <GAlert type="warn">
+            You're close to the VAT threshold. Consider registering voluntarily now — it avoids a rushed registration and lets you reclaim input VAT from the registration date.
+          </GAlert>
+        )}
+        {!isDemo && liveTotal === 0 && (
+          <p className="text-[11px] text-[rgba(153,197,255,0.35)]">No paid invoices found in the last 12 months — log income in the Payments tab to track your threshold.</p>
+        )}
       </GCard>
 
       {/* Simulator */}
       <GCard className="p-4 space-y-4">
-        <SL>FRS vs standard VAT — quarterly comparison</SL>
+        <div className="flex items-center justify-between">
+          <SL>FRS vs standard VAT — quarterly comparison</SL>
+          {runRate > 0 && !isDemo && <span className="text-[10px] text-[rgba(153,197,255,0.35)]">seeded from your avg monthly income</span>}
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <GInput label="Quarterly turnover (£)" type="number" value={turnover} onChange={e => setTurnover(parseFloat(e.target.value)||0)} />
           <GSelect label="Business type" value={businessType} onChange={e => setBusinessType(e.target.value)}>
@@ -1467,9 +1706,20 @@ function TaxToolsTab({ setActiveTab }) {
 }
 
 // ─── TAB: Year End ────────────────────────────────────────────────────────────
-function YearEndTab() {
+function YearEndTab({ entityType = 'sole_trader', bizSettings = {} }) {
   const [checked, setChecked] = useState({});
   const toggle = (k) => setChecked(p => ({ ...p, [k]: !p[k] }));
+  const isLtd = entityType === 'limited_company';
+
+  // For ltd: derive key dates from accounting_year_end_month (default March = 3)
+  const yearEndMonth = bizSettings.accounting_year_end_month ?? 3;
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const yearEndLabel = MONTHS[yearEndMonth - 1];
+  // CT payment: 9 months + 1 day after year end
+  const ctPayMonth  = MONTHS[((yearEndMonth - 1 + 9) % 12)];
+  // Companies House / CT600 filing: 12 months after year end (CT600), 9 months (CH)
+  const chFilingMonth = MONTHS[((yearEndMonth - 1 + 9) % 12)];
+  const ct600Month    = MONTHS[((yearEndMonth - 1 + 11) % 12)]; // 12 months but filed earlier usually
 
   const timeline = [
     { date: "7 Aug 2025",           title: "Q1 MTD Update — Submitted ✓",                      desc: "6 Apr – 5 Jul 2025. £14,210 income · £2,840 expenses.",                    status: "done"     },
@@ -1490,6 +1740,114 @@ function YearEndTab() {
     { key: "aia",       label: "Capital equipment checked for AIA",         done: false },
     { key: "review",    label: "Figures reviewed before submitting",        done: false },
   ];
+
+  const ltdTimeline = [
+    { date: `31 ${yearEndLabel}`, title: "Accounting year end", desc: `Your company's accounting period closes. Start gathering P&L, payroll, and asset records.`, status: "upcoming" },
+    { date: `${ctPayMonth} (9mo + 1 day)`, title: "Corporation Tax payment due", desc: "Pay CT to HMRC online. If you miss this, interest starts accruing immediately.", status: "future" },
+    { date: `${chFilingMonth} (9 months)`, title: "Companies House — annual accounts", desc: "File full or abbreviated accounts. Private companies have 9 months from year end.", status: "future" },
+    { date: `${ct600Month} (12 months)`, title: "CT600 filing deadline", desc: "Corporation Tax return must be filed with HMRC within 12 months of period end.", status: "future" },
+    { date: "Annual", title: "Confirmation Statement", desc: "File at Companies House (due on your incorporation anniversary each year). £13 filing fee.", status: "future" },
+    { date: "Each April", title: "PAYE year-end (P60s)", desc: "Issue P60 to each employee/director. RTI submissions continue monthly throughout the year.", status: "future" },
+  ];
+
+  const ltdChecklist = [
+    { key: "income",    label: "All company income reconciled to bank" },
+    { key: "expenses",  label: "All business expenses categorised with receipts" },
+    { key: "payroll",   label: "Director salary / PAYE reconciled (RTI up to date)" },
+    { key: "directors", label: "Director's loan account at zero or documented" },
+    { key: "assets",    label: "Fixed asset register updated (capital allowances)" },
+    { key: "ct600",     label: "CT600 completed and reviewed" },
+    { key: "accounts",  label: "Annual accounts prepared for Companies House" },
+    { key: "filed_ch",  label: "Accounts filed at Companies House" },
+    { key: "filed_hmrc","label": "CT600 filed with HMRC" },
+    { key: "ct_paid",   label: "Corporation Tax paid to HMRC" },
+  ];
+
+  if (isLtd) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <SL className="mb-0.5">Never miss a deadline · Limited company</SL>
+          <h2 className="text-2xl font-black text-white">Year End & Deadlines</h2>
+          <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">
+            Accounting year end: {yearEndLabel} · CT600 · Companies House · PAYE
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Ltd timeline */}
+          <GCard className="p-4">
+            <SL className="mb-4">Filing deadline timeline</SL>
+            <div className="relative pl-4">
+              <div className="absolute left-[7px] top-2 bottom-2 w-px bg-[rgba(153,197,255,0.1)]" />
+              {ltdTimeline.map(({ date, title, desc, status }) => (
+                <div key={title} className="relative mb-4 ml-4">
+                  <div className={`absolute -left-[1.4rem] top-1 w-3 h-3 rounded-full border-2 ${
+                    status === "done"     ? "bg-emerald-500 border-emerald-500" :
+                    status === "upcoming" ? "bg-amber-400 border-amber-400 animate-pulse" :
+                                            "bg-transparent border-[rgba(153,197,255,0.2)]"
+                  }`} />
+                  <p className={`text-[10px] font-mono mb-0.5 ${status === "upcoming" ? "text-amber-400 font-bold" : "text-[rgba(153,197,255,0.35)]"}`}>{date}</p>
+                  <p className={`text-xs font-black mb-0.5 ${status === "done" ? "text-emerald-400" : status === "upcoming" ? "text-amber-300" : "text-[rgba(153,197,255,0.6)]"}`}>{title}</p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.3)] leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </GCard>
+
+          <div className="space-y-4">
+            {/* Year-end checklist */}
+            <GCard className="p-4">
+              <SL className="mb-3">Year-end filing checklist</SL>
+              <div className="space-y-2">
+                {ltdChecklist.map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-2.5 text-xs cursor-pointer">
+                    <input type="checkbox" onChange={() => toggle(key)} checked={!!checked[key]} className="accent-[#1f48ff] w-4 h-4 shrink-0 rounded" />
+                    <span className={checked[key] ? "text-[rgba(153,197,255,0.5)] line-through" : "text-white"}>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </GCard>
+
+            {/* CT600 export pack */}
+            <GCard className="p-4">
+              <SL className="mb-3">Accountant export pack</SL>
+              <div className="space-y-2 mb-4">
+                {[
+                  "Full P&L — income by type, all expenses",
+                  "CT600 workings (box-by-box breakdown)",
+                  "Capital allowances schedule (AIA/WDA)",
+                  "Director salary & dividends summary",
+                  "Mileage log (HMRC-compliant format)",
+                  "VAT return workings (if applicable)",
+                ].map(item => (
+                  <div key={item} className="flex items-start gap-2 text-xs">
+                    <span className="text-emerald-400 shrink-0">✓</span>
+                    <span className="text-[rgba(153,197,255,0.55)]">{item}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                {[
+                  { icon: "📊", label: "Export CSV / Excel",      desc: "Xero & QuickBooks compatible" },
+                  { icon: "📄", label: "Export PDF summary pack", desc: "Print-ready, CT600 workings on last page" },
+                  { icon: "🔗", label: "Share accountant link",   desc: "Read-only live access — no files" },
+                ].map(({ icon, label, desc }) => (
+                  <button key={label} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] hover:border-[rgba(153,197,255,0.25)] transition-colors text-left">
+                    <span className="text-base shrink-0">{icon}</span>
+                    <div>
+                      <p className="text-xs font-black text-white">{label}</p>
+                      <p className="text-[10px] text-[rgba(153,197,255,0.35)]">{desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </GCard>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -1594,7 +1952,37 @@ function YearEndTab() {
 export default function AccountsTab() {
   const { user }     = useAuth();
   const { invoices } = useInvoices();
+  const businessId   = useBusinessId();
   const [activeTab, setActiveTab] = useState("overview");
+  const [bizSettings, setBizSettings] = useState({
+    entity_type: 'sole_trader',
+    vat_number: null,
+    vat_scheme: 'none',
+    companies_house_number: null,
+    corporation_tax_utr: null,
+    director_salary_annual: 12570,
+    accounting_year_end_month: 3,
+  });
+
+  const loadSettings = useCallback(async () => {
+    try {
+      const data = await getBusinessSettings();
+      if (data) setBizSettings(prev => ({ ...prev, ...data }));
+    } catch { /* keep defaults */ }
+  }, []);
+
+  useEffect(() => { loadSettings(); }, [loadSettings]);
+
+  const saveSettings = useCallback(async (patch) => {
+    try {
+      await supabase.from('business_settings').update(patch).eq('owner_id', (await supabase.auth.getUser()).data.user?.id);
+      setBizSettings(prev => ({ ...prev, ...patch }));
+    } catch { /* ignore */ }
+  }, []);
+
+  const isDemo = user?.id === 'demo-user';
+  const [demoEntityType, setDemoEntityType] = useState('sole_trader');
+  const entityType = isDemo ? demoEntityType : (bizSettings.entity_type ?? 'sole_trader');
 
   const unpaidCount = invoices.filter(i => i.status !== "paid" && i.status !== "draft").length;
 
@@ -1609,13 +1997,13 @@ export default function AccountsTab() {
   ];
 
   const panels = {
-    overview:  <OverviewTab  setActiveTab={setActiveTab} />,
-    hmrc:      <HmrcTab />,
-    invoices:  <InvoiceRecordsTab />,
-    expenses:  <ExpensesTab />,
-    vat:       <VATTab />,
+    overview:    <OverviewTab  setActiveTab={setActiveTab} entityType={entityType} bizSettings={bizSettings} />,
+    hmrc:        <HmrcTab entityType={entityType} />,
+    invoices:    <InvoiceRecordsTab />,
+    expenses:    <ExpensesTab />,
+    vat:         <VATTab bizSettings={bizSettings} saveSettings={saveSettings} />,
     "tax-tools": <TaxToolsTab setActiveTab={setActiveTab} />,
-    "year-end":  <YearEndTab />,
+    "year-end":  <YearEndTab entityType={entityType} bizSettings={bizSettings} />,
   };
 
   return (
@@ -1627,9 +2015,23 @@ export default function AccountsTab() {
       <div className="relative max-w-4xl mx-auto px-4 py-6 space-y-5">
 
         {/* Header */}
-        <div>
-          <SL className="mb-0.5">Cadi Accounts</SL>
-          <h1 className="text-3xl font-black text-white">Accounts</h1>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <SL className="mb-0.5">Cadi Accounts</SL>
+            <h1 className="text-3xl font-black text-white">Accounts</h1>
+          </div>
+          {isDemo && (
+            <div className="shrink-0 flex items-center gap-1 p-1 rounded-xl bg-[rgba(0,0,0,0.2)]">
+              {['sole_trader', 'limited_company'].map(et => (
+                <button key={et} onClick={() => setDemoEntityType(et)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black whitespace-nowrap transition-all ${
+                    demoEntityType === et ? 'bg-[#1f48ff] text-white' : 'text-[rgba(153,197,255,0.5)] hover:text-white'
+                  }`}>
+                  {et === 'sole_trader' ? 'Sole Trader' : 'Ltd Co'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Pill nav — scrollable on mobile */}

@@ -7,11 +7,12 @@ import {
   GraduationCap, ClipboardList, Package, Lock,
   Briefcase, Star, Network, CheckSquare,
   ShoppingBag, GitBranch, MessageSquare, Bell, Inbox, UtensilsCrossed,
-  CalendarClock, ChevronRight,
+  CalendarClock, ChevronRight, CreditCard,
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { usePlan } from '../../hooks/usePlan';
+import { useClientContext } from '../../context/ClientContext';
 import { MoreHorizontal, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { UpgradeModal } from '../UpgradePrompt';
@@ -29,16 +30,15 @@ const NAV_SECTIONS = [
     color: EARN_COLOR,   // accent only; bg stays navy
     accent: '#3b5bdb',
     items: [
-      { path: '/services',   label: 'Services Menu',   icon: UtensilsCrossed  },
-      { path: '/scheduler',  label: 'Scheduler',       icon: CalendarDays     },
-      { path: '/customers',  label: 'Customers',       icon: Users            },
-      { path: '/quotes',     label: 'Quotes',          icon: ClipboardCheck },
-      { path: '/invoices',   label: 'Invoices',        icon: FileText },
-      { path: '/routes',     label: 'Route Planner',   icon: MapPin },
+      { path: '/scheduler',  label: 'Schedule',        icon: CalendarDays  },
+      { path: '/customers',  label: 'Customers',       icon: Users         },
+      { path: '/services',   label: 'Services',        icon: ClipboardCheck },
+      { path: '/payments',   label: 'Payments',        icon: CreditCard    },
       { path: '/money',      label: 'Money',           icon: PoundSterling },
       { path: '/accounts',   label: 'Accounting',      icon: PoundSterling },
-      { path: '/inventory',  label: 'Inventory',       icon: Package },
-      { path: '/staff',      label: 'Staffing',        icon: GraduationCap },
+      { path: '/staff',      label: 'Staff',           icon: GraduationCap },
+      { path: '/inventory',  label: 'Inventory',       icon: Package       },
+      { path: '/routes',     label: 'Route Planner',   icon: MapPin        },
     ],
     tagline: 'RUN',
     accentColor: '#4f78ff',
@@ -70,6 +70,15 @@ const NAV_SECTIONS = [
     tagline: 'EARN',
     accentColor: EARN_COLOR,
   },
+  {
+    id: 'account',
+    label: 'Account',
+    items: [
+      { path: '/settings', label: 'Settings', icon: Settings },
+    ],
+    tagline: 'ACCOUNT',
+    accentColor: '#6b7280',
+  },
 ];
 
 // Flat nav for matching active route
@@ -86,8 +95,7 @@ const TAB_GUIDES = {
   '/customers':    "Your client database — notes, addresses, star ratings and full job history.",
   '/inventory':    "Track your cleaning kit — products, quantities, costs and restock alerts.",
   '/money':        "Your financial dashboard — income, expenses, tax reserve and payment logging.",
-  '/invoices':     "Send and track invoices — one tap to invoice, one tap to chase.",
-  '/quotes':       "Quote pipeline — track every quote, mark accepted, log to income.",
+  '/payments':     "Invoices, quotes, and payment processor setup — Stripe and GoCardless.",
   '/accounts':     "Bookkeeping and compliance — MTD submissions, mileage and year-end figures.",
   '/routes':       "Route planner — optimise your daily drive and log mileage for HMRC.",
   '/scaling':      "Cadi AI — growth strategies, pricing analysis and AI-powered insights.",
@@ -139,6 +147,7 @@ export default function AppLayout() {
   const navigate  = useNavigate();
   const { user, profile, signOut, refreshProfile } = useAuth();
   const { isPro, isTabLocked } = usePlan();
+  const { isAccountant, activeClient, clients, switchClient, exitClientView } = useClientContext();
   const [logoUrl, setLogoUrl] = useState('');
 
   useEffect(() => {
@@ -528,6 +537,34 @@ export default function AppLayout() {
 
       {/* ── MAIN CONTENT ── */}
       <div className="flex-1 flex flex-col md:pl-64 min-w-0">
+
+        {/* Accountant client switcher banner */}
+        {isAccountant && (
+          <div className="sticky top-0 z-40 bg-[#010a4f] border-b border-[rgba(153,197,255,0.15)] px-4 md:px-8 py-2 flex items-center gap-3">
+            <span className="text-xs font-bold text-[rgba(153,197,255,0.5)] shrink-0">Viewing as accountant:</span>
+            <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto">
+              {clients.map(c => (
+                <button
+                  key={c.owner_id}
+                  onClick={() => switchClient(c)}
+                  className={`shrink-0 text-xs font-black px-3 py-1.5 rounded-lg transition-colors ${
+                    activeClient?.owner_id === c.owner_id
+                      ? 'bg-[#1f48ff] text-white'
+                      : 'bg-[rgba(153,197,255,0.08)] text-[rgba(153,197,255,0.7)] hover:bg-[rgba(153,197,255,0.15)]'
+                  }`}>
+                  {c.owner_id.slice(0, 8)}…
+                </button>
+              ))}
+            </div>
+            {activeClient && (
+              <button
+                onClick={exitClientView}
+                className="shrink-0 text-xs text-[rgba(153,197,255,0.4)] hover:text-white transition-colors font-medium">
+                Exit client view
+              </button>
+            )}
+          </div>
+        )}
 
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-[#99c5ff]/30 px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">

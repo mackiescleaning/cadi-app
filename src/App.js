@@ -48,6 +48,7 @@ import EarnComms        from './pages/earn/EarnComms';
 import FmDemoApp from './pages/fm-demo/FmDemoApp';
 import ClientDemoApp from './pages/client-demo/ClientDemoApp';
 import InvoiceSettings from './pages/InvoiceSettings';
+import Payments from './pages/Payments';
 import StripeCallback from './pages/StripeCallback';
 import GoCardlessPaymentCallback from './pages/GoCardlessPaymentCallback';
 import BankingSettings from './pages/BankingSettings';
@@ -55,6 +56,8 @@ import FinancialWalkthrough from './pages/FinancialWalkthrough';
 import WeeklyReport from './pages/WeeklyReport';
 import { DataProvider } from './context/DataContext';
 import { InvoiceProvider } from './context/InvoiceContext';
+import { ClientProvider } from './context/ClientContext';
+import InviteAccept from './pages/InviteAccept';
 import ErrorBoundary from './components/ErrorBoundary';
 
 
@@ -63,6 +66,7 @@ function App() {
     <ErrorBoundary>
     <DataProvider>
     <InvoiceProvider>
+    <ClientProvider>
     <Router>
       <Routes>
         {/* Auth */}
@@ -71,6 +75,7 @@ function App() {
         <Route path="/onboarding" element={<Onboarding />} />
 
         {/* Staff PIN login & dashboard — no auth required */}
+        <Route path="/staff-login/:token" element={<StaffLogin />} />
         <Route path="/staff-login" element={<StaffLogin />} />
         <Route path="/staff-dashboard" element={<StaffDashboard />} />
 
@@ -81,6 +86,9 @@ function App() {
         <Route path="/gocardless/payment-callback" element={<GoCardlessPaymentCallback />} />
         <Route path="/stripe/callback" element={<StripeCallback />} />
         <Route path="/truelayer/callback" element={<TruelayerCallback />} />
+
+        {/* Invite accept — public, handles own auth */}
+        <Route path="/invite/:token" element={<InviteAccept />} />
 
         {/* Legal — public, no auth required */}
         <Route path="/privacy" element={<Privacy />} />
@@ -108,8 +116,9 @@ function App() {
           <Route path="scaling" element={<BusinessLab />} />
           <Route path="business-lab" element={<BusinessLab />} />
           <Route path="routes" element={<RoutePlanner />} />
-          <Route path="invoices" element={<InvoiceGenerator />} />
-          <Route path="quotes" element={<Quotes />} />
+          <Route path="payments" element={<Payments />} />
+          <Route path="invoices" element={<Navigate to="/payments?tab=invoices" replace />} />
+          <Route path="quotes" element={<Navigate to="/payments?tab=quotes" replace />} />
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="staff" element={<TrainingStaff />} />
           <Route path="review" element={<AnnualReview />} />
@@ -142,6 +151,7 @@ function App() {
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
+    </ClientProvider>
     </InvoiceProvider>
     </DataProvider>
     </ErrorBoundary>

@@ -6,7 +6,7 @@ import { approveAgentAction, rejectAgentAction, AGENTS } from '../lib/agentFrame
 import {
   Check, X, Clock, Send, AlertTriangle, Inbox,
   MessageSquare, Star, CalendarDays, CalendarClock, ChevronDown, ChevronRight,
-  RefreshCw, Eye
+  RefreshCw, Eye, MapPin, Phone, Mail, Building2, Wrench
 } from 'lucide-react';
 
 // ─── Static maps ──────────────────────────────────────────────────────────────
@@ -20,6 +20,7 @@ const ACTION_LABELS = {
   cancel_job:           'Job cancelled',
   issue_refund:         'Refund',
   send_complaint_reply: 'Complaint reply',
+  site_visit_request:   'Site visit request',
 };
 
 const STATUS_CONFIG = {
@@ -122,11 +123,11 @@ function ActionCard({ action, onRefresh }) {
               {agentLabel}
             </span>
             <span className="text-xs text-gray-600">{actionLabel}</span>
-            {action.customers && (
+            {action.customers?.name && (
               <>
                 <span className="text-xs text-gray-400">·</span>
                 <span className="text-xs font-medium text-[#010a4f]">
-                  {action.customers.first_name} {action.customers.last_name}
+                  {action.customers.name}
                 </span>
               </>
             )}
@@ -213,6 +214,220 @@ function ActionCard({ action, onRefresh }) {
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
+// ─── Site visit request card ──────────────────────────────────────────────────
+
+function SiteVisitCard({ action, onRefresh }) {
+  const [working,    setWorking]    = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [visitDate,  setVisitDate]  = useState('');
+  const [visitTime,  setVisitTime]  = useState('09:00');
+  const [visitNote,  setVisitNote]  = useState('');
+  const { user } = useAuth();
+  const businessId = useBusinessId();
+  const p = action.proposed_payload ?? {};
+
+  const isPending = action.status === 'pending_approval';
+  const st = STATUS_CONFIG[action.status] ?? STATUS_CONFIG.sent;
+
+  const handleConfirm = async () => {
+    setWorking(true);
+
+    if (visitDate && businessId) {
+      const [h, m]    = visitTime.split(':');
+      const startHour = parseInt(h) + parseInt(m) / 60;
+      const { error: jobErr } = await supabase.from('jobs').insert({
+        owner_id:          user.id,
+        business_id:       businessId,
+        customer:          p.name || 'Site visit enquiry',
+        postcode:          '',
+        date:              visitDate,
+        start_hour:        startHour,
+        duration_hrs:      1,
+        type:              'site_visit',
+        service:           'Site Visit',
+        price:             0,
+        status:            'scheduled',
+        source:            'direct',
+        notes:             [
+          p.company                ? `Company: ${p.company}` : '',
+          p.service_labels?.length ? `Services: ${p.service_labels.join(', ')}` : '',
+          p.address                ? `Address: ${p.address}` : '',
+          visitNote,
+        ].filter(Boolean).join('\n'),
+        evidence_required: {},
+        is_recurring:      false,
+      });
+      if (jobErr) {
+        console.error('site visit job insert failed:', jobErr);
+        alert(`Couldn't add to schedule: ${jobErr.message}`);
+        setWorking(false);
+        return;
+      }
+    }
+
+    await approveAgentAction(action.id, user?.id, {
+      visit_date:         visitDate || null,
+      visit_time:         visitTime,
+      note:               visitNote || null,
+      added_to_schedule:  !!(visitDate && businessId),
+    });
+
+    onRefresh();
+  };
+
+  const handleReject = async () => {
+    setWorking(true);
+    await rejectAgentAction(action.id, user?.id);
+    onRefresh();
+  };
+
+  return (
+    <div className={`rounded-2xl border overflow-hidden transition-all ${
+      isPending ? 'border-[#1D1B8E]/25 bg-[#f5f7ff]' : 'border-[#99c5ff]/20 bg-white'
+    }`}>
+      {/* Header */}
+      <div className="px-4 py-3.5 flex items-start gap-3">
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#1D1B8E]/10">
+          <MapPin size={15} className="text-[#1D1B8E]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-[#1D1B8E]/10 text-[#1D1B8E]">
+              Mackies Website
+            </span>
+            <span className="text-xs text-gray-600">Site visit request</span>
+            {p.name && (
+              <>
+                <span className="text-xs text-gray-400">·</span>
+                <span className="text-xs font-medium text-[#010a4f]">
+                  {p.name}{p.company ? ` — ${p.company}` : ''}
+                </span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${st.color}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+              {st.label}
+            </span>
+            <span className="text-[10px] text-gray-400">{timeAgo(action.created_at)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Detail grid */}
+      <div className="border-t border-gray-100 px-4 py-3 grid grid-cols-1 gap-2">
+        {(p.phone || p.email) && (
+          <div className="flex items-start gap-3">
+            <Phone size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-gray-700 space-y-0.5">
+              {p.phone && <a href={`tel:${p.phone}`} className="block font-medium text-[#1D1B8E] hover:underline">{p.phone}</a>}
+              {p.email && <a href={`mailto:${p.email}`} className="block text-gray-500 hover:underline">{p.email}</a>}
+            </div>
+          </div>
+        )}
+        {p.sector_label && (
+          <div className="flex items-start gap-3">
+            <Building2 size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+            <span className="text-xs text-gray-700">{p.sector_label}</span>
+          </div>
+        )}
+        {p.service_labels?.length > 0 && (
+          <div className="flex items-start gap-3">
+            <Wrench size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+            <span className="text-xs text-gray-700">{p.service_labels.join(', ')}</span>
+          </div>
+        )}
+        {p.address && (
+          <div className="flex items-start gap-3">
+            <MapPin size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+            <span className="text-xs text-gray-700">{p.address}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Schedule panel — shown after tapping "Confirm visit booked" */}
+      {isPending && confirming && (
+        <div className="border-t border-[#1D1B8E]/10 px-4 py-3 bg-white space-y-3">
+          <p className="text-[10px] font-black text-[#1D1B8E] uppercase tracking-wider">Add to schedule</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider block mb-1">Date</label>
+              <input
+                type="date"
+                value={visitDate}
+                onChange={e => setVisitDate(e.target.value)}
+                className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1D1B8E]/50"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider block mb-1">Time</label>
+              <input
+                type="time"
+                value={visitTime}
+                onChange={e => setVisitTime(e.target.value)}
+                className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1D1B8E]/50"
+              />
+            </div>
+          </div>
+          <textarea
+            value={visitNote}
+            onChange={e => setVisitNote(e.target.value)}
+            placeholder="Notes — e.g. access details, what to bring, anything agreed on the call…"
+            rows={2}
+            className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2 resize-none focus:outline-none focus:border-[#1D1B8E]/50"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirming(false)}
+              disabled={working}
+              className="px-3 py-2 text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            >
+              Back
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={working}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#1D1B8E] hover:bg-[#2E6EF7] text-white text-xs font-black rounded-xl transition-colors disabled:opacity-50"
+            >
+              <Check size={12} />
+              {visitDate ? 'Add to schedule & confirm' : 'Confirm (no schedule entry)'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Call + confirm/reject buttons */}
+      {isPending && !confirming && (
+        <div className="px-4 pb-4 flex gap-2">
+          {p.phone && (
+            <a
+              href={`tel:${p.phone}`}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 bg-white border border-[#1D1B8E]/20 text-[#1D1B8E] text-xs font-bold rounded-xl hover:bg-[#f0f4ff] transition-colors"
+            >
+              <Phone size={12} /> Call
+            </a>
+          )}
+          <button
+            onClick={() => setConfirming(true)}
+            disabled={working}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#1D1B8E] hover:bg-[#2E6EF7] text-white text-xs font-black rounded-xl transition-colors disabled:opacity-50"
+          >
+            <Check size={12} /> Review &amp; book visit
+          </button>
+          <button
+            onClick={handleReject}
+            disabled={working}
+            className="px-4 py-2 bg-white border border-red-200 text-red-500 hover:bg-red-50 text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EmptyState({ tab, agentFilter }) {
   const agentName = FILTER_TABS.find(t => t.key === agentFilter)?.label ?? 'your agents';
   return (
@@ -246,18 +461,22 @@ export default function InboxPage() {
     if (!businessId) return;
     setLoading(true);
 
-    const base = supabase
-      .from('agent_actions')
-      .select(`
-        id, agent, action_type, status, proposed_payload, reasoning,
-        created_at, sent_at, approved_at, expires_at,
-        customers ( first_name, last_name )
-      `)
-      .eq('business_id', businessId);
+    const SELECT = `
+      id, agent, action_type, status, proposed_payload, reasoning,
+      created_at, sent_at, approved_at, expires_at,
+      customers ( name )
+    `;
 
     const [{ data: pendingData }, { data: historyData }] = await Promise.all([
-      base.eq('status', 'pending_approval').order('created_at', { ascending: false }),
-      base.neq('status', 'pending_approval').order('created_at', { ascending: false }).limit(50),
+      supabase.from('agent_actions').select(SELECT)
+        .eq('business_id', businessId)
+        .eq('status', 'pending_approval')
+        .order('created_at', { ascending: false }),
+      supabase.from('agent_actions').select(SELECT)
+        .eq('business_id', businessId)
+        .neq('status', 'pending_approval')
+        .order('created_at', { ascending: false })
+        .limit(50),
     ]);
 
     setPending(pendingData ?? []);
@@ -370,11 +589,9 @@ export default function InboxPage() {
         ) : (
           <div className="space-y-3">
             {items.map(action => (
-              <ActionCard
-                key={action.id}
-                action={action}
-                onRefresh={load}
-              />
+              action.action_type === 'site_visit_request'
+                ? <SiteVisitCard key={action.id} action={action} onRefresh={load} />
+                : <ActionCard    key={action.id} action={action} onRefresh={load} />
             ))}
           </div>
         )}

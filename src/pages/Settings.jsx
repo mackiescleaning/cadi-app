@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePlan } from '../hooks/usePlan';
 import { supabase } from '../lib/supabase';
 import { getBusinessSettings, upsertBusinessSettings } from '../lib/db/settingsDb';
+import { inviteMember, listMembers, resendInvite, setAccessLevel, revokeMember, reinstateMember, getAuditLog } from '../lib/db/teamDb';
 import {
   User, Building2, Bell, Lock, CreditCard, Palette,
   ChevronRight, Save, Check, Eye, EyeOff, Sparkles,
@@ -138,6 +139,512 @@ function SavedToast({ show }) {
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
+// ─── STAFF SECTION ───────────────────────────────────────────────────────────
+
+function StaffSection({ user }) {
+  const [staff, setStaff]         = useState([]);
+  const [loginToken, setLoginToken] = useState('');
+  const [copied, setCopied]       = useState(false);
+  const [name, setName]           = useState('');
+  const [role, setRole]           = useState('Cleaner');
+  const [pin, setPin]             = useState('');
+  const [rate, setRate]           = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [busy, setBusy]           = useState(false);
+  const [msg, setMsg]             = useState(null);
+
+  const staffLoginUrl = loginToken
+    ? `${window.location.origin}/staff-login/${loginToken}`
+    : '';
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(staffLoginUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const loadStaff = useCallback(async () => {
+    const [{ data: staffData }, { data: bizData }] = await Promise.all([
+      supabase.from('staff_members').select('*').eq('owner_id', user.id).order('created_at', { ascending: true }),
+      supabase.from('business_settings').select('staff_login_token').eq('owner_id', user.id).single(),
+    ]);
+    setStaff(staffData ?? []);
+    if (bizData?.staff_login_token) setLoginToken(bizData.staff_login_token);
+  }, [user.id]);
+
+  useEffect(() => { loadStaff(); }, [loadStaff]);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      setMsg({ type: 'err', text: 'PIN must be exactly 4 digits' }); return;
+    }
+    setBusy(true); setMsg(null);
+    try {
+      const { error } = await supabase.from('staff_members').insert({
+        owner_id:    user.id,
+        name:        name.trim(),
+        role:        role.trim(),
+        pin_hash:    pin,
+        hourly_rate: rate ? parseFloat(rate) : null,
+        active:      true,
+      });
+      if (error) throw error;
+      setMsg({ type: 'ok', text: `${name} added` });
+      setName(''); setPin(''); setRate(''); setRole('Cleaner');
+      await loadStaff();
+    } catch (err) {
+      setMsg({ type: 'err', text: err.message });
+    } finally { setBusy(false); }
+  }
+
+  async function handleUpdate(member) {
+    setBusy(true);
+    try {
+      const { error } = await supabase.from('staff_members')
+        .update({ pin_hash: member.pin_hash, hourly_rate: member.hourly_rate, role: member.role })
+        .eq('id', member.id);
+      if (error) throw error;
+      setEditingId(null);
+      await loadStaff();
+    } catch { /* ignore */ } finally { setBusy(false); }
+  }
+
+  async function handleToggleActive(member) {
+    await supabase.from('staff_members').update({ active: !member.active }).eq('id', member.id);
+    await loadStaff();
+  }
+
+  const active   = staff.filter(s => s.active);
+  const inactive = staff.filter(s => !s.active);
+
+  return (
+    <div className="space-y-4">
+
+      {/* Staff login link */}
+      {staffLoginUrl && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h3 className="font-bold text-[#010a4f]">Staff login link</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Share this link with your staff — it's unique to your business. Bookmark it on a shared device.</p>
+          </div>
+          <div className="px-6 py-4 flex items-center gap-3">
+            <p className="flex-1 text-xs font-mono text-gray-500 bg-gray-50 px-3 py-2 rounded-lg truncate">{staffLoginUrl}</p>
+            <button
+              onClick={copyLink}
+              className={`shrink-0 text-xs font-bold px-4 py-2 rounded-lg border transition-colors ${
+                copied ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-[#f0f4ff] text-[#1f48ff] border-[#1f48ff]/20 hover:bg-[#e0e8ff]'
+              }`}>
+              {copied ? '✓ Copied' : 'Copy link'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add staff form */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h3 className="font-bold text-[#010a4f]">Add staff member</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Each staff member needs a unique 4-digit PIN.</p>
+        </div>
+        <div className="px-6 py-5">
+          {msg && (
+            <div className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium border ${
+              msg.type === 'ok' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
+            }`}>{msg.text}</div>
+          )}
+          <form onSubmit={handleAdd} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Name</label>
+                <input
+                  required value={name} onChange={e => setName(e.target.value)}
+                  placeholder="e.g. Emma Clarke"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/20 focus:border-[#1f48ff]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Role</label>
+                <input
+                  value={role} onChange={e => setRole(e.target.value)}
+                  placeholder="e.g. Cleaner"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/20 focus:border-[#1f48ff]" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">4-digit PIN</label>
+                <input
+                  required value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="e.g. 1234" maxLength={4}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-[#010a4f] font-mono focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/20 focus:border-[#1f48ff]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Hourly rate (£)</label>
+                <input
+                  type="number" step="0.01" min="0" value={rate} onChange={e => setRate(e.target.value)}
+                  placeholder="e.g. 13.50"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/20 focus:border-[#1f48ff]" />
+              </div>
+            </div>
+            <button
+              type="submit" disabled={busy}
+              className="w-full py-2.5 bg-[#1f48ff] hover:bg-[#1a3de0] text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50">
+              {busy ? 'Adding…' : 'Add staff member →'}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Active staff */}
+      {active.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h3 className="font-bold text-[#010a4f]">Active staff</h3>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {active.map(s => (
+              <div key={s.id} className="px-6 py-4">
+                {editingId === s.id ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-400 mb-1">Role</label>
+                        <input
+                          value={s.role ?? ''} onChange={e => setStaff(prev => prev.map(x => x.id === s.id ? { ...x, role: e.target.value } : x))}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1f48ff]" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-400 mb-1">PIN</label>
+                        <input
+                          value={s.pin_hash ?? ''} maxLength={4}
+                          onChange={e => setStaff(prev => prev.map(x => x.id === s.id ? { ...x, pin_hash: e.target.value.replace(/\D/g, '').slice(0, 4) } : x))}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#1f48ff]" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-400 mb-1">Rate (£/hr)</label>
+                        <input
+                          type="number" step="0.01" value={s.hourly_rate ?? ''}
+                          onChange={e => setStaff(prev => prev.map(x => x.id === s.id ? { ...x, hourly_rate: e.target.value } : x))}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1f48ff]" />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleUpdate(s)} disabled={busy}
+                        className="flex-1 py-2 bg-[#1f48ff] text-white text-xs font-bold rounded-lg hover:bg-[#1a3de0] disabled:opacity-50">
+                        Save
+                      </button>
+                      <button onClick={() => setEditingId(null)}
+                        className="px-4 py-2 text-xs font-bold text-gray-500 hover:text-gray-700 rounded-lg border border-gray-200">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-[#010a4f]">{s.name}</p>
+                      <p className="text-xs text-gray-400">{s.role ?? 'Staff'}{s.hourly_rate ? ` · £${parseFloat(s.hourly_rate).toFixed(2)}/hr` : ''}</p>
+                    </div>
+                    <span className="text-xs font-mono text-gray-300 bg-gray-50 px-2 py-1 rounded">PIN: {s.pin_hash}</span>
+                    <button onClick={() => setEditingId(s.id)}
+                      className="text-xs text-[#1f48ff] hover:underline font-medium">Edit</button>
+                    <button onClick={() => handleToggleActive(s)}
+                      className="text-xs text-red-400 hover:text-red-600 font-medium">Deactivate</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Inactive staff */}
+      {inactive.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h3 className="font-bold text-[#010a4f] text-opacity-60">Inactive staff</h3>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {inactive.map(s => (
+              <div key={s.id} className="px-6 py-4 flex items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-400">{s.name}</p>
+                  <p className="text-xs text-gray-300">{s.role ?? 'Staff'}</p>
+                </div>
+                <button onClick={() => handleToggleActive(s)}
+                  className="text-xs text-[#1f48ff] hover:underline font-medium">Reinstate</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {staff.length === 0 && (
+        <p className="text-sm text-gray-400 text-center py-4">No staff added yet.</p>
+      )}
+    </div>
+  );
+}
+
+// ─── TEAM TAB ─────────────────────────────────────────────────────────────────
+
+const STATUS_CHIP = {
+  pending:  { label: 'Pending',  cls: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  active:   { label: 'Active',   cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+  revoked:  { label: 'Revoked',  cls: 'bg-red-500/10 text-red-400 border-red-500/20' },
+};
+
+function TeamTab({ user }) {
+  const [members, setMembers]     = useState([]);
+  const [auditLog, setAuditLog]   = useState([]);
+  const [email, setEmail]         = useState('');
+  const [role, setRole]           = useState('accountant');
+  const [access, setAccess]       = useState('read_only');
+  const [busy, setBusy]           = useState(false);
+  const [msg, setMsg]             = useState(null); // { type: 'ok'|'err', text }
+  const [showAudit, setShowAudit] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const [m, a] = await Promise.all([listMembers(), getAuditLog(user.id)]);
+      setMembers(m);
+      setAuditLog(a);
+    } catch { /* ignore */ }
+  }, [user.id]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  async function handleInvite(e) {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      await inviteMember({ email, role, accessLevel: access });
+      setMsg({ type: 'ok', text: `Invite sent to ${email}` });
+      setEmail('');
+      await reload();
+    } catch (err) {
+      setMsg({ type: 'err', text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleToggleAccess(member) {
+    const next = member.access_level === 'read_only' ? 'full' : 'read_only';
+    try {
+      await setAccessLevel(member.id, next);
+      await reload();
+    } catch { /* ignore */ }
+  }
+
+  async function handleRevoke(member) {
+    try {
+      if (member.status === 'revoked') await reinstateMember(member.id);
+      else await revokeMember(member.id);
+      await reload();
+    } catch { /* ignore */ }
+  }
+
+  async function handleResend(member) {
+    try {
+      await resendInvite(member.id);
+      setMsg({ type: 'ok', text: `Invite resent to ${member.member_email}` });
+    } catch (err) {
+      setMsg({ type: 'err', text: err.message });
+    }
+  }
+
+  const active  = members.filter(m => m.status !== 'revoked');
+  const revoked = members.filter(m => m.status === 'revoked');
+
+  return (
+    <div className="space-y-4">
+
+      {/* Invite form */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h3 className="font-bold text-[#010a4f]">Invite a team member</h3>
+          <p className="text-xs text-gray-400 mt-0.5">They'll get an email with a link to accept access to your account.</p>
+        </div>
+        <div className="px-6 py-5">
+          {msg && (
+            <div className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium border ${
+              msg.type === 'ok'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-red-50 text-red-700 border-red-200'
+            }`}>
+              {msg.text}
+            </div>
+          )}
+          <form onSubmit={handleInvite} className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1">Email address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="accountant@example.com"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/20 focus:border-[#1f48ff]"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Role</label>
+                <select
+                  value={role}
+                  onChange={e => setRole(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/20 focus:border-[#1f48ff]">
+                  <option value="accountant">Accountant</option>
+                  <option value="bookkeeper">Bookkeeper</option>
+                  <option value="manager">Manager</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Access level</label>
+                <select
+                  value={access}
+                  onChange={e => setAccess(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/20 focus:border-[#1f48ff]">
+                  <option value="read_only">Read only</option>
+                  <option value="full">Full access</option>
+                </select>
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={busy}
+              className="w-full py-2.5 bg-[#1f48ff] hover:bg-[#1a3de0] text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50">
+              {busy ? 'Sending…' : 'Send invite →'}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Active members */}
+      {active.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h3 className="font-bold text-[#010a4f]">Team members</h3>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {active.map(m => {
+              const chip = STATUS_CHIP[m.status] ?? STATUS_CHIP.pending;
+              return (
+                <div key={m.id} className="px-6 py-4 flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-[#010a4f] truncate">{m.member_email}</p>
+                    <p className="text-xs text-gray-400 capitalize">{m.role}</p>
+                  </div>
+                  {/* Access toggle */}
+                  {m.status === 'active' && (
+                    <button
+                      onClick={() => handleToggleAccess(m)}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${
+                        m.access_level === 'full'
+                          ? 'bg-[#1f48ff]/10 text-[#1f48ff] border-[#1f48ff]/20 hover:bg-[#1f48ff]/20'
+                          : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
+                      }`}>
+                      {m.access_level === 'full' ? 'Full access' : 'Read only'}
+                    </button>
+                  )}
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${chip.cls}`}>
+                    {chip.label}
+                  </span>
+                  {m.status === 'pending' && (
+                    <button
+                      onClick={() => handleResend(m)}
+                      className="text-xs text-gray-400 hover:text-[#1f48ff] transition-colors font-medium">
+                      Resend
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleRevoke(m)}
+                    className="text-xs text-red-400 hover:text-red-600 transition-colors font-medium">
+                    Revoke
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Revoked members (collapsed) */}
+      {revoked.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="font-bold text-[#010a4f]">Revoked access</h3>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {revoked.map(m => (
+              <div key={m.id} className="px-6 py-4 flex items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-400 truncate">{m.member_email}</p>
+                  <p className="text-xs text-gray-300 capitalize">{m.role}</p>
+                </div>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${STATUS_CHIP.revoked.cls}`}>
+                  Revoked
+                </span>
+                <button
+                  onClick={() => handleRevoke(m)}
+                  className="text-xs text-[#1f48ff] hover:underline font-medium">
+                  Reinstate
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Audit log */}
+      {auditLog.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+          <button
+            onClick={() => setShowAudit(v => !v)}
+            className="w-full px-6 py-4 flex items-center justify-between border-b border-gray-100 hover:bg-gray-50 transition-colors">
+            <h3 className="font-bold text-[#010a4f]">Activity log</h3>
+            <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${showAudit ? 'rotate-90' : ''}`} />
+          </button>
+          {showAudit && (
+            <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto">
+              {auditLog.map(entry => (
+                <div key={entry.id} className="px-6 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-[#010a4f] capitalize">{entry.action.replace(/_/g, ' ')}</p>
+                    {entry.detail?.member_email && (
+                      <p className="text-xs text-gray-400">{entry.detail.member_email}</p>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-300 shrink-0">
+                    {new Date(entry.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {members.length === 0 && (
+        <p className="text-sm text-gray-400 text-center py-4">No team members yet. Invite an accountant, bookkeeper, or manager above.</p>
+      )}
+
+      {/* Divider */}
+      <div className="flex items-center gap-3 py-2">
+        <div className="flex-1 h-px bg-gray-100" />
+        <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">Staff</span>
+        <div className="flex-1 h-px bg-gray-100" />
+      </div>
+
+      <StaffSection user={user} />
+    </div>
+  );
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+
 const TABS = [
   { id: 'profile',      label: 'Profile',       icon: User       },
   { id: 'business',     label: 'Business',      icon: Building2  },
@@ -150,6 +657,7 @@ const TABS = [
   { id: 'subscription', label: 'Plan',          icon: CreditCard },
   { id: 'security',     label: 'Security',      icon: Lock       },
   { id: 'integrations', label: 'Integrations',  icon: Plug       },
+  { id: 'team',         label: 'Team',          icon: User       },
 ];
 
 export default function Settings() {
@@ -194,12 +702,16 @@ export default function Settings() {
   const [business, setBusiness] = useState({
     name: '', tagline: '',
     address: '', website: '',
-    vatNumber: '', companyNumber: '',
+    vatNumber: '', vatScheme: 'none', companyNumber: '',
     hourlyRate: '', currency: 'GBP',
     businessEmail: '', homePostcode: '',
     bankName: '', sortCode: '', accountNum: '',
     workingDays: { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false },
     startTime: '08:00', endTime: '18:00',
+    entityType: 'sole_trader',
+    corporationTaxUtr: '',
+    directorSalary: '12570',
+    accountingYearEndMonth: '3',
   });
 
   // Notification state
@@ -294,6 +806,13 @@ export default function Settings() {
           workingDays: sd.working_days || prev.workingDays,
           startTime: sd.start_time || prev.startTime,
           endTime: sd.finish_time || prev.endTime,
+          vatNumber: settings.vat_number || prev.vatNumber,
+          vatScheme: settings.vat_scheme || prev.vatScheme,
+          companyNumber: settings.companies_house_number || prev.companyNumber,
+          entityType: settings.entity_type || prev.entityType,
+          corporationTaxUtr: settings.corporation_tax_utr || prev.corporationTaxUtr,
+          directorSalary: settings.director_salary_annual != null ? String(settings.director_salary_annual) : prev.directorSalary,
+          accountingYearEndMonth: settings.accounting_year_end_month != null ? String(settings.accounting_year_end_month) : prev.accountingYearEndMonth,
         }));
 
         if (settings.notifications && typeof settings.notifications === 'object') {
@@ -395,6 +914,13 @@ export default function Settings() {
           start_time: business.startTime,
           finish_time: business.endTime,
         },
+        entity_type: business.entityType,
+        vat_number: business.vatNumber || null,
+        vat_scheme: business.vatScheme || 'none',
+        companies_house_number: business.companyNumber || null,
+        corporation_tax_utr: business.corporationTaxUtr || null,
+        director_salary_annual: Number(business.directorSalary) || 0,
+        accounting_year_end_month: Number(business.accountingYearEndMonth) || 3,
       });
 
       await updateProfile({
@@ -526,7 +1052,7 @@ export default function Settings() {
       </div>
 
       {/* Tab nav */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar bg-white p-1.5 rounded-2xl shadow-sm border border-[#99c5ff]/20 w-fit max-w-full">
+      <div className="flex flex-wrap gap-2 bg-white p-1.5 rounded-2xl shadow-sm border border-[#99c5ff]/20 w-full">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -654,12 +1180,75 @@ export default function Settings() {
               onChange={v => updateBusiness('address', v)} placeholder="Town, County" />
             <InputField label="Website" value={business.website}
               onChange={v => updateBusiness('website', v)} placeholder="www.yourbusiness.co.uk" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <InputField label="VAT Number (if registered)" value={business.vatNumber}
-                onChange={v => updateBusiness('vatNumber', v)} placeholder="GB000000000" />
-              <InputField label="Company Number" value={business.companyNumber}
-                onChange={v => updateBusiness('companyNumber', v)} placeholder="Optional" />
+          </div>
+
+          {/* Business Structure */}
+          <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6 space-y-4">
+            <h3 className="font-bold text-[#010a4f]">Business Structure</h3>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Entity Type</label>
+              <select
+                value={business.entityType}
+                onChange={e => updateBusiness('entityType', e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff]"
+              >
+                <option value="sole_trader">Sole Trader</option>
+                <option value="limited_company">Limited Company</option>
+                <option value="partnership">Partnership</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-1">This determines how Cadi calculates your tax estimates and what HMRC filings apply.</p>
             </div>
+
+            {business.entityType === 'limited_company' && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <InputField label="Companies House Number" value={business.companyNumber}
+                    onChange={v => updateBusiness('companyNumber', v)} placeholder="e.g. 12345678" />
+                  <InputField label="Corporation Tax UTR" value={business.corporationTaxUtr}
+                    onChange={v => updateBusiness('corporationTaxUtr', v)} placeholder="10-digit UTR" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <InputField label="Director Salary (annual, £)" value={business.directorSalary} type="number"
+                    onChange={v => updateBusiness('directorSalary', v)} placeholder="e.g. 12570" />
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Accounting Year End Month</label>
+                    <select
+                      value={business.accountingYearEndMonth}
+                      onChange={e => updateBusiness('accountingYearEndMonth', e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff]"
+                    >
+                      {["January","February","March","April","May","June","July","August","September","October","November","December"].map((m, i) => (
+                        <option key={m} value={String(i + 1)}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* VAT Details */}
+          <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6 space-y-4">
+            <h3 className="font-bold text-[#010a4f]">VAT Details</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <InputField label="VAT Registration Number (VRN)" value={business.vatNumber}
+                onChange={v => updateBusiness('vatNumber', v)} placeholder="GB 123 4567 89" />
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">VAT Scheme</label>
+                <select
+                  value={business.vatScheme}
+                  onChange={e => updateBusiness('vatScheme', e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff]"
+                >
+                  <option value="none">Not VAT registered</option>
+                  <option value="standard">Standard rate</option>
+                  <option value="flat_rate">Flat Rate Scheme (FRS)</option>
+                  <option value="cash">Cash Accounting</option>
+                  <option value="annual">Annual Accounting</option>
+                </select>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400">VAT return submission to HMRC coming soon — we'll use these details when it launches.</p>
           </div>
 
           {/* Business email + postcode */}
@@ -1161,6 +1750,8 @@ export default function Settings() {
 
         </div>
       )}
+
+      {activeTab === 'team' && <TeamTab user={user} />}
 
       {/* Saved toast */}
       <SavedToast show={saved} />

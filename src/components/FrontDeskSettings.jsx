@@ -1,11 +1,35 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, Check, MessageSquare, Settings, Play } from 'lucide-react';
+import { Copy, Check, MessageSquare, Settings, Play, CalendarCheck, Zap, Inbox } from 'lucide-react';
 import FrontDeskPreview from './FrontDeskPreview';
 import { supabase } from '../lib/supabase';
 import { useBusinessId } from '../hooks/useBusinessId';
 
 const WIDGET_URL = 'https://widget.cadi.cleaning/widget.js';
+
+const WIDGET_GOALS = [
+  {
+    id: 'site_visit',
+    icon: CalendarCheck,
+    label: 'Book site visits',
+    desc: 'Widget collects contact details and what they need. Drops straight into your inbox. Perfect for exterior, commercial, or anything that needs a quote in person.',
+    badge: 'Recommended',
+  },
+  {
+    id: 'instant_quote',
+    icon: Zap,
+    label: 'Give instant quotes',
+    desc: 'Widget quotes prices on the spot based on your services menu. Best for residential cleaning with fixed or per-bedroom pricing.',
+    badge: null,
+  },
+  {
+    id: 'enquiry',
+    icon: Inbox,
+    label: 'Take general enquiries',
+    desc: 'Lightweight lead capture. Widget has a quick conversation, collects name and contact info, and sends it to your inbox. No pricing needed.',
+    badge: null,
+  },
+];
 
 function Toggle({ enabled, onChange, disabled }) {
   return (
@@ -40,6 +64,9 @@ export default function FrontDeskSettings() {
   const [showPreview, setShowPreview] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [goalSaving, setGoalSaving] = useState(false);
+  const [goalSaved, setGoalSaved] = useState(false);
+  const [widgetGoal, setWidgetGoal] = useState('site_visit');
   const [chatCount, setChatCount] = useState(null);
   const [lastChatAt, setLastChatAt] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,10 +80,15 @@ export default function FrontDeskSettings() {
     let mounted = true;
 
     (async () => {
-      const [{ data: agentRow }, { count }, { data: lastConv }] = await Promise.all([
+      const [{ data: widgetRow }, { data: agentRow }, { count }, { data: lastConv }] = await Promise.all([
+        supabase
+          .from('widget_configs')
+          .select('enabled, modes')
+          .eq('business_id', businessId)
+          .maybeSingle(),
         supabase
           .from('agent_settings')
-          .select('mode')
+          .select('mode, config')
           .eq('business_id', businessId)
           .eq('agent', 'front_desk')
           .maybeSingle(),
@@ -76,7 +108,16 @@ export default function FrontDeskSettings() {
       ]);
 
       if (!mounted) return;
-      if (agentRow) setEnabled(agentRow.mode !== 'off');
+
+      // widget_configs is primary; fall back to agent_settings for legacy rows
+      if (widgetRow) {
+        setEnabled(widgetRow.enabled);
+      } else if (agentRow) {
+        setEnabled(agentRow.mode !== 'off');
+      }
+      if (agentRow) {
+        setWidgetGoal(agentRow.config?.widget_goal ?? 'site_visit');
+      }
       setChatCount(count ?? 0);
       setLastChatAt(lastConv?.last_message_at ?? null);
       setLoading(false);
@@ -89,13 +130,37 @@ export default function FrontDeskSettings() {
     if (!businessId) return;
     setSaving(true);
     setEnabled(val);
+    // Write to widget_configs (primary) + keep agent_settings in sync (legacy)
+    await Promise.all([
+      supabase
+        .from('widget_configs')
+        .upsert(
+          { business_id: businessId, enabled: val },
+          { onConflict: 'business_id' }
+        ),
+      supabase
+        .from('agent_settings')
+        .upsert(
+          { business_id: businessId, agent: 'front_desk', mode: val ? 'approval' : 'off' },
+          { onConflict: 'business_id,agent' }
+        ),
+    ]);
+    setSaving(false);
+  }
+
+  async function handleGoalChange(goal) {
+    if (!businessId || goalSaving) return;
+    setGoalSaving(true);
+    setWidgetGoal(goal);
     await supabase
       .from('agent_settings')
       .upsert(
-        { business_id: businessId, agent: 'front_desk', mode: val ? 'approval' : 'off' },
+        { business_id: businessId, agent: 'front_desk', config: { widget_goal: goal } },
         { onConflict: 'business_id,agent' }
       );
-    setSaving(false);
+    setGoalSaving(false);
+    setGoalSaved(true);
+    setTimeout(() => setGoalSaved(false), 2500);
   }
 
   function handleCopy() {
@@ -150,6 +215,61 @@ export default function FrontDeskSettings() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Widget goal */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-bold text-[#010a4f]">What should your widget do?</h3>
+            <p className="text-xs text-gray-400 mt-0.5">This shapes the entire conversation — no other configuration needed.</p>
+          </div>
+          {goalSaved && (
+            <div className="flex items-center gap-1.5 text-emerald-600 shrink-0">
+              <Check size={13} />
+              <span className="text-xs font-semibold">Saved</span>
+            </div>
+          )}
+        </div>
+        <div className="p-4 space-y-2">
+          {WIDGET_GOALS.map(({ id, icon: Icon, label, desc, badge }) => {
+            const active = widgetGoal === id;
+            return (
+              <button
+                key={id}
+                onClick={() => handleGoalChange(id)}
+                disabled={goalSaving}
+                className={`w-full text-left flex items-start gap-4 p-4 rounded-xl border-2 transition-all ${
+                  active
+                    ? 'border-[#1f48ff] bg-[#f0f4ff]'
+                    : 'border-gray-100 hover:border-[#99c5ff]/40 hover:bg-gray-50'
+                }`}
+              >
+                <div className={`mt-0.5 w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                  active ? 'bg-[#1f48ff]' : 'bg-gray-100'
+                }`}>
+                  <Icon size={16} className={active ? 'text-white' : 'text-gray-500'} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className={`text-sm font-bold ${active ? 'text-[#1f48ff]' : 'text-[#010a4f]'}`}>{label}</p>
+                    {badge && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                        {badge}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
+                </div>
+                <div className={`mt-1 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                  active ? 'border-[#1f48ff]' : 'border-gray-300'
+                }`}>
+                  {active && <div className="w-2 h-2 rounded-full bg-[#1f48ff]" />}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 

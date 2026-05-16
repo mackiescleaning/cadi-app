@@ -45,6 +45,14 @@ const TYPE = {
     chip:  "bg-orange-100 text-orange-800 border-orange-200",
     dot:   "bg-orange-500",
   },
+  site_visit: {
+    label: "Site Visit",
+    bar:   "#1D1B8E",
+    fill:  "#F0F1FF",
+    ink:   "#1D1B8E",
+    chip:  "bg-indigo-100 text-indigo-800 border-indigo-300",
+    dot:   "bg-indigo-700",
+  },
 };
 
 const STATUS_STYLES = {
@@ -135,7 +143,7 @@ function StatusBadge({ status }) {
 }
 
 function TypeBadge({ type }) {
-  const s = TYPE[type];
+  const s = TYPE[type] ?? { label: type, chip: "bg-gray-100 text-gray-600 border-gray-200", dot: "bg-gray-400" };
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${s.chip}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
@@ -362,6 +370,7 @@ function FilterBar({ typeFilter, setTypeFilter, crews, crewFilter, setCrewFilter
         <FilterPill active={typeFilter==="exterior"}    onClick={() => setTypeFilter("exterior")}    label="Exterior"    type="exterior" />
         <FilterPill active={typeFilter==="residential"} onClick={() => setTypeFilter("residential")} label="Residential" type="residential" />
         <FilterPill active={typeFilter==="commercial"}  onClick={() => setTypeFilter("commercial")}  label="Commercial"  type="commercial" />
+        <FilterPill active={typeFilter==="site_visit"}  onClick={() => setTypeFilter("site_visit")}  label="Site Visits" type="site_visit" />
       </div>
 
       {crews.length > 0 && (

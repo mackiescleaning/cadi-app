@@ -560,13 +560,14 @@ serve(async (req: Request) => {
       }
 
       const result = await hmrcFetch(
-        `/individuals/self-assessment/adjustable-summary/${nino}/self-employment/${calculationId}`,
+        `/individuals/self-assessment/adjustable-summary/${nino}/self-employment/${calculationId}?taxYear=${taxYear}`,
         "GET",
         token,
         "application/vnd.hmrc.7.0+json",
         fraud,
         undefined,
-        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
+        // No Gov-Test-Scenario — rely on stateful sandbox to return the triggered record
+        undefined,
       );
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json(result.data);

@@ -140,14 +140,16 @@ export async function recordAgentAction(businessId, agent, actionType, payload, 
 
 // ─── Approving / rejecting ────────────────────────────────────────────────────
 
-export async function approveAgentAction(actionId, userId) {
+export async function approveAgentAction(actionId, userId, result = null) {
+  const update = {
+    status:              'approved',
+    approved_by_user_id: userId,
+    approved_at:         new Date().toISOString(),
+  };
+  if (result !== null) update.result = result;
   const { error } = await supabase
     .from('agent_actions')
-    .update({
-      status:              'approved',
-      approved_by_user_id: userId,
-      approved_at:         new Date().toISOString(),
-    })
+    .update(update)
     .eq('id', actionId);
   return !error;
 }
