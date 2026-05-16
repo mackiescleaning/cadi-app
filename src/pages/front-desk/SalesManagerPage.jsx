@@ -2,8 +2,8 @@
 // Sales Manager agent profile page — /front-desk/sales-manager
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { MessageSquare, Settings, ArrowRight } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { MessageSquare, Settings, ArrowRight, Sparkles } from 'lucide-react';
 import FrontDeskSettings from '../../components/FrontDeskSettings';
 import { supabase } from '../../lib/supabase';
 import { useBusinessId } from '../../hooks/useBusinessId';
@@ -19,21 +19,24 @@ function StatCard({ label, value, sub }) {
 }
 
 export default function SalesManagerPage() {
-  const businessId = useBusinessId();
+  const navigate    = useNavigate();
+  const businessId  = useBusinessId();
   const [searchParams, setSearchParams] = useSearchParams();
   const fromPhase3 = searchParams.get('from') === 'phase3';
   const [introDismissed, setIntroDismissed] = useState(false);
-  const [stats, setStats] = useState({ conversations: null, quotesThisMonth: null, lastActive: null });
+  const [stats, setStats] = useState({ conversations: null, lastActive: null });
+  const [setupStep, setSetupStep] = useState(null); // null = loading
 
   useEffect(() => {
     if (!businessId) return;
     (async () => {
-      const [{ count: convCount }, { data: recent }] = await Promise.all([
+      const [{ count: convCount }, { data: recent }, { data: wc }] = await Promise.all([
         supabase.from('conversations').select('*', { count: 'exact', head: true })
           .eq('business_id', businessId).eq('channel', 'web_chat'),
         supabase.from('conversations').select('last_message_at')
           .eq('business_id', businessId).eq('channel', 'web_chat')
           .order('last_message_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('widget_configs').select('setup_step').eq('business_id', businessId).maybeSingle(),
       ]);
       const lastAt = recent?.last_message_at;
       let lastActive = null;
@@ -42,6 +45,7 @@ export default function SalesManagerPage() {
         lastActive = diff === 0 ? 'today' : diff === 1 ? 'yesterday' : `${diff} days ago`;
       }
       setStats({ conversations: convCount ?? 0, lastActive });
+      setSetupStep(wc?.setup_step ?? 0);
     })();
   }, [businessId]);
 
@@ -75,6 +79,33 @@ export default function SalesManagerPage() {
             Set up Sales Manager <ArrowRight size={14} />
           </button>
         </div>
+      )}
+
+      {/* Setup wizard CTA — shown until setup_step reaches 5 */}
+      {setupStep !== null && setupStep < 5 && (
+        <button
+          onClick={() => navigate('/front-desk/sales-manager/setup')}
+          className="w-full text-left rounded-2xl overflow-hidden border border-[#4f78ff]/30 p-5 flex items-center justify-between gap-4 hover:border-[#4f78ff]/60 transition-colors"
+          style={{ background: 'linear-gradient(135deg, #010a4f 0%, #0d1e78 100%)' }}
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+              <Sparkles size={18} className="text-[#99c5ff]" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-white">Finish setting up your widget</p>
+              <p className="text-xs text-white/50 mt-0.5">
+                {setupStep === 0
+                  ? '5 quick steps — takes about 2 minutes'
+                  : `Step ${setupStep + 1} of 5 — pick up where you left off`}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 bg-[#4f78ff] rounded-xl shrink-0">
+            <span className="text-xs font-bold text-white">{setupStep === 0 ? 'Get started' : 'Continue'}</span>
+            <ArrowRight size={13} className="text-white" />
+          </div>
+        </button>
       )}
 
       {/* Agent header */}

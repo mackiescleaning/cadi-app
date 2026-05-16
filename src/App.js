@@ -32,6 +32,7 @@ import InboxPage from './pages/Inbox';
 import SalesManagerPage      from './pages/front-desk/SalesManagerPage';
 import ReviewAgentPage       from './pages/front-desk/ReviewAgentPage';
 import OperationsManagerPage from './pages/front-desk/OperationsManagerPage';
+import WidgetSetupWizard     from './pages/front-desk/WidgetSetupWizard';
 import Services from './pages/Services';
 import TrainingStaff from './pages/TrainingStaff';
 import AnnualReview from './pages/AnnualReview';
@@ -128,6 +129,7 @@ function App() {
           {/* Front Desk hub */}
           <Route path="front-desk" element={<InboxPage />} />
           <Route path="front-desk/sales-manager"      element={<SalesManagerPage />} />
+          <Route path="front-desk/sales-manager/setup" element={<WidgetSetupWizard />} />
           <Route path="front-desk/review-agent"       element={<ReviewAgentPage />} />
           <Route path="front-desk/operations-manager" element={<OperationsManagerPage />} />
           {/* Legacy /inbox redirect */}
