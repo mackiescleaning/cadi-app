@@ -32,195 +32,198 @@ const json = (data: unknown, status = 200) =>
 // ─── Build system prompt from business context ────────────────────────────────
 
 function buildSystemPrompt(ctx: BusinessContext): string {
-  const { businessName, serviceArea, services, brandVoice, agentMode, widgetGoal } = ctx;
+  const { businessName, serviceArea, services, brandVoice, widgetConfig, agentMode, selectedMode } = ctx;
 
   if (agentMode === "off") {
     return `You are a chat assistant. The business has disabled automated chat. Politely tell the visitor that online chat isn't currently available and invite them to call or email. Keep it brief.`;
   }
 
+  const tonePreset = widgetConfig?.tone_preset ?? brandVoice?.tone ?? "warm";
   const toneMap: Record<string, string> = {
-    warm:         "warm and approachable — conversational, use first names, no exclamation marks, no filler phrases like 'Great!' or 'Absolutely!'",
-    professional: "professional and composed — complete sentences, no emoji, no exclamation marks",
-    casual:       "casual and direct — short punchy messages, like texting, no hollow affirmations",
+    warm:         "warm and conversational — use first names, sound like a real person",
+    professional: "professional and composed — complete sentences, measured, no emoji",
+    casual:       "casual and direct — short, punchy, like texting a mate",
+    formal:       "formal and courteous — full sentences, polite address",
   };
-  const tone = toneMap[brandVoice?.tone ?? "warm"] ?? toneMap.warm;
+  const tone    = toneMap[tonePreset] ?? toneMap.warm;
   const signOff = brandVoice?.sign_off_name ? `\nAlways sign off as: ${brandVoice.sign_off_name}` : "";
+  const neverSay = widgetConfig?.never_say?.length
+    ? `\nNEVER USE THESE PHRASES: ${widgetConfig.never_say.join(", ")}`
+    : "";
+  const responseWindow = widgetConfig?.response_window ?? "2 hours";
+
   const areaLine = serviceArea?.length
     ? `We cover: ${serviceArea.join(", ")}`
-    : "We cover various areas — confirm availability by asking for their postcode if relevant.";
-
-  // Group services by category for context
-  const byCategory: Record<string, string[]> = {};
-  for (const s of services) {
-    const cat = s.category ?? "other";
-    if (!byCategory[cat]) byCategory[cat] = [];
-    byCategory[cat].push(s.name);
-  }
-  const serviceContext = Object.entries(byCategory)
-    .map(([cat, names]) => `${cat}: ${names.join(", ")}`)
-    .join("\n") || "General cleaning services";
+    : "We cover various areas — ask for their postcode to confirm.";
 
   const SHARED_RULES = `
-## Rules
-- Ask ONE question at a time — never stack multiple questions
-- Keep messages SHORT — 1 to 3 sentences max
-- No exclamation marks. No hollow affirmations ("Great!", "Perfect!", "Absolutely!"). Just respond naturally.
-- Sound like a real person, not a chatbot
-- If asked something outside your services, acknowledge it briefly and redirect
-- Never repeat back what the customer just said before asking the next question
+## Hard rules — follow these in every message
+- Ask ONE question per message. Never stack two questions.
+- Keep messages SHORT — 1 to 3 sentences max.
+- No exclamation marks. None. Not one.
+- No hollow affirmations — never say "Great!", "Perfect!", "Absolutely!", "Sure thing!" or similar.
+- Sound like a real person, not a chatbot. Don't repeat back what the customer just said.
+- Never quote prices. If asked about price, say: "The team will confirm pricing once they've had a look — they'll be in touch within ${responseWindow}."
+- Never commit to dates or availability.${neverSay}
 
 ## Suggestions
 At the end of EVERY response, append:
 
 SUGGESTIONS_START
-["Option 1", "Option 2", "Option 3"]
+["Option A", "Option B", "Option C"]
 SUGGESTIONS_END
 
-Keep suggestions 2-5 words each, max 4, relevant to what comes next.`;
+Suggestions must be 2–5 words, max 4, directly relevant to what comes next in the conversation.`;
 
-  // ── SITE VISIT mode ───────────────────────────────────────────────────────
-  if (widgetGoal === "site_visit") {
-    // Auto-detect qualifying questions from service categories
-    const hasExterior    = byCategory["exterior"]    !== undefined;
-    const hasCommercial  = byCategory["commercial"]  !== undefined;
-    const hasResidential = byCategory["residential"] !== undefined;
+  // ── RESIDENTIAL ───────────────────────────────────────────────────────────
+  if (selectedMode === "residential") {
+    const resServices = services
+      .filter(s => !s.category || s.category === "residential" || s.category === "other")
+      .map(s => `- ${s.name}`)
+      .join("\n") || "- General home cleaning services";
 
-    let qualifyingHint = "";
-    if (hasExterior || hasCommercial) {
-      qualifyingHint = `Ask one quick qualifying question — residential or commercial property, or what type of building (house, office, etc.). Then move straight to collecting the address. The address is the most important piece of information: with it, the team can look up the property on Google Maps and quote accurately. Do NOT ask how many windows or try to quantify the work — the address is enough.`;
-    } else if (hasResidential) {
-      qualifyingHint = `Ask one qualifying question (e.g. "Is it a regular clean or a one-off?" or "How many bedrooms?"). Keep it light.`;
-    } else {
-      qualifyingHint = `Ask one light qualifying question about what they need.`;
-    }
+    return `You are the lead-capture assistant for ${businessName}, a cleaning business. A website visitor is looking for residential cleaning.
 
-    return `You are the Sales Manager for ${businessName}, a cleaning business. Your job is to collect the information needed to arrange a free no-obligation site visit for the customer.
+## Tone
+${tone}${signOff}
 
-## Your personality
-Tone: ${tone}${signOff}
-
-## Services
-${serviceContext}
+## Services offered
+${resServices}
 
 ## Service area
 ${areaLine}
 
-## What you must collect (all three required before submitting)
-1. Their full name
-2. Phone number OR email address
-3. Site address — at minimum a street and town, ideally with postcode. Do not accept just a postcode.
+## Your goal
+Collect a complete lead. Do NOT quote prices. Do NOT book anything. Just gather the information the team needs to follow up.
 
-Optionally also collect: company name (if commercial), which specific services they want.
+## Conversation flow — collect these in order, one at a time
+1. What type of clean? (regular clean / one-off / end of tenancy / after builders)
+2. If regular: what frequency? (weekly / fortnightly / monthly)
+3. How many bedrooms?
+4. Postcode — to confirm coverage
+5. Their name
+6. How they'd like to be contacted (call / text / email) — then collect that detail
 
-## Conversation flow
-1. Ask what they're looking to get done
-2. ${qualifyingHint}
-3. Ask for the property address (street address + town/postcode) — this is the priority
-4. If they give only a postcode, ask for the street address too: "And what's the street address for that?"
-5. Mention the free site visit naturally once you have the address — keep it low-pressure
-6. Collect name → phone or email (one at a time)
-7. Once you have all three (name, contact, address), output the SITE_VISIT_START block and tell them someone will be in touch within a few hours
-8. Never quote prices — if asked, say the team will confirm pricing after reviewing the property
+## CRITICAL: Do not output SITE_VISIT_START until you have: clean type, bedrooms, postcode, name, AND a contact method + detail.
 
-## CRITICAL: Do not output SITE_VISIT_START until you have ALL THREE: name, contact (phone or email), AND a proper site address (not just a postcode).
-
-## Site visit capture
-When you have all three required fields, append AFTER your message:
+## Lead capture
+Once you have all six pieces, append AFTER your closing message:
 
 SITE_VISIT_START
-{ "name": "Jane Smith", "company": "Acme Ltd", "phone": "07700900000", "email": "jane@example.com", "address": "14 High Street, Cardiff CF10 1AB", "services": ["Window Cleaning"] }
+{ "mode": "residential", "name": "Jane Smith", "phone": "07700900000", "email": "jane@example.com", "clean_type": "regular", "frequency": "fortnightly", "bedrooms": 3, "postcode": "CF10 1AB" }
 SITE_VISIT_END
 
-Only include fields the customer provided. The system handles the notification.
+Only include fields collected. Omit any not provided.
 ${SHARED_RULES}`;
   }
 
-  // ── INSTANT QUOTE mode ────────────────────────────────────────────────────
-  if (widgetGoal === "instant_quote") {
-    const formatLine = (s: ServiceRecord): string => {
-      if (s.pricing_type === "per_size" && s.pricing_matrix?.length) {
-        const tiers = s.pricing_matrix.map(t => `${t.label}: £${t.price}`).join(" / ");
-        return `- ${s.name} — priced by size: ${tiers} (ask how many bedrooms)`;
-      }
-      if (s.pricing_type === "hourly" && s.price_hourly_rate) {
-        let line = `- ${s.name} — £${s.price_hourly_rate}/hr`;
-        if (s.price_hourly_minimum_hours) line += `, minimum ${s.price_hourly_minimum_hours}hr`;
-        return line;
-      }
-      if (s.pricing_type === "fixed" && s.price_fixed_basic) {
-        return `- ${s.name} — £${s.price_fixed_basic} fixed`;
-      }
-      if (s.pricing_type === "per_sqm" && s.price_per_sqm) {
-        return `- ${s.name} — £${s.price_per_sqm}/m²`;
-      }
-      if (s.pricing_type === "per_room" && s.price_per_room) {
-        let line = `- ${s.name} — £${s.price_per_room}/room`;
-        if (s.price_per_bathroom) line += ` + £${s.price_per_bathroom}/bathroom`;
-        return line;
-      }
-      return `- ${s.name} — pricing to be confirmed, collect enquiry details`;
-    };
+  // ── EXTERIOR ──────────────────────────────────────────────────────────────
+  if (selectedMode === "exterior") {
+    const extServices = services
+      .filter(s => s.category === "exterior")
+      .map(s => `- ${s.name}`)
+      .join("\n") || "- Window cleaning\n- Gutter clearing\n- Pressure washing\n- Fascias & soffits";
 
-    const serviceList = services.length > 0
-      ? services.map(formatLine).join("\n")
-      : "- General cleaning services (pricing configured separately)";
+    return `You are the lead-capture assistant for ${businessName}, a cleaning business. A website visitor wants exterior cleaning.
 
-    return `You are the Sales Manager for ${businessName}, a cleaning business. You give instant quotes and book new customers.
+## Tone
+${tone}${signOff}
 
-## Your personality
-Tone: ${tone}${signOff}
-
-## Services & pricing
-${serviceList}
+## Exterior services offered
+${extServices}
 
 ## Service area
 ${areaLine}
 
-## Conversation flow
-1. Greet and ask what service they're looking for
-2. Ask bedrooms/size if needed, then frequency (weekly/fortnightly/monthly/one-off)
-3. Ask for their postcode to confirm service area
-4. When you have enough info, output a QUOTE block (the system shows the price — don't state it yourself)
-5. Ask if they'd like to book — collect name, email/phone
-6. Thank them and confirm someone will be in touch within 24 hours
+## Your goal
+Collect a complete lead. The property address is the most important piece of information — with it the team can assess the job on Google Maps and prepare a quote.
 
-## Quoting
-When you have enough info, append AFTER your message:
+Do NOT ask how many windows, how high the gutters are, or any other quantifying questions. The address is enough.
+Do NOT quote prices.
 
-QUOTE_START
-{ "service": "regular_clean", "bedrooms": 3, "frequency": "fortnightly", "postcode": "CF10" }
-QUOTE_END
+## Conversation flow — collect these in order, one at a time
+1. Which services are they interested in? (they can name multiple — use chips to guide them)
+2. What's the full property address? (street + town + postcode — not just a postcode)
+   - If they give only a postcode: "And the street address?"
+3. Any access issues to be aware of? (locked gate, dog, parking restrictions — keep it light)
+4. Their name
+5. Best contact method (call / text / email) — then collect that detail
 
-## Contact capture
-When the customer wants to book, append:
+## CRITICAL: Do not output SITE_VISIT_START until you have: services, full address (not just postcode), name, AND contact detail.
 
-CONTACT_START
-{ "name": "Jane Smith", "email": "jane@example.com", "phone": "07700900000" }
-CONTACT_END
+## Lead capture
+Once you have all five pieces, append AFTER your closing message:
+
+SITE_VISIT_START
+{ "mode": "exterior", "name": "Jane Smith", "phone": "07700900000", "email": "jane@example.com", "services": ["Window Cleaning", "Gutter Clearing"], "address": "14 High Street, Cardiff CF10 1AB", "access_notes": "Side gate, code 1234" }
+SITE_VISIT_END
+
+Only include fields collected.
 ${SHARED_RULES}`;
   }
 
-  // ── ENQUIRY mode (default fallback) ───────────────────────────────────────
-  return `You are the Sales Manager for ${businessName}, a cleaning business. Your job is to have a friendly conversation, understand what the customer needs, and collect their contact details so the team can follow up.
+  // ── COMMERCIAL ────────────────────────────────────────────────────────────
+  if (selectedMode === "commercial") {
+    const commServices = services
+      .filter(s => s.category === "commercial")
+      .map(s => `- ${s.name}`)
+      .join("\n") || "- Commercial cleaning\n- Office cleaning\n- Deep clean";
 
-## Your personality
-Tone: ${tone}${signOff}
+    return `You are the lead-capture assistant for ${businessName}, a cleaning business. A website visitor wants commercial cleaning.
 
-## Services
-${serviceContext}
+## Tone
+${tone}${signOff}
+
+## Commercial services offered
+${commServices}
 
 ## Service area
 ${areaLine}
 
-## Conversation flow
-1. Warm greeting — ask what they're looking for
-2. Show genuine interest — ask one follow-up question about their situation
-3. Let them know the team will be in touch and ask for their name and best contact number or email
-4. Once you have name + (phone or email), output a CONTACT block and thank them
-5. Don't quote prices — just say "we'll get back to you with a quote shortly"
+## Your goal
+Collect a high-quality commercial lead. Commercial jobs always require a site visit — never quote prices.
+
+## Conversation flow — collect these in order, one at a time
+1. Type of premises? (office / retail / school / healthcare / warehouse / other)
+2. Current situation? (no cleaner at the moment / unhappy with current provider / new premises)
+3. Rough size? (small — under 2,000 sq ft / medium — 2–5,000 / large — over 5,000)
+4. Cleaning frequency needed? (daily / weekly / fortnightly / monthly)
+5. Timeline? (need someone ASAP / within the next month / planning ahead)
+6. Their name and job title or role
+7. Best contact method (call / text / email) — then collect that detail
+
+## Compliance
+If premises type is school or healthcare, add "compliance_flag": "DBS check required" to the SITE_VISIT block.
+
+## CRITICAL: Do not output SITE_VISIT_START until you have: premises type, situation, size, frequency, timeline, name + role, AND contact detail.
+
+## Lead capture
+Once complete, append AFTER your closing message:
+
+SITE_VISIT_START
+{ "mode": "commercial", "name": "Jane Smith", "role": "Office Manager", "phone": "07700900000", "email": "jane@example.com", "premises_type": "office", "situation": "switching provider", "size": "medium", "frequency": "weekly", "timeline": "within a month", "compliance_flag": "" }
+SITE_VISIT_END
+
+Only include fields collected. Leave compliance_flag empty string if not applicable.
+${SHARED_RULES}`;
+  }
+
+  // ── FALLBACK (unknown mode) ───────────────────────────────────────────────
+  return `You are the lead-capture assistant for ${businessName}, a cleaning business. Understand what the visitor needs and collect their name and contact details so the team can follow up.
+
+## Tone
+${tone}${signOff}
+
+## Service area
+${areaLine}
+
+## Rules
+- One question at a time
+- Never quote prices
+- Collect: what they need, their name, and phone or email
 
 ## Contact capture
-When you have name + (phone or email), append AFTER your message:
+When you have name + (phone or email), append:
 
 CONTACT_START
 { "name": "Jane Smith", "email": "jane@example.com", "phone": "07700900000" }
@@ -368,8 +371,9 @@ interface BusinessContext {
   legacyRules:  Array<{ service: string; service_label: string; pricing_method: string; base_amounts: Record<string, unknown>; frequency_modifiers?: Record<string, number>; minimum_price?: number }>;
   brandVoice:   Record<string, string> | null;
   agentMode:    string;
-  widgetGoal:   string;
+  widgetGoal:   string;     // legacy — kept for backward compat
   widgetModes:  string[];
+  selectedMode: string;     // resolved per-request (from POST body or derived from widgetGoal)
   widgetConfig: WidgetConfig | null;
 }
 
@@ -446,6 +450,7 @@ async function loadBusinessContext(sb: ReturnType<typeof createClient>, business
     agentMode:    widgetEnabled ? "approval" : "off",
     widgetGoal,
     widgetModes,
+    selectedMode: "residential", // default; overridden per-request in POST handler
     widgetConfig: widgetConfig as WidgetConfig | null,
   };
 }
@@ -469,34 +474,44 @@ serve(async (req: Request) => {
     const ctx = await loadBusinessContext(sb, businessId);
     if (!ctx) return json({ error: "Business not found" }, 404);
 
-    const tone = ctx.brandVoice?.tone ?? "warm";
-    const greetings: Record<string, string> = {
-      site_visit:    tone === "professional"
-        ? `Hello. I'm the virtual assistant for ${ctx.businessName}. I can arrange a free site visit to get you an accurate quote. What are you looking to have done?`
-        : `Hi, I'm the virtual assistant for ${ctx.businessName}. We do free site visits to give you a proper quote — no obligation, usually takes about 20 minutes.\n\nWhat are you looking to get done?`,
-      instant_quote: tone === "professional"
-        ? `Hello. I'm the virtual assistant for ${ctx.businessName}. I can get you a quote straight away. What service are you looking for?`
-        : `Hi, I'm the virtual assistant for ${ctx.businessName}. I can get you a quote straight away.\n\nWhat are you looking to get done?`,
-      enquiry: tone === "professional"
-        ? `Hello. I'm the virtual assistant for ${ctx.businessName}. How can I help?`
-        : `Hi, I'm the virtual assistant for ${ctx.businessName}. How can I help?`,
+    const isPro = (ctx.widgetConfig?.tone_preset ?? ctx.brandVoice?.tone) === "professional";
+    const hi    = isPro ? "Hello." : "Hi —";
+    const biz   = ctx.businessName;
+
+    // Per-mode greetings and chips
+    const modeConfigs: Record<string, { greeting: string; chips: string[] }> = {
+      residential: {
+        greeting: `${hi} I'm the virtual assistant for ${biz}. What type of home cleaning are you looking for?`,
+        chips:    ["Regular clean", "One-off clean", "End of tenancy", "After builders"],
+      },
+      exterior: {
+        greeting: `${hi} I'm the virtual assistant for ${biz}. Which exterior services are you interested in?`,
+        chips:    ["Window cleaning", "Gutter clearing", "Pressure washing", "Fascias & soffits"],
+      },
+      commercial: {
+        greeting: `${hi} I'm the virtual assistant for ${biz}. What type of premises do you have?`,
+        chips:    ["Office", "Retail", "School / healthcare", "Warehouse"],
+      },
     };
 
-    const chipSets: Record<string, string[]> = {
-      site_visit:    ['Book a site visit', 'Window cleaning', 'Gutter clearing', 'Pressure washing'],
-      instant_quote: ['Get a quote', 'Regular cleaning', 'End of tenancy', 'One-off clean'],
-      enquiry:       ['Get in touch', 'Check availability', 'Get a quote', 'Find out more'],
-    };
+    // Only return configs for modes this business has enabled
+    const filteredModeConfigs = Object.fromEntries(
+      ctx.widgetModes
+        .filter(m => modeConfigs[m])
+        .map(m => [m, modeConfigs[m]])
+    );
 
     return json({
-      business_name:  ctx.businessName,
-      service_area:   ctx.serviceArea,
-      greeting:       greetings[ctx.widgetGoal] ?? greetings.enquiry,
-      initial_chips:  chipSets[ctx.widgetGoal] ?? chipSets.enquiry,
-      widget_goal:    ctx.widgetGoal,
-      modes:          ctx.widgetModes,   // Phase 2: visitor mode selector
-      agent_mode:     ctx.agentMode,
+      business_name:   ctx.businessName,
+      service_area:    ctx.serviceArea,
+      modes:           ctx.widgetModes,
+      mode_configs:    filteredModeConfigs,
+      agent_mode:      ctx.agentMode,
       response_window: ctx.widgetConfig?.response_window ?? "2 hours",
+      // Legacy fields — kept for any old widget builds still in the wild
+      widget_goal:     ctx.widgetGoal,
+      greeting:        filteredModeConfigs[ctx.widgetModes[0]]?.greeting ?? `${hi} I'm the virtual assistant for ${biz}. How can I help?`,
+      initial_chips:   filteredModeConfigs[ctx.widgetModes[0]]?.chips ?? [],
     });
   }
 
@@ -507,20 +522,32 @@ serve(async (req: Request) => {
   }
 
   let body: {
-    business_id:     string;
+    business_id:      string;
     conversation_id?: string;
-    message:         string;
-    visitor_info?:   Record<string, string>;
+    message:          string;
+    visitor_info?:    Record<string, string>;
+    selected_mode?:   string;
   };
 
   try { body = await req.json(); }
   catch { return json({ error: "Invalid JSON" }, 400); }
 
-  const { business_id, conversation_id, message, visitor_info = {} } = body;
+  const { business_id, conversation_id, message, visitor_info = {}, selected_mode } = body;
   if (!business_id || !message) return json({ error: "Missing required fields" }, 400);
 
   const ctx = await loadBusinessContext(sb, business_id);
   if (!ctx) return json({ error: "Business not found" }, 404);
+
+  // Resolve selectedMode: use request body value if valid, otherwise derive from legacy widgetGoal
+  const legacyModeMap: Record<string, string> = {
+    site_visit:    "residential",
+    instant_quote: "residential",
+    enquiry:       "residential",
+  };
+  const validModes = ["residential", "exterior", "commercial"];
+  ctx.selectedMode = (selected_mode && validModes.includes(selected_mode))
+    ? selected_mode
+    : (legacyModeMap[ctx.widgetGoal] ?? "residential");
 
   // Get or create conversation
   let convId = conversation_id ?? null;
