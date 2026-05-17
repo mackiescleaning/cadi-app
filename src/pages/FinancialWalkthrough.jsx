@@ -163,7 +163,7 @@ export default function FinancialWalkthrough() {
 
       // Check for existing in-progress walkthrough
       const { data: biz } = await supabase
-        .from('businesses').select('id').eq('owner_id', session.user.id).single();
+        .from('businesses').select('id').eq('owner_user_id', session.user.id).single();
       if (!biz) return;
 
       const [{ data: walks }, { data: an }] = await Promise.all([
@@ -195,7 +195,7 @@ export default function FinancialWalkthrough() {
     if (walkthrough) return walkthrough;
     const { data: { session } } = await supabase.auth.getSession();
     const { data: biz } = await supabase
-      .from('businesses').select('id').eq('owner_id', session.user.id).single();
+      .from('businesses').select('id').eq('owner_user_id', session.user.id).single();
     const { data: w } = await supabase
       .from('walkthroughs')
       .insert({ business_id: biz.id, type: 'first_time', current_screen: 0 })

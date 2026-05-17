@@ -57,7 +57,7 @@ const NAV_SECTIONS = [
   },
   {
     id: 'earn',
-    label: 'Earn more work',
+    label: 'Connect',
     items: [
       { path: '/earn/marketplace',  label: 'Marketplace',      icon: ShoppingBag   },
       { path: '/earn/pipeline',     label: 'Job Pipeline',     icon: GitBranch     },
@@ -435,7 +435,7 @@ export default function AppLayout() {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
     { id: 'run',   label: 'Run',   icon: CalendarDays, color: '#4f78ff' },
     { id: 'grow',  label: 'Grow',  icon: TrendingUp,  color: GROW_COLOR },
-    { id: 'earn',  label: 'Earn',  icon: Star,        color: EARN_COLOR },
+    { id: 'earn',  label: 'Connect',  icon: Star,        color: EARN_COLOR },
   ];
 
   return (

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useBusinessId } from '../hooks/useBusinessId';
@@ -68,6 +69,7 @@ function timeAgo(dateStr) {
 function ActionCard({ action, onRefresh }) {
   const [expanded, setExpanded] = useState(false);
   const [working,  setWorking]  = useState(false);
+  const [cardError, setCardError] = useState(null);
   const { user } = useAuth();
 
   const isPending = action.status === 'pending_approval';
@@ -81,27 +83,41 @@ function ActionCard({ action, onRefresh }) {
 
   const handleApprove = async () => {
     setWorking(true);
-    await approveAgentAction(action.id, user?.id);
+    setCardError(null);
+    try {
+      await approveAgentAction(action.id, user?.id);
 
-    if (action.action_type === 'send_review_request') {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        await supabase.functions.invoke('send-review-request', {
-          body:    { action_id: action.id },
-          headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
-        });
-      } catch (e) {
-        console.error('send-review-request failed:', e);
+      if (action.action_type === 'send_review_request') {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          await supabase.functions.invoke('send-review-request', {
+            body:    { action_id: action.id },
+            headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+          });
+        } catch (e) {
+          console.error('send-review-request failed:', e);
+        }
       }
-    }
 
-    onRefresh();
+      onRefresh();
+    } catch (e) {
+      setCardError('Couldn\'t approve — try again.');
+    } finally {
+      setWorking(false);
+    }
   };
 
   const handleReject = async () => {
     setWorking(true);
-    await rejectAgentAction(action.id, user?.id);
-    onRefresh();
+    setCardError(null);
+    try {
+      await rejectAgentAction(action.id, user?.id);
+      onRefresh();
+    } catch (e) {
+      setCardError('Couldn\'t reject — try again.');
+    } finally {
+      setWorking(false);
+    }
   };
 
   return (
@@ -190,22 +206,27 @@ function ActionCard({ action, onRefresh }) {
 
       {/* Approval buttons */}
       {isPending && (
-        <div className="px-4 pb-4 flex gap-2">
-          <button
-            onClick={handleApprove}
-            disabled={working}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-black rounded-xl transition-colors disabled:opacity-50"
-          >
-            <Check size={12} />
-            Approve & send
-          </button>
-          <button
-            onClick={handleReject}
-            disabled={working}
-            className="px-4 py-2 bg-white border border-red-200 text-red-500 hover:bg-red-50 text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
-          >
-            <X size={12} />
-          </button>
+        <div className="px-4 pb-4 space-y-2">
+          {cardError && (
+            <p className="text-xs text-red-500 font-medium">{cardError}</p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={handleApprove}
+              disabled={working}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-black rounded-xl transition-colors disabled:opacity-50"
+            >
+              <Check size={12} />
+              Approve & send
+            </button>
+            <button
+              onClick={handleReject}
+              disabled={working}
+              className="px-4 py-2 bg-white border border-red-200 text-red-500 hover:bg-red-50 text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+            >
+              <X size={12} />
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -222,6 +243,7 @@ function SiteVisitCard({ action, onRefresh }) {
   const [visitDate,  setVisitDate]  = useState('');
   const [visitTime,  setVisitTime]  = useState('09:00');
   const [visitNote,  setVisitNote]  = useState('');
+  const [cardError,  setCardError]  = useState(null);
   const { user } = useAuth();
   const businessId = useBusinessId();
   const p = action.proposed_payload ?? {};
@@ -231,54 +253,65 @@ function SiteVisitCard({ action, onRefresh }) {
 
   const handleConfirm = async () => {
     setWorking(true);
-
-    if (visitDate && businessId) {
-      const [h, m]    = visitTime.split(':');
-      const startHour = parseInt(h) + parseInt(m) / 60;
-      const { error: jobErr } = await supabase.from('jobs').insert({
-        owner_id:          user.id,
-        business_id:       businessId,
-        customer:          p.name || 'Site visit enquiry',
-        postcode:          '',
-        date:              visitDate,
-        start_hour:        startHour,
-        duration_hrs:      1,
-        type:              'site_visit',
-        service:           'Site Visit',
-        price:             0,
-        status:            'scheduled',
-        source:            'direct',
-        notes:             [
-          p.company                ? `Company: ${p.company}` : '',
-          p.service_labels?.length ? `Services: ${p.service_labels.join(', ')}` : '',
-          p.address                ? `Address: ${p.address}` : '',
-          visitNote,
-        ].filter(Boolean).join('\n'),
-        evidence_required: {},
-        is_recurring:      false,
-      });
-      if (jobErr) {
-        console.error('site visit job insert failed:', jobErr);
-        alert(`Couldn't add to schedule: ${jobErr.message}`);
-        setWorking(false);
-        return;
+    setCardError(null);
+    try {
+      if (visitDate && businessId) {
+        const [h, m]    = visitTime.split(':');
+        const startHour = parseInt(h) + parseInt(m) / 60;
+        const { error: jobErr } = await supabase.from('jobs').insert({
+          owner_id:          user.id,
+          business_id:       businessId,
+          customer:          p.name || 'Site visit enquiry',
+          postcode:          '',
+          date:              visitDate,
+          start_hour:        startHour,
+          duration_hrs:      1,
+          type:              'site_visit',
+          service:           'Site Visit',
+          price:             0,
+          status:            'scheduled',
+          source:            'direct',
+          notes:             [
+            p.company                ? `Company: ${p.company}` : '',
+            p.service_labels?.length ? `Services: ${p.service_labels.join(', ')}` : '',
+            p.address                ? `Address: ${p.address}` : '',
+            visitNote,
+          ].filter(Boolean).join('\n'),
+          evidence_required: {},
+          is_recurring:      false,
+        });
+        if (jobErr) {
+          setCardError(`Couldn't add to schedule: ${jobErr.message}`);
+          return;
+        }
       }
+
+      await approveAgentAction(action.id, user?.id, {
+        visit_date:         visitDate || null,
+        visit_time:         visitTime,
+        note:               visitNote || null,
+        added_to_schedule:  !!(visitDate && businessId),
+      });
+
+      onRefresh();
+    } catch (e) {
+      setCardError('Something went wrong — please try again.');
+    } finally {
+      setWorking(false);
     }
-
-    await approveAgentAction(action.id, user?.id, {
-      visit_date:         visitDate || null,
-      visit_time:         visitTime,
-      note:               visitNote || null,
-      added_to_schedule:  !!(visitDate && businessId),
-    });
-
-    onRefresh();
   };
 
   const handleReject = async () => {
     setWorking(true);
-    await rejectAgentAction(action.id, user?.id);
-    onRefresh();
+    setCardError(null);
+    try {
+      await rejectAgentAction(action.id, user?.id);
+      onRefresh();
+    } catch (e) {
+      setCardError('Couldn\'t reject — try again.');
+    } finally {
+      setWorking(false);
+    }
   };
 
   return (
@@ -377,6 +410,7 @@ function SiteVisitCard({ action, onRefresh }) {
             rows={2}
             className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2 resize-none focus:outline-none focus:border-[#1D1B8E]/50"
           />
+          {cardError && <p className="text-xs text-red-500 font-medium">{cardError}</p>}
           <div className="flex gap-2">
             <button
               onClick={() => setConfirming(false)}
@@ -399,7 +433,9 @@ function SiteVisitCard({ action, onRefresh }) {
 
       {/* Call + confirm/reject buttons */}
       {isPending && !confirming && (
-        <div className="px-4 pb-4 flex gap-2">
+        <div className="px-4 pb-4 space-y-2">
+          {cardError && <p className="text-xs text-red-500 font-medium">{cardError}</p>}
+        <div className="flex gap-2">
           {p.phone && (
             <a
               href={`tel:${p.phone}`}
@@ -423,12 +459,13 @@ function SiteVisitCard({ action, onRefresh }) {
             <X size={12} />
           </button>
         </div>
+        </div>
       )}
     </div>
   );
 }
 
-function EmptyState({ tab, agentFilter }) {
+function EmptyState({ tab, agentFilter, isFirstTime }) {
   const agentName = FILTER_TABS.find(t => t.key === agentFilter)?.label ?? 'your agents';
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -443,6 +480,13 @@ function EmptyState({ tab, agentFilter }) {
           ? `Your Front Desk staff are handling things. When ${agentName} needs your input, it'll appear here.`
           : `Once your agents start taking actions — quotes, review requests, reminders — the full history appears here.`}
       </p>
+      {isFirstTime && tab === 'pending' && (
+        <div className="mt-5 px-4 py-3 rounded-xl bg-[#f0f4ff] border border-[#99c5ff]/30 max-w-xs text-left">
+          <p className="text-xs font-black text-[#010a4f] mb-1">Getting started</p>
+          <p className="text-xs text-gray-500 mb-2">Front Desk handles enquiries from your website. Add the chat widget to your site to start receiving messages.</p>
+          <Link to="/front-desk/widget" className="text-xs font-bold text-[#1f48ff] hover:underline">Set up your chat widget →</Link>
+        </div>
+      )}
     </div>
   );
 }
@@ -467,21 +511,26 @@ export default function InboxPage() {
       customers ( name )
     `;
 
-    const [{ data: pendingData }, { data: historyData }] = await Promise.all([
-      supabase.from('agent_actions').select(SELECT)
-        .eq('business_id', businessId)
-        .eq('status', 'pending_approval')
-        .order('created_at', { ascending: false }),
-      supabase.from('agent_actions').select(SELECT)
-        .eq('business_id', businessId)
-        .neq('status', 'pending_approval')
-        .order('created_at', { ascending: false })
-        .limit(50),
-    ]);
+    try {
+      const [{ data: pendingData }, { data: historyData }] = await Promise.all([
+        supabase.from('agent_actions').select(SELECT)
+          .eq('business_id', businessId)
+          .eq('status', 'pending_approval')
+          .order('created_at', { ascending: false }),
+        supabase.from('agent_actions').select(SELECT)
+          .eq('business_id', businessId)
+          .neq('status', 'pending_approval')
+          .order('created_at', { ascending: false })
+          .limit(50),
+      ]);
 
-    setPending(pendingData ?? []);
-    setHistory(historyData ?? []);
-    setLoading(false);
+      setPending(pendingData ?? []);
+      setHistory(historyData ?? []);
+    } catch (e) {
+      console.error('Inbox load error:', e);
+    } finally {
+      setLoading(false);
+    }
   }, [businessId]);
 
   useEffect(() => { load(); }, [load]);
@@ -585,7 +634,7 @@ export default function InboxPage() {
             ))}
           </div>
         ) : items.length === 0 ? (
-          <EmptyState tab={tab} agentFilter={agentFilter} />
+          <EmptyState tab={tab} agentFilter={agentFilter} isFirstTime={!loading && pending.length === 0 && history.length === 0} />
         ) : (
           <div className="space-y-3">
             {items.map(action => (

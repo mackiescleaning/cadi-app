@@ -449,62 +449,76 @@ export default function WidgetSetupWizard() {
   useEffect(() => {
     if (!businessId) return;
     (async () => {
-      const [{ data: wc }, { data: profile }, { data: { user } }] = await Promise.all([
-        supabase.from('widget_configs').select('*').eq('business_id', businessId).maybeSingle(),
-        supabase.from('profiles').select('business_name, brand_voice').eq('id', businessId).maybeSingle(),
-        supabase.auth.getUser(),
-      ]);
+      try {
+        const [{ data: wc }, { data: profile }, { data: { user } }] = await Promise.all([
+          supabase.from('widget_configs').select('*').eq('business_id', businessId).maybeSingle(),
+          supabase.from('profiles').select('business_name, brand_voice').eq('id', businessId).maybeSingle(),
+          supabase.auth.getUser(),
+        ]);
 
-      if (wc) {
-        if (wc.modes?.length)        setModes(wc.modes);
-        if (wc.business_name)        setBusinessName(wc.business_name);
-        if (wc.owner_name)           setOwnerName(wc.owner_name);
-        if (wc.service_area)         setServiceArea(wc.service_area);
-        if (wc.response_window)      setResponseWindow(wc.response_window);
-        if (wc.tone_preset)          setTonePreset(wc.tone_preset);
-        if (wc.never_say?.length)    setNeverSay(wc.never_say);
-        setNotifyEmail(wc.notify_email ?? true);
-        if (wc.notify_email_address) setNotifyEmailAddr(wc.notify_email_address);
-        if (wc.second_recipient_email) setSecondEmail(wc.second_recipient_email);
+        if (wc) {
+          if (wc.modes?.length)        setModes(wc.modes);
+          if (wc.business_name)        setBusinessName(wc.business_name);
+          if (wc.owner_name)           setOwnerName(wc.owner_name);
+          if (wc.service_area)         setServiceArea(wc.service_area);
+          if (wc.response_window)      setResponseWindow(wc.response_window);
+          if (wc.tone_preset)          setTonePreset(wc.tone_preset);
+          if (wc.never_say?.length)    setNeverSay(wc.never_say);
+          setNotifyEmail(wc.notify_email ?? true);
+          if (wc.notify_email_address) setNotifyEmailAddr(wc.notify_email_address);
+          if (wc.second_recipient_email) setSecondEmail(wc.second_recipient_email);
+        }
+
+        // Pre-fill from profile if widget_configs has no business_name yet
+        if (!wc?.business_name && profile?.business_name) setBusinessName(profile.business_name);
+        if (!wc?.owner_name && profile?.brand_voice?.sign_off_name) setOwnerName(profile.brand_voice.sign_off_name);
+        if (!wc?.notify_email_address && user?.email) setNotifyEmailAddr(user.email);
+      } catch (e) {
+        console.error('WidgetSetupWizard load error:', e);
       }
-
-      // Pre-fill from profile if widget_configs has no business_name yet
-      if (!wc?.business_name && profile?.business_name) setBusinessName(profile.business_name);
-      if (!wc?.owner_name && profile?.brand_voice?.sign_off_name) setOwnerName(profile.brand_voice.sign_off_name);
-      if (!wc?.notify_email_address && user?.email) setNotifyEmailAddr(user.email);
     })();
   }, [businessId]);
 
   async function saveStep(extraFields = {}) {
     if (!businessId) return;
     setSaving(true);
-    await supabase.from('widget_configs').upsert(
-      {
-        business_id:            businessId,
-        modes,
-        business_name:          businessName  || null,
-        owner_name:             ownerName     || null,
-        service_area:           serviceArea   || null,
-        response_window:        responseWindow,
-        tone_preset:            tonePreset,
-        never_say:              neverSay.length ? neverSay : null,
-        notify_email:           notifyEmail,
-        notify_email_address:   notifyEmailAddr || null,
-        second_recipient_email: secondEmail   || null,
-        ...extraFields,
-      },
-      { onConflict: 'business_id' }
-    );
-    setSaving(false);
+    try {
+      await supabase.from('widget_configs').upsert(
+        {
+          business_id:            businessId,
+          modes,
+          business_name:          businessName  || null,
+          owner_name:             ownerName     || null,
+          service_area:           serviceArea   || null,
+          response_window:        responseWindow,
+          tone_preset:            tonePreset,
+          never_say:              neverSay.length ? neverSay : null,
+          notify_email:           notifyEmail,
+          notify_email_address:   notifyEmailAddr || null,
+          second_recipient_email: secondEmail   || null,
+          ...extraFields,
+        },
+        { onConflict: 'business_id' }
+      );
+    } catch (e) {
+      console.error('WidgetSetupWizard save error:', e);
+      throw e;
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleNext() {
     const isLast = step === STEPS.length;
-    await saveStep(isLast ? { setup_step: 5 } : { setup_step: step });
-    if (isLast) {
-      navigate('/front-desk/sales-manager');
-    } else {
-      setStep(s => s + 1);
+    try {
+      await saveStep(isLast ? { setup_step: 5 } : { setup_step: step });
+      if (isLast) {
+        navigate('/front-desk/sales-manager');
+      } else {
+        setStep(s => s + 1);
+      }
+    } catch {
+      // saveStep already logged the error; saving spinner has been cleared
     }
   }
 

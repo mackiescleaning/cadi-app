@@ -78,7 +78,7 @@ export default function OperationsManagerPage() {
   const fromPhase3 = searchParams.get('from') === 'phase3';
   const [introDismissed, setIntroDismissed] = useState(false);
   const [showFreePreview, setShowFreePreview] = useState(false);
-  const { isPro, canUseOperationsManager } = usePlan();
+  const { isPro, canUseOperationsManager, priceMonthly } = usePlan();
 
   const [showWizard, setShowWizard] = useState(false);
   const [activated, setActivated] = useState(false);
@@ -112,7 +112,10 @@ export default function OperationsManagerPage() {
       setActivated(isActivated);
       setOmEnabled(agentRow?.mode === 'auto' || agentRow?.mode === 'approval');
       setOmSettings(omRow ?? null);
-      setLoading(false);
+    }).catch(e => {
+      console.error('OperationsManager load error:', e);
+    }).finally(() => {
+      if (mounted) setLoading(false);
     });
 
     return () => { mounted = false; };
@@ -122,13 +125,19 @@ export default function OperationsManagerPage() {
     if (!businessId) return;
     setSaving(true);
     setOmEnabled(val);
-    await supabase
-      .from('agent_settings')
-      .upsert(
-        { business_id: businessId, agent: 'operations_manager', mode: val ? 'auto' : 'off' },
-        { onConflict: 'business_id,agent' }
-      );
-    setSaving(false);
+    try {
+      await supabase
+        .from('agent_settings')
+        .upsert(
+          { business_id: businessId, agent: 'operations_manager', mode: val ? 'auto' : 'off' },
+          { onConflict: 'business_id,agent' }
+        );
+    } catch (e) {
+      console.error('OperationsManager toggle error:', e);
+      setOmEnabled(!val);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleWizardComplete() {
@@ -250,7 +259,7 @@ export default function OperationsManagerPage() {
                 onClick={() => navigate('/upgrade')}
                 className="flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white bg-[#1f48ff] rounded-xl hover:bg-[#3a5eff] transition-colors"
               >
-                Upgrade to Pro — £39/month
+                Upgrade to Pro — £{priceMonthly}/month
               </button>
               <button
                 onClick={handleFreeSkip}

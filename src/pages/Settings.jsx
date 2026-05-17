@@ -660,6 +660,67 @@ const TABS = [
   { id: 'team',         label: 'Team',          icon: User       },
 ];
 
+function DeleteAccountButton({ onDeleted }) {
+  const [phase, setPhase] = useState('idle'); // idle | confirm | deleting | error
+  const [errorMsg, setErrorMsg] = useState('');
+
+  async function handleDelete() {
+    setPhase('deleting');
+    try {
+      const { error } = await supabase.functions.invoke('delete-account', { body: {} });
+      if (error) throw error;
+      onDeleted();
+    } catch (err) {
+      const msg = err?.message ?? 'Something went wrong. Please contact support@cadi.cleaning';
+      setErrorMsg(msg);
+      setPhase('error');
+    }
+  }
+
+  if (phase === 'idle') {
+    return (
+      <button
+        onClick={() => setPhase('confirm')}
+        className="text-xs font-bold px-4 py-2 border-2 border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors">
+        Delete
+      </button>
+    );
+  }
+
+  if (phase === 'confirm') {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-red-500 font-semibold">Are you sure?</span>
+        <button
+          onClick={handleDelete}
+          className="text-xs font-bold px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
+          Yes, delete
+        </button>
+        <button
+          onClick={() => setPhase('idle')}
+          className="text-xs font-bold px-3 py-1.5 border border-gray-200 rounded-lg text-gray-500 hover:border-gray-400 transition-colors">
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  if (phase === 'deleting') {
+    return <span className="text-xs text-gray-400">Deleting…</span>;
+  }
+
+  return (
+    <div className="text-right">
+      <p className="text-xs text-red-500 mb-1">{errorMsg}</p>
+      <button
+        onClick={() => setPhase('idle')}
+        className="text-xs font-bold px-3 py-1.5 border border-gray-200 rounded-lg text-gray-500">
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -672,6 +733,7 @@ export default function Settings() {
   });
   const [upgradeSuccess, setUpgradeSuccess] = useState(searchParams.get('upgraded') === '1');
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
 
   // After returning from Stripe, poll the DB directly (avoids stale closure on isPro)
@@ -743,6 +805,7 @@ export default function Settings() {
   // GoCardless state
   const [gcStatus, setGcStatus] = useState(null); // null | { connected, connectedAt, organisationId, sandbox }
   const [gcLoading, setGcLoading] = useState(false);
+  const [confirmGcDisconnect, setConfirmGcDisconnect] = useState(false);
   const [gcCopied, setGcCopied] = useState(false);
 
   useEffect(() => {
@@ -803,6 +866,9 @@ export default function Settings() {
           bankName: bd.bankName || prev.bankName,
           sortCode: bd.sortCode || prev.sortCode,
           accountNum: bd.accountNum || prev.accountNum,
+          tagline: sd.tagline || prev.tagline,
+          address: sd.address || prev.address,
+          website: sd.website || prev.website,
           workingDays: sd.working_days || prev.workingDays,
           startTime: sd.start_time || prev.startTime,
           endTime: sd.finish_time || prev.endTime,
@@ -850,6 +916,7 @@ export default function Settings() {
     setGcLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const { data } = await supabase.functions.invoke('gocardless-auth', {
         body:    { action: 'url' },
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -861,10 +928,11 @@ export default function Settings() {
   };
 
   const handleGcDisconnect = async () => {
-    if (!window.confirm('Disconnect GoCardless? You will no longer be able to collect Direct Debits until you reconnect.')) return;
     setGcLoading(true);
+    setConfirmGcDisconnect(false);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       await supabase.functions.invoke('gocardless-auth', {
         body:    { action: 'disconnect' },
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -876,8 +944,14 @@ export default function Settings() {
   };
 
   const showSaved = () => {
+    setSaveError(null);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+  };
+
+  const showSaveError = () => {
+    setSaveError('Couldn\'t save — check your connection and try again.');
+    setTimeout(() => setSaveError(null), 5000);
   };
 
   const handleProfileSave = async () => {
@@ -895,7 +969,7 @@ export default function Settings() {
 
       showSaved();
     } catch {
-      // Keep UI editable even if save fails.
+      showSaveError();
     }
   };
 
@@ -910,6 +984,9 @@ export default function Settings() {
         bank_details: { bankName: business.bankName, sortCode: business.sortCode, accountNum: business.accountNum },
         setup_data: {
           ...sd,
+          tagline: business.tagline || null,
+          address: business.address || null,
+          website: business.website || null,
           working_days: business.workingDays,
           start_time: business.startTime,
           finish_time: business.endTime,
@@ -930,7 +1007,7 @@ export default function Settings() {
       });
       showSaved();
     } catch {
-      // Keep local values when persistence fails.
+      showSaveError();
     }
   };
 
@@ -951,7 +1028,7 @@ export default function Settings() {
       });
       showSaved();
     } catch {
-      // Keep local values when persistence fails.
+      showSaveError();
     }
   };
 
@@ -960,19 +1037,20 @@ export default function Settings() {
       await upsertBusinessSettings({ notifications });
       showSaved();
     } catch {
-      // Keep local values when persistence fails.
+      showSaveError();
     }
   };
 
   const handlePasswordUpdate = async () => {
     if (!security.newPassword || security.newPassword !== security.confirmPassword) return;
+    if (security.newPassword.length < 8) { showSaveError(); return; }
 
     try {
       await supabase.auth.updateUser({ password: security.newPassword });
       setSecurity((prev) => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
       showSaved();
     } catch {
-      // Ignore errors and keep form values for retry.
+      showSaveError();
     }
   };
 
@@ -1575,16 +1653,7 @@ export default function Settings() {
               </button>
             </SettingRow>
             <SettingRow icon={Trash2} label="Delete Account" desc="Permanently delete your account and all data" danger>
-              <button
-                onClick={() => {
-                  if (window.confirm('Are you sure? This will permanently delete your account and all data. This cannot be undone.')) {
-                    // Flag account for deletion — actual deletion handled by admin
-                    updateProfile({ status: 'deleted' }).then(() => { signOut(); navigate('/login'); });
-                  }
-                }}
-                className="text-xs font-bold px-4 py-2 border-2 border-red-200 rounded-xl text-red-500 hover:bg-red-50 transition-colors">
-                Delete
-              </button>
+              <DeleteAccountButton onDeleted={() => { signOut(); navigate('/login'); }} />
             </SettingRow>
           </Section>
         </div>
@@ -1631,14 +1700,22 @@ export default function Settings() {
                         Org: {gcStatus.organisationId ?? '—'}
                       </p>
                     </div>
-                    <button
-                      onClick={handleGcDisconnect}
-                      disabled={gcLoading}
-                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
-                    >
-                      <Unlink size={12} />
-                      Disconnect
-                    </button>
+                    {confirmGcDisconnect ? (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-gray-500">Sure?</span>
+                        <button onClick={handleGcDisconnect} disabled={gcLoading} className="px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-40">Yes, disconnect</button>
+                        <button onClick={() => setConfirmGcDisconnect(false)} className="px-3 py-1.5 text-xs font-bold text-gray-500 border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors">Cancel</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmGcDisconnect(true)}
+                        disabled={gcLoading}
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
+                      >
+                        <Unlink size={12} />
+                        Disconnect
+                      </button>
+                    )}
                   </div>
 
                   {/* Customer payment link */}
@@ -1755,6 +1832,13 @@ export default function Settings() {
 
       {/* Saved toast */}
       <SavedToast show={saved} />
+
+      {/* Error toast */}
+      {saveError && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] px-5 py-3 rounded-xl bg-red-600 border border-red-500 text-white text-sm font-semibold shadow-2xl flex items-center gap-2">
+          ⚠ {saveError}
+        </div>
+      )}
     </div>
   );
 }

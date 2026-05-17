@@ -8,41 +8,57 @@ import ReviewsSettings from '../../components/ReviewsSettings';
 import { supabase } from '../../lib/supabase';
 import { useBusinessId } from '../../hooks/useBusinessId';
 import { useAuth } from '../../context/AuthContext';
+import { usePlan } from '../../hooks/usePlan';
 
 export default function ReviewAgentPage() {
   const businessId = useBusinessId();
   const { user } = useAuth();
+  const { isPro, reviewsMonthlyLimit } = usePlan();
   const [searchParams, setSearchParams] = useSearchParams();
   const fromPhase3 = searchParams.get('from') === 'phase3';
   const [introDismissed, setIntroDismissed] = useState(false);
-  const [stats, setStats] = useState({ requestsSent: null, reviewsReceived: null, avgRating: null });
+  const [stats, setStats] = useState({ requestsSent: null, reviewsReceived: null, avgRating: null, sentThisMonth: null });
 
   useEffect(() => {
     if (!businessId || !user) return;
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+    const monthStartIso = monthStart.toISOString();
     (async () => {
-      const [{ count: sent }, { data: received }] = await Promise.all([
-        supabase.from('agent_actions')
-          .select('*', { count: 'exact', head: true })
-          .eq('business_id', businessId)
-          .in('agent', ['reviews', 'review_agent'])
-          .eq('action_type', 'send_review_request')
-          .neq('status', 'pending_approval'),
-        supabase.from('reviews')
-          .select('rating')
-          .eq('business_id', businessId)
-          .not('rating', 'is', null),
-      ]);
+      try {
+        const [{ count: sent }, { data: received }, { count: sentThisMonth }] = await Promise.all([
+          supabase.from('agent_actions')
+            .select('*', { count: 'exact', head: true })
+            .eq('business_id', businessId)
+            .in('agent', ['reviews', 'review_agent'])
+            .eq('action_type', 'send_review_request')
+            .neq('status', 'pending_approval'),
+          supabase.from('reviews')
+            .select('rating')
+            .eq('business_id', businessId)
+            .not('rating', 'is', null),
+          supabase.from('agent_actions')
+            .select('*', { count: 'exact', head: true })
+            .eq('business_id', businessId)
+            .in('agent', ['reviews', 'review_agent'])
+            .eq('action_type', 'send_review_request')
+            .neq('status', 'pending_approval')
+            .gte('created_at', monthStartIso),
+        ]);
 
-      const ratings = received ?? [];
-      const avg = ratings.length > 0
-        ? (ratings.reduce((s, r) => s + (r.rating ?? 0), 0) / ratings.length).toFixed(1)
-        : null;
+        const ratings = received ?? [];
+        const avg = ratings.length > 0
+          ? (ratings.reduce((s, r) => s + (r.rating ?? 0), 0) / ratings.length).toFixed(1)
+          : null;
 
-      setStats({
-        requestsSent:    sent ?? 0,
-        reviewsReceived: ratings.length,
-        avgRating:       avg,
-      });
+        setStats({
+          requestsSent:    sent ?? 0,
+          reviewsReceived: ratings.length,
+          avgRating:       avg,
+          sentThisMonth:   sentThisMonth ?? 0,
+        });
+      } catch (e) {
+        console.error('ReviewAgent load error:', e);
+      }
     })();
   }, [businessId, user]);
 
@@ -122,6 +138,26 @@ export default function ReviewAgentPage() {
             <p className="text-[10px] font-semibold text-gray-400 mt-0.5 uppercase tracking-wide">Avg rating</p>
           </div>
         </div>
+
+        {/* Monthly usage — lite only */}
+        {!isPro && stats.sentThisMonth !== null && (
+          <div className={`px-5 py-3 border-t border-[#99c5ff]/20 flex items-center justify-between gap-3 ${stats.sentThisMonth >= reviewsMonthlyLimit ? 'bg-amber-50' : ''}`}>
+            <div>
+              <p className="text-xs font-black text-[#010a4f]">
+                {stats.sentThisMonth} of {reviewsMonthlyLimit} review requests used this month
+              </p>
+              {stats.sentThisMonth >= reviewsMonthlyLimit && (
+                <p className="text-[10px] text-amber-600 mt-0.5">Monthly limit reached — upgrade to Pro for unlimited requests.</p>
+              )}
+            </div>
+            <div className="h-1.5 flex-1 max-w-[120px] bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${stats.sentThisMonth >= reviewsMonthlyLimit ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                style={{ width: `${Math.min((stats.sentThisMonth / reviewsMonthlyLimit) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Settings */}

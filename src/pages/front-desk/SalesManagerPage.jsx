@@ -30,22 +30,27 @@ export default function SalesManagerPage() {
   useEffect(() => {
     if (!businessId) return;
     (async () => {
-      const [{ count: convCount }, { data: recent }, { data: wc }] = await Promise.all([
-        supabase.from('conversations').select('*', { count: 'exact', head: true })
-          .eq('business_id', businessId).eq('channel', 'web_chat'),
-        supabase.from('conversations').select('last_message_at')
-          .eq('business_id', businessId).eq('channel', 'web_chat')
-          .order('last_message_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('widget_configs').select('setup_step').eq('business_id', businessId).maybeSingle(),
-      ]);
-      const lastAt = recent?.last_message_at;
-      let lastActive = null;
-      if (lastAt) {
-        const diff = Math.floor((Date.now() - new Date(lastAt)) / 86_400_000);
-        lastActive = diff === 0 ? 'today' : diff === 1 ? 'yesterday' : `${diff} days ago`;
+      try {
+        const [{ count: convCount }, { data: recent }, { data: wc }] = await Promise.all([
+          supabase.from('conversations').select('*', { count: 'exact', head: true })
+            .eq('business_id', businessId).eq('channel', 'web_chat'),
+          supabase.from('conversations').select('last_message_at')
+            .eq('business_id', businessId).eq('channel', 'web_chat')
+            .order('last_message_at', { ascending: false }).limit(1).maybeSingle(),
+          supabase.from('widget_configs').select('setup_step').eq('business_id', businessId).maybeSingle(),
+        ]);
+        const lastAt = recent?.last_message_at;
+        let lastActive = null;
+        if (lastAt) {
+          const diff = Math.floor((Date.now() - new Date(lastAt)) / 86_400_000);
+          lastActive = diff === 0 ? 'today' : diff === 1 ? 'yesterday' : `${diff} days ago`;
+        }
+        setStats({ conversations: convCount ?? 0, lastActive });
+        setSetupStep(wc?.setup_step ?? 0);
+      } catch (e) {
+        console.error('SalesManager load error:', e);
+        setSetupStep(0);
       }
-      setStats({ conversations: convCount ?? 0, lastActive });
-      setSetupStep(wc?.setup_step ?? 0);
     })();
   }, [businessId]);
 

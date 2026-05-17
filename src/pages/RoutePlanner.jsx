@@ -137,7 +137,7 @@ const MILEAGE_LOG_DEMO = [
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmt2   = n  => `£${(+n).toFixed(2)}`;
 const fmtMi  = n  => `${(+n).toFixed(1)} mi`;
-const fmtDate = s => new Date(s).toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" });
+const fmtDate = s => { if (!s) return '—'; const d = new Date(s); return isNaN(d) ? '—' : d.toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" }); };
 
 // ─── Glass design system ──────────────────────────────────────────────────────
 function GCard({ children, className = "" }) {
@@ -225,7 +225,7 @@ function StopList({ stops, setStops, homePostcode, stats, onAddStop, onRemoveSto
       </div>
 
       {stops.map((stop, idx) => {
-        const legMiles    = stats.legs[idx + 1]?.miles ?? 0;
+        const legMiles    = stats.legs[idx]?.miles ?? 0;
         const isDragTarget = dragOver === idx && dragging !== idx;
 
         return (
@@ -606,6 +606,7 @@ function MileageClaimCard({ stats, ytdMileage }) {
             : <span className="text-amber-400 font-black">Past 10,000 miles — rate now 25p/mile</span>
           }
         </p>
+        <p className="text-[10px] text-[rgba(153,197,255,0.25)] mt-2">Distances are estimates only — verify actual mileage before submitting to HMRC.</p>
       </div>
     </GCard>
   );
@@ -796,7 +797,10 @@ export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileage
 
   const handleDeleteRoute = useCallback(async (id) => {
     setSavedRoutes(prev => prev.filter(r => r.id !== id));
-    if (isLive) { try { await deleteRoute(id); } catch {} }
+    if (isLive) {
+      try { await deleteRoute(id); }
+      catch { setSaveError('Could not delete route — it will reappear on next load. Check your connection.'); setTimeout(() => setSaveError(null), 5000); }
+    }
   }, [isLive]);
 
   const handleSaveRoute = async ({ name, frequency, logMileage, stats, stops }) => {

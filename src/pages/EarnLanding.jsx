@@ -36,7 +36,7 @@ export default function EarnLanding() {
           Coming Soon
         </div>
         <h1 className="text-3xl font-black text-white mb-3 leading-tight">
-          Earn more work.
+          Connect.
         </h1>
         <p className="text-[#99c5ff]/70 text-base leading-relaxed max-w-lg mx-auto">
           The Cadi marketplace connects you to FM aggregators across the UK who need reliable subcontractors.
@@ -82,9 +82,9 @@ export default function EarnLanding() {
             },
             {
               step: '3',
-              title: 'Earn more work',
+              title: 'Connect to more work',
               desc: 'Cadi matches you to FM jobs based on your score, location, and services. You get paid more, faster.',
-              tab: 'Earn tab',
+              tab: 'Connect tab',
               color: EARN_ORANGE,
             },
           ].map(({ step, title, desc, tab, color }) => (

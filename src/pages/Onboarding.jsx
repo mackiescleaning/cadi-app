@@ -1224,7 +1224,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           <div className="grid grid-cols-2 gap-3">
             {[
               { val: true,  label: '✅ Yes, I\'m interested',   hint: "We'll add you to the early-access list" },
-              { val: false, label: '⏳ Not now',                 hint: "No problem — you can join later in the Earn tab" },
+              { val: false, label: '⏳ Not now',                 hint: "No problem — you can join later in the Connect tab" },
             ].map(opt => (
               <button
                 key={String(opt.val)}

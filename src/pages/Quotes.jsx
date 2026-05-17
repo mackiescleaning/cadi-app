@@ -58,8 +58,9 @@ export default function Quotes() {
   const [loading,     setLoading]     = useState(true);
   const [activeTab,   setActiveTab]   = useState('all');
   const [expandedId,  setExpandedId]  = useState(null);
-  const [actioningId, setActioningId] = useState(null);
-  const [error,       setError]       = useState(null);
+  const [actioningId,    setActioningId]    = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [error,           setError]           = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -101,6 +102,7 @@ export default function Quotes() {
   };
 
   const handleMarkSent = async (quote) => {
+    if (quote.status === 'accepted' || quote.status === 'declined') return;
     setActioningId(quote.id);
     try {
       await updateQuoteStatus(quote.id, 'sent');
@@ -113,12 +115,12 @@ export default function Quotes() {
   };
 
   const handleDelete = async (quote) => {
-    if (!window.confirm(`Delete quote for ${quote.job_label || quote.customer || 'this customer'}?`)) return;
     setActioningId(quote.id);
     try {
       await deleteQuote(quote.id);
       setQuotes(prev => prev.filter(q => q.id !== quote.id));
       if (expandedId === quote.id) setExpandedId(null);
+      setConfirmDeleteId(null);
     } catch {
       setError('Could not delete quote — try again.');
     } finally {
@@ -224,7 +226,7 @@ export default function Quotes() {
                 >
                   {/* Main row */}
                   <button
-                    onClick={() => setExpandedId(isOpen ? null : quote.id)}
+                    onClick={() => { setExpandedId(isOpen ? null : quote.id); setConfirmDeleteId(null); }}
                     className="w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors"
                   >
                     <span className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`} />
@@ -313,13 +315,32 @@ export default function Quotes() {
                           New quote
                         </button>
 
-                        <button
-                          onClick={() => handleDelete(quote)}
-                          disabled={busy}
-                          className="px-3 py-1.5 text-xs font-bold border border-gray-200 text-red-400 bg-white rounded-sm hover:bg-red-50 hover:border-red-200 transition-colors disabled:opacity-50 ml-auto"
-                        >
-                          Delete
-                        </button>
+                        {confirmDeleteId === quote.id ? (
+                          <div className="ml-auto flex items-center gap-2">
+                            <span className="text-xs text-gray-500">Delete this quote?</span>
+                            <button
+                              onClick={() => handleDelete(quote)}
+                              disabled={busy}
+                              className="px-3 py-1.5 text-xs font-bold border border-red-400 text-white bg-red-600 rounded-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+                            >
+                              {busy ? 'Deleting…' : 'Yes, delete'}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-3 py-1.5 text-xs font-bold border border-gray-200 text-gray-600 bg-white rounded-sm hover:bg-gray-50 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteId(quote.id)}
+                            disabled={busy}
+                            className="px-3 py-1.5 text-xs font-bold border border-gray-200 text-red-400 bg-white rounded-sm hover:bg-red-50 hover:border-red-200 transition-colors disabled:opacity-50 ml-auto"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

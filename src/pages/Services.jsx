@@ -543,7 +543,6 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
   const [form, setForm] = useState(isEdit ? recordToForm(initialData) : { ...EMPTY_FORM, category: initialData?.category ?? 'residential' });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState(null);
 
   const patch = useCallback((fields) => setForm(f => ({ ...f, ...fields })), []);
 
@@ -928,8 +927,11 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
 
   const handleToggle = async () => {
     setToggling(true);
-    await onToggleActive(service.id, !service.is_active);
-    setToggling(false);
+    try {
+      await onToggleActive(service.id, !service.is_active);
+    } finally {
+      setToggling(false);
+    }
   };
 
   const freq = getFrequencyLabels(service);
@@ -1040,9 +1042,10 @@ function EmptyState({ category, onAdd }) {
         <Plus size={24} className="text-gray-400" />
       </div>
       <h3 className="font-black text-gray-800 text-lg mb-1">No {label.toLowerCase()} services yet.</h3>
-      <p className="text-sm text-gray-400 mb-2">
+      <p className="text-sm text-gray-400 mb-1">
         Examples: {examples[category]?.join(', ')}.
       </p>
+      <p className="text-xs text-gray-400">Services power your quotes, scheduler and pricing calculator.</p>
       <button
         onClick={onAdd}
         className="mt-4 px-5 py-2.5 rounded-xl bg-[#4f78ff] text-white font-bold text-sm hover:bg-[#3d68ff] transition-colors"
@@ -1209,8 +1212,12 @@ export default function Services() {
   };
 
   const handleToggleActive = async (id, isActive) => {
-    await setServiceActive(id, isActive);
-    load();
+    try {
+      await setServiceActive(id, isActive);
+      load();
+    } catch (e) {
+      setToast('Couldn\'t update that service. Try again in a moment.');
+    }
   };
 
   const handleChatDone = (serviceName) => {

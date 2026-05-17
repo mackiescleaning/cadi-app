@@ -514,59 +514,162 @@ function StarRating({ value = 0, onChange, size = "sm" }) {
 }
 
 // ─── Customer card (list row) ─────────────────────────────────────────────────
-function CustomerRow({ customer, onClick, selected, onArchive }) {
+// density: 'large' (<30) | 'medium' (30–99) | 'compact' (100+)
+function CustomerRow({ customer, onClick, selected, onArchive, density = 'large' }) {
   const [confirmArchive, setConfirmArchive] = useState(false);
-  const suggestions    = useMemo(() => generateSuggestions(customer), [customer]);
-  const daysSince      = customer.lastJobDate
-    ? Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000)
-    : null;
-  const urgent         = suggestions.some(s => s.priority === "urgent" || s.priority === "high");
-  const topSuggestion  = suggestions[0];
+  const suggestions   = useMemo(() => generateSuggestions(customer), [customer]);
+  const urgent        = suggestions.some(s => s.priority === "urgent" || s.priority === "high");
+  const topSuggestion = suggestions[0];
+  const initials      = customer.name.split(" ").map(n => n[0]).slice(0, 2).join("");
 
-  const initials = customer.name.split(" ").map(n => n[0]).slice(0, 2).join("");
-
-  const avatarRing = customer.status === "active"
-    ? "ring-emerald-500/40"
+  const statusColor = customer.status === "active"
+    ? { ring: "ring-emerald-500/40", bg: "bg-emerald-500/20 text-emerald-300", dot: "bg-emerald-400" }
     : customer.status === "lapsed"
-    ? "ring-red-500/40"
-    : "ring-amber-500/40";
+    ? { ring: "ring-red-500/40",     bg: "bg-red-500/20 text-red-300",         dot: "bg-red-400"     }
+    : { ring: "ring-amber-500/40",   bg: "bg-amber-500/20 text-amber-300",     dot: "bg-amber-400"   };
 
-  const avatarBg = customer.status === "active"
-    ? "bg-emerald-500/20 text-emerald-300"
-    : customer.status === "lapsed"
-    ? "bg-red-500/20 text-red-300"
-    : "bg-amber-500/20 text-amber-300";
+  const selectedBg  = "linear-gradient(145deg, #0d1e78 0%, #1a2fa0 100%)";
+  const defaultBg   = "linear-gradient(145deg, #05124a 0%, #0a1860 100%)";
+  const borderCls   = selected
+    ? "border-[#1f48ff]/60 shadow-lg shadow-[#1f48ff]/20"
+    : "border-[rgba(153,197,255,0.10)] hover:border-[rgba(153,197,255,0.25)]";
 
+  // ── COMPACT (100+): single slim row, ~44px tall ────────────────────────────
+  if (density === 'compact') {
+    return (
+      <button
+        onClick={() => onClick(customer)}
+        className={`w-full text-left px-3 py-1.5 transition-all group relative ${selected ? "opacity-100" : "opacity-85 hover:opacity-100"}`}
+      >
+        <div
+          className={`relative flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition-all ${borderCls}`}
+          style={{ background: selected ? selectedBg : defaultBg }}
+        >
+          {/* Tiny avatar */}
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ring-1 ${statusColor.ring} ${statusColor.bg}`}>
+            {initials}
+          </div>
+
+          {/* Name + sub */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs font-bold text-white truncate leading-tight">{customer.name}</p>
+              {urgent && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />}
+            </div>
+            <p className="text-[10px] text-[rgba(153,197,255,0.45)] truncate leading-tight">
+              {customer.postcode}{customer.frequency ? ` · ${customer.frequency}` : ""}
+            </p>
+          </div>
+
+          {/* Value + status dot */}
+          <div className="flex items-center gap-2 shrink-0">
+            <p className="text-xs font-black text-emerald-400 tabular-nums">£{customer.lifetimeValue.toLocaleString()}</p>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${statusColor.dot}`} />
+          </div>
+        </div>
+
+        {onArchive && (
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+            {confirmArchive ? (
+              <div className="flex items-center gap-1 bg-[#010a4f] border border-red-500/30 rounded-lg px-2 py-1">
+                <span className="text-[10px] text-red-400 font-bold">Remove?</span>
+                <button onClick={() => { onArchive(customer.id); setConfirmArchive(false); }} className="text-[10px] font-black text-red-400 hover:text-red-300 px-1">Yes</button>
+                <button onClick={() => setConfirmArchive(false)} className="text-[10px] font-black text-[rgba(153,197,255,0.5)] hover:text-white px-1">No</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmArchive(true)} className="w-5 h-5 rounded-full bg-[rgba(255,80,80,0.15)] hover:bg-[rgba(255,80,80,0.3)] border border-red-500/20 flex items-center justify-center text-red-400/70 hover:text-red-400 transition-all text-[10px] font-bold" title="Remove">×</button>
+            )}
+          </div>
+        )}
+      </button>
+    );
+  }
+
+  // ── MEDIUM (30–99): card without tags row or stars ─────────────────────────
+  if (density === 'medium') {
+    return (
+      <button
+        onClick={() => onClick(customer)}
+        className={`w-full text-left px-3 py-1.5 transition-all group relative ${selected ? "opacity-100" : "opacity-90 hover:opacity-100"}`}
+      >
+        <div
+          className={`relative overflow-hidden rounded-xl border transition-all ${borderCls}`}
+          style={{ background: selected ? selectedBg : defaultBg }}
+        >
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/40 to-transparent" />
+          {urgent && <div className="absolute inset-0 rounded-xl bg-amber-500/5 pointer-events-none" />}
+
+          <div className="relative flex items-center gap-2.5 p-2.5">
+            {/* Avatar */}
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black shrink-0 ring-2 ${statusColor.ring} ${statusColor.bg}`}>
+              {initials}
+            </div>
+
+            {/* Name + meta */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <p className="text-sm font-bold text-white truncate">{customer.name}</p>
+                {urgent && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[rgba(153,197,255,0.5)]">{customer.postcode}</span>
+                {customer.frequency && <>
+                  <span className="text-[rgba(153,197,255,0.2)]">·</span>
+                  <span className="text-[11px] text-[rgba(153,197,255,0.5)] capitalize">{customer.frequency}</span>
+                </>}
+                {urgent && topSuggestion && (
+                  <>
+                    <span className="text-[rgba(153,197,255,0.2)]">·</span>
+                    <span className="text-[11px] text-amber-400 font-semibold truncate">💡 {topSuggestion.title}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Value + badge */}
+            <div className="text-right shrink-0">
+              <p className="text-sm font-black text-emerald-400 tabular-nums mb-1">£{customer.lifetimeValue.toLocaleString()}</p>
+              <StatusBadge status={customer.status} />
+            </div>
+          </div>
+        </div>
+
+        {onArchive && (
+          <div className="absolute top-2 right-4 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+            {confirmArchive ? (
+              <div className="flex items-center gap-1 bg-[#010a4f] border border-red-500/30 rounded-lg px-2 py-1">
+                <span className="text-[10px] text-red-400 font-bold">Remove?</span>
+                <button onClick={() => { onArchive(customer.id); setConfirmArchive(false); }} className="text-[10px] font-black text-red-400 hover:text-red-300 px-1">Yes</button>
+                <button onClick={() => setConfirmArchive(false)} className="text-[10px] font-black text-[rgba(153,197,255,0.5)] hover:text-white px-1">No</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmArchive(true)} className="w-6 h-6 rounded-full bg-[rgba(255,80,80,0.15)] hover:bg-[rgba(255,80,80,0.3)] border border-red-500/20 hover:border-red-500/50 flex items-center justify-center text-red-400/70 hover:text-red-400 transition-all text-xs font-bold" title="Remove customer">×</button>
+            )}
+          </div>
+        )}
+      </button>
+    );
+  }
+
+  // ── LARGE (<30): full card with all details ────────────────────────────────
   return (
     <button
       onClick={() => onClick(customer)}
       className={`w-full text-left p-3 transition-all group ${selected ? "opacity-100" : "opacity-90 hover:opacity-100"}`}
     >
       <div
-        className={`relative overflow-hidden rounded-xl border transition-all ${
-          selected
-            ? "border-[#1f48ff]/60 shadow-lg shadow-[#1f48ff]/20"
-            : "border-[rgba(153,197,255,0.10)] hover:border-[rgba(153,197,255,0.25)]"
-        }`}
-        style={{
-          background: selected
-            ? "linear-gradient(145deg, #0d1e78 0%, #1a2fa0 100%)"
-            : "linear-gradient(145deg, #05124a 0%, #0a1860 100%)",
-        }}
+        className={`relative overflow-hidden rounded-xl border transition-all ${borderCls}`}
+        style={{ background: selected ? selectedBg : defaultBg }}
       >
-        {/* Top shimmer */}
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/40 to-transparent" />
-        {/* Urgent pulse glow */}
         {urgent && <div className="absolute inset-0 rounded-xl bg-amber-500/5 pointer-events-none" />}
 
         <div className="relative p-3">
           <div className="flex items-start gap-3">
-            {/* Avatar */}
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black shrink-0 ring-2 ${avatarRing} ${avatarBg}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black shrink-0 ring-2 ${statusColor.ring} ${statusColor.bg}`}>
               {initials}
             </div>
 
-            {/* Main info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <p className="text-sm font-bold text-white truncate">{customer.name}</p>
@@ -582,7 +685,6 @@ function CustomerRow({ customer, onClick, selected, onArchive }) {
               )}
             </div>
 
-            {/* Right */}
             <div className="text-right shrink-0">
               <p className="text-sm font-black text-emerald-400 tabular-nums mb-1">£{customer.lifetimeValue.toLocaleString()}</p>
               <StatusBadge status={customer.status} />
@@ -594,7 +696,6 @@ function CustomerRow({ customer, onClick, selected, onArchive }) {
             </div>
           </div>
 
-          {/* Tags + portal row */}
           <div className="flex items-center justify-between mt-2 pt-2 border-t border-[rgba(153,197,255,0.06)]">
             <div className="flex items-center gap-1.5">
               {customer.tags.slice(0, 2).map(tag => <Chip key={tag} color="sky">{tag}</Chip>)}
@@ -607,30 +708,16 @@ function CustomerRow({ customer, onClick, selected, onArchive }) {
         </div>
       </div>
 
-      {/* Quick-archive — shown on hover (desktop) or tap the × */}
       {onArchive && (
-        <div
-          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={e => e.stopPropagation()}
-        >
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
           {confirmArchive ? (
             <div className="flex items-center gap-1 bg-[#010a4f] border border-red-500/30 rounded-lg px-2 py-1">
               <span className="text-[10px] text-red-400 font-bold">Remove?</span>
-              <button
-                onClick={() => { onArchive(customer.id); setConfirmArchive(false); }}
-                className="text-[10px] font-black text-red-400 hover:text-red-300 px-1"
-              >Yes</button>
-              <button
-                onClick={() => setConfirmArchive(false)}
-                className="text-[10px] font-black text-[rgba(153,197,255,0.5)] hover:text-white px-1"
-              >No</button>
+              <button onClick={() => { onArchive(customer.id); setConfirmArchive(false); }} className="text-[10px] font-black text-red-400 hover:text-red-300 px-1">Yes</button>
+              <button onClick={() => setConfirmArchive(false)} className="text-[10px] font-black text-[rgba(153,197,255,0.5)] hover:text-white px-1">No</button>
             </div>
           ) : (
-            <button
-              onClick={() => setConfirmArchive(true)}
-              className="w-6 h-6 rounded-full bg-[rgba(255,80,80,0.15)] hover:bg-[rgba(255,80,80,0.3)] border border-red-500/20 hover:border-red-500/50 flex items-center justify-center text-red-400/70 hover:text-red-400 transition-all text-xs font-bold"
-              title="Remove customer"
-            >×</button>
+            <button onClick={() => setConfirmArchive(true)} className="w-6 h-6 rounded-full bg-[rgba(255,80,80,0.15)] hover:bg-[rgba(255,80,80,0.3)] border border-red-500/20 hover:border-red-500/50 flex items-center justify-center text-red-400/70 hover:text-red-400 transition-all text-xs font-bold" title="Remove customer">×</button>
           )}
         </div>
       )}
@@ -807,7 +894,7 @@ function MessageComposer({ customer, suggestion, onClose }) {
 
             {/* Custom instructions for AI */}
             <div>
-              <SL>AI instructions (optional)</SL>
+              <SL>Personalisation notes (optional)</SL>
               <input
                 value={customInstr}
                 onChange={e => setCustomInstr(e.target.value)}
@@ -1530,7 +1617,7 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
         {activeTab === "suggestions" && (
           <>
             <div className="flex items-center justify-between">
-              <SL>AI opportunities</SL>
+              <SL>Opportunities</SL>
               <Chip color="amber">{suggestions.length} suggestions</Chip>
             </div>
 
@@ -1968,21 +2055,19 @@ export default function CustomerTab() {
     }
 
     // Sort
-    list = [...list].sort((a, b) => {
-      if (sortBy === "name")   return a.name.localeCompare(b.name);
-      if (sortBy === "value")  return b.lifetimeValue - a.lifetimeValue;
-      if (sortBy === "recent") return new Date(b.lastJobDate) - new Date(a.lastJobDate);
-      if (sortBy === "urgent") {
-        const urgencyScore = c => {
-          const days = Math.floor((Date.now() - new Date(c.lastJobDate)) / 86400000);
-          const sugPriority = generateSuggestions(c)[0]?.priority;
-          const base = sugPriority === "urgent" ? 1000 : sugPriority === "high" ? 100 : 0;
-          return base + days;
-        };
-        return urgencyScore(b) - urgencyScore(a);
-      }
-      return 0;
-    });
+    if (sortBy === "name")   list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    else if (sortBy === "value")  list = [...list].sort((a, b) => b.lifetimeValue - a.lifetimeValue);
+    else if (sortBy === "recent") list = [...list].sort((a, b) => new Date(b.lastJobDate) - new Date(a.lastJobDate));
+    else if (sortBy === "urgent") {
+      // Pre-compute scores once, then sort — avoids O(n log n) * generateSuggestions calls
+      const scores = new Map(list.map(c => {
+        const days = c.lastJobDate ? Math.floor((Date.now() - new Date(c.lastJobDate)) / 86400000) : 0;
+        const pri  = generateSuggestions(c)[0]?.priority;
+        const base = pri === "urgent" ? 1000 : pri === "high" ? 100 : 0;
+        return [c.id, base + days];
+      }));
+      list = [...list].sort((a, b) => scores.get(b.id) - scores.get(a.id));
+    }
 
     return list;
   }, [customers, search, jobTypeFilter, statusFilter, sortBy]);
@@ -1997,6 +2082,11 @@ export default function CustomerTab() {
     const urgent  = customers.filter(c => generateSuggestions(c).some(s => s.priority === "urgent" || s.priority === "high")).length;
     return { total, active, lapsed, atRisk, revenue, urgent };
   }, [customers]);
+
+  // Density tier — based on total active customers so it doesn't flip while filtering
+  const density = activeCustomers.length >= 100 ? 'compact'
+    : activeCustomers.length >= 30  ? 'medium'
+    : 'large';
 
   const handleMessage = useCallback((customer, suggestion) => {
     setComposing({ customer, suggestion });
@@ -2068,6 +2158,21 @@ export default function CustomerTab() {
             ))}
           </div>
         </div>
+
+        {/* Approaching limit warning */}
+        {!isPro && activeCustomers.length >= 45 && activeCustomers.length < FREE_CUSTOMER_LIMIT && (
+          <div className="mx-4 mt-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10">
+            <p className="text-xs text-amber-300 leading-snug">
+              <span className="font-black">{activeCustomers.length}/{FREE_CUSTOMER_LIMIT} customers</span> — you're nearly at your free limit.
+            </p>
+            <button
+              onClick={() => setShowUpgrade(true)}
+              className="shrink-0 text-[11px] font-black px-3 py-1.5 bg-[#1f48ff] text-white rounded-lg hover:bg-[#3a5eff] transition-colors whitespace-nowrap"
+            >
+              Upgrade →
+            </button>
+          </div>
+        )}
 
         {/* Stat bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
@@ -2168,18 +2273,44 @@ export default function CustomerTab() {
         {/* Customer list */}
         <div className="bg-transparent overflow-y-auto flex-1">
           {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-              <div className="w-16 h-16 rounded-2xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.1)] flex items-center justify-center mb-4">
-                <span className="text-2xl">👥</span>
+            activeCustomers.length === 0 ? (
+              /* True empty — no customers at all */
+              <div className="flex flex-col items-center justify-center py-16 text-center px-6">
+                <div className="w-16 h-16 rounded-2xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.1)] flex items-center justify-center mb-4">
+                  <span className="text-2xl">👥</span>
+                </div>
+                <p className="text-sm font-bold text-white mb-1">Add your first customer</p>
+                <p className="text-xs text-[rgba(153,197,255,0.4)] mb-5 leading-relaxed max-w-xs">
+                  Your client list powers job scheduling, invoicing, reminders and review requests.
+                </p>
+                <button
+                  onClick={() => atLimit ? setShowUpgrade(true) : setShowAddModal(true)}
+                  className="px-5 py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-black rounded-xl transition-colors shadow-lg shadow-[#1f48ff]/30 mb-3"
+                >
+                  + Add a customer
+                </button>
+                <button
+                  onClick={() => setShowImport(true)}
+                  className="text-xs text-[rgba(153,197,255,0.5)] hover:text-white font-semibold transition-colors"
+                >
+                  Or import from a spreadsheet →
+                </button>
               </div>
-              <p className="text-sm text-[rgba(153,197,255,0.5)] mb-1">No customers found</p>
-              <button
-                onClick={() => { setSearch(""); setJobTypeFilter("all"); setStatusFilter("all"); }}
-                className="mt-1 text-xs text-[#99c5ff] hover:text-white font-semibold transition-colors"
-              >
-                Clear filters
-              </button>
-            </div>
+            ) : (
+              /* Filtered empty — customers exist but none match */
+              <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+                <div className="w-16 h-16 rounded-2xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.1)] flex items-center justify-center mb-4">
+                  <span className="text-2xl">🔍</span>
+                </div>
+                <p className="text-sm text-[rgba(153,197,255,0.5)] mb-1">No customers found</p>
+                <button
+                  onClick={() => { setSearch(""); setJobTypeFilter("all"); setStatusFilter("all"); }}
+                  className="mt-1 text-xs text-[#99c5ff] hover:text-white font-semibold transition-colors"
+                >
+                  Clear filters
+                </button>
+              </div>
+            )
           ) : (
             filtered.map(customer => (
               <CustomerRow
@@ -2188,6 +2319,7 @@ export default function CustomerTab() {
                 onClick={handleSelectCustomer}
                 selected={selected?.id === customer.id}
                 onArchive={(id) => { deleteCustomer(id); if (selected?.id === id) { setShowDetail(false); setSelected(null); } }}
+                density={density}
               />
             ))
           )}
@@ -2214,7 +2346,7 @@ export default function CustomerTab() {
               <span className="text-3xl">👤</span>
             </div>
             <p className="text-sm font-bold text-[rgba(153,197,255,0.5)] mb-1">Select a customer</p>
-            <p className="text-xs text-[rgba(153,197,255,0.3)]">View profile, job history, and AI opportunities</p>
+            <p className="text-xs text-[rgba(153,197,255,0.3)]">View profile, job history and opportunities</p>
           </div>
         </div>
       )}

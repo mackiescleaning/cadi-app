@@ -118,12 +118,13 @@ function SectionLabel({ children, className = "" }) {
 // ─── Open Banking Banner ──────────────────────────────────────────────────────
 function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete }) {
   const { user } = useAuth();
-  const [connected,  setConnected]  = useState(false);
-  const [loading,    setLoading]    = useState(false);
-  const [syncing,    setSyncing]    = useState(false);
-  const [error,      setError]      = useState(null);
-  const [success,    setSuccess]    = useState(null);
-  const [showTxs,    setShowTxs]    = useState(false);
+  const [connected,         setConnected]         = useState(false);
+  const [loading,           setLoading]           = useState(false);
+  const [syncing,           setSyncing]           = useState(false);
+  const [error,             setError]             = useState(null);
+  const [success,           setSuccess]           = useState(null);
+  const [showTxs,           setShowTxs]           = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   const tlInvoke = async (fn, body) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -165,9 +166,8 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete }) {
   };
 
   const handleDisconnect = async () => {
-    if (!window.confirm('Disconnect your bank account? Imported transactions will be kept.')) return;
-    try { await tlInvoke('truelayer-auth', { action: 'disconnect' }); setConnected(false); setBankTxs([]); setShowTxs(false); onSyncComplete?.([]); }
-    catch (e) { setError(e.message); }
+    try { await tlInvoke('truelayer-auth', { action: 'disconnect' }); setConnected(false); setBankTxs([]); setShowTxs(false); setConfirmDisconnect(false); onSyncComplete?.([]); }
+    catch (e) { setError(e.message); setConfirmDisconnect(false); }
   };
 
   const handleCategorise = async (txId, isBusiness, category) => {
@@ -200,7 +200,15 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete }) {
             </p>
           </div>
           {connected && (
-            <button onClick={handleDisconnect} className="text-[10px] text-[rgba(153,197,255,0.4)] hover:text-red-400 transition-colors">Disconnect</button>
+            confirmDisconnect ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-[rgba(153,197,255,0.5)]">Keep transactions?</span>
+                <button onClick={handleDisconnect} className="text-[10px] text-red-400 font-bold hover:text-red-300 transition-colors">Yes, disconnect</button>
+                <button onClick={() => setConfirmDisconnect(false)} className="text-[10px] text-[rgba(153,197,255,0.4)] hover:text-white transition-colors">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDisconnect(true)} className="text-[10px] text-[rgba(153,197,255,0.4)] hover:text-red-400 transition-colors">Disconnect</button>
+            )
           )}
         </div>
 
@@ -370,9 +378,9 @@ function PeriodHero({ period, setPeriod, weekRevenue, monthIncome, monthlyData, 
       {hero.value > 0 && (
         <div className="mt-4 grid grid-cols-3 gap-2">
           {[
-            { label: "Gross",     val: fmt(hero.value),       color: "text-white"         },
-            { label: "Tax (25%)", val: `-${fmt(taxAside)}`,   color: "text-amber-400"     },
-            { label: "Available", val: fmt(hero.value * 0.75),color: "text-emerald-400"   },
+            { label: "Gross",     val: fmt(hero.value),                               color: "text-white"       },
+            { label: `Tax (${Math.round((accounts.taxRate || 0.20) * 100)}%)`, val: `-${fmt(taxAside)}`, color: "text-amber-400"   },
+            { label: "Available", val: fmt(hero.value - taxAside),                    color: "text-emerald-400" },
           ].map(({ label, val, color }) => (
             <div key={label} className="text-center px-2 py-2 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
               <p className="text-[9px] font-bold tracking-wider uppercase text-[rgba(153,197,255,0.35)] mb-0.5">{label}</p>
@@ -1414,9 +1422,9 @@ function ReminderModal({ invoice, onClose }) {
   if (sent) return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="relative w-full max-w-sm rounded-2xl border border-[rgba(153,197,255,0.15)] bg-gradient-to-br from-[#010a4f] via-[#05124a] to-[#0d1e78] p-8 text-center">
-        <p className="text-4xl mb-3">✅</p>
-        <p className="text-lg font-black text-white mb-1">Reminder sent</p>
-        <p className="text-sm text-[rgba(153,197,255,0.5)] mb-6">Logged to {invoice?.customer}'s record.</p>
+        <p className="text-4xl mb-3">📋</p>
+        <p className="text-lg font-black text-white mb-1">Message copied</p>
+        <p className="text-sm text-[rgba(153,197,255,0.5)] mb-6">Paste it into WhatsApp, email, or text to send to {invoice?.customer}.</p>
         <button onClick={onClose} className="px-6 py-2.5 bg-[#1f48ff] text-white text-xs font-black rounded-xl hover:bg-[#3a5eff] transition-colors">Done</button>
       </div>
     </div>
@@ -1448,8 +1456,8 @@ function ReminderModal({ invoice, onClose }) {
           <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={5}
             className="w-full px-4 py-3 rounded-xl bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.12)] text-sm text-[rgba(153,197,255,0.8)] focus:outline-none focus:border-[rgba(153,197,255,0.3)] resize-none transition-colors" />
           <div className="flex gap-2">
-            <button onClick={() => setSent(true)} className="flex-1 py-3 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors">
-              📤 Send reminder
+            <button onClick={() => { navigator.clipboard?.writeText(msg).catch(() => {}); setSent(true); }} className="flex-1 py-3 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors">
+              📋 Copy message
             </button>
             <button onClick={onClose} className="px-5 py-3 rounded-xl border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.5)] text-xs font-black hover:text-white transition-all">
               Cancel
@@ -1620,6 +1628,8 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
   const unpaidInvoices = invoices.filter(i => i.status !== "paid");
 
   const [saveError, setSaveError] = useState(null);
+  const [taxSetupDismissed, setTaxSetupDismissed] = useState(() => localStorage.getItem('cadi_tax_setup_dismissed') === '1');
+  const showTaxSetupNudge = isLive && !taxSetupDismissed && !accountsData?.annualTarget && user?.id !== 'demo-user';
 
   const handlePaymentConfirm = async ({ invoiceId, amount }) => {
     setSaveError(null);
@@ -1666,12 +1676,16 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
 
   const handleBulkCategorize = async (ids, newCat) => {
     setExpenses(prev => prev.map(e => ids.includes(e.id) ? { ...e, category: newCat } : e));
-    await Promise.allSettled(ids.map(id => updateMoneyEntry(id, { category: newCat })));
+    const results = await Promise.allSettled(ids.map(id => updateMoneyEntry(id, { category: newCat })));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    if (failed > 0) setSaveError(`${failed} item${failed !== 1 ? 's' : ''} couldn't be updated. Refresh and try again.`);
   };
 
   const handleBulkDelete = async (ids) => {
     setExpenses(prev => prev.filter(e => !ids.includes(e.id)));
-    await Promise.allSettled(ids.map(id => deleteMoneyEntry(id)));
+    const results = await Promise.allSettled(ids.map(id => deleteMoneyEntry(id)));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    if (failed > 0) setSaveError(`${failed} item${failed !== 1 ? 's' : ''} couldn't be deleted. Refresh and try again.`);
   };
 
   return (
@@ -1687,6 +1701,19 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
           <div className="px-4 py-3 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center gap-2">
             <span className="text-red-400 text-sm font-bold">!</span>
             <p className="text-xs text-red-300 font-semibold flex-1">{saveError}</p>
+          </div>
+        )}
+
+        {/* Tax setup nudge */}
+        {showTaxSetupNudge && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/10">
+            <p className="text-xs text-amber-300 leading-snug">
+              <span className="font-black">Set your tax rate</span> — head to Accounts to confirm your tax rate and annual income target so your tax reserve is accurate.
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={() => onNavigate('accounts')} className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-black hover:bg-amber-500/30 transition-colors">Set up →</button>
+              <button onClick={() => { setTaxSetupDismissed(true); localStorage.setItem('cadi_tax_setup_dismissed', '1'); }} className="text-amber-400/50 hover:text-amber-300 transition-colors text-lg leading-none">×</button>
+            </div>
           </div>
         )}
 
