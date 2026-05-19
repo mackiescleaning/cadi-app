@@ -1,167 +1,281 @@
 import { useState } from 'react';
+import { CheckCircle2, Clock, TrendingUp, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 
-const EARN_ORANGE = '#C2410C';
+const card = {
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.08)',
+};
+
+const INVOICES_TRACKER = [
+  {
+    id: 'INV-0042',
+    client: 'Britannia FM',
+    amount: 173,
+    sent: '19 May',
+    stages: [
+      { label: 'Sent', done: true },
+      { label: 'Received', done: true },
+      { label: 'Processing', done: false, active: true },
+      { label: 'Payment', done: false },
+    ],
+  },
+  {
+    id: 'INV-0041',
+    client: 'Metro Clean',
+    amount: 120,
+    sent: '10 May',
+    stages: [
+      { label: 'Sent', done: true },
+      { label: 'Received', done: true },
+      { label: 'Processing', done: true },
+      { label: 'Paid', done: true },
+    ],
+  },
+];
 
 const PERIOD_DATA = {
-  month: {
-    label: 'May 2026',
-    earned: 595,
-    pending: 460,
-    forecast: 1055,
+  'This month': {
+    gross: 1340,
+    net: 1072,
+    jobs: 12,
+    vat: 268,
     breakdown: [
-      { fm: 'Britannia FM', jobs: 7, value: 595, status: 'paid',           color: '#10b981' },
-      { fm: 'Britannia FM', jobs: 4, value: 340, status: 'pending-review', color: '#f59e0b' },
-      { fm: 'Metro Clean',  jobs: 1, value: 120, status: 'pending-pay',    color: '#f59e0b' },
+      { client: 'Britannia FM', amount: 780 },
+      { client: 'Metro Clean', amount: 360 },
+      { client: 'Central Beds Council', amount: 200 },
     ],
-    payments: [
-      { date: '07 May 2026', fm: 'Britannia FM', jobs: 5,  amount: 425, ref: '#BF-PAY-0512', status: 'paid' },
-      { date: '30 Apr 2026', fm: 'Britannia FM', jobs: 2,  amount: 170, ref: '#BF-PAY-0490', status: 'paid' },
-      { date: 'Pending',     fm: 'Britannia FM', jobs: 4,  amount: 340, ref: '—',             status: 'pending' },
-      { date: 'Pending',     fm: 'Metro Clean',  jobs: 1,  amount: 120, ref: '—',             status: 'pending' },
+    ledger: [
+      { date: '19 May', ref: '#INV-0042', client: 'Britannia FM', amount: 173, status: 'Processing' },
+      { date: '10 May', ref: '#INV-0041', client: 'Metro Clean', amount: 120, status: 'Paid' },
+      { date: '06 May', ref: '#INV-0040', client: 'Britannia FM', amount: 156, status: 'Paid' },
+      { date: '02 May', ref: '#INV-0039', client: 'Central Beds Council', amount: 200, status: 'Paid' },
     ],
   },
-  quarter: {
-    label: 'Q2 2026 (Apr–Jun)',
-    earned: 1780,
-    pending: 460,
-    forecast: 3200,
+  'Last month': {
+    gross: 2180,
+    net: 1744,
+    jobs: 19,
+    vat: 436,
     breakdown: [
-      { fm: 'Britannia FM', jobs: 28, value: 1660, status: 'paid',           color: '#10b981' },
-      { fm: 'Metro Clean',  jobs: 1,  value: 120,  status: 'pending-pay',    color: '#f59e0b' },
-      { fm: 'Britannia FM', jobs: 4,  value: 340,  status: 'pending-review', color: '#f59e0b' },
+      { client: 'Britannia FM', amount: 1200 },
+      { client: 'Metro Clean', amount: 580 },
+      { client: 'Central Beds Council', amount: 400 },
     ],
-    payments: [
-      { date: '07 May 2026', fm: 'Britannia FM', jobs: 5,  amount: 425, ref: '#BF-PAY-0512', status: 'paid' },
-      { date: '30 Apr 2026', fm: 'Britannia FM', jobs: 8,  amount: 720, ref: '#BF-PAY-0490', status: 'paid' },
-      { date: '15 Apr 2026', fm: 'Britannia FM', jobs: 6,  amount: 515, ref: '#BF-PAY-0481', status: 'paid' },
-      { date: 'Pending',     fm: 'Britannia FM', jobs: 4,  amount: 340, ref: '—',             status: 'pending' },
-      { date: 'Pending',     fm: 'Metro Clean',  jobs: 1,  amount: 120, ref: '—',             status: 'pending' },
+    ledger: [
+      { date: '30 Apr', ref: '#INV-0038', client: 'Britannia FM', amount: 312, status: 'Paid' },
+      { date: '22 Apr', ref: '#INV-0037', client: 'Metro Clean', amount: 240, status: 'Paid' },
+      { date: '15 Apr', ref: '#INV-0036', client: 'Britannia FM', amount: 288, status: 'Paid' },
+      { date: '05 Apr', ref: '#INV-0035', client: 'Central Beds Council', amount: 400, status: 'Paid' },
     ],
   },
-  year: {
-    label: '2026 YTD',
-    earned: 4680,
-    pending: 460,
-    forecast: 13800,
+  'Last 3 months': {
+    gross: 5820,
+    net: 4656,
+    jobs: 51,
+    vat: 1164,
     breakdown: [
-      { fm: 'Britannia FM', jobs: 62, value: 4560, status: 'paid',           color: '#10b981' },
-      { fm: 'Metro Clean',  jobs: 1,  value: 120,  status: 'pending-pay',    color: '#f59e0b' },
-      { fm: 'Britannia FM', jobs: 4,  value: 340,  status: 'pending-review', color: '#f59e0b' },
+      { client: 'Britannia FM', amount: 3200 },
+      { client: 'Metro Clean', amount: 1420 },
+      { client: 'Central Beds Council', amount: 1200 },
     ],
-    payments: [],
+    ledger: [],
   },
 };
 
-const PAYMENT_STATUS = {
-  paid:           { label: 'Paid',           color: '#10b981', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.2)' },
-  'pending-review':{ label: 'FM reviewing',  color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.2)' },
-  'pending-pay':  { label: 'Awaiting payment', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.2)' },
-  pending:        { label: 'Pending',        color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.2)' },
-};
+function StagePipeline({ stages }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginTop: '0.65rem' }}>
+      {stages.map((stage, i) => {
+        const isLast = i === stages.length - 1;
+        const dotColor = stage.done ? '#4ade80' : stage.active ? '#fbbf24' : 'rgba(226,232,240,0.2)';
+        const labelColor = stage.done ? '#4ade80' : stage.active ? '#fbbf24' : 'rgba(226,232,240,0.35)';
+        const lineColor = stage.done ? 'rgba(74,222,128,0.4)' : 'rgba(255,255,255,0.08)';
+
+        return (
+          <div key={stage.label} style={{ display: 'flex', alignItems: 'center', flex: isLast ? 'none' : 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{
+                  width: 10, height: 10, borderRadius: '50%',
+                  background: dotColor,
+                  animation: stage.active ? 'cadipulse 1.4s infinite' : 'none',
+                  flexShrink: 0,
+                }} />
+              </div>
+              <span style={{ fontSize: '0.66rem', fontWeight: 600, color: labelColor, whiteSpace: 'nowrap' }}>
+                {stage.label}{stage.done ? ' ✓' : ''}
+              </span>
+            </div>
+            {!isLast && (
+              <div style={{ height: 1.5, flex: 1, background: lineColor, margin: '0 4px', marginBottom: '1rem' }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function InvoiceTrackerCard({ inv }) {
+  const allPaid = inv.stages.every(s => s.done);
+  return (
+    <div style={{ ...card, borderRadius: '0.9rem', padding: '0.9rem 1.1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ color: 'white', fontWeight: 800, fontSize: '0.875rem' }}>{inv.id}</div>
+          <div style={{ color: 'rgba(226,232,240,0.45)', fontSize: '0.75rem' }}>{inv.client} · Sent {inv.sent}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontWeight: 900, color: allPaid ? '#4ade80' : 'white', fontFamily: 'monospace', fontSize: '0.95rem' }}>
+            £{inv.amount}
+          </span>
+          {allPaid && <CheckCircle2 size={14} color="#4ade80" />}
+        </div>
+      </div>
+      <StagePipeline stages={inv.stages} />
+    </div>
+  );
+}
+
+function StatusChip({ status }) {
+  const map = {
+    Paid: { color: '#4ade80', bg: 'rgba(74,222,128,0.1)' },
+    Processing: { color: '#fbbf24', bg: 'rgba(251,191,36,0.1)' },
+    Sent: { color: '#60a5fa', bg: 'rgba(96,165,250,0.1)' },
+  };
+  const style = map[status] || { color: 'rgba(226,232,240,0.4)', bg: 'transparent' };
+  return (
+    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: style.color, background: style.bg, borderRadius: '999px', padding: '2px 8px' }}>
+      {status}
+    </span>
+  );
+}
 
 export default function EarnEarnings() {
-  const [period, setPeriod] = useState('month');
+  const [period, setPeriod] = useState('This month');
   const data = PERIOD_DATA[period];
 
   return (
-    <div className="max-w-2xl space-y-5 pb-8">
+    <div className="flex flex-col gap-5 p-6 pb-10" style={{ color: '#e2e8f0' }}>
+      <style>{`
+        @keyframes cadipulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.25; }
+        }
+      `}</style>
 
-      {/* Header */}
       <div>
-        <h1 className="text-xl font-black text-[#010a4f]">Earnings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">FM payments tracked separately from your Money tab — confirmed, pending, and forecast.</p>
+        <h1 style={{ color: 'white', fontWeight: 900, fontSize: '1.5rem', margin: 0, marginBottom: '0.2rem' }}>Earnings</h1>
+        <p style={{ color: 'rgba(226,232,240,0.4)', fontSize: '0.875rem', margin: 0 }}>Income tracking and invoice status</p>
+      </div>
+
+      {/* Invoice tracker */}
+      <div style={{ ...card, borderRadius: '1rem', padding: '1.1rem 1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
+          <FileText size={14} color="rgba(226,232,240,0.4)" />
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(226,232,240,0.4)' }}>
+            Invoice tracker
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+          {INVOICES_TRACKER.map(inv => (
+            <InvoiceTrackerCard key={inv.id} inv={inv} />
+          ))}
+        </div>
       </div>
 
       {/* Period selector */}
-      <div className="flex items-center gap-2">
-        {[['month', 'This month'], ['quarter', 'This quarter'], ['year', 'YTD']].map(([v, l]) => (
-          <button key={v} onClick={() => setPeriod(v)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              period === v ? 'text-white' : 'bg-white border border-[#99c5ff]/30 text-gray-600 hover:border-gray-300'
-            }`}
-            style={period === v ? { background: EARN_ORANGE } : {}}>
-            {l}
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        {Object.keys(PERIOD_DATA).map(p => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            style={{
+              padding: '0.4rem 1rem',
+              borderRadius: '999px',
+              border: period === p ? '1px solid rgba(194,65,12,0.5)' : '1px solid rgba(255,255,255,0.08)',
+              background: period === p ? 'rgba(194,65,12,0.12)' : 'rgba(255,255,255,0.04)',
+              color: period === p ? '#fb923c' : 'rgba(226,232,240,0.5)',
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+            }}
+          >
+            {p}
           </button>
         ))}
-        <span className="ml-auto text-xs font-bold text-gray-400">{data.label}</span>
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white rounded-2xl border border-[#99c5ff]/20 shadow-sm p-5">
-          <div className="text-2xl font-black text-emerald-600">£{data.earned.toLocaleString()}</div>
-          <div className="text-xs font-bold text-[#010a4f] mt-1">Earned</div>
-          <div className="text-[10px] text-gray-400 mt-0.5">Confirmed & paid</div>
-        </div>
-        <div className="bg-white rounded-2xl border border-[#99c5ff]/20 shadow-sm p-5">
-          <div className="text-2xl font-black text-amber-500">£{data.pending.toLocaleString()}</div>
-          <div className="text-xs font-bold text-[#010a4f] mt-1">Pending</div>
-          <div className="text-[10px] text-gray-400 mt-0.5">Awaiting FM sign-off</div>
-        </div>
-        <div className="bg-white rounded-2xl border border-[#99c5ff]/20 shadow-sm p-5">
-          <div className="text-2xl font-black" style={{ color: EARN_ORANGE }}>£{data.forecast.toLocaleString()}</div>
-          <div className="text-xs font-bold text-[#010a4f] mt-1">Forecast</div>
-          <div className="text-[10px] text-gray-400 mt-0.5">Based on accepted jobs</div>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+        {[
+          { label: 'Gross income', value: `£${data.gross.toLocaleString()}`, sub: `${data.jobs} jobs`, color: '#fb923c' },
+          { label: 'Net income', value: `£${data.net.toLocaleString()}`, sub: 'After VAT', color: '#4ade80' },
+          { label: 'VAT collected', value: `£${data.vat.toLocaleString()}`, sub: '20% standard', color: '#60a5fa' },
+        ].map(item => (
+          <div key={item.label} style={{ ...card, borderRadius: '0.9rem', padding: '0.9rem 1rem' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(226,232,240,0.4)', marginBottom: '0.5rem' }}>{item.label}</div>
+            <div style={{ fontWeight: 900, fontSize: '1.25rem', fontFamily: 'monospace', color: item.color }}>{item.value}</div>
+            <div style={{ fontSize: '0.72rem', color: 'rgba(226,232,240,0.35)', marginTop: '0.2rem' }}>{item.sub}</div>
+          </div>
+        ))}
       </div>
 
-      {/* FM breakdown */}
-      <div className="bg-white rounded-2xl border border-[#99c5ff]/20 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-50">
-          <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">Breakdown by FM</div>
+      {/* By client breakdown */}
+      <div style={{ ...card, borderRadius: '1rem', padding: '1.1rem 1.25rem' }}>
+        <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(226,232,240,0.4)', marginBottom: '0.85rem' }}>
+          By client
         </div>
-        <div className="divide-y divide-gray-50">
-          {data.breakdown.map((row, i) => {
-            const pst = PAYMENT_STATUS[row.status];
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {data.breakdown.map(b => {
+            const pct = Math.round((b.amount / data.gross) * 100);
             return (
-              <div key={i} className="px-5 py-4 flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="text-sm font-bold text-[#010a4f]">{row.fm}</div>
-                  <div className="text-xs text-gray-400 mt-0.5">{row.jobs} {row.jobs === 1 ? 'job' : 'jobs'}</div>
+              <div key={b.client}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem', fontSize: '0.82rem' }}>
+                  <span style={{ color: 'rgba(226,232,240,0.7)' }}>{b.client}</span>
+                  <span style={{ color: 'white', fontWeight: 700, fontFamily: 'monospace' }}>£{b.amount} <span style={{ color: 'rgba(226,232,240,0.35)', fontWeight: 400, fontSize: '0.72rem' }}>{pct}%</span></span>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                  style={{ background: pst.bg, border: `1px solid ${pst.border}`, color: pst.color }}>
-                  {pst.label}
-                </span>
-                <div className="text-sm font-black text-[#010a4f] w-14 text-right">£{row.value.toLocaleString()}</div>
+                <div style={{ height: 5, borderRadius: '999px', background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, borderRadius: '999px', background: 'linear-gradient(90deg, #C2410C, #fb923c)' }} />
+                </div>
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Payment ledger */}
-      {data.payments.length > 0 && (
-        <div className="bg-white rounded-2xl border border-[#99c5ff]/20 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-50">
-            <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">Payment ledger</div>
+      {/* Ledger */}
+      {data.ledger.length > 0 && (
+        <div style={{ ...card, borderRadius: '1rem', padding: '1.1rem 1.25rem' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(226,232,240,0.4)', marginBottom: '0.85rem' }}>
+            Transaction ledger
           </div>
-          <div className="divide-y divide-gray-50">
-            {data.payments.map((pay, i) => {
-              const pst = PAYMENT_STATUS[pay.status];
-              return (
-                <div key={i} className="px-5 py-3.5 flex items-center gap-4">
-                  <div className="flex-1">
-                    <div className="text-sm font-bold text-[#010a4f]">{pay.fm}</div>
-                    <div className="text-xs text-gray-400">{pay.date} · {pay.jobs} jobs · {pay.ref}</div>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0"
-                    style={{ background: pst.bg, border: `1px solid ${pst.border}`, color: pst.color }}>
-                    {pst.label}
-                  </span>
-                  <div className="text-sm font-black text-[#010a4f] w-14 text-right">£{pay.amount.toLocaleString()}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {data.ledger.map((tx, i) => (
+              <div
+                key={tx.ref}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'auto 1fr auto auto',
+                  gap: '0.75rem',
+                  alignItems: 'center',
+                  padding: '0.65rem 0',
+                  borderBottom: i < data.ledger.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                  fontSize: '0.8rem',
+                }}
+              >
+                <span style={{ color: 'rgba(226,232,240,0.35)', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>{tx.date}</span>
+                <div>
+                  <div style={{ color: 'rgba(226,232,240,0.8)' }}>{tx.client}</div>
+                  <div style={{ color: 'rgba(226,232,240,0.35)', fontSize: '0.7rem' }}>{tx.ref}</div>
                 </div>
-              );
-            })}
+                <StatusChip status={tx.status} />
+                <span style={{ fontWeight: 800, fontFamily: 'monospace', color: 'white', textAlign: 'right' }}>£{tx.amount}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
-
-      {/* Note */}
-      <div className="rounded-xl bg-[#f8faff] border border-[#99c5ff]/20 px-4 py-3 text-xs text-gray-500">
-        <span className="font-bold text-[#010a4f]">Note:</span> FM payments are made directly to you — Cadi tracks status but does not process payments.
-        Payment terms vary by FM (typically Net 14–30). Contact your FM for disputes.
-      </div>
     </div>
   );
 }

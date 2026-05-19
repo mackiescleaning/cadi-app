@@ -60,7 +60,7 @@ const NAV_SECTIONS = [
     label: 'Connect to more work',
     items: [
       { path: '/connect/marketplace',  label: 'Marketplace',      icon: ShoppingBag   },
-      { path: '/connect/pipeline',     label: 'Job Pipeline',     icon: GitBranch     },
+      { path: '/connect/pipeline',     label: 'Current Work',     icon: GitBranch     },
       { path: '/connect/completion',   label: 'Work Completion',  icon: CheckSquare   },
       { path: '/connect/connections',  label: 'FM Connections',   icon: Network       },
       { path: '/connect/reputation',   label: 'My Profile',       icon: Star          },
