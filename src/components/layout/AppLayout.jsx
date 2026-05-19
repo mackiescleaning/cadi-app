@@ -6,7 +6,7 @@ import {
   TrendingUp, MapPin, FileText, ClipboardCheck,
   GraduationCap, ClipboardList, Package, Lock,
   Briefcase, Star, Network, CheckSquare,
-  ShoppingBag, GitBranch, MessageSquare, Bell, Inbox, UtensilsCrossed,
+  ShoppingBag, GitBranch, MessageSquare, Bell, Inbox, UtensilsCrossed, Receipt,
   CalendarClock, ChevronRight, CreditCard,
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -57,17 +57,18 @@ const NAV_SECTIONS = [
   },
   {
     id: 'earn',
-    label: 'Connect',
+    label: 'Connect to more work',
     items: [
-      { path: '/earn/marketplace',  label: 'Marketplace',      icon: ShoppingBag   },
-      { path: '/earn/pipeline',     label: 'Job Pipeline',     icon: GitBranch     },
-      { path: '/earn/completion',   label: 'Work Completion',  icon: CheckSquare   },
-      { path: '/earn/connections',  label: 'FM Connections',   icon: Network       },
-      { path: '/earn/reputation',   label: 'My Profile',       icon: Star          },
-      { path: '/earn/earnings',     label: 'Earnings',         icon: PoundSterling },
-      { path: '/earn/comms',        label: 'Messages',         icon: MessageSquare },
+      { path: '/connect/marketplace',  label: 'Marketplace',      icon: ShoppingBag   },
+      { path: '/connect/pipeline',     label: 'Job Pipeline',     icon: GitBranch     },
+      { path: '/connect/completion',   label: 'Work Completion',  icon: CheckSquare   },
+      { path: '/connect/connections',  label: 'FM Connections',   icon: Network       },
+      { path: '/connect/reputation',   label: 'My Profile',       icon: Star          },
+      { path: '/connect/earnings',     label: 'Earnings',         icon: PoundSterling },
+      { path: '/connect/comms',        label: 'Messages',         icon: MessageSquare },
+      { path: '/connect/invoice',      label: 'Invoicing',        icon: Receipt       },
     ],
-    tagline: 'EARN',
+    tagline: 'CONNECT',
     accentColor: EARN_COLOR,
   },
   {
@@ -158,26 +159,43 @@ export default function AppLayout() {
         setLogoUrl(data?.setup_data?.logo_url || '');
       } catch {}
     })();
-  }, [user, location.pathname]);
+  }, [user?.id]);
 
-  // Poll pending agent actions count
+  // Pending agent actions — Realtime subscription (no polling)
   useEffect(() => {
     if (!user || user.id === 'demo-user') return;
-    const loadPending = async () => {
+    let channel;
+
+    const setup = async () => {
       try {
-        const { data: biz } = await supabase.from('businesses').select('id').eq('owner_user_id', user.id).single();
+        const { data: biz } = await supabase.from('businesses').select('id').eq('owner_user_id', user.id).maybeSingle();
         if (!biz) return;
-        const { count } = await supabase
-          .from('agent_actions')
-          .select('id', { count: 'exact', head: true })
-          .eq('business_id', biz.id)
-          .eq('status', 'pending_approval');
-        setPendingActions(count ?? 0);
+
+        const recount = async () => {
+          const { count } = await supabase
+            .from('agent_actions')
+            .select('id', { count: 'exact', head: true })
+            .eq('business_id', biz.id)
+            .eq('status', 'pending_approval');
+          setPendingActions(count ?? 0);
+        };
+
+        await recount();
+
+        channel = supabase
+          .channel(`pending-actions-${biz.id}`)
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'agent_actions',
+            filter: `business_id=eq.${biz.id}`,
+          }, recount)
+          .subscribe();
       } catch {}
     };
-    loadPending();
-    const interval = setInterval(loadPending, 60_000);
-    return () => clearInterval(interval);
+
+    setup();
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, [user?.id]);
 
   // Track last-viewed tab per section and active mobile section
@@ -199,7 +217,7 @@ export default function AppLayout() {
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
-      const { data } = await supabase.from('profiles').select('plan, subscription_tier').single();
+      const { data } = await supabase.from('profiles').select('plan, subscription_tier').maybeSingle();
       const activated = data?.subscription_tier === 'pro' || data?.subscription_tier === 'max' || data?.plan === 'pro';
       if (activated) {
         clearInterval(interval);
@@ -345,7 +363,7 @@ export default function AppLayout() {
               {section.id === 'earn' && (
                 <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full tracking-wider"
                   style={{ background: 'rgba(194,65,12,0.25)', color: '#C2410C' }}>
-                  COMING SOON
+                  BETA
                 </span>
               )}
             </span>
@@ -375,14 +393,14 @@ export default function AppLayout() {
                   onMouseLeave={() => setHoveredNav(null)}
                 >
                   <NavLink
-                    to={comingSoon ? '/earn' : path}
+                    to={comingSoon ? '/connect' : path}
                     onClick={(e) => {
-                      if (comingSoon) { e.preventDefault(); navigate('/earn'); return; }
+                      if (comingSoon) { e.preventDefault(); navigate('/connect'); return; }
                       handleNavClick(path, e);
                       onNavigate?.();
                     }}
                     className={({ isActive: navActive }) => {
-                      const active = navActive || (comingSoon && location.pathname === '/earn' && isActive);
+                      const active = navActive || (comingSoon && location.pathname === '/connect' && isActive);
                       return `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
                         locked
                           ? 'text-[#99c5ff]/40 hover:bg-white/5'
@@ -696,17 +714,17 @@ export default function AppLayout() {
             const isSectionActive = isDashboard
               ? location.pathname === '/dashboard'
               : sectionItems.some(i => location.pathname.startsWith(i.path)) ||
-                (id === 'earn' && location.pathname.startsWith('/earn'));
+                (id === 'earn' && location.pathname.startsWith('/connect'));
 
             const lastTabs = getLastTabs();
-            const dest = isDashboard ? '/dashboard' : (lastTabs[id] || sectionItems[0]?.path || '/earn');
+            const dest = isDashboard ? '/dashboard' : (lastTabs[id] || sectionItems[0]?.path || '/connect');
 
             return (
               <button
                 key={id}
                 onClick={() => {
                   if (isDashboard) navigate('/dashboard');
-                  else if (id === 'earn') navigate('/earn');
+                  else if (id === 'earn') navigate('/connect');
                   else navigate(dest);
                   setMobileMenuOpen(false);
                 }}
