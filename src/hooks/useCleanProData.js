@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { listCustomers } from '../lib/db/customersDb';
 import { listMoneyEntries } from '../lib/db/moneyDb';
 import { listQuotes } from '../lib/db/quotesDb';
 import { getBusinessSettings } from '../lib/db/settingsDb';
@@ -229,14 +228,14 @@ export function useCleanProData() {
 
     try {
       const taxYearFrom = formatIsoDate(startOfTaxYear());
-      const [settings, quotes, moneyEntries, customers] = await Promise.all([
+      const [settings, quotes, moneyEntries] = await Promise.all([
         getBusinessSettings(),
         listQuotes(250),
-        listMoneyEntries({ from: taxYearFrom, pageSize: 2000 }),
-        listCustomers(250),
+        listMoneyEntries({ from: taxYearFrom, pageSize: 500 }),
       ]);
 
-      const customersById = Object.fromEntries((customers || []).map(customer => [customer.id, customer]));
+      // Use already-loaded context customers (up to 1000) — avoids a duplicate fetch
+      const customersById = Object.fromEntries((liveCustomers || []).map(c => [c.id, c]));
       const schedulerResult = mapSchedulerData(userJobs, moneyEntries);
 
       setData({
@@ -246,7 +245,7 @@ export function useCleanProData() {
         jobsToday: schedulerResult.todayJobs,
         teamData: [],
         feedData: mapFeedData({ quotes, moneyEntries, customersById }),
-        customerCount: (customers || []).length,
+        customerCount: (liveCustomers || []).length,
       });
     } catch (err) {
       setError(err);

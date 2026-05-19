@@ -1539,7 +1539,7 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
       try {
         const [quoteRows, moneyRows] = await Promise.all([
           listQuotes(250),
-          listMoneyEntries({ pageSize: 1000 }),
+          listMoneyEntries({ from: new Date(Date.now() - 730 * 864e5).toISOString().slice(0, 10), pageSize: 500 }),
         ]);
         if (!mounted) return;
 

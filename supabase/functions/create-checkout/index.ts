@@ -101,7 +101,7 @@ serve(async (req: Request) => {
       line_items:                  [{ price: priceId, quantity: 1 }],
       allow_promotion_codes:       true,
       billing_address_collection:  "auto",
-      success_url: `${returnUrl}/settings?upgraded=1&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${returnUrl}/dashboard?upgraded=1&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${returnUrl}/upgrade?canceled=1`,
       metadata:    { supabase_user_id: user.id, tier },
       subscription_data: {

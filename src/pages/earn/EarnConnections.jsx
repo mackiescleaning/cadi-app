@@ -51,14 +51,10 @@ export default function EarnConnections() {
   return (
     <div className="max-w-2xl space-y-5 pb-8">
 
-      {/* Preview banner */}
-      <div className="flex items-center gap-3 rounded-xl px-4 py-3"
-        style={{ background: 'rgba(194,65,12,0.07)', border: '1px solid rgba(194,65,12,0.2)' }}>
-        <span className="text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full shrink-0"
-          style={{ background: EARN_ORANGE, color: 'white' }}>PREVIEW</span>
-        <span className="text-xs text-[#7c2d12]">
-          Manage your FM relationships here. Each FM has its own contract terms, rates and requirements.
-        </span>
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-black text-[#010a4f]">FM Connections</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Manage your FM relationships — each has its own contract terms, rates and requirements.</p>
       </div>
 
       {/* Summary */}

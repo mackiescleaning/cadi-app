@@ -45,7 +45,7 @@ import {
 } from '../lib/db/hmrcDb';
 
 // ─── Status polling interval (ms) when a connection is active ────────────────
-const STATUS_POLL_MS = 5 * 60 * 1000; // 5 minutes
+const STATUS_POLL_MS = 30 * 60 * 1000; // 30 minutes — visibility listener handles tab-return refreshes
 
 export function useHmrc() {
   const { user } = useAuth();
@@ -110,7 +110,18 @@ export function useHmrc() {
     if (isDemo) return undefined;
     refreshStatus();
     pollRef.current = setInterval(refreshStatus, STATUS_POLL_MS);
-    return () => clearInterval(pollRef.current);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshStatus();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', refreshStatus);
+
+    return () => {
+      clearInterval(pollRef.current);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', refreshStatus);
+    };
   }, [refreshStatus, isDemo]);
 
   // ── Auto-load obligations when connected + has NINO ──────────────────────────

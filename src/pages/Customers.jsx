@@ -2027,6 +2027,13 @@ export default function CustomerTab() {
   const atLimit = !isPro && activeCustomers.length >= customerLimit;
 
   // ── Filtering + sorting — O(n) — handles thousands of records ───────────────
+  // Compute suggestions once per customers change — shared by stats and urgent sort
+  const suggestionsByCustomer = useMemo(() => {
+    const map = new Map();
+    for (const c of customers) map.set(c.id, generateSuggestions(c));
+    return map;
+  }, [customers]);
+
   const filtered = useMemo(() => {
     // Always hide archived unless explicitly viewing them
     let list = statusFilter === 'archived'
@@ -2059,10 +2066,9 @@ export default function CustomerTab() {
     else if (sortBy === "value")  list = [...list].sort((a, b) => b.lifetimeValue - a.lifetimeValue);
     else if (sortBy === "recent") list = [...list].sort((a, b) => new Date(b.lastJobDate) - new Date(a.lastJobDate));
     else if (sortBy === "urgent") {
-      // Pre-compute scores once, then sort — avoids O(n log n) * generateSuggestions calls
       const scores = new Map(list.map(c => {
         const days = c.lastJobDate ? Math.floor((Date.now() - new Date(c.lastJobDate)) / 86400000) : 0;
-        const pri  = generateSuggestions(c)[0]?.priority;
+        const pri  = suggestionsByCustomer.get(c.id)?.[0]?.priority;
         const base = pri === "urgent" ? 1000 : pri === "high" ? 100 : 0;
         return [c.id, base + days];
       }));
@@ -2070,7 +2076,7 @@ export default function CustomerTab() {
     }
 
     return list;
-  }, [customers, search, jobTypeFilter, statusFilter, sortBy]);
+  }, [customers, search, jobTypeFilter, statusFilter, sortBy, suggestionsByCustomer]);
 
   // ── Summary stats ────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -2079,9 +2085,9 @@ export default function CustomerTab() {
     const lapsed  = customers.filter(c => c.status === "lapsed").length;
     const atRisk  = customers.filter(c => c.status === "at-risk").length;
     const revenue = customers.reduce((s, c) => s + c.lifetimeValue, 0);
-    const urgent  = customers.filter(c => generateSuggestions(c).some(s => s.priority === "urgent" || s.priority === "high")).length;
+    const urgent  = customers.filter(c => suggestionsByCustomer.get(c.id)?.some(s => s.priority === "urgent" || s.priority === "high")).length;
     return { total, active, lapsed, atRisk, revenue, urgent };
-  }, [customers]);
+  }, [customers, suggestionsByCustomer]);
 
   // Density tier — based on total active customers so it doesn't flip while filtering
   const density = activeCustomers.length >= 100 ? 'compact'

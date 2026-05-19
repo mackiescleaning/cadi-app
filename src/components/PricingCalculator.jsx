@@ -364,31 +364,12 @@ function PhotoCapture({ mode, onResult }) {
       </div>
       <div className="p-4 space-y-3">
         {!preview ? (
-          <div
-            onClick={() => ref.current?.click()}
-            className="border-2 border-dashed border-gray-200 hover:border-brand-blue rounded-sm cursor-pointer transition-colors"
-          >
+          <div className="border-2 border-dashed border-gray-200 rounded-sm">
             <div className="flex flex-col items-center py-6 px-4 text-center">
-              <p className="text-sm font-semibold text-gray-700 mb-1">
-                {isMobile ? "Photograph the job for AI pricing" : "Upload a photo for AI pricing"}
-              </p>
-              <p className="text-xs text-gray-400 mb-4">AI analyses the space and suggests a price range</p>
-              <div className="flex gap-2">
-                {isMobile && (
-                  <span className="px-4 py-2 bg-brand-navy text-white text-xs font-bold rounded-sm">Take photo</span>
-                )}
-                <span className="px-4 py-2 bg-gray-100 text-gray-700 text-xs font-bold rounded-sm">Upload photo</span>
-              </div>
+              <p className="text-sm font-semibold text-gray-500 mb-1">AI photo pricing</p>
+              <p className="text-xs text-gray-400 mb-3">Coming soon — Cadi will analyse a photo of the job and suggest a price range.</p>
+              <span className="px-3 py-1 bg-gray-100 text-gray-400 text-xs font-bold rounded-sm">Coming soon</span>
             </div>
-            {/* Accept all images — camera on mobile, file picker on desktop */}
-            <input
-              ref={ref}
-              type="file"
-              accept="image/*"
-              {...(isMobile ? { capture: "environment" } : {})}
-              className="hidden"
-              onChange={e => handle(e.target.files?.[0])}
-            />
           </div>
         ) : (
           <div className="relative">

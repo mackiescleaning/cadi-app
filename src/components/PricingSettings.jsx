@@ -61,7 +61,7 @@ const DEFAULT_FREQ_MODIFIERS = {
   weekly: 0.90, fortnightly: 1.00, four_weekly: 1.05, monthly: 1.05, one_off: 1.25,
 };
 
-const DEFAULT_BASE: Record<string, object> = {
+const DEFAULT_BASE = {
   per_bedroom:          { '1': '', '2': '', '3': '', '4': '', '5': '', '6_plus_per_extra': '' },
   per_bedroom_bathroom: { base: '', per_bedroom: '', per_bathroom: '' },
   per_sqm:              { rate_per_sqm: '', tiered_rates: [] },
@@ -76,7 +76,7 @@ const DEFAULT_BASE: Record<string, object> = {
   site_visit_required:  {},
 };
 
-const ADDON_DEFAULTS: Record<string, { name: string; price: number; duration_minutes_added: number | null }[]> = {
+const ADDON_DEFAULTS = {
   regular_clean:        [
     { name: 'Inside the oven',    price: 25, duration_minutes_added: 30 },
     { name: 'Inside the fridge',  price: 15, duration_minutes_added: 15 },

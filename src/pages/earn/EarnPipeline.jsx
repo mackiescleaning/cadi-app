@@ -11,14 +11,14 @@ const STATUS_CONFIG = {
 };
 
 const PIPELINE = [
-  { id: 'p1', status: 'in-progress',       site: 'Riverside Primary',   postcode: 'MK41', fm: 'Britannia FM',       service: 'Morning clean',  date: 'Today',      time: '06:58–',       value: 85,  evidenceCount: 6  },
-  { id: 'p2', status: 'awaiting-evidence', site: 'Wharfside Nursery',   postcode: 'MK42', fm: 'Britannia FM',       service: 'Morning clean',  date: '08 May',     time: '07:15–07:58',  value: 78,  evidenceCount: 0  },
+  { id: 'p1', status: 'in-progress',       site: 'Next – Luton The Mall',   postcode: 'MK41', fm: 'Britannia FM',       service: 'Morning clean',  date: 'Today',      time: '06:58–',       value: 85,  evidenceCount: 6  },
+  { id: 'p2', status: 'awaiting-evidence', site: 'Premier Inn Luton Airport',   postcode: 'MK42', fm: 'Britannia FM',       service: 'Morning clean',  date: '08 May',     time: '07:15–07:58',  value: 78,  evidenceCount: 0  },
   { id: 'p3', status: 'pending-review',    site: 'Aylesbury College',   postcode: 'HP20', fm: 'Metro Clean',        service: 'Evening clean',  date: '08 May',     time: '18:30–20:15',  value: 120, evidenceCount: 11 },
-  { id: 'p4', status: 'pending-review',    site: 'Civic Centre',        postcode: 'MK9',  fm: 'Britannia FM',       service: 'Office clean',   date: '07 May',     time: '07:00–08:45',  value: 95,  evidenceCount: 8  },
-  { id: 'p5', status: 'upcoming',          site: 'Riverside Primary',   postcode: 'MK41', fm: 'Britannia FM',       service: 'Morning clean',  date: 'Sat 10 May', time: '06:00–08:00',  value: 85,  evidenceCount: 0  },
-  { id: 'p6', status: 'upcoming',          site: 'Luton Library',       postcode: 'LU1',  fm: 'Britannia FM',       service: 'Evening clean',  date: 'Mon 12 May', time: '18:00–20:00',  value: 68,  evidenceCount: 0  },
-  { id: 'p7', status: 'paid',              site: 'Riverside Primary',   postcode: 'MK41', fm: 'Britannia FM',       service: 'Morning clean',  date: '05–08 May',  time: '4 jobs',       value: 340, evidenceCount: 47 },
-  { id: 'p8', status: 'paid',              site: 'Wharfside Nursery',   postcode: 'MK42', fm: 'Britannia FM',       service: 'Morning clean',  date: '05–07 May',  time: '3 jobs',       value: 234, evidenceCount: 30 },
+  { id: 'p4', status: 'pending-review',    site: 'Central Beds Council HQ',        postcode: 'MK9',  fm: 'Britannia FM',       service: 'Office clean',   date: '07 May',     time: '07:00–08:45',  value: 95,  evidenceCount: 8  },
+  { id: 'p5', status: 'upcoming',          site: 'Next – Luton The Mall',   postcode: 'MK41', fm: 'Britannia FM',       service: 'Morning clean',  date: 'Sat 10 May', time: '06:00–08:00',  value: 85,  evidenceCount: 0  },
+  { id: 'p6', status: 'upcoming',          site: 'Luton Central Library',       postcode: 'LU1',  fm: 'Britannia FM',       service: 'Evening clean',  date: 'Mon 12 May', time: '18:00–20:00',  value: 68,  evidenceCount: 0  },
+  { id: 'p7', status: 'paid',              site: 'Next – Luton The Mall',   postcode: 'MK41', fm: 'Britannia FM',       service: 'Morning clean',  date: '05–08 May',  time: '4 jobs',       value: 340, evidenceCount: 47 },
+  { id: 'p8', status: 'paid',              site: 'Premier Inn Luton Airport',   postcode: 'MK42', fm: 'Britannia FM',       service: 'Morning clean',  date: '05–07 May',  time: '3 jobs',       value: 234, evidenceCount: 30 },
 ];
 
 const STATUS_ORDER = ['in-progress', 'awaiting-evidence', 'pending-review', 'upcoming', 'paid'];
@@ -36,14 +36,10 @@ export default function EarnPipeline() {
   return (
     <div className="max-w-2xl space-y-5 pb-8">
 
-      {/* Preview banner */}
-      <div className="flex items-center gap-3 rounded-xl px-4 py-3"
-        style={{ background: 'rgba(194,65,12,0.07)', border: '1px solid rgba(194,65,12,0.2)' }}>
-        <span className="text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full shrink-0"
-          style={{ background: EARN_ORANGE, color: 'white' }}>PREVIEW</span>
-        <span className="text-xs text-[#7c2d12]">
-          Your live job pipeline — from accepted to paid. Each stage has a required action.
-        </span>
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-black text-[#010a4f]">Job Pipeline</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Your live pipeline — from accepted to paid. Each stage has a required action.</p>
       </div>
 
       {/* Summary strip */}

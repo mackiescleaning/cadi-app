@@ -15,7 +15,7 @@ export default function Terms() {
         <div className="mb-10">
           <Link to="/login" className="text-xs text-[rgba(153,197,255,0.4)] hover:text-white transition-colors mb-6 inline-block">← Back to Cadi</Link>
           <h1 className="text-2xl font-black text-white mb-2">Terms &amp; Conditions</h1>
-          <p className="text-xs text-[rgba(153,197,255,0.4)]">Last updated: 24 April 2026</p>
+          <p className="text-xs text-[rgba(153,197,255,0.4)]">Last updated: 17 May 2026</p>
         </div>
 
         <Section title="About Cadi">
@@ -34,7 +34,12 @@ export default function Terms() {
         </Section>
 
         <Section title="Subscription and payment">
-          <p>Cadi is available on a monthly subscription of £29 per month (inclusive of VAT where applicable). Payment is taken on the same date each month via Stripe.</p>
+          <p>Cadi is available on the following plans:</p>
+          <ul className="list-disc list-inside space-y-1 pl-2">
+            <li><strong className="text-white">Free (Lite)</strong> — no charge. Includes scheduling, invoicing, and up to 50 customers.</li>
+            <li><strong className="text-white">Pro — £39/month</strong>. Includes everything in Free plus unlimited customers, money tracker, P&amp;L, tax reserve, HMRC MTD submissions, invoice chasing, GoCardless direct debit, staff management (up to 5 crew), Front Desk AI agent, and unlimited review requests.</li>
+          </ul>
+          <p>Payment is taken on the same date each month via Stripe. All prices are inclusive of VAT where applicable.</p>
           <p>You may cancel at any time from Settings. Cancellation takes effect at the end of the current billing period — no refunds are issued for partial months.</p>
           <p>We reserve the right to change pricing with 30 days' notice. Continued use after a price change constitutes acceptance.</p>
         </Section>

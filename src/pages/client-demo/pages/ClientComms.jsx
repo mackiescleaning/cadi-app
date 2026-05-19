@@ -2,40 +2,40 @@ import { useState } from 'react';
 
 const INITIAL_MESSAGES = [
   {
-    id: 1, from: 'fm', sender: 'Britannia FM', time: '08:30',
-    text: 'Good morning — your morning clean at Riverside Primary is complete. 14 photos uploaded. All areas signed off per the schedule.',
+    id: 1, from: 'fm', sender: 'Britannia FM', time: '08:05',
+    text: 'Good morning — your morning clean at Next – Luton The Mall is complete. 12 photos uploaded. All areas signed off per the schedule.',
   },
   {
-    id: 2, from: 'client', sender: 'Sarah Mitchell', time: '09:15',
-    text: 'Thanks — can we look at scheduling a one-off deep clean of the main hall ahead of the school fete on 23 May?',
+    id: 2, from: 'client', sender: 'Helen Marsh', time: '09:10',
+    text: 'Thanks — can we look at scheduling a one-off deep clean of the stockroom and fitting rooms ahead of the summer sale starting 23 May?',
   },
   {
-    id: 3, from: 'fm', sender: 'Britannia FM', time: '09:47',
-    text: "Absolutely. I'll get a quote over to you by end of day. Are you happy for us to schedule this on a Saturday morning? That's typically most convenient for school sites.",
+    id: 3, from: 'fm', sender: 'Britannia FM', time: '09:44',
+    text: "Absolutely. I'll get a quote over to you by end of day. Would a Sunday morning work? That's typically best for retail sites — no trading disruption.",
   },
   {
-    id: 4, from: 'client', sender: 'Sarah Mitchell', time: '10:02',
-    text: 'Saturday works perfectly — 17 May if possible? An 08:00 start would be ideal so it\'s done before the fete setup begins.',
+    id: 4, from: 'client', sender: 'Helen Marsh', time: '10:01',
+    text: 'Sunday works perfectly — 18 May if possible? A 07:00 start would be ideal so everything is done well before the doors open.',
   },
   {
-    id: 5, from: 'fm', sender: 'Britannia FM', time: '10:18',
-    text: "Confirmed for Sat 17 May, 08:00–12:00. I'll add it to your schedule and send the quote and booking confirmation this afternoon. Our deep clean team will be doing the hall, kitchen, and all toilet blocks.",
+    id: 5, from: 'fm', sender: 'Britannia FM', time: '10:15',
+    text: "Confirmed for Sun 18 May, 07:00–11:00. I'll add it to your schedule and send the quote and booking confirmation this afternoon. Our deep clean team will cover the stockroom, fitting rooms, and all toilet facilities.",
   },
   {
-    id: 6, from: 'client', sender: 'Sarah Mitchell', time: '10:24',
-    text: 'Perfect — thank you. Please also include the two corridor areas off the hall if there\'s time.',
+    id: 6, from: 'client', sender: 'Helen Marsh', time: '10:22',
+    text: 'Perfect — thank you. Please also include the checkout area near the main entrance if there\'s time.',
   },
   {
     id: 7, from: 'fm', sender: 'Britannia FM', time: '14:35',
-    text: "Quote attached (PDF). Deep clean includes hall, kitchen, toilets, and corridors A & B — £340 + VAT. Happy to proceed once you have internal sign-off.",
+    text: "Quote attached (PDF). Deep clean includes stockroom, fitting rooms, toilets, and checkout zone — £385 + VAT. Happy to proceed once you have internal sign-off.",
   },
 ];
 
 const NOTIFICATIONS = [
-  { type: 'complete', text: 'Clean completed — Riverside Primary',  time: '08:28', read: true  },
-  { type: 'complete', text: 'Clean completed — Academy Nursery',    time: '08:41', read: true  },
-  { type: 'complete', text: 'Clean completed — Sixth Form Centre',  time: '09:12', read: true  },
-  { type: 'quote',    text: 'Quote ready — Deep clean 17 May',      time: '14:35', read: false },
+  { type: 'complete', text: 'Clean completed — Next Luton The Mall',  time: '08:05', read: true  },
+  { type: 'complete', text: 'Clean completed — Next Centre:MK',       time: '08:22', read: true  },
+  { type: 'complete', text: 'Clean completed — Next Watford Atria',   time: '08:41', read: true  },
+  { type: 'quote',    text: 'Quote ready — Deep clean 18 May',        time: '14:35', read: false },
 ];
 
 export default function ClientComms({ showToast }) {
@@ -75,7 +75,7 @@ export default function ClientComms({ showToast }) {
             {id === 'notifications' && <span className="ml-1.5 bg-[#4f78ff] text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">1</span>}
           </button>
         ))}
-        <div className="ml-auto text-xs text-gray-400">Riverside Primary · Britannia FM</div>
+        <div className="ml-auto text-xs text-gray-400">Next – Luton The Mall · Britannia FM</div>
       </div>
 
       {tab === 'messages' ? (

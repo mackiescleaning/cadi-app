@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { LayoutDashboard, Activity, ClipboardList, ShieldCheck, BarChart2, AlertTriangle, MessageSquare, Settings, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Activity, Images, ClipboardList, ShieldCheck, BarChart2, AlertTriangle, MessageSquare, Settings, Menu, X } from 'lucide-react';
 import ClientOverview      from './pages/ClientOverview';
 import ClientLiveActivity  from './pages/ClientLiveActivity';
+import ClientEvidence      from './pages/ClientEvidence';
 import ClientJobHistory    from './pages/ClientJobHistory';
 import ClientCompliance    from './pages/ClientCompliance';
 import ClientReports       from './pages/ClientReports';
@@ -10,11 +11,9 @@ import ClientComms         from './pages/ClientComms';
 import ClientSettings      from './pages/ClientSettings';
 
 const SITES = [
-  { id: 'rp', name: 'Riverside Primary',   status: 'good'    },
-  { id: 'an', name: 'Academy Nursery',      status: 'good'    },
-  { id: 'rs', name: 'Riverside Secondary',  status: 'warning' },
-  { id: 'sf', name: 'Sixth Form Centre',    status: 'good'    },
-  { id: 'ah', name: 'Trust Admin Hub',      status: 'good'    },
+  { id: 'lu', name: 'Next – Luton The Mall',  status: 'good'    },
+  { id: 'mk', name: 'Next – Centre:MK',       status: 'good'    },
+  { id: 'wf', name: 'Next – Watford Atria',   status: 'warning' },
 ];
 
 const STATUS_DOT = {
@@ -24,8 +23,9 @@ const STATUS_DOT = {
 };
 
 const PAGES = [
-  { id: 'overview',    label: 'Overview',        icon: LayoutDashboard, component: ClientOverview     },
-  { id: 'live',        label: 'Live Activity',    icon: Activity,        component: ClientLiveActivity },
+  { id: 'overview',    label: 'Overview',        icon: LayoutDashboard, component: ClientOverview,    badge: 'live' },
+  { id: 'live',        label: 'Live Activity',    icon: Activity,        component: ClientLiveActivity, badge: 'live' },
+  { id: 'evidence',    label: 'Photo Evidence',   icon: Images,          component: ClientEvidence,    badge: '312'  },
   { id: 'history',     label: 'Job History',      icon: ClipboardList,   component: ClientJobHistory   },
   { id: 'compliance',  label: 'Compliance Pack',  icon: ShieldCheck,     component: ClientCompliance   },
   { id: 'reports',     label: 'Reports',          icon: BarChart2,       component: ClientReports      },
@@ -119,7 +119,7 @@ export default function ClientDemoApp() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {PAGES.map(({ id, label, icon: Icon }) => (
+          {PAGES.map(({ id, label, icon: Icon, badge }) => (
             <button key={id} onClick={() => { setPage(id); setSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 page === id
@@ -128,11 +128,17 @@ export default function ClientDemoApp() {
               }`}>
               <Icon size={15} className="shrink-0" />
               <span className="flex-1 text-left">{label}</span>
-              {id === 'comms' && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[#4f78ff] shrink-0" />
+              {badge === 'live' && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  <span className="text-[9px] font-black text-blue-600">LIVE</span>
+                </div>
               )}
-              {id === 'issue' && (
-                <span className="text-[9px] font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full shrink-0">0 open</span>
+              {badge && badge !== 'live' && (
+                <span className="text-[9px] font-black text-[#4f78ff] bg-[#f0f4ff] px-1.5 py-0.5 rounded-full shrink-0">{badge}</span>
+              )}
+              {id === 'comms' && !badge && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[#4f78ff] shrink-0" />
               )}
             </button>
           ))}
@@ -141,7 +147,7 @@ export default function ClientDemoApp() {
         {/* Footer */}
         <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
           <div className="text-[10px] text-gray-300 leading-relaxed">
-            Riverside Academy Trust · 5 sites
+            Next Retail UK Ltd · 3 sites
           </div>
         </div>
       </aside>
@@ -161,13 +167,21 @@ export default function ClientDemoApp() {
           </button>
           <div className="flex-1 min-w-0">
             <div className="text-[10px] text-gray-400 truncate">
-              {activeSite === 'all' ? 'Riverside Academy Trust — All sites' : currentSite?.name + ' · Riverside Academy Trust'}
+              {activeSite === 'all' ? 'Next Retail UK Ltd — All sites' : currentSite?.name + ' · Next Retail UK Ltd'}
             </div>
             <h1 className="text-sm font-bold text-[#010a4f] truncate">{PAGES.find(p => p.id === page)?.label}</h1>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => window.open('/fm-demo', '_blank')}
+              className="hidden md:flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full transition-colors"
+              style={{ background: 'rgba(1,10,79,0.07)', color: '#010a4f', border: '1px solid rgba(1,10,79,0.12)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(1,10,79,0.13)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(1,10,79,0.07)'}>
+              ← FM Portal
+            </button>
             <div className="text-[10px] font-bold text-[#C2410C] bg-[#C2410C]/10 px-2.5 py-1 rounded-full">DEMO</div>
-            <div className="w-7 h-7 rounded-full bg-[#f0f4ff] flex items-center justify-center text-[10px] font-black text-[#4f78ff]">SM</div>
+            <div className="w-7 h-7 rounded-full bg-[#f0f4ff] flex items-center justify-center text-[10px] font-black text-[#4f78ff]">HM</div>
           </div>
         </header>
 

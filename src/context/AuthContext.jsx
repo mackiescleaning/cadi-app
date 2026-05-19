@@ -67,12 +67,14 @@ export function AuthProvider({ children }) {
 
   async function fetchProfile(userId) {
     setProfileLoading(true);
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    if (data) setProfile(data);
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      if (data) setProfile(data);
+    } catch {}
     setProfileLoading(false);
   }
 

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { usePlan } from '../hooks/usePlan';
 import CadiWordmark from './CadiWordmark';
-import { X } from 'lucide-react';
+import { X, CheckCircle2, Sparkles, Users, BarChart3, CreditCard, Star, Zap, Shield } from 'lucide-react';
 
 const PRO_FEATURES = [
   'Unlimited customers',
@@ -174,6 +174,88 @@ export function UpgradeBanner({ reason, compact = false }) {
           {loading ? 'Opening checkout…' : `Upgrade to Pro — £${priceMonthly || 39}/month`}
         </button>
         <p className="text-[10px] text-white/25 mt-3">Cancel anytime · Powered by Stripe</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Upgrade success modal — shown after Stripe checkout completes ──────────────
+const PRO_UNLOCKED = [
+  { icon: BarChart3,  label: 'Money tracker, P&L & tax reserve' },
+  { icon: Shield,     label: 'HMRC MTD tax submissions' },
+  { icon: CreditCard, label: 'Invoice chasing & GoCardless payments' },
+  { icon: Users,      label: 'Staff management (up to 5 crew)' },
+  { icon: Zap,        label: 'Front Desk AI web chat agent' },
+  { icon: Star,       label: 'Unlimited review requests' },
+];
+
+export function UpgradeSuccessModal({ onClose }) {
+  const [visible, setVisible] = useState(false);
+
+  // Slight entrance delay so the animation feels intentional
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 60);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div className={`fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`}>
+      <div
+        className={`relative w-full max-w-md rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 ${visible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}
+        style={{ background: 'linear-gradient(145deg, #010a4f 0%, #05124a 50%, #0d1e78 100%)' }}
+      >
+        {/* Top shine */}
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/70 to-transparent" />
+
+        {/* Grid texture */}
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{ backgroundImage: 'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)', backgroundSize: '28px 28px' }} />
+
+        <div className="relative p-6">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-white/30 hover:text-white/70 transition-colors"
+          >
+            <X size={18} />
+          </button>
+
+          {/* Header */}
+          <div className="flex justify-center mb-5">
+            <CadiWordmark height={22} />
+          </div>
+
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#1f48ff]/20 border border-[#1f48ff]/40 mb-4">
+              <Sparkles size={28} className="text-[#99c5ff]" />
+            </div>
+            <h2 className="text-2xl font-black text-white mb-1">You're on Cadi Pro</h2>
+            <p className="text-sm text-white/50">Everything's unlocked. Here's what you've got access to now.</p>
+          </div>
+
+          {/* Unlocked features */}
+          <ul className="space-y-2.5 mb-6">
+            {PRO_UNLOCKED.map(({ icon: Icon, label }) => (
+              <li key={label} className="flex items-center gap-3">
+                <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-[#1f48ff]/20 border border-[#1f48ff]/30 flex items-center justify-center">
+                  <Icon size={13} className="text-[#99c5ff]" />
+                </div>
+                <span className="text-sm text-white/75">{label}</span>
+                <CheckCircle2 size={14} className="ml-auto text-emerald-400 flex-shrink-0" />
+              </li>
+            ))}
+          </ul>
+
+          <button
+            onClick={onClose}
+            className="w-full py-3.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black text-sm rounded-xl transition-all shadow-lg shadow-[#1f48ff]/40"
+          >
+            Start exploring Pro →
+          </button>
+
+          <p className="text-center text-[10px] text-white/25 mt-3">
+            A confirmation email is on its way to you.
+          </p>
+        </div>
       </div>
     </div>
   );

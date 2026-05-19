@@ -12,8 +12,8 @@ export async function getProgress() {
   const { data, error } = await supabase
     .from('onboarding_progress')
     .select('*')
-    .single();
-  if (error && error.code !== 'PGRST116') throw error;
+    .maybeSingle();
+  if (error) throw error;
   return data ?? null;
 }
 
@@ -55,7 +55,7 @@ export async function markStepComplete(stepKey, phase = 1, metadata = {}) {
     .eq('phase', phase)
     .eq('step_key', stepKey)
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -93,7 +93,7 @@ export async function checkAndCompletePhase1() {
 
   // Seed Phase 2 steps
   try {
-    const { data: biz } = await supabase.from('businesses').select('id').single();
+    const { data: biz } = await supabase.from('businesses').select('id').maybeSingle();
     if (biz) {
       await supabase.rpc('initialise_phase2_plan', { p_business_id: biz.id });
     }

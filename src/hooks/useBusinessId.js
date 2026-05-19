@@ -12,7 +12,7 @@ export function useBusinessId() {
       .from('businesses')
       .select('id')
       .eq('owner_user_id', user.id)
-      .single()
+      .maybeSingle()
       .then(({ data }) => { if (data) setBusinessId(data.id); });
   }, [user?.id]);
 

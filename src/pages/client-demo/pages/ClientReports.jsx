@@ -4,13 +4,11 @@ const MONTHS = ['May 2026', 'Apr 2026', 'Mar 2026', 'Feb 2026'];
 
 const REPORT_DATA = {
   'May 2026': {
-    sla: 97, jobs: 99, photos: 412, issues: { raised: 1, resolved: 1 },
+    sla: 99, jobs: 68, photos: 312, issues: { raised: 1, resolved: 1 },
     sites: [
-      { name: 'Riverside Primary',   jobs: 22, sla: 100 },
-      { name: 'Academy Nursery',      jobs: 22, sla: 100 },
-      { name: 'Riverside Secondary',  jobs: 26, sla: 95  },
-      { name: 'Sixth Form Centre',    jobs: 20, sla: 100 },
-      { name: 'Trust Admin Hub',      jobs: 9,  sla: 100 },
+      { name: 'Next – Luton The Mall',  jobs: 22, sla: 100 },
+      { name: 'Next – Centre:MK',       jobs: 22, sla: 100 },
+      { name: 'Next – Watford Atria',   jobs: 24, sla: 97  },
     ],
     weeks: [
       { label: 'w/c 28 Apr', jobs: 5,  sla: 100 },
@@ -18,13 +16,11 @@ const REPORT_DATA = {
     ],
   },
   'Apr 2026': {
-    sla: 98, jobs: 96, photos: 389, issues: { raised: 1, resolved: 1 },
+    sla: 98, jobs: 65, photos: 289, issues: { raised: 1, resolved: 1 },
     sites: [
-      { name: 'Riverside Primary',   jobs: 21, sla: 95  },
-      { name: 'Academy Nursery',      jobs: 21, sla: 100 },
-      { name: 'Riverside Secondary',  jobs: 24, sla: 100 },
-      { name: 'Sixth Form Centre',    jobs: 20, sla: 100 },
-      { name: 'Trust Admin Hub',      jobs: 10, sla: 100 },
+      { name: 'Next – Luton The Mall',  jobs: 21, sla: 95  },
+      { name: 'Next – Centre:MK',       jobs: 22, sla: 100 },
+      { name: 'Next – Watford Atria',   jobs: 22, sla: 100 },
     ],
     weeks: [
       { label: 'w/c 31 Mar', jobs: 5, sla: 100 },
@@ -35,13 +31,11 @@ const REPORT_DATA = {
     ],
   },
   'Mar 2026': {
-    sla: 100, jobs: 110, photos: 441, issues: { raised: 0, resolved: 0 },
+    sla: 100, jobs: 72, photos: 338, issues: { raised: 0, resolved: 0 },
     sites: [
-      { name: 'Riverside Primary',   jobs: 23, sla: 100 },
-      { name: 'Academy Nursery',      jobs: 23, sla: 100 },
-      { name: 'Riverside Secondary',  jobs: 27, sla: 100 },
-      { name: 'Sixth Form Centre',    jobs: 22, sla: 100 },
-      { name: 'Trust Admin Hub',      jobs: 10, sla: 100 },
+      { name: 'Next – Luton The Mall',  jobs: 24, sla: 100 },
+      { name: 'Next – Centre:MK',       jobs: 24, sla: 100 },
+      { name: 'Next – Watford Atria',   jobs: 24, sla: 100 },
     ],
     weeks: [
       { label: 'w/c 3 Mar',  jobs: 5, sla: 100 },
@@ -52,13 +46,11 @@ const REPORT_DATA = {
     ],
   },
   'Feb 2026': {
-    sla: 99, jobs: 88, photos: 352, issues: { raised: 1, resolved: 1 },
+    sla: 99, jobs: 60, photos: 274, issues: { raised: 1, resolved: 1 },
     sites: [
-      { name: 'Riverside Primary',   jobs: 19, sla: 100 },
-      { name: 'Academy Nursery',      jobs: 19, sla: 100 },
-      { name: 'Riverside Secondary',  jobs: 23, sla: 95  },
-      { name: 'Sixth Form Centre',    jobs: 18, sla: 100 },
-      { name: 'Trust Admin Hub',      jobs: 9,  sla: 100 },
+      { name: 'Next – Luton The Mall',  jobs: 20, sla: 100 },
+      { name: 'Next – Centre:MK',       jobs: 20, sla: 100 },
+      { name: 'Next – Watford Atria',   jobs: 20, sla: 97  },
     ],
     weeks: [
       { label: 'w/c 3 Feb',  jobs: 5, sla: 100 },
@@ -179,7 +171,7 @@ export default function ClientReports({ showToast }) {
 
       {/* Weekly jobs (current site) */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Riverside Primary — weekly jobs</div>
+        <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Next – Luton The Mall — weekly jobs</div>
         <div className="space-y-2">
           {data.weeks.map(({ label, jobs, sla, partial }) => (
             <div key={label} className="flex items-center gap-3">

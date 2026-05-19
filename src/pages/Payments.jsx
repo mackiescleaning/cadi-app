@@ -96,7 +96,7 @@ function PaymentSetupTab() {
   useEffect(() => { load(); }, [load]);
 
   function handleStripeConnect() {
-    const clientId = process.env.REACT_APP_STRIPE_CLIENT_ID;
+    const clientId = import.meta.env.VITE_STRIPE_CLIENT_ID;
     if (!clientId) { alert('Stripe Connect not configured yet — check back soon.'); return; }
     setConnecting('stripe');
     const state       = btoa(JSON.stringify({ flow: 'payment_connect', provider: 'stripe', ts: Date.now() }));
@@ -105,7 +105,7 @@ function PaymentSetupTab() {
   }
 
   function handleGcConnect() {
-    const clientId = process.env.REACT_APP_GOCARDLESS_PAYMENTS_CLIENT_ID;
+    const clientId = import.meta.env.VITE_GOCARDLESS_PAYMENTS_CLIENT_ID;
     if (!clientId) { alert('GoCardless payments not configured yet — check back soon.'); return; }
     setConnecting('gocardless');
     const state       = btoa(JSON.stringify({ flow: 'payment_connect', provider: 'gocardless', ts: Date.now() }));

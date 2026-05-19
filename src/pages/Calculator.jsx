@@ -39,7 +39,7 @@ export default function Calculator() {
         const taxYearStart = startOfTaxYear();
         const [settingsData, moneyEntries] = await Promise.all([
           getBusinessSettings(),
-          listMoneyEntries({ from: taxYearStart, pageSize: 2000 }),
+          listMoneyEntries({ from: taxYearStart, pageSize: 500 }),
         ]);
 
         if (!mounted) return;

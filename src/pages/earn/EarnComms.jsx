@@ -3,19 +3,19 @@ import { useState } from 'react';
 const EARN_ORANGE = '#C2410C';
 
 const NOTIFICATIONS = [
-  { id: 'n1', type: 'job-new',   icon: '⭐', title: 'New job matched to you',       sub: 'Wharfside Nursery · MK42 · Britannia FM · £85/visit',    time: '5 min ago',  read: false },
+  { id: 'n1', type: 'job-new',   icon: '⭐', title: 'New job matched to you',       sub: 'Premier Inn Luton Airport · MK42 · Britannia FM · £85/visit',    time: '5 min ago',  read: false },
   { id: 'n2', type: 'accepted',  icon: '✅', title: 'Application accepted',          sub: 'Luton Library evening clean · Britannia FM',              time: '08:47',      read: false },
-  { id: 'n3', type: 'review',    icon: '★',  title: 'New FM review posted',          sub: 'Britannia FM · Riverside Primary · 5 stars',             time: '08:30',      read: true  },
+  { id: 'n3', type: 'review',    icon: '★',  title: 'New FM review posted',          sub: 'Britannia FM · Next – Luton The Mall · 5 stars',             time: '08:30',      read: true  },
   { id: 'n4', type: 'payment',   icon: '💷', title: 'Payment confirmed',             sub: 'Britannia FM · £425 · ref #BF-PAY-0512',                 time: 'Yesterday',  read: true  },
-  { id: 'n5', type: 'job-new',   icon: '⭐', title: 'New job matched to you',       sub: 'Riverside Academy · MK41 · Metro Clean · £92/visit',     time: 'Yesterday',  read: true  },
-  { id: 'n6', type: 'change',    icon: '📋', title: 'Job details updated by FM',    sub: 'Riverside Primary · 9 May · time window adjusted',        time: '2 days ago', read: true  },
+  { id: 'n5', type: 'job-new',   icon: '⭐', title: 'New job matched to you',       sub: 'Next – Centre:MK · MK41 · Metro Clean · £92/visit',     time: 'Yesterday',  read: true  },
+  { id: 'n6', type: 'change',    icon: '📋', title: 'Job details updated by FM',    sub: 'Next – Luton The Mall · 9 May · time window adjusted',        time: '2 days ago', read: true  },
 ];
 
 const THREADS = [
   {
     id: 't1', fm: 'Britannia FM', contact: 'James Morris — Ops Manager', unread: 2,
     messages: [
-      { from: 'fm',  time: '08:30', text: 'Hi — just to confirm, Riverside Primary is a daily job Monday to Friday, 06:00–08:00. Please make sure photos are uploaded before you leave site each morning.' },
+      { from: 'fm',  time: '08:30', text: 'Hi — just to confirm, Next – Luton The Mall is a daily job Monday to Friday, 06:00–08:00. Please make sure photos are uploaded before you leave site each morning.' },
       { from: 'me',  time: '08:45', text: "Understood, thanks. Will do — I\'ve been uploading within 10 minutes of leaving. Any specific areas they want more coverage on?" },
       { from: 'fm',  time: '09:02', text: "The site supervisor has mentioned the toilets on the first floor could have more photos — they want 2 per room ideally. Can you add that from tomorrow?" },
       { from: 'me',  time: '09:15', text: 'Yes, no problem at all. I\'ll cover all 6 toilet cubicles from tomorrow.' },
@@ -54,14 +54,10 @@ export default function EarnComms() {
   return (
     <div className="max-w-3xl space-y-5 pb-8">
 
-      {/* Preview banner */}
-      <div className="flex items-center gap-3 rounded-xl px-4 py-3"
-        style={{ background: 'rgba(194,65,12,0.07)', border: '1px solid rgba(194,65,12,0.2)' }}>
-        <span className="text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full shrink-0"
-          style={{ background: EARN_ORANGE, color: 'white' }}>PREVIEW</span>
-        <span className="text-xs text-[#7c2d12]">
-          All FM communications and job alerts in one place — no more buried emails.
-        </span>
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-black text-[#010a4f]">Messages</h1>
+        <p className="text-sm text-gray-500 mt-0.5">All FM communications and job alerts in one place — no buried emails.</p>
       </div>
 
       {/* Tab bar */}

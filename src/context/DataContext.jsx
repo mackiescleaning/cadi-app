@@ -64,7 +64,7 @@ export function DataProvider({ children }) {
   // Load customers from Supabase
   useEffect(() => {
     if (!user) { setCustomers([]); return; }
-    listCustomers()
+    listCustomers({ pageSize: 1000 })
       .then(rows => setCustomers(rows.map(mapRow)))
       .catch(() => setCustomers([]));
   }, [user]);

@@ -323,7 +323,7 @@ export default function InvoiceSettings() {
   }
 
   function handleStripeConnect() {
-    const clientId = process.env.REACT_APP_STRIPE_CLIENT_ID;
+    const clientId = import.meta.env.VITE_STRIPE_CLIENT_ID;
     if (!clientId) {
       flash('Stripe Connect not configured yet — check back soon.', 'error');
       return;
@@ -335,7 +335,7 @@ export default function InvoiceSettings() {
   }
 
   function handleGoCardlessConnect() {
-    const clientId = process.env.REACT_APP_GOCARDLESS_PAYMENTS_CLIENT_ID;
+    const clientId = import.meta.env.VITE_GOCARDLESS_PAYMENTS_CLIENT_ID;
     if (!clientId) {
       flash('GoCardless payments not configured yet — check back soon.', 'error');
       return;

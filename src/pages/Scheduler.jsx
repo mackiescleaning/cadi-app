@@ -152,6 +152,13 @@ function TypeBadge({ type }) {
   );
 }
 
+function durLabel(h) {
+  if (h === "0.33" || h === 0.33) return "20m";
+  if (h === "0.67" || h === 0.67) return "40m";
+  if (h === "0.5"  || h === 0.5)  return "30m";
+  return `${h}h`;
+}
+
 function getJobAssignees(job) {
   if (Array.isArray(job.assignees) && job.assignees.length > 0) return job.assignees;
   if (job.assignee) return [job.assignee];
@@ -498,7 +505,7 @@ function deriveCrews(jobs) {
 }
 
 function JobBlock({ job, onClick }) {
-  const t = TYPE[job.type];
+  const t = TYPE[job.type] || TYPE.residential;
   const top = (job.startHour - DAY_START) * PX_PER_HR;
   const h   = Math.max(job.durationHrs * PX_PER_HR, 24);
   const isComplete = job.status === "complete";
@@ -649,7 +656,7 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter }) {
               <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background: t.bar }} />
               <div className="w-14 shrink-0">
                 <p className="text-xs font-semibold tabular-nums text-slate-700">{fmtTime(job.startHour)}</p>
-                <p className="text-[10px] text-slate-400">{job.durationHrs}hr</p>
+                <p className="text-[10px] text-slate-400">{durLabel(job.durationHrs)}</p>
               </div>
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-bold text-slate-900 truncate ${job.status === 'complete' ? 'line-through opacity-50' : ''}`}>
@@ -705,10 +712,29 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter }) {
 }
 
 // ─── WEEK VIEW — 7-col time grid (re-themed) ──────────────────────────────────
-function WeekView({ jobs, onJobClick, weekDates = [] }) {
+function WeekView({ jobs, onJobClick, weekDates = [], typeFilter = "all", crewFilter = "all" }) {
   const WEEK_PX_PER_HR = 56;
   const LABEL_W = 48;
   const [expandedDay, setExpandedDay] = useState(0);
+
+  const filteredJobs = useMemo(() => jobs.filter(j => {
+    if (typeFilter !== "all" && j.type !== typeFilter) return false;
+    if (crewFilter !== "all") {
+      const assignees = getJobAssignees(j);
+      if (crewFilter === "__unassigned__") return assignees.length === 0;
+      if (!assignees.includes(crewFilter)) return false;
+    }
+    return true;
+  }), [jobs, typeFilter, crewFilter]);
+
+  const jobsByDay = useMemo(() => {
+    const map = Array.from({ length: 7 }, () => []);
+    for (const j of filteredJobs) {
+      if (j.day >= 0 && j.day < 7) map[j.day].push(j);
+    }
+    for (const arr of map) arr.sort((a, b) => a.startHour - b.startHour);
+    return map;
+  }, [filteredJobs]);
 
   const jobHeight = (hrs) => Math.max(hrs * WEEK_PX_PER_HR, 24);
   const jobTop    = (h)   => (h - GRID_HOURS[0]) * WEEK_PX_PER_HR;
@@ -718,7 +744,7 @@ function WeekView({ jobs, onJobClick, weekDates = [] }) {
       {/* Mobile: day-by-day cards */}
       <div className="sm:hidden space-y-2">
         {DAYS_SHORT.map((day, dayIdx) => {
-          const dayJobs = jobs.filter(j => j.day === dayIdx).sort((a,b) => a.startHour - b.startHour);
+          const dayJobs = jobsByDay[dayIdx];
           const dayRevenue = dayJobs.reduce((s,j) => s + j.price, 0);
           const isOpen = expandedDay === dayIdx;
 
@@ -761,10 +787,10 @@ function WeekView({ jobs, onJobClick, weekDates = [] }) {
                       onClick={() => onJobClick(job)}
                       className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
                     >
-                      <div className="w-1 self-stretch rounded-full" style={{ background: TYPE[job.type].bar }} />
+                      <div className="w-1 self-stretch rounded-full" style={{ background: (TYPE[job.type] || TYPE.residential).bar }} />
                       <div className="w-12 shrink-0">
                         <p className="text-xs font-mono text-slate-500">{fmtTime(job.startHour)}</p>
-                        <p className="text-xs text-slate-400">{job.durationHrs}hr</p>
+                        <p className="text-xs text-slate-400">{durLabel(job.durationHrs)}</p>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-slate-900 truncate">{job.customer}</p>
@@ -788,7 +814,7 @@ function WeekView({ jobs, onJobClick, weekDates = [] }) {
         <div className="flex border-b border-white/60 bg-white/40 backdrop-blur rounded-t-2xl">
           <div style={{ width: LABEL_W, minWidth: LABEL_W }} className="shrink-0" />
           {DAYS_SHORT.map((d, i) => {
-            const dayJobs = jobs.filter(j => j.day === i);
+            const dayJobs = jobsByDay[i];
             const rev = dayJobs.reduce((s, j) => s + j.price, 0);
             return (
               <div
@@ -818,7 +844,7 @@ function WeekView({ jobs, onJobClick, weekDates = [] }) {
             </div>
 
             {DAYS_SHORT.map((_, dayIdx) => {
-              const dayJobs = jobs.filter(j => j.day === dayIdx);
+              const dayJobs = jobsByDay[dayIdx];
               return (
                 <div
                   key={dayIdx}
@@ -830,7 +856,7 @@ function WeekView({ jobs, onJobClick, weekDates = [] }) {
                   ))}
 
                   {layoutDayJobs(dayJobs).map(({ job, col, colCount }) => {
-                    const t      = TYPE[job.type];
+                    const t      = TYPE[job.type] || TYPE.residential;
                     const top    = jobTop(job.startHour);
                     const height = jobHeight(job.durationHrs);
                     const pct    = 100 / colCount;
@@ -1127,6 +1153,7 @@ function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
   const [notes, setNotes] = useState(job.notes || '');
   const [saving, setSaving] = useState(false);
   const [drawerError, setDrawerError] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const hasChanges = status !== job.status || notes !== (job.notes || '');
 
@@ -1144,17 +1171,16 @@ function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
   };
 
   const handleDelete = async () => {
-    if (window.confirm('Delete this job? This cannot be undone.')) {
-      try {
-        await onDeleteJob?.(job.id);
-        onClose();
-      } catch {
-        setDrawerError('Could not delete job. Please try again.');
-      }
+    try {
+      await onDeleteJob?.(job.id);
+      onClose();
+    } catch {
+      setDrawerError('Could not delete job. Please try again.');
+      setConfirmDelete(false);
     }
   };
 
-  const t = TYPE[job.type];
+  const t = TYPE[job.type] || TYPE.residential;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/30 backdrop-blur-sm" onClick={onClose}>
@@ -1200,7 +1226,7 @@ function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
               ["Date",      job.date ? new Date(job.date + 'T00:00:00').toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : "—"],
               ["Address",   [job.address_line1, job.address_line2, job.town, job.postcode].filter(Boolean).join(', ') || job.postcode || "—"],
               ["Time",      `${fmtTime(job.startHour)} — ${fmtTime(job.startHour + job.durationHrs)}`],
-              ["Duration",  `${job.durationHrs} hrs`],
+              ["Duration",  durLabel(job.durationHrs)],
               ["Price",     `£${job.price}`],
               ["Assignee",  getJobAssigneeLabel(job)],
             ].map(([label, val]) => (
@@ -1246,26 +1272,46 @@ function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
           {drawerError && (
             <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{drawerError}</div>
           )}
-          <div className="flex gap-2 pt-2">
-            <button
-              onClick={handleSave}
-              disabled={!hasChanges || saving}
-              className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wide rounded-xl transition-all ${
-                hasChanges && !saving
-                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                  : "bg-slate-100 text-slate-400 cursor-not-allowed"
-              }`}
-            >
-              {saving ? "Saving..." : "Save changes"}
-            </button>
-            <button
-              onClick={handleDelete}
-              className="px-3 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-              title="Delete"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+          {confirmDelete ? (
+            <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 space-y-2">
+              <p className="text-xs font-bold text-red-700">Delete this job? This cannot be undone.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDelete}
+                  className="flex-1 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                >
+                  Yes, delete
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="flex-1 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleSave}
+                disabled={!hasChanges || saving}
+                className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wide rounded-xl transition-all ${
+                  hasChanges && !saving
+                    ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                    : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                }`}
+              >
+                {saving ? "Saving..." : "Save changes"}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="px-3 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                title="Delete"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1708,15 +1754,34 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
   const weekStartStr  = isoDate(weekDates[0]);
   const weekEndStr    = isoDate(weekDates[6]);
 
-  const searchMatch = (j) => !search || j.customer?.toLowerCase().includes(search.toLowerCase()) || j.postcode?.toLowerCase().includes(search.toLowerCase());
+  const searchLower = search.toLowerCase();
+  const todayJobs = useMemo(() =>
+    allJobs.filter(j =>
+      j.date === todayStr &&
+      j.status !== 'cancelled' &&
+      (!search || j.customer?.toLowerCase().includes(searchLower) || j.postcode?.toLowerCase().includes(searchLower))
+    ),
+  [allJobs, todayStr, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const todayJobs = allJobs.filter(j => j.date === todayStr && j.status !== 'cancelled' && searchMatch(j));
-  const weekJobs  = allJobs.filter(j => j.date >= weekStartStr && j.date <= weekEndStr && j.status !== 'cancelled' && searchMatch(j));
-  const weekJobsWithDay = weekJobs.map(j => {
-    const jobDate = new Date(j.date + 'T00:00:00');
-    const dayOfWeek = jobDate.getDay();
-    return { ...j, day: dayOfWeek === 0 ? 6 : dayOfWeek - 1 };
-  });
+  const weekJobs = useMemo(() =>
+    allJobs.filter(j =>
+      j.date >= weekStartStr &&
+      j.date <= weekEndStr &&
+      j.status !== 'cancelled' &&
+      (!search || j.customer?.toLowerCase().includes(searchLower) || j.postcode?.toLowerCase().includes(searchLower))
+    ),
+  [allJobs, weekStartStr, weekEndStr, search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const weekJobsWithDay = useMemo(() =>
+    weekJobs.map(j => {
+      const dayOfWeek = new Date(j.date + 'T00:00:00').getDay();
+      return { ...j, day: dayOfWeek === 0 ? 6 : dayOfWeek - 1 };
+    }),
+  [weekJobs]);
+
+  const nonCancelledJobs = useMemo(() =>
+    allJobs.filter(j => j.status !== 'cancelled'),
+  [allJobs]);
 
   // Crews derived from currently-visible day jobs (for the filter bar)
   const dayCrews = useMemo(() => deriveCrews(todayJobs), [todayJobs]);
@@ -1809,9 +1874,9 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
       <div className="relative z-0 flex-1 overflow-y-auto p-4 lg:p-6">
         <div className="max-w-[1600px] mx-auto space-y-4">
           {view === "Day"     && <DayView     jobs={todayJobs} onJobClick={handleJobClick} typeFilter={typeFilter} crewFilter={crewFilter} />}
-          {view === "Week"    && <WeekView    jobs={weekJobsWithDay} onJobClick={handleJobClick} weekDates={weekDates} />}
-          {view === "Month"   && <MonthView   jobs={allJobs.filter(j => j.status !== 'cancelled')} onJobClick={handleJobClick} viewDate={viewDate} />}
-          {view === "Quarter" && <QuarterView jobs={allJobs.filter(j => j.status !== 'cancelled')} />}
+          {view === "Week"    && <WeekView    jobs={weekJobsWithDay} onJobClick={handleJobClick} weekDates={weekDates} typeFilter={typeFilter} crewFilter={crewFilter} />}
+          {view === "Month"   && <MonthView   jobs={nonCancelledJobs} onJobClick={handleJobClick} viewDate={viewDate} />}
+          {view === "Quarter" && <QuarterView jobs={nonCancelledJobs} />}
           <AskCadi tab="scheduler" />
         </div>
       </div>

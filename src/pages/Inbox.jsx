@@ -516,7 +516,8 @@ export default function InboxPage() {
         supabase.from('agent_actions').select(SELECT)
           .eq('business_id', businessId)
           .eq('status', 'pending_approval')
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(100),
         supabase.from('agent_actions').select(SELECT)
           .eq('business_id', businessId)
           .neq('status', 'pending_approval')

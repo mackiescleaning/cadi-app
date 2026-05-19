@@ -72,17 +72,41 @@ function buildChrisEmail(opts: {
   sectorLabel?: string | null; serviceLabels: string[];
   address?: string; notes?: string[];
   businessName?: string; enquirySource?: string;
+  mode?: string; clean_type?: string; frequency?: string; bedrooms?: number; postcode?: string;
+  access_notes?: string; role?: string; premises_type?: string; situation?: string;
+  size?: string; timeline?: string; compliance_flag?: string;
 }): string {
-  const { name, company, phone, email, sectorLabel, serviceLabels, address, notes, businessName, enquirySource } = opts;
+  const { name, company, phone, email, sectorLabel, serviceLabels, address, notes, businessName, enquirySource,
+    mode, clean_type, frequency, bedrooms, postcode, access_notes, role, premises_type, situation, size, timeline, compliance_flag } = opts;
   const sourceLabel = enquirySource === "widget_chat" ? "From the website chat widget" : "From the website enquiry form";
+
+  function row(label: string, value: string | number | undefined | null, href?: string) {
+    if (!value) return "";
+    const cell = href
+      ? `<a href="${href}" style="color:#1D1B8E;font-weight:600;">${value}</a>`
+      : `<span style="color:#010a4f;">${value}</span>`;
+    return `<tr><td style="color:#6b7280;padding:6px 0;width:110px;font-size:13px;vertical-align:top;">${label}</td><td style="font-size:13px;">${cell}</td></tr>`;
+  }
+
   const rows = [
-    name    ? `<tr><td style="color:#6b7280;padding:6px 0;width:100px;font-size:13px;">Name</td><td style="font-size:13px;font-weight:600;color:#010a4f;">${name}${company ? ` — ${company}` : ""}</td></tr>` : "",
-    phone   ? `<tr><td style="color:#6b7280;padding:6px 0;font-size:13px;">Phone</td><td style="font-size:13px;"><a href="tel:${phone}" style="color:#1D1B8E;font-weight:600;">${phone}</a></td></tr>` : "",
-    email   ? `<tr><td style="color:#6b7280;padding:6px 0;font-size:13px;">Email</td><td style="font-size:13px;"><a href="mailto:${email}" style="color:#1D1B8E;">${email}</a></td></tr>` : "",
-    sectorLabel ? `<tr><td style="color:#6b7280;padding:6px 0;font-size:13px;">Sector</td><td style="font-size:13px;color:#010a4f;">${sectorLabel}</td></tr>` : "",
-    serviceLabels.length ? `<tr><td style="color:#6b7280;padding:6px 0;font-size:13px;">Services</td><td style="font-size:13px;color:#010a4f;">${serviceLabels.join(", ")}</td></tr>` : "",
-    address ? `<tr><td style="color:#6b7280;padding:6px 0;font-size:13px;">Site</td><td style="font-size:13px;color:#010a4f;">${address}</td></tr>` : "",
-    notes?.length ? `<tr><td style="color:#6b7280;padding:6px 0;font-size:13px;">Notes</td><td style="font-size:13px;color:#010a4f;">${notes.join(", ")}</td></tr>` : "",
+    row("Name",      name ? `${name}${role ? ` (${role})` : ""}${company ? ` — ${company}` : ""}` : ""),
+    row("Phone",     phone, `tel:${phone}`),
+    row("Email",     email, `mailto:${email}`),
+    row("Type",      mode ? (mode.charAt(0).toUpperCase() + mode.slice(1)) : ""),
+    row("Clean type", clean_type),
+    row("Frequency", frequency),
+    row("Bedrooms",  bedrooms),
+    row("Postcode",  postcode),
+    row("Premises",  premises_type),
+    row("Situation", situation),
+    row("Size",      size),
+    row("Timeline",  timeline),
+    row("Sector",    sectorLabel),
+    row("Services",  serviceLabels.length ? serviceLabels.join(", ") : ""),
+    row("Address",   address),
+    row("Access",    access_notes),
+    compliance_flag ? `<tr><td colspan="2" style="padding:8px 0 0;font-size:12px;color:#b45309;font-weight:600;">⚠ ${compliance_flag}</td></tr>` : "",
+    row("Notes",     notes?.length ? notes.join(", ") : ""),
   ].filter(Boolean).join("");
 
   return `<!DOCTYPE html>
@@ -143,10 +167,20 @@ serve(async (req) => {
     business_id,
     name, company, phone, email,
     sector, services, notes, address,
+    // Chat-specific fields
+    mode,
+    clean_type, frequency, bedrooms, postcode,
+    access_notes,
+    role, premises_type, situation, size, timeline, compliance_flag,
   } = body as {
     business_id: string;
     name?: string; company?: string; phone?: string; email?: string;
     sector?: string; services?: string[]; notes?: string[]; address?: string;
+    mode?: string;
+    clean_type?: string; frequency?: string; bedrooms?: number; postcode?: string;
+    access_notes?: string;
+    role?: string; premises_type?: string; situation?: string; size?: string;
+    timeline?: string; compliance_flag?: string;
   };
 
   if (!business_id) return json({ error: "Missing business_id" }, 400);
@@ -167,12 +201,12 @@ serve(async (req) => {
   if (biz?.owner_user_id) {
     const { data: profile } = await sb
       .from("profiles")
-      .select("display_name, brand_voice, email")
+      .select("business_name, display_name, brand_voice, email")
       .eq("id", biz.owner_user_id)
       .maybeSingle();
 
     const brandVoice = profile?.brand_voice as Record<string, string> | null;
-    bizName = brandVoice?.business_name ?? profile?.display_name ?? "Cleaning Services";
+    bizName = brandVoice?.business_name ?? profile?.business_name ?? profile?.display_name ?? "Cleaning Services";
 
     // Try profile email first, then auth admin API
     if (profile?.email) {
@@ -197,14 +231,38 @@ serve(async (req) => {
   const sectorLabel   = sector ? (SECTOR_LABELS[sector] ?? sector) : null;
   const serviceLabels = (services ?? []).map(s => SERVICE_LABELS[s] ?? s);
 
+  // Human-readable labels for chat-collected fields
+  const MODE_LABELS: Record<string, string> = {
+    residential: "Residential", exterior: "Exterior", commercial: "Commercial",
+  };
+  const CLEAN_TYPE_LABELS: Record<string, string> = {
+    regular: "Regular clean", "one-off": "One-off clean",
+    "end of tenancy": "End of tenancy", "after builders": "After builders",
+  };
+  const FREQ_LABELS: Record<string, string> = {
+    weekly: "Weekly", fortnightly: "Fortnightly", monthly: "Monthly",
+    four_weekly: "Every 4 weeks", "one_off": "One-off",
+  };
+
   const summaryLines = [
-    name    ? `**Name:** ${name}${company ? ` — ${company}` : ""}` : null,
+    name    ? `**Name:** ${name}${company ? ` — ${company}` : ""}${role ? ` (${role})` : ""}` : null,
     phone   ? `**Phone:** ${phone}` : null,
     email   ? `**Email:** ${email}` : null,
+    mode          ? `**Type:** ${MODE_LABELS[mode] ?? mode}` : null,
+    clean_type    ? `**Clean type:** ${CLEAN_TYPE_LABELS[clean_type] ?? clean_type}` : null,
+    frequency     ? `**Frequency:** ${FREQ_LABELS[frequency] ?? frequency}` : null,
+    bedrooms      ? `**Bedrooms:** ${bedrooms}` : null,
+    postcode      ? `**Postcode:** ${postcode}` : null,
+    premises_type ? `**Premises:** ${premises_type}` : null,
+    situation     ? `**Situation:** ${situation}` : null,
+    size          ? `**Size:** ${size}` : null,
+    timeline      ? `**Timeline:** ${timeline}` : null,
     sectorLabel          ? `**Sector:** ${sectorLabel}` : null,
     serviceLabels.length ? `**Services:** ${serviceLabels.join(", ")}` : null,
-    notes?.length        ? `**Notes:** ${notes.join(", ")}` : null,
-    address ? `**Site:** ${address}` : null,
+    address       ? `**Address:** ${address}` : null,
+    access_notes  ? `**Access:** ${access_notes}` : null,
+    compliance_flag ? `**Compliance:** ${compliance_flag}` : null,
+    notes?.length ? `**Notes:** ${notes.join(", ")}` : null,
   ].filter(Boolean).join("\n");
 
   // ── Insert agent_actions row ───────────────────────────────────────────────
@@ -218,10 +276,14 @@ serve(async (req) => {
       sector, sector_label: sectorLabel,
       services, service_labels: serviceLabels,
       notes, address,
+      mode,
+      clean_type, frequency, bedrooms, postcode,
+      access_notes,
+      role, premises_type, situation, size, timeline, compliance_flag,
       summary: summaryLines,
       lead_id: lead?.id ?? null,
     },
-    reasoning: `New site visit request from the Mackies website. ${name ?? ""}${company ? ` (${company})` : ""} is interested in ${serviceLabels.length ? serviceLabels.join(", ") : "exterior cleaning services"}.`,
+    reasoning: `New site visit request from the Mackies website. ${name ?? ""}${role ? ` (${role})` : ""}${company ? ` — ${company}` : ""} is interested in ${serviceLabels.length ? serviceLabels.join(", ") : mode ? `${MODE_LABELS[mode] ?? mode} cleaning` : "cleaning services"}.`,
   }).select("id").single();
 
   if (actionErr) {
@@ -231,7 +293,12 @@ serve(async (req) => {
 
   // ── Send emails (fire and forget — don't block the response) ──────────────
   const enquirySource = body.enquiry_source as string | undefined;
-  const emailOpts = { name, company, phone, email, sectorLabel, serviceLabels, address, notes, businessName: bizName, enquirySource };
+  const emailOpts = {
+    name, company, phone, email, sectorLabel, serviceLabels, address, notes,
+    businessName: bizName, enquirySource,
+    mode, clean_type, frequency, bedrooms, postcode,
+    access_notes, role, premises_type, situation, size, timeline, compliance_flag,
+  };
 
   await Promise.allSettled([
     ownerEmail

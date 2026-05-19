@@ -7,11 +7,11 @@ import sites    from '../mock/sites.json';
 import { getServiceColour, getJobStatusColour } from '../utils/colours';
 
 const SITE_COORDS = {
-  s1:  [52.136, -0.460], s2:  [52.120, -0.470], s3:  [52.140, -0.455],
-  s4:  [52.040, -0.780], s5:  [52.038, -0.773], s6:  [51.883, -0.432],
-  s7:  [51.757, -0.459], s8:  [51.878, -0.414], s9:  [51.880, -0.420],
-  s10: [51.657, -0.396], s11: [52.041, -0.756], s12: [51.816, -0.811],
-  s13: [51.875, -0.412], s14: [51.655, -0.399], s15: [51.818, -0.806],
+  s1:  [51.880, -0.413], s2:  [52.042, -0.754], s3:  [51.657, -0.396],
+  s4:  [51.886, -0.452], s5:  [51.885, -0.451], s6:  [51.882, -0.530],
+  s7:  [51.656, -0.396], s8:  [51.879, -0.413], s9:  [51.879, -0.416],
+  s10: [51.878, -0.424], s11: [51.874, -0.370], s12: [52.036, -0.338],
+  s13: [51.879, -0.413], s14: [52.135, -0.465], s15: [51.886, -0.524],
 };
 
 const HEAT_ZONES = [
@@ -32,70 +32,124 @@ const STATUS_DOT = {
   'open':        '#9ca3af',
 };
 
+const FEED = [
+  { time: '09:14', text: 'Sarah Patel arrived at Next – Luton The Mall',                    type: 'arrival'  },
+  { time: '09:08', text: 'Retail clean completed — Next Watford · 7 photos',                type: 'complete' },
+  { time: '08:52', text: 'Evidence uploaded — L&D Hospital Main Tower · 6 photos',          type: 'photos'   },
+  { time: '08:31', text: 'Campus clean completed — UoB Luton Campus · 9 photos',            type: 'complete' },
+  { time: '08:22', text: 'Offices clean completed — Watling House · SLA met',               type: 'complete' },
+  { time: '07:48', text: 'Kwame Boateng en route to Central Beds – Priory House',           type: 'arrival'  },
+  { time: '07:41', text: 'Customer Service Centre — awaiting QA sign-off',                  type: 'pending'  },
+  { time: '07:10', text: 'SLA risk flagged — Luton Central Library: cleaner not on site',  type: 'alert'    },
+  { time: '06:55', text: 'Distribution clean completed — Aldi Dunstable RDC · 18 photos',  type: 'complete' },
+  { time: '06:42', text: 'Marcus Webb checked in at Luton Customer Service Centre',         type: 'arrival'  },
+];
+
+const FEED_META = {
+  complete: { color: '#34d399', bg: 'rgba(52,211,153,0.12)',  border: 'rgba(52,211,153,0.25)',  dot: '✓' },
+  arrival:  { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',  border: 'rgba(96,165,250,0.25)',  dot: '↗' },
+  photos:   { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.25)', dot: '⬡' },
+  pending:  { color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.25)',  dot: '◎' },
+  alert:    { color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.25)', dot: '!' },
+};
+
 function MapStyler() {
   const map = useMap();
-  useEffect(() => { map.getContainer().style.background = '#020c3e'; }, [map]);
+  useEffect(() => { map.getContainer().style.background = '#010b38'; }, [map]);
   return null;
 }
 
-const FEED = [
-  { time: '09:14', icon: '📍', text: 'Sarah Patel arrived at Riverside Primary',                     type: 'arrival'   },
-  { time: '09:08', icon: '✅', text: 'Nursery clean completed — Wharfside Nursery · 7 photos',       type: 'complete'  },
-  { time: '08:52', icon: '📸', text: 'Evidence uploaded — MK Hospital North Wing · 6 photos',        type: 'photos'    },
-  { time: '08:31', icon: '✅', text: 'School clean completed — Aylesbury College · 9 photos',        type: 'complete'  },
-  { time: '08:22', icon: '✅', text: 'Annex clean completed — on time · SLA met',                    type: 'complete'  },
-  { time: '07:48', icon: '📍', text: 'Kwame Boateng en route to Riverside Academy',                  type: 'arrival'   },
-  { time: '07:41', icon: '⏳', text: 'Civic Centre clean completed — awaiting QA sign-off',          type: 'pending'   },
-  { time: '07:10', icon: '⚠️', text: 'SLA risk flagged — Luton Library: cleaner not on site',        type: 'alert'     },
-  { time: '06:55', icon: '✅', text: 'Warehouse clean completed — Tesco Hub · 18 photos',            type: 'complete'  },
-  { time: '06:42', icon: '📍', text: 'Marcus Webb checked in at Luton Civic Centre',                 type: 'arrival'   },
-];
-
-const FEED_COLORS = {
-  complete: 'text-emerald-400',
-  arrival:  'text-blue-400',
-  photos:   'text-indigo-400',
-  pending:  'text-amber-400',
-  alert:    'text-red-400',
-};
-
-
-
-function GlassCard({ children, className = '', style = {} }) {
+function Sparkline({ data, color, id }) {
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const w = 88, h = 32;
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - ((v - min) / range) * h * 0.75 - h * 0.1;
+    return [x, y];
+  });
+  const linePath = `M ${pts.map(p => p.join(',')).join(' L ')}`;
+  const areaPath = `M 0,${h} L ${pts.map(p => p.join(',')).join(' L ')} L ${w},${h} Z`;
+  const gradId = `spark-${id}`;
   return (
-    <div
-      className={`rounded-2xl ${className}`}
-      style={{
-        background: 'rgba(255,255,255,0.06)',
-        backdropFilter: 'blur(16px)',
-        border: '1px solid rgba(255,255,255,0.1)',
-        ...style,
-      }}
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ overflow: 'visible' }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradId})`} />
+      <path d={linePath} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* End dot */}
+      <circle cx={pts[pts.length-1][0]} cy={pts[pts.length-1][1]} r="2.5" fill={color} />
+    </svg>
+  );
+}
+
+function StatCard({ label, value, sub, color, sparkData, sparkId, trend }) {
+  return (
+    <div className="rounded-2xl p-5 relative overflow-hidden flex flex-col gap-0" style={{
+      background: 'rgba(255,255,255,0.05)',
+      backdropFilter: 'blur(20px)',
+      border: `1px solid ${color}28`,
+      boxShadow: `0 0 0 0 transparent, inset 0 1px 0 rgba(255,255,255,0.07)`,
+    }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 0 40px ${color}18, inset 0 1px 0 rgba(255,255,255,0.1)`; e.currentTarget.style.borderColor = `${color}50`; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = `0 0 0 0 transparent, inset 0 1px 0 rgba(255,255,255,0.07)`; e.currentTarget.style.borderColor = `${color}28`; }}
     >
-      {children}
+      {/* Corner glow */}
+      <div style={{
+        position: 'absolute', top: -24, right: -24,
+        width: 80, height: 80, borderRadius: '50%',
+        background: `radial-gradient(circle, ${color}22 0%, transparent 70%)`,
+        pointerEvents: 'none',
+      }} />
+
+      <div className="flex items-start justify-between mb-2">
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold shrink-0"
+          style={{ background: `${color}15`, border: `1px solid ${color}25`, color }}>
+          {trend ? '↑' : '◈'}
+        </div>
+        {trend && (
+          <span className="text-[10px] font-black px-2 py-0.5 rounded-full"
+            style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399', border: '1px solid rgba(52,211,153,0.2)' }}>
+            {trend}
+          </span>
+        )}
+      </div>
+
+      {/* Gradient value */}
+      <div className="text-3xl font-black leading-none mb-1.5" style={{
+        background: `linear-gradient(135deg, white 20%, ${color} 100%)`,
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        backgroundClip: 'text',
+      }}>{value}</div>
+
+      <div className="text-white/80 font-bold text-sm leading-tight">{label}</div>
+      <div className="text-white/30 text-xs mt-0.5 mb-3">{sub}</div>
+
+      {sparkData && (
+        <div className="flex justify-end opacity-70 mt-auto">
+          <Sparkline data={sparkData} color={color} id={sparkId} />
+        </div>
+      )}
     </div>
   );
 }
 
-function StatCard({ label, value, sub, color, icon }) {
+function GlassCard({ children, className = '', style = {} }) {
   return (
-    <div
-      className="rounded-2xl p-5 flex flex-col gap-3"
-      style={{
-        background: `linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%)`,
-        backdropFilter: 'blur(16px)',
-        border: `1px solid ${color}25`,
-        boxShadow: `0 0 30px ${color}12`,
-      }}
-    >
-      <div className="flex items-start justify-between">
-        <div className="text-3xl font-black" style={{ color }}>{value}</div>
-        <div className="text-lg opacity-70">{icon}</div>
-      </div>
-      <div>
-        <div className="text-white font-bold text-sm">{label}</div>
-        <div className="text-white/40 text-xs mt-0.5">{sub}</div>
-      </div>
+    <div className={`rounded-2xl ${className}`} style={{
+      background: 'rgba(255,255,255,0.05)',
+      backdropFilter: 'blur(20px)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)',
+      ...style,
+    }}>
+      {children}
     </div>
   );
 }
@@ -111,14 +165,26 @@ export default function FmDashboard({ showToast, onNavigate }) {
 
       {/* SLA alert strip */}
       {alerts > 0 && (
-        <div className="flex items-center gap-4 rounded-xl px-5 py-3.5"
-          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}>
-          <span className="text-red-400 text-base shrink-0">⚠️</span>
+        <div className="flex items-center gap-4 rounded-xl px-5 py-3.5 relative overflow-hidden"
+          style={{
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            boxShadow: '0 0 30px rgba(239,68,68,0.08)',
+          }}>
+          <div style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+            background: 'linear-gradient(180deg, transparent, #ef4444, transparent)',
+          }} />
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm"
+            style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', animation: 'alert-pulse 2s ease-in-out infinite' }}>
+            ⚠
+          </div>
           <span className="text-sm font-bold text-red-300 flex-1">
             {alerts} SLA breach risk — Luton Library: cleaner 18 min late
           </span>
           <button onClick={() => onNavigate('live')}
-            className="text-xs font-bold text-red-400 hover:text-red-300 underline underline-offset-2 shrink-0 transition-colors">
+            className="text-xs font-black px-3 py-1.5 rounded-lg transition-all hover:brightness-110 shrink-0"
+            style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5' }}>
             View live ops →
           </button>
         </div>
@@ -126,53 +192,60 @@ export default function FmDashboard({ showToast, onNavigate }) {
 
       {/* Stat cards */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Jobs today"    value={today.length} sub="across all sites"   color="#4f78ff" icon="📋" />
-        <StatCard label="In progress"   value={inProgress}   sub="cleaners on site"   color="#34d399" icon="🔄" />
-        <StatCard label="Awaiting QA"   value={awaitingQA}   sub="ready for sign-off" color="#fbbf24" icon="⏳" />
-        <StatCard label="SLA hit rate"  value="98%"          sub="this month"         color="#a78bfa" icon="📈" />
+        <StatCard
+          label="Jobs today"   value={today.length}  sub="across all sites"
+          color="#4f78ff"  sparkId="jobs"
+          sparkData={[8,11,9,13,12,15,14,15]}  trend="+2 vs yesterday"
+        />
+        <StatCard
+          label="On site now"  value={inProgress}    sub="cleaners active"
+          color="#34d399"  sparkId="active"
+          sparkData={[1,2,3,2,4,3,4,3]}
+        />
+        <StatCard
+          label="Awaiting QA"  value={awaitingQA}    sub="ready for sign-off"
+          color="#fbbf24"  sparkId="qa"
+          sparkData={[3,4,2,5,3,4,3,2]}
+        />
+        <StatCard
+          label="SLA hit rate" value="98%"            sub="this month"
+          color="#a78bfa"  sparkId="sla"
+          sparkData={[94,95,96,95,97,96,98,98]}  trend="↑ 2pts"
+        />
       </div>
 
       {/* Map + Feed row */}
-      <div className="grid grid-cols-[1fr_320px] gap-5">
+      <div className="grid grid-cols-[1fr_310px] gap-5">
 
-        {/* Coverage map — real Leaflet */}
+        {/* Coverage map */}
         <GlassCard style={{ overflow: 'hidden' }}>
-          <div className="px-5 pt-4 pb-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="px-5 pt-4 pb-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <div>
               <div className="text-white font-bold text-sm">Coverage map</div>
-              <div className="text-white/40 text-xs mt-0.5">Hertfordshire · Bedfordshire · Buckinghamshire</div>
+              <div className="text-white/35 text-xs mt-0.5">Hertfordshire · Bedfordshire · Buckinghamshire</div>
             </div>
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-3 text-xs">
               {[['#10b981','Completed'],['#3b82f6','On site'],['#f59e0b','Awaiting QA'],['#ef4444','SLA risk']].map(([c,l]) => (
                 <div key={l} className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: c }} />
-                  <span className="text-white/50">{l}</span>
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: c, boxShadow: `0 0 4px ${c}` }} />
+                  <span className="text-white/40">{l}</span>
                 </div>
               ))}
             </div>
           </div>
           <div style={{ height: 260, position: 'relative' }}>
             <MapContainer
-              center={[52.0, -0.5]}
-              zoom={9}
+              center={[52.0, -0.5]} zoom={9}
               style={{ width: '100%', height: '100%' }}
-              zoomControl={false}
-              attributionControl={false}
-              dragging={false}
-              scrollWheelZoom={false}
-              doubleClickZoom={false}
+              zoomControl={false} attributionControl={false}
+              dragging={false} scrollWheelZoom={false} doubleClickZoom={false}
             >
               <MapStyler />
-              <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                subdomains="abcd"
-                maxZoom={19}
-              />
+              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" subdomains="abcd" maxZoom={19} />
               {HEAT_ZONES.map((zone, i) => (
                 <CircleMarker key={`h${i}`} center={zone.latlng}
                   radius={Math.round(zone.intensity * 70)}
-                  pathOptions={{ color: 'transparent', fillColor: '#4f78ff', fillOpacity: zone.intensity * 0.25 }}
-                />
+                  pathOptions={{ color: 'transparent', fillColor: '#4f78ff', fillOpacity: zone.intensity * 0.25 }} />
               ))}
               {today.map(job => {
                 const coords = SITE_COORDS[job.siteId];
@@ -180,78 +253,102 @@ export default function FmDashboard({ showToast, onNavigate }) {
                 const color = STATUS_DOT[job.status] || STATUS_DOT.open;
                 return (
                   <CircleMarker key={job.id} center={coords} radius={7}
-                    pathOptions={{ color: 'rgba(255,255,255,0.4)', weight: 1.5, fillColor: color, fillOpacity: 0.9 }}
-                  />
+                    pathOptions={{ color: 'rgba(255,255,255,0.35)', weight: 1.5, fillColor: color, fillOpacity: 0.9 }} />
                 );
               })}
             </MapContainer>
-            <div className="absolute bottom-3 left-4 z-[1000] text-white/30 text-xs font-medium pointer-events-none"
-              style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
-              {today.length} jobs today
+            <div className="absolute bottom-3 left-4 z-[1000] pointer-events-none">
+              <span className="text-white/40 text-xs font-medium px-2.5 py-1 rounded-lg"
+                style={{ background: 'rgba(1,11,56,0.7)', backdropFilter: 'blur(8px)' }}>
+                {today.length} jobs today
+              </span>
             </div>
           </div>
         </GlassCard>
 
         {/* Live activity feed */}
         <GlassCard className="flex flex-col">
-          <div className="px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-            <div className="text-white font-bold text-sm">Live activity</div>
-            <div className="text-white/40 text-xs mt-0.5">Real-time updates</div>
+          <div className="px-5 py-4 flex items-center justify-between flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div>
+              <div className="text-white font-bold text-sm">Live activity</div>
+              <div className="text-white/35 text-xs mt-0.5">Real-time updates</div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 6px #34d399', animation: 'alert-pulse 2s ease-in-out infinite' }} />
+              <span className="text-white/30 text-[10px] font-bold">LIVE</span>
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto" style={{ maxHeight: 300 }}>
-            {FEED.map((item, i) => (
-              <div key={i} className="flex items-start gap-3 px-5 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                <span className="text-[10px] font-bold text-white/30 shrink-0 mt-0.5 w-10">{item.time}</span>
-                <span className="text-xs text-white/60 leading-relaxed flex-1">{item.text}</span>
-              </div>
-            ))}
+          <div className="flex-1 overflow-y-auto py-2" style={{ maxHeight: 300 }}>
+            {FEED.map((item, i) => {
+              const meta = FEED_META[item.type];
+              return (
+                <div key={i} className="flex items-start gap-3 px-4 py-2.5 transition-colors"
+                  style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}>
+                  <div className="w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-black shrink-0 mt-0.5"
+                    style={{ background: meta.bg, border: `1px solid ${meta.border}`, color: meta.color }}>
+                    {meta.dot}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white/65 text-xs leading-snug">{item.text}</div>
+                  </div>
+                  <span className="text-[10px] font-bold text-white/25 shrink-0 mt-0.5">{item.time}</span>
+                </div>
+              );
+            })}
           </div>
         </GlassCard>
       </div>
 
       {/* Today's jobs table */}
       <GlassCard>
-        <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="text-white font-bold text-sm">Today's jobs</div>
-          <span className="text-white/40 text-xs">{today.length} scheduled</span>
+          <span className="text-white/30 text-xs font-bold px-2.5 py-1 rounded-lg"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            {today.length} scheduled
+          </span>
         </div>
-        {/* Table header */}
         <div className="grid px-6 py-2.5" style={{ gridTemplateColumns: '1fr 160px 140px 90px 110px' }}>
           {['Site', 'Cleaner', 'Service / Window', 'Value', 'Status'].map(h => (
-            <div key={h} className="text-[10px] font-black uppercase tracking-widest text-white/25">{h}</div>
+            <div key={h} className="text-[10px] font-black uppercase tracking-widest text-white/20">{h}</div>
           ))}
         </div>
         <div>
-          {today.slice(0, 10).map(job => {
+          {today.slice(0, 10).map((job, idx) => {
             const site    = sites.find(s => s.id === job.siteId);
             const cleaner = cleaners.find(c => c.id === job.cleanerId);
             const st      = getJobStatusColour(job.status);
             const sc      = getServiceColour(job.service);
             return (
               <div key={job.id}
-                className="grid px-6 py-3 transition-colors"
+                className="grid px-6 py-3.5 transition-all cursor-default"
                 style={{
                   gridTemplateColumns: '1fr 160px 140px 90px 110px',
-                  borderTop: '1px solid rgba(255,255,255,0.05)',
+                  borderTop: '1px solid rgba(255,255,255,0.04)',
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                onMouseLeave={e => e.currentTarget.style.background = ''}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(79,120,255,0.05)'; e.currentTarget.style.borderTopColor = 'rgba(79,120,255,0.12)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.borderTopColor = 'rgba(255,255,255,0.04)'; }}
               >
-                <div>
-                  <div className="text-white font-medium text-sm truncate">{site?.name || '—'}</div>
-                  <div className="text-white/35 text-xs truncate">{site?.address?.split(',')[0]}</div>
+                <div className="self-center">
+                  <div className="text-white font-semibold text-sm truncate">{site?.name || '—'}</div>
+                  <div className="text-white/30 text-xs truncate mt-0.5">{site?.address?.split(',')[0]}</div>
                 </div>
-                <div className="text-white/70 text-sm self-center truncate">{cleaner?.name || <span className="text-white/30">Unassigned</span>}</div>
+                <div className="text-white/60 text-sm self-center truncate">{cleaner?.name || <span className="text-white/25 italic">Unassigned</span>}</div>
                 <div className="self-center">
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                     style={{ background: sc.bg, border: `1px solid ${sc.border}`, color: sc.text }}>
                     {job.service}
                   </span>
-                  <div className="text-white/35 text-xs mt-0.5">{job.timeWindow}</div>
+                  <div className="text-white/30 text-xs mt-0.5">{job.timeWindow}</div>
                 </div>
-                <div className="text-white font-bold text-sm self-center">£{job.value}</div>
+                <div className="text-white font-bold text-sm self-center">
+                  <span className="text-white/40 text-xs mr-0.5">£</span>{job.value}
+                </div>
                 <div className="self-center">
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: st.bg, border: `1px solid ${st.border}`, color: st.color }}>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+                    style={{ background: st.bg, border: `1px solid ${st.border}`, color: st.color, boxShadow: `0 0 8px ${st.color}20` }}>
                     {st.label}
                   </span>
                 </div>

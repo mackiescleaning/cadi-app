@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, RotateCcw } from 'lucide-react';
 import { useBusinessId } from '../hooks/useBusinessId';
 
-const FN_BASE = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1`;
+const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 async function apiFetchBusinessInfo(businessId) {
   const res = await fetch(`${FN_BASE}/front-desk-chat?business_id=${encodeURIComponent(businessId)}`);

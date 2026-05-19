@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, ToggleLeft, ToggleRight, Edit2 } from 'lucide-react';
 import { createService, updateService } from '../lib/db/servicesDb';
+import { supabase } from '../lib/supabase';
 
 // ── Microcopy ─────────────────────────────────────────────────────────────────
 
@@ -204,6 +205,31 @@ function parseNoteCategory(input) {
   if (/\b(bring|supply|supplies|equipment|tools|chemicals|products|cloths|hoover|mop)\b/.test(t))
     return 'materials_equipment_notes';
   return 'private_notes';
+}
+
+// ── Haiku NLP helper (falls back to regex parsers above on any error) ─────────
+
+async function callNlp(step, input) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return null;
+    const res = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-service-nlp`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization:  `Bearer ${session.access_token}`,
+          apikey:         import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ step, input }),
+      },
+    );
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
@@ -679,13 +705,15 @@ export default function ServiceChat({
   }
 
   // Step: PRICING (free text)
-  function handlePricing(inputOverride) {
+  async function handlePricing(inputOverride) {
     const val = (inputOverride || textInput).trim();
     if (!val) return;
     addMessage('user', val);
     setTextInput('');
-
-    const parsed = parsePricing(val);
+    setIsTyping(true);
+    const nlp = await callNlp('pricing', val);
+    setIsTyping(false);
+    const parsed = nlp ?? parsePricing(val);
 
     if (parsed.confidence < 0.7) {
       setPendingFollowUp(parsed.follow_up_question);
@@ -717,10 +745,10 @@ export default function ServiceChat({
   }
 
   // Step: PRICING_CLARIFY (follow-up after low confidence)
-  function handlePricingClarify() {
+  async function handlePricingClarify() {
     const val = textInput.trim();
     if (!val) return;
-    handlePricing(val); // re-parse with clarified input
+    await handlePricing(val); // re-parse with clarified input
   }
 
   function showPricingConfirm(parsed) {
@@ -764,12 +792,15 @@ export default function ServiceChat({
   }
 
   // Step: DURATION (free text)
-  function handleDuration() {
+  async function handleDuration() {
     const val = textInput.trim();
     if (!val) return;
     addMessage('user', val);
     setTextInput('');
-    const dur = parseDuration(val);
+    setIsTyping(true);
+    const nlp = await callNlp('duration', val);
+    setIsTyping(false);
+    const dur = nlp ?? parseDuration(val);
     patch({ duration: dur });
     const summary = dur.varies ? 'duration varies — I\'ll ask the customer details to estimate per job.' : `about ${fmtDuration(dur)}.`;
     const confirmText = `${ack()} ${dur.is_range ? 'Between' : 'About'} ${fmtDuration(dur)}.`;
@@ -777,12 +808,15 @@ export default function ServiceChat({
   }
 
   // Step: INCLUSIONS (free text)
-  function handleInclusions() {
+  async function handleInclusions() {
     const val = textInput.trim();
     if (!val) return;
     addMessage('user', val);
     setTextInput('');
-    const { included, excluded } = parseIncEx(val);
+    setIsTyping(true);
+    const nlp = await callNlp('inclusions', val);
+    setIsTyping(false);
+    const { included, excluded } = nlp ?? parseIncEx(val);
     const desc_inc = included.join(', ') || null;
     const desc_exc = excluded.join(', ') || null;
     patch({ description_included: desc_inc, description_excluded: desc_exc });
@@ -796,12 +830,15 @@ export default function ServiceChat({
   }
 
   // Step: FREQUENCY (free text)
-  function handleFrequency() {
+  async function handleFrequency() {
     const val = textInput.trim();
     if (!val) return;
     addMessage('user', val);
     setTextInput('');
-    const freq = parseFrequency(val);
+    setIsTyping(true);
+    const nlp = await callNlp('frequency', val);
+    setIsTyping(false);
+    const freq = nlp ?? parseFrequency(val);
     // Ensure at least one is set
     if (!Object.values(freq).some(Boolean)) freq.frequency_one_off = true;
     patch({ frequency: freq });
@@ -809,12 +846,15 @@ export default function ServiceChat({
   }
 
   // Step: NOTES_TEXT (free text)
-  function handleNotesText() {
+  async function handleNotesText() {
     const val = textInput.trim();
     if (!val) return;
     addMessage('user', val);
     setTextInput('');
-    const category = parseNoteCategory(val);
+    setIsTyping(true);
+    const nlp = await callNlp('notes_category', val);
+    setIsTyping(false);
+    const category = nlp?.category ?? parseNoteCategory(val);
     const noteLabels = {
       pricing_notes: 'pricing note',
       service_area_custom: 'service area note',

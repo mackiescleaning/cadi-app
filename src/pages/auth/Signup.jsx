@@ -45,6 +45,11 @@ export default function Signup() {
       return;
     }
 
+    // Fire welcome email — don't await, don't block the user
+    supabase.functions.invoke('send-welcome', {
+      body: { email, firstName, businessName },
+    }).catch(() => {});
+
     // If email confirmation is disabled in Supabase, a session is returned
     // immediately — skip the "check your email" screen and go straight in.
     if (data?.session) {

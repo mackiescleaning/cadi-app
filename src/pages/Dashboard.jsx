@@ -56,7 +56,8 @@
 //   <DashboardTab accountsData={accountsData} onNavigate={setActiveTab} />
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCountUp } from "../hooks/useCountUp";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCleanProData } from "../hooks/useCleanProData";
 import { supabase } from "../lib/supabase";
@@ -65,10 +66,15 @@ import { listLeaderboard, upsertMyEntry, deleteMyEntry } from "../lib/db/leaderb
 import AskCadi from "../components/AskCadi";
 import CadiWordmark from "../components/CadiWordmark";
 import SpotlightTour from "../components/SpotlightTour";
+import LeaderboardPanel, { LEADERBOARD_DEMO, SECTOR_COLORS } from "../components/dashboard/LeaderboardPanel";
+import ShareCardModal from "../components/dashboard/ShareCardModal";
+import WelcomeModal from "../components/dashboard/WelcomeModal";
+import SetupChecklist from "../components/dashboard/SetupChecklist";
+import MobileDashboard from "../components/dashboard/MobileDashboard";
 import Onboarding from "./Onboarding";
 import ThirtyDayPlan from "../components/ThirtyDayPlan";
 import { usePlan, PRO_TABS } from "../hooks/usePlan";
-import { UpgradeModal } from "../components/UpgradePrompt";
+import { UpgradeModal, UpgradeSuccessModal } from "../components/UpgradePrompt";
 
 // ─── Demo data ────────────────────────────────────────────────────────────────
 const DEMO_ACCOUNTS = {
@@ -301,25 +307,44 @@ function Chip({ children, color = "blue" }) {
 
 // ─── Health score ring ─────────────────────────────────────────────────────────
 function ScoreRing({ score, size = 112 }) {
+  const display     = useCountUp(score, 1800);
+  const [landed, setLanded] = useState(false);
+
+  useEffect(() => {
+    if (!score) return;
+    const t1 = setTimeout(() => setLanded(true), 1850);
+    const t2 = setTimeout(() => setLanded(false), 2800);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [score]);
+
   const r           = (size / 2) - 10;
   const circ        = 2 * Math.PI * r;
-  const dashOffset  = circ * (1 - score / 100);
-  const strokeColor = score >= 90 ? "#a78bfa" : score >= 75 ? "#34d399" : score >= 60 ? "#38bdf8" : score >= 40 ? "#fbbf24" : "#f87171";
+  const dashOffset  = circ * (1 - display / 100);
+  const strokeColor = display >= 90 ? "#a78bfa" : display >= 75 ? "#34d399" : display >= 60 ? "#38bdf8" : display >= 40 ? "#fbbf24" : "#f87171";
 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
+      {landed && (
+        <div
+          className="absolute inset-0 rounded-full pointer-events-none"
+          style={{ border: `2px solid ${strokeColor}`, animation: 'scoreLand 0.9s ease-out forwards' }}
+        />
+      )}
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="9" />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="9" />
         <circle
           cx={size/2} cy={size/2} r={r} fill="none"
           stroke={strokeColor} strokeWidth="9" strokeLinecap="round"
           strokeDasharray={circ}
           strokeDashoffset={dashOffset}
-          style={{ transition: "stroke-dashoffset 1s ease", filter: `drop-shadow(0 0 6px ${strokeColor}90)` }}
+          style={{
+            transition: "stroke-dashoffset 0.04s linear, stroke 0.25s ease",
+            filter: `drop-shadow(0 0 ${landed ? '14px' : '7px'} ${strokeColor})`,
+          }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-black tabular-nums text-white leading-none">{score}</span>
+        <span className="text-3xl font-black tabular-nums text-white leading-none">{display}</span>
         <span className="text-[10px] font-bold mt-1 text-white/50 tracking-wider">/ 100</span>
       </div>
     </div>
@@ -340,13 +365,19 @@ function KPIStrip({ accounts, weekJobs, jobsTodayData, invoices }) {
   const taxPct        = accounts.taxReserveTarget > 0
     ? Math.round((accounts.taxReserve / accounts.taxReserveTarget) * 100) : 0;
 
+  const todayRevAnim  = useCountUp(todayRevenue, 1600);
+  const weekRevAnim   = useCountUp(weekRevenue,  1700);
+  const monthIncAnim  = useCountUp(monthIncome,  1800);
+  const unpaidAnim    = useCountUp(unpaidTotal,  1400);
+  const taxAnim       = useCountUp(taxPct,       1200);
+
   const kpis = [
-    { label: "Today's revenue",   val: fmt(todayRevenue),                   accent: "text-brand-navy"  },
-    { label: "Week revenue",       val: fmt(weekRevenue),                    accent: "text-brand-navy",  sub: `${pct((weekRevenue/Math.max(weekTotal,1))*100)} of ${fmt(weekTotal)}` },
-    { label: "Month income",       val: fmt(monthIncome),                   accent: "text-brand-navy",  sub: `${pct((monthIncome/accounts.monthlyTarget)*100)} of ${fmt(accounts.monthlyTarget)}` },
-    { label: "Outstanding",        val: fmt(unpaidTotal),                   accent: unpaidTotal>0?"text-amber-600":"text-emerald-600" },
-    { label: "Jobs today",         val: `${jobsDone}/${jobsToday}`,         accent: "text-brand-navy",  sub: "complete" },
-    { label: "Tax reserve",        val: `${taxPct}%`,                       accent: taxPct>=100?"text-emerald-600":taxPct>=70?"text-amber-600":"text-red-500" },
+    { label: "Today's revenue",   val: fmt(todayRevAnim),                          accent: "text-brand-navy"  },
+    { label: "Week revenue",       val: fmt(weekRevAnim),                           accent: "text-brand-navy",  sub: `${pct((weekRevAnim/Math.max(weekTotal,1))*100)} of ${fmt(weekTotal)}` },
+    { label: "Month income",       val: fmt(monthIncAnim),                          accent: "text-brand-navy",  sub: `${pct((monthIncAnim/accounts.monthlyTarget)*100)} of ${fmt(accounts.monthlyTarget)}` },
+    { label: "Outstanding",        val: fmt(unpaidAnim),                            accent: unpaidTotal>0?"text-amber-600":"text-emerald-600" },
+    { label: "Jobs today",         val: `${jobsDone}/${jobsToday}`,                 accent: "text-brand-navy",  sub: "complete" },
+    { label: "Tax reserve",        val: `${taxAnim}%`,                              accent: taxPct>=100?"text-emerald-600":taxPct>=70?"text-amber-600":"text-red-500" },
   ];
 
   return (
@@ -476,6 +507,8 @@ function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
   const tierIdx     = TIERS_ORDERED.indexOf(tier);
   const nextTier    = TIERS_ORDERED[tierIdx + 1];
   const [showExplainer, setShowExplainer] = useState(false);
+  const [barsMounted, setBarsMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setBarsMounted(true), 200); return () => clearTimeout(t); }, []);
 
   return (
     <div
@@ -534,16 +567,23 @@ function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
           </button>
         </div>
         <div className="space-y-3">
-          {dims.map(({ label, score: s, max }) => {
+          {dims.map(({ label, score: s, max }, i) => {
             const pct  = (s / max) * 100;
             const glow = SCORE_DIMENSIONS.find(d => d.label === label)?.glow;
             return (
-              <div key={label} className="flex items-center gap-3">
+              <div key={label} className="flex items-center gap-3"
+                style={{ animation: `fadeSlideIn 0.4s ease-out ${i * 0.1 + 0.25}s both` }}
+              >
                 <span className="text-xs text-white/40 w-24 shrink-0">{label}</span>
                 <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${pct}%`, background: glow?.bar, boxShadow: pct > 5 ? glow?.shadow : "none" }}
+                    className="h-full rounded-full"
+                    style={{
+                      width: barsMounted ? `${pct}%` : 0,
+                      transition: `width 0.65s cubic-bezier(0.34,1.2,0.64,1) ${i * 0.12 + 0.3}s`,
+                      background: glow?.bar,
+                      boxShadow: pct > 5 ? glow?.shadow : "none",
+                    }}
                   />
                 </div>
                 <div className="flex items-center gap-0.5 w-12 shrink-0 justify-end">
@@ -599,8 +639,11 @@ function ActionsPanel({ actions, onNavigate }) {
           return (
             <div
               key={i}
-              className="flex items-center gap-4 px-5 py-4 transition-all duration-200 hover:bg-white/[0.03] cursor-default"
-              style={{ background: i === 0 && a.pts > 0 ? `linear-gradient(90deg, ${cfg.glow} 0%, transparent 60%)` : undefined }}
+              className="flex items-center gap-4 px-5 py-4 transition-colors duration-200 hover:bg-white/[0.03] cursor-default"
+              style={{
+                background: i === 0 && a.pts > 0 ? `linear-gradient(90deg, ${cfg.glow} 0%, transparent 60%)` : undefined,
+                animation: `fadeSlideIn 0.4s ease-out ${i * 0.09}s both`,
+              }}
             >
               {/* Severity dot */}
               <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${cfg.dot}`} />
@@ -641,6 +684,8 @@ function WeekGrid({ weekJobs }) {
   const weekEarned = weekJobs.filter(d => d.done || d.isToday).reduce((s,d) => s+d.revenue, 0);
   const weekTotal  = weekJobs.reduce((s,d) => s+d.revenue, 0);
   const weekPct    = weekTotal > 0 ? Math.round((weekEarned / weekTotal) * 100) : 0;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 80); return () => clearTimeout(t); }, []);
 
   return (
     <div
@@ -658,7 +703,7 @@ function WeekGrid({ weekJobs }) {
 
       {/* Day columns */}
       <div className="grid grid-cols-7 gap-px px-3 pt-4 pb-2">
-        {weekJobs.map(d => {
+        {weekJobs.map((d, index) => {
           const barH = d.revenue > 0 ? Math.max((d.revenue / maxRevenue) * 56, 6) : 0;
           return (
             <div key={d.day} className="flex flex-col items-center gap-1.5">
@@ -671,9 +716,10 @@ function WeekGrid({ weekJobs }) {
               <div className="w-full h-14 flex items-end justify-center">
                 {d.revenue > 0 ? (
                   <div
-                    className="w-5 rounded-t-md transition-all duration-500"
+                    className="w-5 rounded-t-md"
                     style={{
-                      height: `${barH}px`,
+                      height: mounted ? `${barH}px` : 0,
+                      transition: `height 0.55s cubic-bezier(0.34,1.56,0.64,1) ${index * 0.07}s`,
                       background: d.isToday
                         ? 'linear-gradient(180deg, #99c5ff 0%, #4f78ff 100%)'
                         : d.done
@@ -1294,36 +1340,6 @@ function computeBadges({ score, invoices, weekJobs, rank, totalUsers, streak, fo
   }));
 }
 
-// ─── Leaderboard demo data ─────────────────────────────────────────────────────
-const LEADERBOARD_DEMO = [
-  { id: "l1",  name: "Sparkle & Shine",  sector: "residential", score: 97, delta: +4,  region: "SW" },
-  { id: "l2",  name: "CleanPro SW",      sector: "commercial",  score: 94, delta: +1,  region: "SE" },
-  { id: "l3",  name: "Crystal Clear",    sector: "exterior",    score: 91, delta: -1,  region: "NW" },
-  { id: "l4",  name: "Prestige Clean",   sector: "commercial",  score: 88, delta: +6,  region: "M"  },
-  { id: "l5",  name: "Gleam Team",       sector: "residential", score: 86, delta: +2,  region: "E"  },
-  { id: "l6",  name: "FreshStart Svcs",  sector: "residential", score: 83, delta: -3,  region: "W"  },
-  { id: "l7",  name: "AceClean Ltd",     sector: "commercial",  score: 81, delta: +5,  region: "NE" },
-  { id: "l8",  name: "BrightSide Co",    sector: "exterior",    score: 79, delta: 0,   region: "SW" },
-  { id: "l9",  name: "Spotless & Co",    sector: "residential", score: 77, delta: +3,  region: "SE" },
-  { id: "l10", name: "ProShine NW",      sector: "exterior",    score: 74, delta: -2,  region: "NW" },
-  { id: "l11", name: "Diamond Clean",    sector: "commercial",  score: 72, delta: +1,  region: "M"  },
-  { id: "l12", name: "TopGloss Ltd",     sector: "residential", score: 69, delta: +4,  region: "E"  },
-  { id: "l13", name: "SwiftClean Co",    sector: "exterior",    score: 66, delta: -1,  region: "SW" },
-  { id: "l14", name: "Immaculate Svcs",  sector: "commercial",  score: 63, delta: +2,  region: "SE" },
-  { id: "l15", name: "CleanSweep Pro",   sector: "residential", score: 60, delta: 0,   region: "W"  },
-  { id: "l16", name: "PureClean UK",     sector: "exterior",    score: 57, delta: +3,  region: "NE" },
-  { id: "l17", name: "GoldDust Clean",   sector: "residential", score: 53, delta: -4,  region: "NW" },
-  { id: "l18", name: "MintFresh Ltd",    sector: "commercial",  score: 49, delta: +1,  region: "M"  },
-  { id: "l19", name: "AllBright Svcs",   sector: "exterior",    score: 44, delta: 0,   region: "SE" },
-  { id: "l20", name: "BestClean Co",     sector: "residential", score: 38, delta: +2,  region: "E"  },
-];
-
-const SECTOR_COLORS = {
-  residential: { bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500", label: "Residential" },
-  commercial:  { bg: "bg-blue-100",    text: "text-brand-blue",  dot: "bg-brand-blue",  label: "Commercial"  },
-  exterior:    { bg: "bg-orange-100",  text: "text-orange-700",  dot: "bg-orange-500",  label: "Exterior"    },
-};
-
 // ─── Badges shelf ──────────────────────────────────────────────────────────────
 function BadgesShelf({ badges, onShare }) {
   const [showGuide, setShowGuide] = useState(false);
@@ -1436,560 +1452,13 @@ function BadgesShelf({ badges, onShare }) {
   );
 }
 
-// ─── Cadi Setup Journey ────────────────────────────────────────────────────────
-// ─── Leaderboard panel ────────────────────────────────────────────────────────
-function LeaderboardPanel({ userScore, userBizName, userSector, communityOptIn, onOptIn, healthDelta = 0, entries, isPreview = false }) {
-  const [filter, setFilter] = useState("all");
-  const [showExplainer, setShowExplainer] = useState(() => {
-    try { return !localStorage.getItem('cadi_lb_explained'); } catch { return true; }
-  });
-
-  const dismissExplainer = () => {
-    setShowExplainer(false);
-    try { localStorage.setItem('cadi_lb_explained', '1'); } catch {}
-  };
-
-  const userEntry = {
-    id: "me",
-    owner_id: "me",
-    name: communityOptIn ? (userBizName || "Your Business") : "Your Business",
-    sector: userSector || "residential",
-    score: userScore ?? 42,
-    prev_score: null,
-    region: "You",
-    isMe: true,
-  };
-
-  const boardSource = entries && entries.length > 0 ? entries : LEADERBOARD_DEMO;
-  const allSource   = [...boardSource, userEntry];
-
-  // ── Global ranking with rank-delta from prev_score ─────────────────────────
-  const globalRanked = [...allSource]
-    .sort((a, b) => b.score - a.score)
-    .map((e, i) => ({ ...e, globalRank: i + 1 }));
-
-  const globalPrevRanked = [...allSource]
-    .sort((a, b) => (b.prev_score ?? b.score) - (a.prev_score ?? a.score))
-    .map((e, i) => ({ ...e, globalPrevRank: i + 1 }));
-
-  const prevRankMap = {};
-  globalPrevRanked.forEach(e => { prevRankMap[e.owner_id ?? e.id] = e.globalPrevRank; });
-
-  const allEntries = globalRanked.map(e => {
-    const key      = e.owner_id ?? e.id;
-    const prevRank = prevRankMap[key] ?? e.globalRank;
-    return { ...e, rank: e.globalRank, rankDelta: prevRank - e.globalRank };
-  });
-
-  // ── Sector league: re-rank within sector when filter active ────────────────
-  const sectorLabel = filter === "all" ? null : SECTOR_COLORS[filter]?.label ?? filter;
-
-  const filtered = filter === "all"
-    ? allEntries
-    : (() => {
-        const inSector  = allSource.filter(e => e.sector === filter || e.isMe);
-        const sPrevMap  = {};
-        [...inSector]
-          .sort((a, b) => (b.prev_score ?? b.score) - (a.prev_score ?? a.score))
-          .forEach((e, i) => { sPrevMap[e.owner_id ?? e.id] = i + 1; });
-        return [...inSector]
-          .sort((a, b) => b.score - a.score)
-          .map((e, i) => {
-            const key = e.owner_id ?? e.id;
-            return { ...e, rank: i + 1, rankDelta: (sPrevMap[key] ?? i + 1) - (i + 1) };
-          });
-      })();
-
-  const userRank   = filtered.find(e => e.isMe)?.rank ?? filtered.length;
-  const totalCount = filtered.length;
-  const topPct     = Math.round((userRank / totalCount) * 100);
-  const globalRank = allEntries.find(e => e.isMe)?.rank ?? allEntries.length;
-
-  const podium = filtered.filter(e => !e.isMe).slice(0, 3);
-
-  // Tier labels based on rank percentile within current view
-  const tierLabel = topPct <= 10 ? "Elite" : topPct <= 25 ? "Pro" : topPct <= 50 ? "Rising" : "Starter";
-  const tierColor = topPct <= 10 ? "text-yellow-600" : topPct <= 25 ? "text-emerald-600" : topPct <= 50 ? "text-brand-blue" : "text-gray-500";
-  const tierBg    = topPct <= 10 ? "bg-yellow-50 border-yellow-200" : topPct <= 25 ? "bg-emerald-50 border-emerald-200" : topPct <= 50 ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200";
-
-  return (
-    <div className="relative overflow-hidden rounded-sm shadow-2xl shadow-brand-navy/50" style={{ background: 'linear-gradient(145deg, #010a4f 0%, #05124a 50%, #0d1e78 100%)' }}>
-      {/* Grid texture */}
-      <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)', backgroundSize: '28px 28px' }} />
-      {/* Glow blobs */}
-      <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-brand-blue/30 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-16 -left-12 w-40 h-40 rounded-full bg-brand-skyblue/10 blur-3xl pointer-events-none" />
-      {/* Top shine */}
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-skyblue/60 to-transparent" />
-
-      <div className="relative">
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-bold tracking-widest uppercase text-brand-skyblue/60 mb-0.5">
-              {sectorLabel ? `${sectorLabel} league` : "Cadi community leaderboard"}
-            </p>
-            <p className="text-xs text-white/40">
-              {sectorLabel ? `Ranked among ${sectorLabel.toLowerCase()} cleaners · ` : "All sectors · "}
-              health score · updated weekly
-            </p>
-          </div>
-          <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
-            topPct <= 10 ? "bg-yellow-400/20 border-yellow-400/40 text-yellow-300"
-            : topPct <= 25 ? "bg-emerald-400/20 border-emerald-400/40 text-emerald-300"
-            : topPct <= 50 ? "bg-brand-blue/30 border-brand-skyblue/30 text-brand-skyblue"
-            : "bg-white/10 border-white/20 text-white/60"
-          }`}>{tierLabel}</span>
-        </div>
-
-        {/* First-time explainer */}
-        {showExplainer && (
-          <div className="mx-4 mt-4 p-3 rounded-xl bg-white/5 border border-white/10 relative">
-            <button onClick={dismissExplainer} className="absolute top-2 right-2 text-white/20 hover:text-white/50 text-xs">✕</button>
-            <p className="text-xs font-black text-white mb-1.5">🏆 Welcome to the Cadi community</p>
-            <div className="space-y-1 text-[11px] text-white/50 leading-relaxed">
-              <p>• Your rank is based on your <span className="font-semibold text-white/80">Business Health Score</span> — optimise to climb</p>
-              <p>• All business names are <span className="font-semibold text-white/80">anonymous</span> unless you opt in to the community</p>
-              <p>• Reach <span className="font-semibold text-yellow-400">Elite tier (top 10%)</span> to unlock exclusive badges and the share card</p>
-            </div>
-          </div>
-        )}
-
-        {/* Community opt-in CTA — loss-aversion framing */}
-        {!communityOptIn && !isPreview && (
-          <div className="mx-4 mt-4 mb-2 p-4 rounded-xl bg-gradient-to-r from-brand-blue/20 to-brand-skyblue/10 border border-brand-skyblue/25">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl shrink-0">👻</span>
-              <div className="flex-1">
-                <p className="text-sm font-black text-white mb-0.5">
-                  You're ranked #{globalRank} anonymously
-                </p>
-                <p className="text-xs text-white/50 leading-relaxed mb-3">
-                  Reveal {userBizName || "your business name"} to claim your spot on the leaderboard — and get featured when you hit Elite tier.
-                </p>
-                <button
-                  onClick={onOptIn}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-skyblue text-brand-navy text-xs font-black rounded-lg hover:bg-white transition-colors shadow-lg"
-                >
-                  Claim my spot →
-                </button>
-                <p className="text-[10px] text-white/30 mt-1.5">Your business name replaces "Your Business" on the board</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Your rank hero */}
-        <div className="px-4 py-4 border-y border-white/10 bg-white/5 flex items-center justify-between">
-          {isPreview ? (
-            <div className="flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-skyblue/60 mb-1">Your ranking</p>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-2xl">🔒</span>
-                <p className="text-sm font-black text-white">Building your rank…</p>
-              </div>
-              <p className="text-xs text-white/40 leading-relaxed">Add customers, jobs and invoices to see where your business stands against others.</p>
-            </div>
-          ) : (
-            <>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-skyblue/60 mb-1">
-                  {sectorLabel ? `Your ${sectorLabel} rank` : "Your ranking"}
-                </p>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-black text-white">#{userRank}</span>
-                  <span className="text-sm text-white/40">of {totalCount} {sectorLabel ? `${sectorLabel.toLowerCase()} businesses` : "businesses"}</span>
-                </div>
-                <p className="text-xs text-brand-skyblue/70 mt-1">
-                  Top <span className="font-bold text-white">{topPct}%</span> · <span className={`font-black ${topPct <= 10 ? "text-yellow-400" : topPct <= 25 ? "text-emerald-400" : topPct <= 50 ? "text-brand-skyblue" : "text-white/40"}`}>{tierLabel} tier</span>
-                  {sectorLabel && <span className="text-white/30 font-normal"> · #{globalRank} overall</span>}
-                </p>
-              </div>
-              <div className="text-right">
-                {healthDelta !== 0 && (
-                  <>
-                    <div className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl ${
-                      healthDelta > 0 ? "bg-emerald-500/20 border border-emerald-500/30" : "bg-red-500/20 border border-red-500/30"
-                    }`}>
-                      <span className={`text-sm font-black ${healthDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                        {healthDelta > 0 ? `↑ +${healthDelta}` : `↓ ${healthDelta}`}
-                      </span>
-                      <span className={`text-[10px] ${healthDelta > 0 ? "text-emerald-400/70" : "text-red-400/70"}`}>pts</span>
-                    </div>
-                    <p className="text-[10px] text-white/25 mt-1.5">since last session</p>
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Podium */}
-        <div className="px-4 py-4 border-b border-white/10">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-skyblue/50 mb-3">
-            {sectorLabel ? `${sectorLabel} podium` : "This week's podium"}
-          </p>
-          <div className="flex items-end justify-center gap-2">
-            {[podium[1], podium[0], podium[2]].map((entry, i) => {
-              const heights  = ["h-16", "h-24", "h-14"];
-              const medals   = ["🥈", "🥇", "🥉"];
-              const configs  = [
-                { bar: "bg-gradient-to-b from-slate-300 to-slate-400",  glow: "shadow-[0_0_18px_4px_rgba(148,163,184,0.55)]",  border: "border-slate-300/60",  score: "text-slate-100" },
-                { bar: "bg-gradient-to-b from-yellow-300 to-amber-400", glow: "shadow-[0_0_22px_6px_rgba(251,191,36,0.65)]",  border: "border-yellow-300/70", score: "text-yellow-100" },
-                { bar: "bg-gradient-to-b from-orange-400 to-amber-600", glow: "shadow-[0_0_16px_4px_rgba(251,146,60,0.55)]",  border: "border-orange-400/60", score: "text-orange-100" },
-              ];
-              if (!entry) return null;
-              const cfg = configs[i];
-              return (
-                <div key={entry.id} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-lg">{medals[i]}</span>
-                  <p className="text-[10px] font-bold text-white/70 text-center truncate w-full px-1">{entry.name}</p>
-                  <div className={`flex items-end justify-center w-full ${heights[i]} ${cfg.bar} ${cfg.glow} rounded-t-lg border ${cfg.border}`}>
-                    <span className={`text-sm font-black pb-2 ${cfg.score}`}>{entry.score}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Sector filter */}
-        <div className="px-4 pt-3 flex gap-1.5 flex-wrap">
-          {[
-            { key: "all",         label: "All sectors" },
-            { key: "residential", label: "🏠 Residential" },
-            { key: "commercial",  label: "🏢 Commercial" },
-            { key: "exterior",    label: "🪟 Exterior" },
-          ].map(f => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={`px-2.5 py-1 text-[10px] font-bold rounded-full border transition-colors ${
-                filter === f.key
-                  ? "bg-brand-skyblue text-brand-navy border-brand-skyblue"
-                  : "text-white/40 border-white/15 hover:border-white/30 hover:text-white/60"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Rankings list */}
-        <div className="divide-y divide-white/5 mt-2 max-h-60 overflow-y-auto">
-          {filtered.slice(0, 10).map(entry => {
-            const sc = SECTOR_COLORS[entry.sector] ?? SECTOR_COLORS.residential;
-            return (
-              <div
-                key={entry.id}
-                className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${entry.isMe ? "bg-brand-skyblue/10 border-l-2 border-brand-skyblue" : "hover:bg-white/5"}`}
-              >
-                <span className={`text-xs font-black w-6 text-center shrink-0 ${entry.isMe ? "text-brand-skyblue" : "text-white/30"}`}>
-                  #{entry.rank}
-                </span>
-                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${sc.dot}`} />
-                <p className={`flex-1 text-xs font-semibold truncate ${entry.isMe ? "text-white font-black" : "text-white/60"}`}>
-                  {entry.name} {entry.isMe && <span className="text-brand-skyblue font-bold">(you)</span>}
-                </p>
-                <span className={`text-xs font-bold tabular-nums ${entry.isMe ? "text-white" : "text-white/50"}`}>{entry.score}</span>
-                {entry.rankDelta !== 0 && entry.rankDelta !== undefined && (
-                  <span className={`text-[10px] font-bold w-8 text-right shrink-0 ${entry.rankDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {entry.rankDelta > 0 ? `↑${entry.rankDelta}` : `↓${Math.abs(entry.rankDelta)}`}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="px-4 py-2.5 border-t border-white/10">
-          <p className="text-[10px] text-white/25 text-center">
-            {communityOptIn ? "Your business name is visible to the Cadi community" : "Join the community to show your real business name on the leaderboard"}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Share card modal ─────────────────────────────────────────────────────────
-function ShareCardModal({ onClose, businessName, sector, score, badges, rank, totalUsers, streak }) {
-  const [copied, setCopied] = useState(false);
-  const earnedBadges  = badges.filter(b => b.earned).slice(0, 4);
-  const sc            = SECTOR_COLORS[sector] ?? SECTOR_COLORS.residential;
-  const topPct        = Math.round(((rank ?? totalUsers) / (totalUsers ?? 1)) * 100);
-  const tierColor     = score?.total >= 90 ? "#a78bfa" : score?.total >= 75 ? "#34d399" : score?.total >= 60 ? "#38bdf8" : score?.total >= 40 ? "#fbbf24" : "#f87171";
-  const tier          = score?.tier ?? "Solid";
-  const r             = 38;
-  const circ          = 2 * Math.PI * r;
-  const dashOffset    = circ * (1 - (score?.total ?? 0) / 100);
-
-  const handleCopy = () => {
-    navigator.clipboard?.writeText("Check out my Cadi Score! 🚀 cadi.cleaning").then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
-      <div className="relative w-full max-w-sm">
-
-        {/* Instructions */}
-        <div className="text-center mb-3">
-          <p className="text-white/70 text-xs font-semibold">Screenshot this card and share it 📸</p>
-        </div>
-
-        {/* THE CARD — this is what gets screenshotted */}
-        <div
-          className="relative overflow-hidden rounded-3xl shadow-2xl"
-          style={{ background: 'linear-gradient(145deg, #010a4f 0%, #05124a 40%, #091660 70%, #0d1e78 100%)', aspectRatio: '9/16', maxHeight: '75vh' }}
-        >
-          {/* Grid texture */}
-          <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)', backgroundSize: '32px 32px' }} />
-          {/* Glow blobs */}
-          <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-brand-blue/30 blur-3xl" />
-          <div className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full bg-brand-skyblue/15 blur-3xl" />
-          {/* Top stripe */}
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-skyblue to-transparent opacity-80" />
-
-          <div className="relative h-full flex flex-col px-7 py-8 justify-between">
-
-            {/* Top: Logo + sector */}
-            <div className="flex items-center justify-between">
-              <CadiWordmark height={20} />
-              <span className={`text-xs font-bold px-3 py-1 rounded-full border ${sc.bg} ${sc.text} bg-opacity-20 border-current/30`}>
-                {sc.label}
-              </span>
-            </div>
-
-            {/* Middle: Business name + score ring */}
-            <div className="flex flex-col items-center text-center gap-4">
-              <div>
-                <p className="text-brand-skyblue/70 text-xs font-bold uppercase tracking-widest mb-1">Cadi Score</p>
-                <h2 className="text-white font-black text-2xl leading-tight tracking-tight">{businessName || "My Business"}</h2>
-              </div>
-
-              {/* Score ring — large */}
-              <div className="relative" style={{ width: 140, height: 140 }}>
-                <svg width="140" height="140" viewBox="0 0 140 140" className="-rotate-90">
-                  <circle cx="70" cy="70" r={r * 1.85} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
-                  <circle
-                    cx="70" cy="70" r={r * 1.85} fill="none"
-                    stroke={tierColor} strokeWidth="10" strokeLinecap="round"
-                    strokeDasharray={circ * 1.85}
-                    strokeDashoffset={circ * 1.85 * (1 - (score?.total ?? 0) / 100)}
-                    style={{ filter: `drop-shadow(0 0 8px ${tierColor})` }}
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-4xl font-black text-white tabular-nums leading-none">{score?.total ?? 0}</span>
-                  <span className="text-xs font-bold mt-1" style={{ color: tierColor }}>{tier}</span>
-                </div>
-              </div>
-
-              {/* Rank badge */}
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col items-center px-4 py-2 rounded-xl bg-white/10 border border-white/10">
-                  <span className="text-white font-black text-lg leading-none">#{rank ?? "?"}</span>
-                  <span className="text-brand-skyblue/60 text-[10px] mt-0.5">Leaderboard</span>
-                </div>
-                <div className="flex flex-col items-center px-4 py-2 rounded-xl bg-white/10 border border-white/10">
-                  <span className="text-white font-black text-lg leading-none">Top {topPct}%</span>
-                  <span className="text-brand-skyblue/60 text-[10px] mt-0.5">All businesses</span>
-                </div>
-                {streak > 0 && (
-                  <div className="flex flex-col items-center px-4 py-2 rounded-xl bg-white/10 border border-white/10">
-                    <span className="text-white font-black text-lg leading-none">🔥 {streak}</span>
-                    <span className="text-brand-skyblue/60 text-[10px] mt-0.5">Day streak</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Badges */}
-            {earnedBadges.length > 0 && (
-              <div className="flex flex-col items-center gap-2">
-                <p className="text-brand-skyblue/50 text-[10px] font-bold uppercase tracking-widest">Achievements</p>
-                <div className="flex gap-3 justify-center">
-                  {earnedBadges.map(b => (
-                    <div key={b.id} className="flex flex-col items-center gap-1">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${b.color} flex items-center justify-center text-lg shadow-lg`}>
-                        {b.emoji}
-                      </div>
-                      <span className="text-[9px] text-white/50 font-semibold max-w-[40px] text-center leading-tight">{b.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Bottom: Cadi branding */}
-            <div className="flex flex-col items-center gap-1">
-              <div className="w-16 h-px bg-white/20" />
-              <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest mt-1">Powered by Cadi</p>
-              <p className="text-brand-skyblue/40 text-[10px]">getcadi.co.uk · Your Cleaning Business OS</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Buttons below card */}
-        <div className="mt-4 flex gap-2">
-          <button
-            onClick={handleCopy}
-            className="flex-1 py-3 bg-white text-brand-navy text-xs font-black rounded-xl hover:bg-gray-100 transition-colors"
-          >
-            {copied ? "✓ Copied!" : "📋 Copy link"}
-          </button>
-          <button
-            onClick={onClose}
-            className="flex-1 py-3 bg-white/10 text-white text-xs font-bold rounded-xl hover:bg-white/20 transition-colors border border-white/20"
-          >
-            Close
-          </button>
-        </div>
-        <p className="text-center text-white/30 text-[10px] mt-2">Take a screenshot to share on social media</p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Welcome modal (first login only) ─────────────────────────────────────────
-function WelcomeModal({ businessName, firstName, onClose }) {
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-brand-navy/80 backdrop-blur-sm" />
-
-      {/* Modal */}
-      <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl"
-        style={{ background: 'linear-gradient(160deg, #05124a 0%, #010a4f 60%, #091660 100%)' }}>
-
-        {/* Top glow */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-skyblue to-transparent opacity-60" />
-        <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full bg-brand-blue/20 blur-3xl pointer-events-none" />
-
-        {/* Header */}
-        <div className="relative px-6 pt-8 pb-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-blue/20 border border-brand-blue/30 mb-4">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-bold text-brand-skyblue tracking-wide uppercase">Welcome to Cadi</span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight tracking-tight">
-                Hey! 👋{' '}
-                <span className="text-brand-skyblue">
-                  {businessName || firstName || 'there'}
-                </span>
-              </h2>
-            </div>
-            <button
-              onClick={onClose}
-              className="shrink-0 mt-1 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-colors text-sm"
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Community welcome pill */}
-          <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/25">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-            <span className="text-[11px] font-bold text-emerald-300">Welcome to the Cadi community of cleaning professionals</span>
-          </div>
-
-          {/* Intro copy */}
-          <p className="mt-3 text-sm sm:text-base leading-relaxed text-[rgba(153,197,255,0.8)]">
-            Allow me to introduce you to your Cadi Command Centre — this is the most powerful thing that's ever happened to your cleaning business. <span className="text-white font-semibold">Check it every morning, every evening, obsessively</span> — you're about to become <span className="text-brand-skyblue font-semibold">completely addicted to business growth.</span>
-          </p>
-
-          {/* Founding member callout */}
-          <div className="mt-3 flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-yellow-500/15 to-amber-500/10 border border-yellow-400/20">
-            <span className="text-2xl shrink-0">👑</span>
-            <div>
-              <p className="text-xs font-black text-yellow-300">You're a Founding Member</p>
-              <p className="text-[11px] text-yellow-200/60 leading-snug">You're one of the first 1,000 businesses on Cadi. Your Founding Member badge is already waiting on your dashboard.</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="mx-6 h-px bg-white/10" />
-
-        {/* What Cadi does for you */}
-        <div className="px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-widest text-brand-skyblue/70 mb-1">What Cadi does for you</p>
-          <p className="text-sm text-white font-semibold mb-4">Everything you need to build a profitable cleaning business, in one place.</p>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { emoji: "💰", title: "Know your money", body: "See exactly what you've earned, what's reserved for tax, and what's yours to spend — updated live." },
-              { emoji: "📈", title: "Grow your score", body: "Your Business Health Score tracks revenue, ops, invoicing and growth. The higher it climbs, the stronger your business." },
-              { emoji: "🏆", title: "Compete + celebrate", body: "Join the Cadi leaderboard and see how your business ranks — screenshot your milestones and share them." },
-              { emoji: "🤖", title: "AI-powered pricing", body: "Generate accurate quotes in seconds. Cadi knows the UK market rates and prices every job to protect your margins." },
-              { emoji: "🗓️", title: "Run smooth days", body: "Scheduler, route planner, customer records — your entire operation visible at a glance, every morning." },
-              { emoji: "📊", title: "File with confidence", body: "Mileage logs, tax reserves, and MTD submissions all tracked automatically. No more stress at year end." },
-            ].map(({ emoji, title, body }) => (
-              <div key={title} className="flex gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
-                <span className="text-lg shrink-0">{emoji}</span>
-                <div>
-                  <p className="text-xs font-bold text-white mb-0.5">{title}</p>
-                  <p className="text-[11px] leading-relaxed text-[rgba(153,197,255,0.6)]">{body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="mx-6 h-px bg-white/10" />
-
-        {/* Dashboard info */}
-        <div className="px-6 py-5 space-y-4">
-          <div className="flex gap-3 p-4 rounded-xl bg-brand-blue/15 border border-brand-blue/25">
-            <span className="text-xl shrink-0">📊</span>
-            <div>
-              <p className="text-sm font-bold text-white mb-1">Your live dashboard</p>
-              <p className="text-xs leading-relaxed text-[rgba(153,197,255,0.7)]">
-                Everything here updates in real time — your money, customers, and schedule all feed in automatically. The more you use Cadi, the smarter your dashboard gets.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
-            <span className="text-xl shrink-0">🏆</span>
-            <div>
-              <p className="text-sm font-bold text-white mb-1">Your business health score</p>
-              <p className="text-xs leading-relaxed text-[rgba(153,197,255,0.7)]">
-                The more you input into Cadi, the more it syncs to give you a true picture of your business. <span className="text-white font-semibold">Don't worry about the score just yet</span> — we'll come back to this once you're up and running. 😊
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* CTA */}
-        <div className="px-6 pb-7 pt-1">
-          <button
-            onClick={onClose}
-            className="w-full py-4 bg-brand-blue hover:bg-[#1a3de0] text-white font-black text-sm rounded-xl transition-all shadow-lg shadow-brand-blue/40 hover:shadow-brand-blue/60 hover:-translate-y-0.5 active:translate-y-0"
-          >
-            Let's go — show me around 🚀
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function DashboardTab({ accountsData, schedulerData, invoiceData, teamData: incomingTeamData, feedData: incomingFeedData, onNavigate: onNavigateProp }) {
   const routerNavigate = useNavigate();
-  const { isPro } = usePlan();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isPro, tier } = usePlan();
   const [dashUpgradeReason, setDashUpgradeReason] = useState(null);
+  const [showUpgradeSuccess, setShowUpgradeSuccess] = useState(false);
 
   const onNavigate = (tab) => {
     const path = `/${tab}`;
@@ -2000,7 +1469,43 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     if (onNavigateProp) { onNavigateProp(tab); } else { routerNavigate(path); }
   };
 
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile, updateProfile, refreshProfile } = useAuth();
+
+  // Keep a ref so the polling closure always has the latest user id even if auth resolved after mount
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  // Detect return from Stripe checkout and show upgrade success modal
+  useEffect(() => {
+    if (!searchParams.get('upgraded')) return;
+    setSearchParams(prev => { const p = new URLSearchParams(prev); p.delete('upgraded'); return p; }, { replace: true });
+
+    let attempts = 0;
+    const MAX = 12;
+
+    function poll() {
+      attempts += 1;
+      const uid = userRef.current?.id;
+      if (!uid || uid === 'demo-user') {
+        // Auth not ready yet — wait and retry
+        if (attempts < MAX) setTimeout(poll, 2000);
+        return;
+      }
+      supabase.from('profiles').select('subscription_tier, plan').eq('id', uid).single()
+        .then(({ data }) => {
+          const t = data?.subscription_tier;
+          if (t === 'pro' || t === 'max' || data?.plan === 'pro' || data?.plan === 'max') {
+            refreshProfile(); // sync AuthContext so usePlan picks up the new tier
+            setShowUpgradeSuccess(true);
+          } else if (attempts < MAX) {
+            setTimeout(poll, 2000);
+          }
+        });
+    }
+    // Small initial delay so auth has a chance to resolve before first poll
+    setTimeout(poll, 500);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const {
     accountsData: liveAccountsData,
     schedulerData: liveSchedulerData,
@@ -2350,11 +1855,79 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const taxMonth   = getTaxYearMonth();
 
   return (
-    <div className="flex flex-col h-full bg-gray-50/50">
-
+    <>
+      {/* ── Shared modals — render on all screen sizes ── */}
       {dashUpgradeReason && (
         <UpgradeModal reason={dashUpgradeReason} onClose={() => setDashUpgradeReason(null)} />
       )}
+      {showUpgradeSuccess && (
+        <UpgradeSuccessModal onClose={() => setShowUpgradeSuccess(false)} />
+      )}
+      {showPayModal && (
+        <LogPaymentModal
+          onConfirm={handlePaymentLogged}
+          onClose={() => setShowPayModal(false)}
+        />
+      )}
+      {showWelcome && (
+        <WelcomeModal
+          businessName={profile?.business_name}
+          firstName={displayName}
+          onClose={handleDismissWelcome}
+        />
+      )}
+      {!showWelcome && profile && !profile?.onboarding_complete && (
+        <Onboarding isModal onComplete={() => updateProfile({ onboarding_complete: true })} />
+      )}
+      {showShareCard && (
+        <ShareCardModal
+          onClose={() => setShowShareCard(false)}
+          businessName={profile?.business_name || displayName}
+          sector={profile?.cleaner_type || "residential"}
+          score={score}
+          badges={badges}
+          rank={userRank}
+          totalUsers={totalUsers}
+          streak={streak}
+        />
+      )}
+      {milestone && (
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[300] px-6 py-4 rounded-2xl bg-gradient-to-r from-brand-navy to-brand-blue border border-brand-skyblue/30 shadow-2xl flex items-center gap-4 animate-bounce">
+          <span className="text-3xl">{milestone.emoji}</span>
+          <div>
+            <p className="text-white font-black text-sm">{milestone.title}</p>
+            <p className="text-brand-skyblue/80 text-xs">{milestone.body}</p>
+          </div>
+          <button onClick={() => setMilestone(null)} className="text-white/40 hover:text-white text-sm ml-2">✕</button>
+        </div>
+      )}
+      {paymentError && (
+        <div className="fixed top-4 right-4 z-[400] px-5 py-3 rounded-xl bg-red-600 text-white text-sm font-semibold shadow-2xl flex items-center gap-2 animate-bounce">
+          <span>!</span> {paymentError}
+        </div>
+      )}
+
+      {/* ── Mobile layout (< sm breakpoint) ── */}
+      <div className="sm:hidden flex flex-col h-full">
+        <MobileDashboard
+          score={score}
+          weekJobs={weekJobs}
+          jobsToday={jobsToday}
+          feed={feed}
+          actions={actions}
+          badges={badges}
+          invoices={invoices}
+          onNavigate={onNavigate}
+          onLogPayment={() => setShowPayModal(true)}
+          onShare={() => setShowShareCard(true)}
+          displayName={displayName}
+          isLive={isLive}
+          dataLoading={dataLoading}
+        />
+      </div>
+
+      {/* ── Desktop layout (≥ sm breakpoint) ── */}
+    <div className="hidden sm:flex flex-col h-full bg-gray-50/50">
 
       {/* ── 30 Day Plan — full-width at top, visible until Phase 4 complete ── */}
       <ThirtyDayPlan onRefresh={() => {}} />
@@ -2520,6 +2093,15 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
             All of this updates automatically as you work. You can change any setting in the Settings tab.
           </p>
         </div>
+      )}
+
+      {/* ── Setup checklist (new users, until all 3 steps done) ── */}
+      {isLive && (
+        <SetupChecklist
+          hasJobs={(weekJobs || []).some(d => d.jobs > 0) || (jobsToday || []).length > 0}
+          onNavigate={onNavigate}
+          userId={user?.id}
+        />
       )}
 
       {/* ── Loading state ── */}
@@ -2724,31 +2306,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
         </div>
       </div>
 
-      {/* ── Error toast ── */}
-      {paymentError && (
-        <div className="fixed top-4 right-4 z-[400] px-5 py-3 rounded-xl bg-red-600 text-white text-sm font-semibold shadow-2xl flex items-center gap-2 animate-bounce">
-          <span>!</span> {paymentError}
-        </div>
-      )}
-
-      {/* ── Log payment modal ── */}
-      {showPayModal && (
-        <LogPaymentModal
-          onConfirm={handlePaymentLogged}
-          onClose={() => setShowPayModal(false)}
-        />
-      )}
-
-      {/* ── Welcome modal (first login only) ── */}
-      {showWelcome && (
-        <WelcomeModal
-          businessName={profile?.business_name}
-          firstName={displayName}
-          onClose={handleDismissWelcome}
-        />
-      )}
-
-      {/* ── Spotlight tour (after welcome dismissed on first visit) ── */}
+      {/* ── Spotlight tour (desktop only) ── */}
       {showTour && (
         <SpotlightTour
           steps={[
@@ -2768,37 +2326,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           }}
         />
       )}
-
-      {/* ── Onboarding sequence (first-time users, after welcome modal) ── */}
-      {!showWelcome && profile && !profile?.onboarding_complete && (
-        <Onboarding isModal onComplete={() => updateProfile({ onboarding_complete: true })} />
-      )}
-
-      {/* ── Share card modal ── */}
-      {showShareCard && (
-        <ShareCardModal
-          onClose={() => setShowShareCard(false)}
-          businessName={profile?.business_name || displayName}
-          sector={profile?.cleaner_type || "residential"}
-          score={score}
-          badges={badges}
-          rank={userRank}
-          totalUsers={totalUsers}
-          streak={streak}
-        />
-      )}
-
-      {/* ── Milestone celebration ── */}
-      {milestone && (
-        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[300] px-6 py-4 rounded-2xl bg-gradient-to-r from-brand-navy to-brand-blue border border-brand-skyblue/30 shadow-2xl flex items-center gap-4 animate-bounce">
-          <span className="text-3xl">{milestone.emoji}</span>
-          <div>
-            <p className="text-white font-black text-sm">{milestone.title}</p>
-            <p className="text-brand-skyblue/80 text-xs">{milestone.body}</p>
-          </div>
-          <button onClick={() => setMilestone(null)} className="text-white/40 hover:text-white text-sm ml-2">✕</button>
-        </div>
-      )}
     </div>
+    </>
   );
 }

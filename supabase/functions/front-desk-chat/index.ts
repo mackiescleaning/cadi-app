@@ -602,13 +602,16 @@ serve(async (req: Request) => {
     },
     body: JSON.stringify({
       model:      "claude-haiku-4-5-20251001",
-      max_tokens: 500,
+      max_tokens: 1024,
       system:     systemPrompt,
       messages:   history,
     }),
   });
 
-  const aiData   = await anthropicRes.json();
+  const aiData = await anthropicRes.json();
+  if (!anthropicRes.ok || !aiData?.content?.[0]?.text) {
+    console.error(`Anthropic error ${anthropicRes.status}:`, JSON.stringify(aiData));
+  }
   const rawReply = aiData?.content?.[0]?.text ?? "Sorry, I'm having trouble responding right now. Please try again.";
 
   // Parse structured blocks

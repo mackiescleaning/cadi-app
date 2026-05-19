@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import cleaners from '../mock/cleaners.json';
-import { Search } from 'lucide-react';
+import { Search, X, Mail, Link2, Check, ChevronRight, Smartphone, Users, Briefcase, Shield } from 'lucide-react';
 import { getScoreTier, getServiceColour } from '../utils/colours';
 
 const FILTERS = [
@@ -23,10 +23,173 @@ const NOTES = {
   c15: 'New to network — strong references, pending first job.',
 };
 
+function InviteModal({ cleaner, onClose }) {
+  const [mode, setMode]       = useState('employed');
+  const [sent, setSent]       = useState(false);
+  const [copied, setCopied]   = useState(false);
+  const inviteLink = `app.cadi.cleaning/join/britannia/${cleaner.id}`;
+
+  function handleCopy() {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleSend() {
+    setSent(true);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6"
+      style={{ background: 'rgba(2,12,62,0.85)', backdropFilter: 'blur(12px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl"
+        style={{ background: 'rgba(8,21,64,0.98)', border: '1px solid rgba(79,120,255,0.25)' }}>
+
+        {/* Header */}
+        <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+          <div>
+            <div className="text-white font-black text-base">Invite to Cadi network</div>
+            <div className="text-white/40 text-xs mt-0.5">{cleaner.name} · {cleaner.town}</div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center text-white/30 hover:text-white hover:bg-white/10 transition-colors">
+            <X size={15} />
+          </button>
+        </div>
+
+        {!sent ? (
+          <div className="p-6 space-y-5">
+            {/* Mode toggle */}
+            <div>
+              <div className="text-white/35 text-[10px] font-black uppercase tracking-widest mb-2">Cleaner type</div>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'employed', icon: Briefcase, label: 'Employed staff', sub: 'FM-sponsored · free seat' },
+                  { id: 'sub',      icon: Users,     label: 'Subcontractor',   sub: 'Free Connect tier' },
+                ].map(({ id, icon: Icon, label, sub }) => (
+                  <button key={id} onClick={() => setMode(id)}
+                    className="p-3.5 rounded-2xl text-left transition-all"
+                    style={mode === id
+                      ? { background: 'rgba(79,120,255,0.18)', border: '1px solid rgba(79,120,255,0.45)' }
+                      : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <Icon size={14} style={{ color: mode === id ? '#4f78ff' : 'rgba(255,255,255,0.4)' }} className="mb-2" />
+                    <div className="text-white font-bold text-xs">{label}</div>
+                    <div className="text-white/40 text-[10px] mt-0.5">{sub}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* What they get */}
+            <div className="rounded-2xl p-4 space-y-2.5" style={{ background: 'rgba(79,120,255,0.07)', border: '1px solid rgba(79,120,255,0.18)' }}>
+              <div className="text-white/40 text-[10px] font-black uppercase tracking-widest">What {cleaner.name.split(' ')[0]} gets</div>
+              {(mode === 'employed' ? [
+                { icon: Smartphone, text: 'Instant access to all Britannia FM jobs' },
+                { icon: Shield,     text: 'Geo-verified completions — no paper sheets' },
+                { icon: Mail,       text: 'Pay tracked automatically through Cadi' },
+              ] : [
+                { icon: Smartphone, text: 'Free Cadi Connect account — no monthly cost' },
+                { icon: Shield,     text: 'Geo-verified completions build their Cadi Score' },
+                { icon: Mail,       text: 'Access to Britannia jobs + wider FM marketplace' },
+              ]).map(({ icon: Icon, text }, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(79,120,255,0.2)' }}>
+                    <Icon size={12} style={{ color: '#4f78ff' }} />
+                  </div>
+                  <div className="text-white/75 text-xs">{text}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Preview of what cleaner sees */}
+            <div>
+              <div className="text-white/35 text-[10px] font-black uppercase tracking-widest mb-2">Preview — cleaner's join screen</div>
+              <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div className="px-4 py-3 flex items-center gap-2" style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div className="flex gap-1">
+                    {['#ff5f57','#febc2e','#28c840'].map(c => <div key={c} className="w-2 h-2 rounded-full" style={{ background: c }} />)}
+                  </div>
+                  <div className="flex-1 mx-2 rounded text-center text-[9px] text-white/30 py-0.5" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    app.cadi.cleaning/join/britannia/…
+                  </div>
+                </div>
+                <div className="px-5 py-5 text-center" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                  <div className="w-10 h-10 rounded-xl bg-[#4f78ff] flex items-center justify-center text-white font-black text-base mx-auto mb-3 shadow-lg shadow-[#4f78ff]/30">B</div>
+                  <div className="text-white font-black text-sm">Britannia FM invited you</div>
+                  <div className="text-white/45 text-xs mt-1">Join Cadi to access your jobs, submit completions, and get paid — free{mode === 'employed' ? ', sponsored by Britannia' : ''}.</div>
+                  <div className="mt-4 flex flex-col gap-2">
+                    <div className="py-2 rounded-xl text-xs font-black text-white" style={{ background: '#4f78ff' }}>Create free account →</div>
+                    <div className="py-2 rounded-xl text-xs font-bold text-white/50" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>I already have an account</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Invite link */}
+            <div>
+              <div className="text-white/35 text-[10px] font-black uppercase tracking-widest mb-2">Invite link</div>
+              <div className="flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                <Link2 size={12} className="text-white/35 shrink-0" />
+                <span className="flex-1 text-white/55 text-xs font-mono truncate">{inviteLink}</span>
+                <button onClick={handleCopy}
+                  className="text-[10px] font-black px-2.5 py-1 rounded-lg transition-all"
+                  style={{ background: copied ? 'rgba(52,211,153,0.15)' : 'rgba(79,120,255,0.2)', color: copied ? '#34d399' : '#4f78ff', border: `1px solid ${copied ? 'rgba(52,211,153,0.3)' : 'rgba(79,120,255,0.3)'}` }}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </div>
+
+            {/* Send actions */}
+            <div className="flex gap-2 pt-1">
+              <button onClick={handleSend}
+                className="flex-1 py-3 rounded-xl text-sm font-black text-white flex items-center justify-center gap-2 transition-all hover:brightness-110"
+                style={{ background: 'rgba(79,120,255,0.3)', border: '1px solid rgba(79,120,255,0.5)' }}>
+                <Mail size={14} />
+                Send invite by email
+              </button>
+              <button onClick={onClose}
+                className="px-4 py-3 rounded-xl text-sm font-bold text-white/45 hover:text-white/70 transition-colors"
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-8 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center" style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)' }}>
+              <Check size={24} style={{ color: '#34d399' }} />
+            </div>
+            <div>
+              <div className="text-white font-black text-base">Invite sent</div>
+              <div className="text-white/45 text-sm mt-1">{cleaner.name} will receive an email with their personal join link. You'll see them appear in your network once they activate their account.</div>
+            </div>
+            <div className="rounded-2xl p-4 text-left" style={{ background: 'rgba(79,120,255,0.07)', border: '1px solid rgba(79,120,255,0.18)' }}>
+              <div className="text-white/35 text-[10px] font-black uppercase tracking-widest mb-2">Next steps</div>
+              {['Invitation email delivered', 'Cleaner creates free Cadi account', 'Auto-linked to Britannia job pool', 'Geo-verified completions start building their score'].map((step, i) => (
+                <div key={i} className="flex items-center gap-2.5 py-1.5">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0" style={{ background: 'rgba(79,120,255,0.2)', color: '#4f78ff' }}>{i + 1}</div>
+                  <div className="text-white/65 text-xs">{step}</div>
+                  {i < 1 && <Check size={11} style={{ color: '#34d399' }} className="ml-auto shrink-0" />}
+                  {i === 1 && <ChevronRight size={11} className="ml-auto text-white/25 shrink-0" />}
+                </div>
+              ))}
+            </div>
+            <button onClick={onClose}
+              className="w-full py-3 rounded-xl text-sm font-black text-white transition-all hover:brightness-110"
+              style={{ background: 'rgba(79,120,255,0.25)', border: '1px solid rgba(79,120,255,0.4)' }}>
+              Done
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function FmCleaners({ showToast }) {
   const [filter,   setFilter]   = useState('all');
   const [search,   setSearch]   = useState('');
   const [selected, setSelected] = useState(null);
+  const [inviting, setInviting] = useState(null);
 
   const filtered = cleaners
     .filter(c => filter === 'all' || c.availability === filter)
@@ -37,6 +200,7 @@ export default function FmCleaners({ showToast }) {
 
   return (
     <div className="flex h-full overflow-hidden">
+      {inviting && <InviteModal cleaner={inviting} onClose={() => setInviting(null)} />}
 
       {/* ── Left: list ── */}
       <div className="flex flex-col overflow-hidden" style={{ width: selected ? '55%' : '100%', borderRight: '1px solid rgba(255,255,255,0.07)', transition: 'width 0.2s' }}>
@@ -219,7 +383,7 @@ export default function FmCleaners({ showToast }) {
           {/* Actions */}
           <div className="space-y-2">
             {sel.availability === 'invite' ? (
-              <button onClick={() => showToast(`send network invitation to ${sel.name}`)}
+              <button onClick={() => setInviting(sel)}
                 className="w-full py-3 rounded-xl text-sm font-black text-white transition-colors"
                 style={{ background: 'rgba(79,120,255,0.25)', border: '1px solid rgba(79,120,255,0.45)' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(79,120,255,0.35)'}

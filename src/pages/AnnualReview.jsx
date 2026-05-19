@@ -884,8 +884,9 @@ Respond ONLY with valid JSON (no markdown, no extra text):
   "motivatingClose": "string max 20 words"
 }`;
 
-      // AI audit — disabled until API key is configured server-side
-      throw new Error("AI sprint audit coming soon — this feature is not yet available.");
+      setAuditLoading(false);
+      setAuditError("AI sprint audits are coming soon — we're putting the finishing touches on this feature.");
+      return;
     } catch (err) {
       console.error(err);
       setAuditError("Couldn't generate the audit. Check your connection and try again.");

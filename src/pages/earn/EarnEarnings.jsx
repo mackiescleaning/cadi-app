@@ -66,14 +66,10 @@ export default function EarnEarnings() {
   return (
     <div className="max-w-2xl space-y-5 pb-8">
 
-      {/* Preview banner */}
-      <div className="flex items-center gap-3 rounded-xl px-4 py-3"
-        style={{ background: 'rgba(194,65,12,0.07)', border: '1px solid rgba(194,65,12,0.2)' }}>
-        <span className="text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full shrink-0"
-          style={{ background: EARN_ORANGE, color: 'white' }}>PREVIEW</span>
-        <span className="text-xs text-[#7c2d12]">
-          Earn earnings are tracked separately from your main Money tab — FM payments, pending, and forecast.
-        </span>
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-black text-[#010a4f]">Earnings</h1>
+        <p className="text-sm text-gray-500 mt-0.5">FM payments tracked separately from your Money tab — confirmed, pending, and forecast.</p>
       </div>
 
       {/* Period selector */}

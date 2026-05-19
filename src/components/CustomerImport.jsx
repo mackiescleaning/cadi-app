@@ -529,7 +529,7 @@ function CapModal({ total, onUpgrade, onPick, onImportRecent }) {
             >
               <Crown size={18} className="text-white shrink-0" />
               <div>
-                <p className="text-sm font-black text-white">Upgrade to Pro — £29/month</p>
+                <p className="text-sm font-black text-white">Upgrade to Pro — £39/month</p>
                 <p className="text-xs text-[rgba(255,255,255,0.7)] mt-0.5">Unlock all {total} customers and everything else.</p>
               </div>
             </button>

@@ -314,9 +314,17 @@ function StockSection({ products, setProducts, accounts, onOrderLogged, onUpdate
     return g;
   }, [filtered]);
 
-  const critical   = products.filter(p => stockStatus(p) === "critical");
-  const low        = products.filter(p => stockStatus(p) === "low");
-  const stockValue = products.reduce((s,p) => s + p.qty * p.unitCost, 0);
+  const { critical, low, stockValue } = useMemo(() => {
+    const critical = [], low = [];
+    let stockValue = 0;
+    for (const p of products) {
+      const s = stockStatus(p);
+      if (s === "critical") critical.push(p);
+      else if (s === "low") low.push(p);
+      stockValue += p.qty * p.unitCost;
+    }
+    return { critical, low, stockValue };
+  }, [products]);
 
   const handleReorderConfirm = (product, qty, total) => {
     onUpdateProduct(product.id, { qty: product.qty + qty });
@@ -478,7 +486,7 @@ function KitsSection({ products, setProducts, accounts, kits, setKits }) {
   const [kitStaffOptions, setKitStaffOptions] = useState(DEFAULT_KIT_STAFF_OPTIONS);
   useEffect(() => {
     import('../lib/supabase').then(({ supabase }) => {
-      supabase.from('staff_members').select('name').eq('active', true)
+      supabase.from('staff_members').select('name').eq('active', true).limit(50)
         .then(({ data }) => {
           if (data && data.length > 0) {
             setKitStaffOptions(["You", ...data.map(s => s.name), "Unassigned"]);

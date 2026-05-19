@@ -13,8 +13,8 @@ export default function ClientSiteDashboard({ showToast, onNavigate }) {
       {/* Welcome */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
         <div className="text-sm text-gray-400 mb-1">Good morning</div>
-        <h1 className="text-xl font-black text-[#010a4f]">Riverside Primary School</h1>
-        <p className="text-sm text-gray-500 mt-1">Riverside Academy Trust · Managed by Britannia FM</p>
+        <h1 className="text-xl font-black text-[#010a4f]">Next – Luton The Mall</h1>
+        <p className="text-sm text-gray-500 mt-1">Next Retail UK Ltd · Managed by Britannia FM</p>
       </div>
 
       {/* Today's status */}

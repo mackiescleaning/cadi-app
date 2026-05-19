@@ -14,7 +14,7 @@ const SERVICE_COLOUR = {
 
 const JOBS = [
   {
-    id: 'j1', site: 'Wharfside Nursery',    postcode: 'MK42', fm: 'Britannia FM',
+    id: 'j1', site: 'Premier Inn Luton Airport',    postcode: 'MK42', fm: 'Britannia FM',
     service: 'Daily clean',    freq: 'Recurring',  schedule: 'Mon–Fri',  window: '06:00–08:00',
     value: 85, valueFreq: '/visit', monthlyEst: 1700, matchScore: 94,
     matchReasons: ['Location match', 'Service match', 'Score threshold met'],
@@ -22,7 +22,7 @@ const JOBS = [
     action: 'accept',
   },
   {
-    id: 'j2', site: 'Luton Library',         postcode: 'LU1',  fm: 'Britannia FM',
+    id: 'j2', site: 'Luton Central Library',         postcode: 'LU1',  fm: 'Britannia FM',
     service: 'Evening clean',  freq: 'Recurring',  schedule: 'Mon–Fri',  window: '18:00–20:00',
     value: 68, valueFreq: '/visit', monthlyEst: 1360, matchScore: 88,
     matchReasons: ['Service match', 'Score threshold met'],
@@ -30,7 +30,7 @@ const JOBS = [
     action: 'accept',
   },
   {
-    id: 'j3', site: 'Riverside Academy',      postcode: 'MK41', fm: 'Metro Clean',
+    id: 'j3', site: 'Next – Centre:MK',      postcode: 'MK41', fm: 'Metro Clean',
     service: 'Daily clean',    freq: 'Recurring',  schedule: 'Mon–Fri',  window: '06:30–08:30',
     value: 92, valueFreq: '/visit', monthlyEst: 1840, matchScore: 82,
     matchReasons: ['Location match', 'Service match'],
@@ -54,7 +54,7 @@ const JOBS = [
     action: 'apply',
   },
   {
-    id: 'j6', site: 'St Mary\'s Hospital',     postcode: 'LU2',  fm: 'Britannia FM',
+    id: 'j6', site: 'L&D Hospital – Main Tower',     postcode: 'LU2',  fm: 'Britannia FM',
     service: 'Hospital clean', freq: 'Recurring',  schedule: 'Mon–Sat',  window: '06:00–09:00',
     value: 110, valueFreq: '/visit', monthlyEst: 2420, matchScore: 65,
     matchReasons: ['Service match'],
@@ -91,15 +91,10 @@ export default function EarnMarketplace() {
   return (
     <div className="max-w-3xl space-y-5 pb-8">
 
-      {/* Preview banner */}
-      <div className="flex items-center gap-3 rounded-xl px-4 py-3"
-        style={{ background: 'rgba(194,65,12,0.07)', border: '1px solid rgba(194,65,12,0.2)' }}>
-        <span className="text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full shrink-0"
-          style={{ background: EARN_ORANGE, color: 'white' }}>PREVIEW</span>
-        <span className="text-xs text-[#7c2d12]">
-          The Earn marketplace is coming soon — you're seeing your personalised preview.
-          Jobs shown are matched to your Cadi score and location.
-        </span>
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-black text-[#010a4f]">Marketplace</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Jobs matched to your Cadi score and location — accept or apply directly.</p>
       </div>
 
       {/* Search + filters */}
