@@ -1,25 +1,11 @@
 import { useState } from 'react';
 import {
   Upload, FileText, Clock, CheckCircle2, ChevronDown, ChevronUp,
-  Camera, Zap, Calendar, User, Building2, CreditCard, Hash
+  Camera, Calendar, User, Building2, CreditCard, Hash, Zap,
 } from 'lucide-react';
 
-const card = {
-  background: 'rgba(255,255,255,0.04)',
-  border: '1px solid rgba(255,255,255,0.08)',
-};
-
-const inputStyle = {
-  background: 'rgba(255,255,255,0.06)',
-  border: '1px solid rgba(255,255,255,0.1)',
-  color: 'white',
-  borderRadius: '0.75rem',
-  padding: '0.5rem 0.75rem',
-  width: '100%',
-  fontSize: '0.875rem',
-  outline: 'none',
-  boxSizing: 'border-box',
-};
+const ORANGE = '#C2410C';
+const NAVY   = '#010a4f';
 
 const jobs = [
   {
@@ -34,8 +20,7 @@ const jobs = [
     rate: 85,
     ref: '#BF-4471',
     po: 'PO-2026-0091',
-    defaultTasks:
-      'Swept and mopped all retail floor areas, cleaned customer service desk, sanitised fitting rooms, emptied bins x12, cleaned windows internal, wiped down display shelving units, cleaned staff toilets, restocked consumables.',
+    defaultTasks: 'Swept and mopped all retail floor areas, cleaned customer service desk, sanitised fitting rooms, emptied bins x12, cleaned windows internal, wiped down display shelving units, cleaned staff toilets, restocked consumables.',
     photos: 4,
     address: 'The Mall Luton, Luton LU1 2TL',
     sla: '06:00–09:00',
@@ -54,8 +39,7 @@ const jobs = [
     rate: 78,
     ref: '#BF-4468',
     po: 'PO-2026-0088',
-    defaultTasks:
-      'Cleaned all guest corridor floors, vacuumed lift areas, cleaned reception and lobby, sanitised public toilets x3, wiped down breakfast area, restocked hand sanitiser stations, spot-cleaned glass entrance doors.',
+    defaultTasks: 'Cleaned all guest corridor floors, vacuumed lift areas, cleaned reception and lobby, sanitised public toilets x3, wiped down breakfast area, restocked hand sanitiser stations, spot-cleaned glass entrance doors.',
     photos: 6,
     address: 'Airport Way, Luton LU2 9LY',
     sla: '07:00–09:30',
@@ -74,8 +58,7 @@ const jobs = [
     rate: 120,
     ref: '#MC-221',
     po: 'PO-2026-0094',
-    defaultTasks:
-      'Full classroom sweep and mop (8 rooms), clean staff kitchen, empty all bins, sanitise door handles and light switches, vacuum common areas, clean student toilets x4.',
+    defaultTasks: 'Full classroom sweep and mop (8 rooms), clean staff kitchen, empty all bins, sanitise door handles and light switches, vacuum common areas, clean student toilets x4.',
     photos: 0,
     address: 'Oxford Rd, Aylesbury HP21 8PD',
     sla: '17:30–20:30',
@@ -85,212 +68,187 @@ const jobs = [
 ];
 
 function StatusBadge({ status, label }) {
-  if (status === 'live') {
-    return (
-      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 700, color: '#60a5fa' }}>
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#60a5fa', display: 'inline-block', animation: 'cadipulse 1.5s infinite' }} />
-        Live · {label}
-      </span>
-    );
-  }
-  if (status === 'invoice') {
-    return (
-      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fb923c', background: 'rgba(194,65,12,0.15)', borderRadius: '999px', padding: '2px 10px' }}>
-        {label}
-      </span>
-    );
-  }
+  if (status === 'live') return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600">
+      <span className="w-2 h-2 rounded-full bg-blue-500 inline-block animate-pulse" />
+      {label}
+    </span>
+  );
+  if (status === 'invoice') return (
+    <span className="inline-block text-xs font-bold rounded-full px-2.5 py-0.5"
+      style={{ background: 'rgba(194,65,12,0.1)', color: ORANGE, border: `1px solid rgba(194,65,12,0.2)` }}>
+      {label}
+    </span>
+  );
   return (
-    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a78bfa', background: 'rgba(124,58,237,0.12)', borderRadius: '999px', padding: '2px 10px' }}>
+    <span className="inline-block text-xs font-bold rounded-full px-2.5 py-0.5 text-indigo-500 bg-indigo-50 border border-indigo-100">
       {label}
     </span>
   );
 }
 
-function Chip({ children, color }) {
+function InfoBlock({ label, icon: Icon, children }) {
   return (
-    <span style={{
-      background: 'rgba(255,255,255,0.07)',
-      border: '1px solid rgba(255,255,255,0.1)',
-      borderRadius: '999px',
-      padding: '2px 10px',
-      fontSize: '0.75rem',
-      color: color || '#e2e8f0',
-      fontWeight: 600,
-      display: 'inline-block',
-    }}>
-      {children}
-    </span>
-  );
-}
-
-function SectionLabel({ icon: Icon, children }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.45rem', color: 'rgba(226,232,240,0.45)', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-      <Icon size={11} />
+    <div>
+      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">
+        <Icon size={10} />
+        {label}
+      </div>
       {children}
     </div>
   );
 }
 
-function JobCard({ job }) {
-  const [open, setOpen] = useState(job.status === 'live' || job.status === 'invoice');
-  const [tasks, setTasks] = useState(job.defaultTasks);
-  const [invoiceSent, setInvoiceSent] = useState(false);
-  const [jobComplete, setJobComplete] = useState(false);
+function InfoChip({ children, accent }) {
+  return (
+    <span className="inline-block text-xs font-semibold rounded-lg px-2.5 py-1 border"
+      style={accent
+        ? { background: 'rgba(194,65,12,0.06)', color: ORANGE, borderColor: 'rgba(194,65,12,0.2)' }
+        : { background: '#f8faff', color: NAVY, borderColor: '#e0e8ff' }}>
+      {children}
+    </span>
+  );
+}
 
+function JobCard({ job }) {
+  const [open, setOpen]           = useState(job.status !== 'upcoming');
+  const [tasks, setTasks]         = useState(job.defaultTasks);
+  const [jobDone, setJobDone]     = useState(false);
+  const [invDone, setInvDone]     = useState(false);
   const isUpcoming = job.status === 'upcoming';
-  const isLive = job.status === 'live';
-  const isInvoice = job.status === 'invoice';
+  const isLive     = job.status === 'live';
+  const isInvoice  = job.status === 'invoice';
 
   return (
-    <div style={{ ...card, borderRadius: '1rem', overflow: 'hidden', opacity: isUpcoming ? 0.72 : 1 }}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{
-          width: '100%', textAlign: 'left', background: 'transparent', border: 'none',
-          padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', alignItems: 'flex-start',
-          justifyContent: 'space-between', gap: '1rem',
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ marginBottom: '0.3rem' }}>
-            <StatusBadge status={job.status} label={job.statusLabel} />
-          </div>
-          <div style={{ color: 'white', fontWeight: 800, fontSize: '1rem', marginBottom: '0.15rem' }}>{job.site}</div>
-          <div style={{ color: 'rgba(226,232,240,0.5)', fontSize: '0.8rem' }}>{job.client} · {job.service} · {job.date} {job.time}</div>
+    <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-opacity ${isUpcoming ? 'opacity-60' : ''}`}
+      style={{ borderColor: isLive ? 'rgba(59,130,246,0.3)' : isInvoice ? 'rgba(194,65,12,0.25)' : '#e8eeff' }}>
+
+      {/* Header row */}
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full text-left px-5 py-4 flex items-start justify-between gap-4 hover:bg-gray-50/50 transition-colors">
+        <div className="flex-1 min-w-0">
+          <div className="mb-1"><StatusBadge status={job.status} label={job.statusLabel} /></div>
+          <div className="font-black text-base truncate" style={{ color: NAVY }}>{job.site}</div>
+          <div className="text-xs text-gray-400 mt-0.5">{job.client} · {job.service} · {job.date} {job.time}</div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem', flexShrink: 0 }}>
-          <span style={{ color: 'white', fontWeight: 900, fontSize: '1.1rem', fontFamily: 'monospace' }}>£{job.rate}</span>
-          <span style={{ color: 'rgba(226,232,240,0.35)', fontSize: '0.72rem' }}>{job.ref}</span>
-          {open ? <ChevronUp size={15} color="rgba(226,232,240,0.35)" /> : <ChevronDown size={15} color="rgba(226,232,240,0.35)" />}
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className="font-black text-lg" style={{ color: NAVY }}>£{job.rate}</span>
+          <span className="text-[10px] text-gray-300 font-mono">{job.ref}</span>
+          {open ? <ChevronUp size={14} className="text-gray-300 mt-0.5" /> : <ChevronDown size={14} className="text-gray-300 mt-0.5" />}
         </div>
       </button>
 
+      {/* Expanded worksheet */}
       {open && (
-        <div style={{ padding: '0 1.25rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ paddingTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-            {/* Left */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <SectionLabel icon={User}>From</SectionLabel>
-                <div style={{ ...card, borderRadius: '0.75rem', padding: '0.65rem 0.85rem', fontSize: '0.8rem' }}>
-                  <div style={{ fontWeight: 700, color: 'white', marginBottom: '0.15rem' }}>Sarah K.</div>
-                  <div style={{ color: 'rgba(226,232,240,0.5)' }}>Sole trader</div>
-                  <div style={{ color: 'rgba(226,232,240,0.35)', fontSize: '0.72rem' }}>UTR: 12345 67890</div>
-                </div>
-              </div>
+        <div className="border-t px-5 pb-5 pt-4" style={{ borderColor: '#f0f4ff' }}>
 
-              <div>
-                <SectionLabel icon={Building2}>To</SectionLabel>
-                <div style={{ ...card, borderRadius: '0.75rem', padding: '0.65rem 0.85rem', fontSize: '0.8rem' }}>
-                  <div style={{ fontWeight: 700, color: 'white', marginBottom: '0.15rem' }}>{job.client} Ltd</div>
-                  <div style={{ color: 'rgba(226,232,240,0.5)' }}>{job.address}</div>
-                </div>
-              </div>
+          {/* 2-col grid */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
 
-              <div>
-                <SectionLabel icon={Calendar}>Date &amp; SLA</SectionLabel>
-                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                  <Chip>{job.date}</Chip>
-                  <Chip>{job.time}</Chip>
-                  <Chip color="rgba(226,232,240,0.45)">SLA {job.sla}</Chip>
-                </div>
+            {/* From */}
+            <InfoBlock label="From" icon={User}>
+              <div className="bg-[#f8faff] border border-[#e8eeff] rounded-xl px-3 py-2.5 text-xs">
+                <div className="font-bold" style={{ color: NAVY }}>Sarah K.</div>
+                <div className="text-gray-400 mt-0.5">Sole trader · cleaning operative</div>
+                <div className="text-gray-300 mt-0.5 font-mono text-[10px]">UTR: 12345 67890</div>
               </div>
+            </InfoBlock>
 
-              <div>
-                <SectionLabel icon={FileText}>Service type</SectionLabel>
-                <Chip>{job.service}</Chip>
+            {/* To */}
+            <InfoBlock label="To" icon={Building2}>
+              <div className="bg-[#f8faff] border border-[#e8eeff] rounded-xl px-3 py-2.5 text-xs">
+                <div className="font-bold" style={{ color: NAVY }}>{job.client} Ltd</div>
+                <div className="text-gray-400 mt-0.5">{job.address}</div>
               </div>
-            </div>
+            </InfoBlock>
 
-            {/* Right */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <SectionLabel icon={Hash}>PO Number</SectionLabel>
-                <Chip color="#fb923c">{job.po}</Chip>
+            {/* Date & SLA */}
+            <InfoBlock label="Date & SLA" icon={Calendar}>
+              <div className="flex flex-wrap gap-1.5">
+                <InfoChip>{job.date}</InfoChip>
+                <InfoChip>{job.time || '—'}</InfoChip>
+                <InfoChip>SLA {job.sla}</InfoChip>
               </div>
+            </InfoBlock>
 
-              <div>
-                <SectionLabel icon={CreditCard}>Payment terms</SectionLabel>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Chip>{job.paymentTerms}</Chip>
-                  <span style={{ fontSize: '0.73rem', color: 'rgba(226,232,240,0.4)' }}>Due {job.dueDate}</span>
-                </div>
-              </div>
+            {/* Service */}
+            <InfoBlock label="Service" icon={FileText}>
+              <InfoChip>{job.service}</InfoChip>
+            </InfoBlock>
 
-              <div>
-                <SectionLabel icon={Camera}>Evidence</SectionLabel>
-                <Chip color={job.photos > 0 ? '#4ade80' : 'rgba(226,232,240,0.3)'}>
-                  {job.photos > 0 ? `${job.photos} photos verified ✓` : 'No photos yet'}
-                </Chip>
-              </div>
+            {/* PO Number */}
+            <InfoBlock label="PO Number" icon={Hash}>
+              <InfoChip accent>{job.po}</InfoChip>
+            </InfoBlock>
 
-              <div>
-                <SectionLabel icon={Upload}>Paper invoice upload</SectionLabel>
-                <div style={{
-                  border: '1.5px dashed rgba(255,255,255,0.14)',
-                  borderRadius: '0.75rem',
-                  padding: '0.85rem',
-                  textAlign: 'center',
-                  background: 'rgba(255,255,255,0.02)',
-                  cursor: isUpcoming ? 'not-allowed' : 'pointer',
-                }}>
-                  <Upload size={18} color="rgba(226,232,240,0.3)" style={{ margin: '0 auto 0.35rem', display: 'block' }} />
-                  <div style={{ fontSize: '0.73rem', color: 'rgba(226,232,240,0.45)', lineHeight: 1.45 }}>
-                    Upload paper invoice — Cadi converts to {job.client}-approved PDF
-                  </div>
-                  <div style={{ fontSize: '0.66rem', color: 'rgba(226,232,240,0.28)', marginTop: '0.3rem' }}>Supported: JPG, PNG, PDF</div>
-                </div>
+            {/* Payment terms */}
+            <InfoBlock label="Payment terms" icon={CreditCard}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <InfoChip>{job.paymentTerms}</InfoChip>
+                <span className="text-xs text-gray-400">Due {job.dueDate}</span>
               </div>
-            </div>
+            </InfoBlock>
+
+            {/* Evidence */}
+            <InfoBlock label="Evidence" icon={Camera}>
+              {job.photos > 0
+                ? <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1">
+                    <CheckCircle2 size={11} /> {job.photos} photos verified
+                  </span>
+                : <span className="text-xs text-gray-300 font-medium">No photos yet</span>
+              }
+            </InfoBlock>
+
+            {/* Paper invoice upload */}
+            <InfoBlock label="Paper invoice" icon={Upload}>
+              <label className={`block border-2 border-dashed rounded-xl p-3 text-center transition-colors ${isUpcoming ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:border-orange-300 hover:bg-orange-50/30'}`}
+                style={{ borderColor: 'rgba(194,65,12,0.2)' }}>
+                <Upload size={16} className="mx-auto mb-1 text-gray-300" />
+                <div className="text-[11px] text-gray-400 leading-snug">Upload — Cadi converts to<br />{job.client}-approved PDF</div>
+                <div className="text-[10px] text-gray-300 mt-1">JPG · PNG · PDF</div>
+                {!isUpcoming && <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf" />}
+              </label>
+            </InfoBlock>
           </div>
 
           {/* Work completed — full width */}
-          <div style={{ marginTop: '1rem' }}>
-            <SectionLabel icon={CheckCircle2}>Work completed</SectionLabel>
+          <div className="mt-4">
+            <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">
+              <CheckCircle2 size={10} /> Work completed
+            </div>
             <textarea
               value={tasks}
               onChange={e => setTasks(e.target.value)}
               disabled={isUpcoming}
               rows={3}
-              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, opacity: isUpcoming ? 0.5 : 1 }}
+              className="w-full rounded-xl border text-sm px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ borderColor: '#e0e8ff', color: NAVY, fontFamily: 'inherit', lineHeight: 1.6 }}
             />
           </div>
 
           {/* CTAs */}
-          {isLive && !jobComplete && (
-            <button
-              onClick={() => setJobComplete(true)}
-              style={{
-                marginTop: '0.75rem', width: '100%', padding: '0.75rem', borderRadius: '0.75rem',
-                background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.28)',
-                color: '#60a5fa', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer',
-              }}
-            >
-              Complete Job →
+          {isLive && !jobDone && (
+            <button onClick={() => setJobDone(true)}
+              className="mt-3 w-full py-3 rounded-xl font-bold text-sm transition-all hover:brightness-95"
+              style={{ background: '#EFF6FF', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.2)' }}>
+              Mark Job Complete →
             </button>
           )}
-          {isLive && jobComplete && (
-            <div style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: '0.75rem', background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', color: '#4ade80', fontWeight: 700, fontSize: '0.875rem', textAlign: 'center' }}>
-              Job marked complete ✓
+          {isLive && jobDone && (
+            <div className="mt-3 py-3 rounded-xl text-center text-sm font-bold text-emerald-600 bg-emerald-50 border border-emerald-100">
+              ✓ Job marked complete — ready to invoice
             </div>
           )}
-          {isInvoice && !invoiceSent && (
-            <button
-              onClick={() => setInvoiceSent(true)}
-              style={{
-                marginTop: '0.75rem', width: '100%', padding: '0.75rem', borderRadius: '0.75rem',
-                background: '#C2410C', border: 'none', color: 'white',
-                fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer',
-              }}
-            >
+          {isInvoice && !invDone && (
+            <button onClick={() => setInvDone(true)}
+              className="mt-3 w-full py-3 rounded-xl font-black text-sm text-white transition-all hover:brightness-90"
+              style={{ background: ORANGE }}>
               Create Invoice →
             </button>
           )}
-          {isInvoice && invoiceSent && (
-            <div style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: '0.75rem', background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', color: '#4ade80', fontWeight: 700, fontSize: '0.875rem', textAlign: 'center' }}>
-              Invoice created ✓ — tracking live in Earnings
+          {isInvoice && invDone && (
+            <div className="mt-3 py-3 rounded-xl text-center text-sm font-bold text-emerald-600 bg-emerald-50 border border-emerald-100">
+              ✓ Invoice created — tracking live in Earnings
             </div>
           )}
         </div>
@@ -301,47 +259,39 @@ function JobCard({ job }) {
 
 export default function EarnPipeline() {
   return (
-    <div className="flex flex-col gap-5 p-6 pb-10" style={{ color: '#e2e8f0' }}>
-      <style>{`
-        @keyframes cadipulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.25; }
-        }
-      `}</style>
+    <div className="max-w-2xl space-y-4 pb-10">
 
+      {/* Header */}
       <div>
-        <h1 style={{ color: 'white', fontWeight: 900, fontSize: '1.5rem', margin: 0, marginBottom: '0.2rem' }}>Current Work</h1>
-        <p style={{ color: 'rgba(226,232,240,0.4)', fontSize: '0.875rem', margin: 0 }}>Active jobs, worksheets and invoice readiness</p>
+        <h1 className="text-xl font-black" style={{ color: NAVY }}>Current Work</h1>
+        <p className="text-sm text-gray-400 mt-0.5">Active jobs, worksheets and invoice readiness</p>
       </div>
 
       {/* Summary strip */}
-      <div style={{ ...card, borderRadius: '1rem', padding: '0.85rem 1.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#60a5fa', display: 'inline-block', animation: 'cadipulse 1.5s infinite' }} />
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#60a5fa' }}>On site</span>
-          <span style={{ fontWeight: 900, color: 'white', fontFamily: 'monospace' }}>1</span>
+      <div className="bg-white rounded-2xl border border-[#e8eeff] shadow-sm px-5 py-3.5 flex items-center gap-5 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+          <span className="text-xs font-bold text-blue-600">On site</span>
+          <span className="font-black text-sm" style={{ color: NAVY }}>1</span>
         </div>
-        <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fb923c', display: 'inline-block' }} />
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fb923c' }}>Invoice ready</span>
-          <span style={{ fontWeight: 900, color: 'white', fontFamily: 'monospace' }}>1</span>
+        <div className="w-px h-4 bg-gray-100" />
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full" style={{ background: ORANGE }} />
+          <span className="text-xs font-bold" style={{ color: ORANGE }}>Invoice ready</span>
+          <span className="font-black text-sm" style={{ color: NAVY }}>1</span>
         </div>
-        <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#a78bfa', display: 'inline-block' }} />
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#a78bfa' }}>Upcoming</span>
-          <span style={{ fontWeight: 900, color: 'white', fontFamily: 'monospace' }}>1</span>
+        <div className="w-px h-4 bg-gray-100" />
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-indigo-400" />
+          <span className="text-xs font-bold text-indigo-500">Upcoming</span>
+          <span className="font-black text-sm" style={{ color: NAVY }}>1</span>
         </div>
-        <div style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'rgba(226,232,240,0.3)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-          <Clock size={11} />
-          Live data
+        <div className="ml-auto flex items-center gap-1 text-[10px] text-gray-300">
+          <Clock size={10} /> Live
         </div>
       </div>
 
-      {jobs.map(job => (
-        <JobCard key={job.id} job={job} />
-      ))}
+      {jobs.map(job => <JobCard key={job.id} job={job} />)}
     </div>
   );
 }
