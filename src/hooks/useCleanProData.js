@@ -5,6 +5,12 @@ import { listMoneyEntries } from '../lib/db/moneyDb';
 import { listQuotes } from '../lib/db/quotesDb';
 import { getBusinessSettings } from '../lib/db/settingsDb';
 
+// ─── Module-level TTL cache ───────────────────────────────────────────────────
+// Survives component unmount (tab navigation) so re-visiting the dashboard
+// within the TTL window fires zero DB queries. Keyed by user ID.
+const DB_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+const _dbCache = {}; // { [userId]: { ts, settings, quotes, moneyEntries, profile } }
+
 function isoToday() {
   return new Date().toISOString().split('T')[0];
 }
@@ -45,12 +51,21 @@ function inferInvoiceStatus(quote) {
   const status = (quote.status || '').toLowerCase();
   if (status === 'paid') return 'paid';
   if (status === 'draft') return 'draft';
-  if (status === 'accepted') return 'sent';
 
-  const createdAt = quote.created_at ? new Date(quote.created_at) : null;
-  if (createdAt) {
-    const ageDays = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
-    if (ageDays > 14) return 'overdue';
+  // Only flag overdue when payment was actually expected (sent/accepted/invoiced states)
+  const paymentExpected = status === 'accepted' || status === 'sent' || status === 'invoiced' || status === '';
+
+  if (paymentExpected) {
+    // Prefer an explicit due_date stored in the jsonb payload; fall back to
+    // 30 days from created_at (UK standard net-30 terms) rather than 14.
+    const payload = quote.payload || {};
+    const dueDateStr = payload.due_date || null;
+    const termsGrace = (payload.payment_terms > 0 ? payload.payment_terms : 30) * 86400000;
+    const refDate = dueDateStr
+      ? new Date(dueDateStr).getTime()
+      : (quote.created_at ? new Date(quote.created_at).getTime() + termsGrace : null);
+
+    if (refDate && Date.now() > refDate) return 'overdue';
   }
 
   return 'sent';
@@ -215,10 +230,38 @@ export function useCleanProData() {
   const [isLoading, setIsLoading] = useState(Boolean(user) && !isDemo);
   const [error, setError] = useState(null);
 
-  const fetch = useCallback(async () => {
+  // Capture the specific profile scalars that affect data mapping so that
+  // minor profile writes (e.g. dashboard_tour_complete) don't trigger a refetch.
+  const profileBizStructure  = profile?.biz_structure;
+  const profileCleanerType   = profile?.cleaner_type;
+  const profileTeamStructure = profile?.team_structure;
+
+  const fetch = useCallback(async ({ bust = false } = {}) => {
     if (!user || user.id === 'demo-user') {
       setData(null);
       setError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    const cacheKey = user.id;
+    const cached = _dbCache[cacheKey];
+    const cacheValid = !bust && cached && (Date.now() - cached.ts) < DB_CACHE_TTL;
+
+    if (cacheValid) {
+      // Re-derive scheduler and jobsToday from live DataContext jobs so the
+      // dashboard stays current when jobs are added — zero extra DB queries.
+      const customersById = Object.fromEntries((liveCustomers || []).map(c => [c.id, c]));
+      const schedulerResult = mapSchedulerData(userJobs, cached.moneyEntries);
+      setData({
+        accounts: mapAccountsData({ profile, settings: cached.settings, moneyEntries: cached.moneyEntries }),
+        scheduler: { weekJobs: schedulerResult.weekJobs },
+        invoiceData: mapInvoiceData(cached.quotes, customersById),
+        jobsToday: schedulerResult.todayJobs,
+        teamData: [],
+        feedData: mapFeedData({ quotes: cached.quotes, moneyEntries: cached.moneyEntries, customersById }),
+        customerCount: (liveCustomers || []).length,
+      });
       setIsLoading(false);
       return;
     }
@@ -233,6 +276,9 @@ export function useCleanProData() {
         listQuotes(250),
         listMoneyEntries({ from: taxYearFrom, pageSize: 500 }),
       ]);
+
+      // Store raw DB results in the module cache
+      _dbCache[cacheKey] = { ts: Date.now(), settings, quotes, moneyEntries };
 
       // Use already-loaded context customers (up to 1000) — avoids a duplicate fetch
       const customersById = Object.fromEntries((liveCustomers || []).map(c => [c.id, c]));
@@ -252,11 +298,19 @@ export function useCleanProData() {
     } finally {
       setIsLoading(false);
     }
-  }, [profile, user, userJobs]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, profileBizStructure, profileCleanerType, profileTeamStructure, userJobs]);
 
   useEffect(() => {
     fetch();
   }, [fetch]);
+
+  // Exposed refresh busts the cache so the retry button and manual refreshes
+  // always get a fresh read from the DB.
+  const refresh = useCallback(() => {
+    if (user?.id) delete _dbCache[user.id];
+    fetch({ bust: true });
+  }, [user?.id, fetch]);
 
   return {
     accountsData: data?.accounts ?? null,
@@ -268,6 +322,6 @@ export function useCleanProData() {
     customerCount: liveCustomers?.length ?? 0,
     isLoading,
     error,
-    refresh: fetch,
+    refresh,
   };
 }

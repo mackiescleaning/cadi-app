@@ -68,8 +68,6 @@ import CadiWordmark from "../components/CadiWordmark";
 import SpotlightTour from "../components/SpotlightTour";
 import LeaderboardPanel, { LEADERBOARD_DEMO, SECTOR_COLORS } from "../components/dashboard/LeaderboardPanel";
 import ShareCardModal from "../components/dashboard/ShareCardModal";
-import WelcomeModal from "../components/dashboard/WelcomeModal";
-import SetupChecklist from "../components/dashboard/SetupChecklist";
 import MobileDashboard from "../components/dashboard/MobileDashboard";
 import Onboarding from "./Onboarding";
 import ThirtyDayPlan from "../components/ThirtyDayPlan";
@@ -870,6 +868,15 @@ function TeamPanel({ team, jobsToday, onNavigate }) {
         <SL>Team today</SL>
         <button onClick={() => onNavigate?.("scheduler")} className="text-xs font-bold text-brand-blue hover:underline">Manage →</button>
       </div>
+      {team.length === 0 && unassigned.length === 0 && (
+        <div className="px-4 py-8 text-center">
+          <p className="text-sm font-semibold text-gray-500">No team members logged yet</p>
+          <p className="text-xs text-gray-400 mt-1">Add staff in the Scheduler to see their status here.</p>
+          <button onClick={() => onNavigate?.("scheduler")} className="mt-3 px-4 py-2 text-xs font-bold text-white bg-brand-navy rounded-lg hover:bg-brand-blue transition-colors">
+            Go to Scheduler →
+          </button>
+        </div>
+      )}
       <div className="divide-y divide-gray-100">
         {team.map(m => (
           <div key={m.id} className="flex items-center gap-3 px-4 py-3">
@@ -1568,7 +1575,6 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const hasBusinessData = hasJobs || hasInvoices || (accounts?.ytdIncome ?? 0) > 0;
   const [showQuickWins,    setShowQuickWins]    = useState(true);
   const [demoMode,         setDemoMode]         = useState(false);
-  const [showWelcome,      setShowWelcome]      = useState(dashVisitCount <= 2 && !profile?.dashboard_tour_complete);
   const [showTour,         setShowTour]         = useState(false);
   const [showShareCard,    setShowShareCard]    = useState(false);
   const [milestone,        setMilestone]        = useState(null); // { emoji, title, body }
@@ -1590,6 +1596,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     }
   }, [profile?.community_opt_in]);
   const [liveBoard,        setLiveBoard]        = useState([]);
+  const lastLbUpsertRef = useRef(0); // epoch ms of last leaderboard DB write
 
   const score   = useMemo(() => calcHealthScore({ accounts, weekJobs, invoices, jobsToday }), [accounts, weekJobs, invoices, jobsToday]);
   const actions = useMemo(() => buildActions({ accounts, invoices, jobsToday, score }), [accounts, invoices, jobsToday, score]);
@@ -1621,7 +1628,9 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   }, [score.total]);
 
 
-  // Fetch live leaderboard on mount + whenever the user's own score changes
+  // Fetch live leaderboard on mount and when the user or opt-in status changes.
+  // score.total is intentionally excluded — the user's own score is injected
+  // client-side, so there's no need to re-hit the DB every time it recalculates.
   useEffect(() => {
     let cancelled = false;
     listLeaderboard(50)
@@ -1631,15 +1640,28 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
         if (!cancelled) setLiveBoard([]);
       });
     return () => { cancelled = true; };
-  }, [user?.id, communityOptIn, score.total]);
+  }, [user?.id, communityOptIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync own entry to the public board when opted in (real users only)
+  // Sync own entry to the public board when opted in (real users only).
+  // Throttled to one DB write per 5 minutes — score.total is in the dep array
+  // so the check runs when data refreshes, but the SELECT+UPSERT only fires
+  // when the throttle window has elapsed or the user just opted in.
   useEffect(() => {
     if (!user || user.id === 'demo-user') return;
     if (!communityOptIn) {
+      lastLbUpsertRef.current = 0; // reset so next opt-in writes immediately
       deleteMyEntry().catch(err => console.error('Failed to remove leaderboard entry:', err));
       return;
     }
+    const FIVE_MIN = 5 * 60 * 1000;
+    const now = Date.now();
+    // Initialise from localStorage on first run so throttle survives page refresh
+    if (!lastLbUpsertRef.current) {
+      try { lastLbUpsertRef.current = parseInt(localStorage.getItem('cadi_lb_upsert') || '0', 10); } catch {}
+    }
+    if (now - lastLbUpsertRef.current < FIVE_MIN) return;
+    lastLbUpsertRef.current = now;
+    try { localStorage.setItem('cadi_lb_upsert', String(now)); } catch {}
     upsertMyEntry({
       business_name: profile?.business_name || displayName,
       sector: profile?.cleaner_type || 'residential',
@@ -1766,14 +1788,6 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     } catch { /* non-critical */ }
   }
 
-  const handleDismissWelcome = () => {
-    setShowWelcome(false);
-    // Start the spotlight tour after first welcome
-    if (dashVisitCount === 1) {
-      setTimeout(() => setShowTour(true), 500);
-    }
-  };
-
   const handleDismissQuickWins = async () => {
     setShowQuickWins(false);
     setDemoMode(false);
@@ -1869,14 +1883,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           onClose={() => setShowPayModal(false)}
         />
       )}
-      {showWelcome && (
-        <WelcomeModal
-          businessName={profile?.business_name}
-          firstName={displayName}
-          onClose={handleDismissWelcome}
-        />
-      )}
-      {!showWelcome && profile && !profile?.onboarding_complete && (
+      {profile && !profile?.onboarding_complete && (
         <Onboarding isModal onComplete={() => updateProfile({ onboarding_complete: true })} />
       )}
       {showShareCard && (
@@ -1949,7 +1956,8 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                 <span className="text-white text-xs font-bold">+{recentPts} pts</span>
               </div>
             )}
-            {/* Mode toggle */}
+            {/* Mode toggle — only shown when user has a team */}
+            {accounts.teamStructure !== 'solo' && (
             <div className="flex bg-white/10 rounded-sm p-0.5 gap-0.5">
               {[{id:"solo",label:"Solo"},{id:"team",label:"Team"}].map(m => (
                 <button
@@ -1963,6 +1971,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                 </button>
               ))}
             </div>
+            )} {/* end team toggle conditional */}
             {/* Live indicator */}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 rounded-sm">
               <span className={`w-2 h-2 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-gray-400"}`} />
@@ -2095,14 +2104,6 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
         </div>
       )}
 
-      {/* ── Setup checklist (new users, until all 3 steps done) ── */}
-      {isLive && (
-        <SetupChecklist
-          hasJobs={(weekJobs || []).some(d => d.jobs > 0) || (jobsToday || []).length > 0}
-          onNavigate={onNavigate}
-          userId={user?.id}
-        />
-      )}
 
       {/* ── Loading state ── */}
       {isLive && dataLoading && (
@@ -2133,9 +2134,9 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
         </div>
       )}
 
-      {/* ── Scrollable content ── */}
+      {/* ── Scrollable content — hidden while live data is still loading ── */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4 lg:p-6">
+        <div className="p-4 lg:p-6" style={{ display: isLive && dataLoading ? 'none' : undefined }}>
 
           {/* ── SOLO MODE ── */}
           {mode === "solo" && (
