@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useBusinessId } from '../hooks/useBusinessId';
+import { useFrontDeskUsage } from '../hooks/useFrontDeskUsage';
 import { approveAgentAction, rejectAgentAction, AGENTS } from '../lib/agentFramework';
 import {
   Check, X, Clock, Send, AlertTriangle, Inbox,
   MessageSquare, Star, CalendarDays, CalendarClock, ChevronDown, ChevronRight,
-  RefreshCw, Eye, MapPin, Phone, Mail, Building2, Wrench
+  RefreshCw, Eye, MapPin, Phone, Mail, Building2, Wrench, Tag, Repeat, Timer
 } from 'lucide-react';
 
 // ─── Static maps ──────────────────────────────────────────────────────────────
@@ -359,22 +360,65 @@ function SiteVisitCard({ action, onRefresh }) {
             </div>
           </div>
         )}
-        {p.sector_label && (
+        {(p.mode || p.sector_label || p.premises_type) && (
           <div className="flex items-start gap-3">
             <Building2 size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
-            <span className="text-xs text-gray-700">{p.sector_label}</span>
+            <span className="text-xs text-gray-700">
+              {[
+                p.mode ? p.mode.charAt(0).toUpperCase() + p.mode.slice(1) : null,
+                p.premises_type ? p.premises_type.charAt(0).toUpperCase() + p.premises_type.slice(1) : null,
+                p.sector_label,
+              ].filter(Boolean).join(' · ')}
+              {p.role ? <span className="text-gray-400"> — {p.role}</span> : null}
+            </span>
           </div>
         )}
-        {p.service_labels?.length > 0 && (
+        {(p.service_labels?.length > 0 || p.clean_type || p.services?.length > 0) && (
           <div className="flex items-start gap-3">
             <Wrench size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
-            <span className="text-xs text-gray-700">{p.service_labels.join(', ')}</span>
+            <span className="text-xs text-gray-700">
+              {[
+                p.clean_type,
+                ...(p.service_labels ?? []),
+                ...(p.services ?? []),
+              ].filter(Boolean).join(', ')}
+            </span>
           </div>
         )}
-        {p.address && (
+        {p.frequency && (
+          <div className="flex items-start gap-3">
+            <Repeat size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+            <span className="text-xs text-gray-700 capitalize">{p.frequency}</span>
+          </div>
+        )}
+        {p.timeline && (
+          <div className="flex items-start gap-3">
+            <Timer size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+            <span className="text-xs text-gray-700 capitalize">{p.timeline}</span>
+          </div>
+        )}
+        {(p.address || p.postcode) && (
           <div className="flex items-start gap-3">
             <MapPin size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
-            <span className="text-xs text-gray-700">{p.address}</span>
+            <span className="text-xs text-gray-700">{p.address || p.postcode}</span>
+          </div>
+        )}
+        {p.access_notes && (
+          <div className="flex items-start gap-3">
+            <Tag size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+            <span className="text-xs text-gray-700">{p.access_notes}</span>
+          </div>
+        )}
+        {(p.bedrooms || p.size || p.situation) && (
+          <div className="flex items-start gap-3">
+            <Tag size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+            <span className="text-xs text-gray-700">
+              {[
+                p.bedrooms ? `${p.bedrooms} bed` : null,
+                p.size,
+                p.situation,
+              ].filter(Boolean).join(' · ')}
+            </span>
           </div>
         )}
       </div>
@@ -495,6 +539,7 @@ function EmptyState({ tab, agentFilter, isFirstTime }) {
 
 export default function InboxPage() {
   const businessId = useBusinessId();
+  const fdUsage    = useFrontDeskUsage();
   const [tab,         setTab]         = useState('pending');
   const [agentFilter, setAgentFilter] = useState(null); // null = all
   const [pending,     setPending]     = useState([]);
@@ -569,6 +614,41 @@ export default function InboxPage() {
             <RefreshCw size={16} />
           </button>
         </div>
+
+        {/* Front Desk usage bar — free users only */}
+        {!fdUsage.isPro && !fdUsage.loading && (
+          <div className={`mb-5 rounded-xl border px-4 py-3 ${
+            fdUsage.isAtLimit
+              ? 'bg-red-50 border-red-200'
+              : fdUsage.isNearLimit
+              ? 'bg-amber-50 border-amber-200'
+              : 'bg-white border-[#99c5ff]/20'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-xs font-bold ${
+                fdUsage.isAtLimit ? 'text-red-600' : fdUsage.isNearLimit ? 'text-amber-700' : 'text-[#010a4f]'
+              }`}>
+                {fdUsage.isAtLimit
+                  ? 'Monthly limit reached — new actions paused until next month'
+                  : `${fdUsage.used} of ${fdUsage.limit} Front Desk actions used this month`}
+              </span>
+              <Link
+                to="/upgrade"
+                className="text-xs font-bold text-[#1f48ff] hover:underline shrink-0 ml-3"
+              >
+                Upgrade for unlimited →
+              </Link>
+            </div>
+            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  fdUsage.isAtLimit ? 'bg-red-400' : fdUsage.isNearLimit ? 'bg-amber-400' : 'bg-[#1f48ff]'
+                }`}
+                style={{ width: `${Math.min((fdUsage.used / fdUsage.limit) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Pending / History tabs */}
         <div className="flex items-center gap-1 p-1 bg-white rounded-xl border border-[#99c5ff]/20 shadow-sm mb-3">
