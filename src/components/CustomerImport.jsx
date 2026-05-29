@@ -8,6 +8,8 @@ import { useState, useRef, useCallback } from 'react';
 import { X, Upload, ArrowRight, ArrowLeft, Check, AlertCircle, ChevronDown, Crown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { upsertCustomer } from '../lib/db/customersDb';
+import { bulkInsertRounds, deleteRoundsForCustomer } from '../lib/db/customerRoundsDb';
+import { bulkCreateJobs } from '../lib/db/jobsDb';
 import { supabase } from '../lib/supabase';
 import { usePlan } from '../hooks/usePlan';
 
@@ -15,33 +17,51 @@ const LITE_CAP = 30;
 
 // ─── Cadi fields that imports can fill ────────────────────────────────────────
 const CADI_FIELDS = [
-  { id: 'name',         label: 'Name',          required: true  },
-  { id: 'email',        label: 'Email'                          },
-  { id: 'phone',        label: 'Phone'                          },
-  { id: 'addressLine1', label: 'Address line 1'                 },
-  { id: 'addressLine2', label: 'Address line 2'                 },
-  { id: 'town',         label: 'Town / City'                    },
-  { id: 'county',       label: 'County'                         },
-  { id: 'postcode',     label: 'Postcode'                       },
-  { id: 'frequency',    label: 'Frequency'                      },
-  { id: 'notes',        label: 'Notes'                          },
-  { id: 'tags',         label: 'Tags (comma-separated)'         },
-  { id: '__skip',       label: '— Skip this column —'          },
+  { id: 'name',              label: 'Name',                  required: true  },
+  { id: 'email',             label: 'Email'                                  },
+  { id: 'phone',             label: 'Phone'                                  },
+  { id: 'addressLine1',      label: 'Address line 1'                         },
+  { id: 'addressLine2',      label: 'Address line 2'                         },
+  { id: 'town',              label: 'Town / City'                            },
+  { id: 'county',            label: 'County'                                 },
+  { id: 'postcode',          label: 'Postcode'                               },
+  { id: 'frequency',         label: 'Frequency'                              },
+  { id: 'notes',             label: 'Notes'                                  },
+  { id: 'tags',              label: 'Tags (comma-separated)'                 },
+  // CleanerPlanner / Squeegee fields
+  { id: 'dueDate',           label: 'Due date'                               },
+  { id: 'jobReference',      label: 'Job reference'                          },
+  { id: 'customerReference', label: 'Customer reference'                     },
+  { id: 'schedule',          label: 'Schedule'                               },
+  { id: 'customerBalance',   label: 'Customer balance (£)'                   },
+  { id: 'pricePerVisit',     label: 'Price per visit (£)'                    },
+  { id: 'roundName',         label: 'Round'                                  },
+  { id: 'accountStatus',     label: 'Status (active/suspended/cancelled)'    },
+  { id: '__skip',            label: '— Skip this column —'                  },
 ];
 
 // ─── Keyword → Cadi field auto-mapping ────────────────────────────────────────
 const KEYWORD_MAP = [
-  { field: 'name',         keywords: ['name', 'full name', 'customer', 'client', 'contact'] },
-  { field: 'email',        keywords: ['email', 'e-mail', 'mail'] },
-  { field: 'phone',        keywords: ['phone', 'mobile', 'tel', 'telephone', 'cell'] },
-  { field: 'addressLine1', keywords: ['address 1', 'address1', 'street', 'address line 1', 'line 1', 'addr1', 'addr'] },
-  { field: 'addressLine2', keywords: ['address 2', 'address2', 'address line 2', 'line 2', 'addr2'] },
-  { field: 'town',         keywords: ['town', 'city', 'suburb'] },
-  { field: 'county',       keywords: ['county', 'region', 'state', 'area'] },
-  { field: 'postcode',     keywords: ['postcode', 'post code', 'postal', 'zip', 'zipcode'] },
-  { field: 'frequency',    keywords: ['frequency', 'schedule', 'recurring', 'recurrence', 'interval'] },
-  { field: 'notes',        keywords: ['notes', 'note', 'comments', 'comment', 'description', 'memo'] },
-  { field: 'tags',         keywords: ['tags', 'tag', 'labels', 'label', 'category', 'categories'] },
+  { field: 'name',              keywords: ['name', 'full name', 'customer', 'client', 'contact'] },
+  { field: 'email',             keywords: ['email', 'e-mail', 'mail'] },
+  { field: 'phone',             keywords: ['phone', 'mobile', 'tel', 'telephone', 'cell'] },
+  { field: 'addressLine1',      keywords: ['address 1', 'address1', 'street', 'address line 1', 'line 1', 'addr1', 'addr'] },
+  { field: 'addressLine2',      keywords: ['address 2', 'address2', 'address line 2', 'line 2', 'addr2'] },
+  { field: 'town',              keywords: ['town', 'city', 'suburb'] },
+  { field: 'county',            keywords: ['county', 'region', 'state', 'area'] },
+  { field: 'postcode',          keywords: ['postcode', 'post code', 'postal', 'zip', 'zipcode'] },
+  { field: 'frequency',         keywords: ['frequency', 'recurring', 'recurrence', 'interval'] },
+  { field: 'notes',             keywords: ['notes', 'note', 'comments', 'comment', 'description', 'memo'] },
+  { field: 'tags',              keywords: ['tags', 'tag', 'labels', 'label', 'category', 'categories'] },
+  // CleanerPlanner / Squeegee specific
+  { field: 'dueDate',           keywords: ['due date', 'due', 'next due', 'next visit', 'date due', 'duedate'] },
+  { field: 'jobReference',      keywords: ['job ref', 'job reference', 'job no', 'job number', 'jobref', 'job id'] },
+  { field: 'customerReference', keywords: ['customer ref', 'customer reference', 'cust ref', 'account ref', 'account number', 'acc ref', 'ref'] },
+  { field: 'schedule',          keywords: ['schedule', 'cleaning schedule', 'service schedule', 'visit schedule'] },
+  { field: 'customerBalance',   keywords: ['balance', 'customer balance', 'outstanding', 'amount due', 'account balance', 'balance due'] },
+  { field: 'pricePerVisit',     keywords: ['price', 'cost', 'charge', 'amount', 'price per visit', 'job price', 'visit price', 'fee'] },
+  { field: 'roundName',         keywords: ['round', 'round name', 'route', 'route name', 'rounds', 'area round'] },
+  { field: 'accountStatus',     keywords: ['status', 'account status', 'active', 'state', 'customer status'] },
 ];
 
 function autoMap(header) {
@@ -50,6 +70,154 @@ function autoMap(header) {
     if (keywords.some(k => lower === k || lower.includes(k))) return field;
   }
   return '__skip';
+}
+
+// ─── CleanerPlanner Jobs format detection + parsing ───────────────────────────
+function isCleanerPlannerJobs(headers) {
+  const lower = headers.map(h => h.toLowerCase().trim());
+  return lower.includes('cust ref') && lower.includes('round') && lower.includes('job ref');
+}
+
+function parseCurrency(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  if (s.toLowerCase() === 'quote' || s === '') return null;
+  const n = parseFloat(s.replace(/[^0-9.-]/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+function parseCleanerDate(str) {
+  if (!str) return null;
+  const parts = str.trim().split('/');
+  if (parts.length !== 3) return null;
+  const [d, m, y] = parts;
+  const year = y.length === 2 ? `20${y}` : y;
+  return `${year}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+}
+
+// Returns { entries: [{customer, rounds, isDupe}], skipped }
+// One entry per unique Cust Ref. Each entry has its customer data + all its rounds.
+function buildCleanerPlannerData(rows, existingCustRefs = new Set()) {
+  const customerMap = new Map(); // dedupKey → { customer, rounds, isDupe }
+  const skipped = [];
+
+  rows.forEach((row, idx) => {
+    const get = (col) => (row[col] ?? '').toString().trim();
+
+    const custRef   = get('Cust Ref');
+    const rawName   = get('Name');
+    const address   = get('Address Line 1');
+    const name      = rawName || address; // address fallback for unnamed rows
+    const status    = get('Status').toLowerCase();
+    const cancelled = get('Cancelled');
+
+    if (!name) { skipped.push({ row: idx + 2, reason: 'No name or address' }); return; }
+    if (status === 'quote') { skipped.push({ row: idx + 2, reason: 'Quote — skipped' }); return; }
+
+    const dedupKey = custRef || `${name}::${address}`.toLowerCase();
+
+    const accountStatus = cancelled
+      ? 'cancelled'
+      : status.includes('suspend') ? 'suspended'
+      : 'active';
+
+    const pricePerVisit  = parseCurrency(get('Price'));
+    const balance        = parseCurrency(get('Balance')) ?? 0;
+    const dueDate        = parseCleanerDate(get('Due'));
+    const schedule       = get('Schedule') || null;
+    const roundName      = get('Round')    || null;
+    const jobRef         = get('Job Ref')  || null;
+
+    const round = { jobReference: jobRef, roundName, schedule, pricePerVisit, dueDate, accountStatus };
+
+    if (!customerMap.has(dedupKey)) {
+      const phone = get('Mobile') || get('Phone') || null;
+      const email = get('Email') || null;
+      customerMap.set(dedupKey, {
+        customer: {
+          name,
+          addressLine1:      address || null,
+          phone:             phone || null,
+          email:             email || null,
+          customerReference: custRef || null,
+          accountStatus,
+          customerBalance:   balance,
+          schedule,
+          roundName,
+          pricePerVisit,
+          dueDate,
+          tags: [],
+        },
+        rounds:  [round],
+        isDupe:  custRef ? existingCustRefs.has(custRef) : false,
+      });
+    } else {
+      const entry = customerMap.get(dedupKey);
+      entry.rounds.push(round);
+      entry.customer.customerBalance = (entry.customer.customerBalance || 0) + balance;
+      if (dueDate && (!entry.customer.dueDate || dueDate < entry.customer.dueDate)) {
+        entry.customer.dueDate = dueDate;
+      }
+    }
+  });
+
+  return { entries: [...customerMap.values()], skipped };
+}
+
+// ─── Schedule generation helpers ─────────────────────────────────────────────
+
+function parseFrequencyDays(scheduleStr) {
+  if (!scheduleStr) return null;
+  const s = scheduleStr.toLowerCase().trim();
+  if (s.includes('one off') || s.includes('one-off')) return 0;
+  const weeksMatch = s.match(/(\d+)\s*week/);
+  if (weeksMatch) return parseInt(weeksMatch[1]) * 7;
+  const monthsMatch = s.match(/(\d+)\s*month/);
+  if (monthsMatch) return parseInt(monthsMatch[1]) * 30;
+  if (s === 'weekly') return 7;
+  if (s === 'fortnightly') return 14;
+  if (s === 'monthly') return 30;
+  return null;
+}
+
+function detectJobType(customerName) {
+  const lower = (customerName || '').toLowerCase();
+  const commercial = ['ltd', 'limited', 'plc', 'management', 'lettings', 'school', 'hotel', 'inn', 'lodge', 'apartments', 'surgery', 'clinic', 'detection', 'primary', 'college'];
+  return commercial.some(w => lower.includes(w)) ? 'commercial' : 'exterior';
+}
+
+function generateJobDatesFromRound(round, windowMonths = 4) {
+  if (!round.dueDate) return [];
+  const freqDays = parseFrequencyDays(round.schedule);
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const windowEnd = new Date(today);
+  windowEnd.setMonth(windowEnd.getMonth() + windowMonths);
+
+  // One-off: single job on due date (even if past — skip if already > 1yr ago)
+  if (freqDays === 0) {
+    const d = new Date(round.dueDate + 'T00:00:00');
+    const msAgo = today - d;
+    if (msAgo > 365 * 86400000) return []; // skip very stale one-offs
+    return [round.dueDate];
+  }
+  if (!freqDays) return [];
+
+  // Advance from due date to first occurrence on or after today
+  const start = new Date(round.dueDate + 'T00:00:00');
+  if (start < today) {
+    const diff = today - start;
+    const skips = Math.ceil(diff / (freqDays * 86400000));
+    start.setDate(start.getDate() + skips * freqDays);
+  }
+
+  const dates = [];
+  const cur = new Date(start);
+  while (cur <= windowEnd) {
+    dates.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + freqDays);
+  }
+  return dates;
 }
 
 // ─── Parse file (CSV or Excel) → { headers, rows } ───────────────────────────
@@ -92,7 +260,7 @@ const SOURCES = [
     id: 'cleanerplanner',
     name: 'CleanerPlanner',
     icon: '🧹',
-    hint: 'Go to Customers → Export → Download CSV. Upload it here.',
+    hint: 'In CleanerPlanner go to Customers → Export → Download CSV. The export includes rounds, job references, schedules, balances, and pricing — Cadi will auto-map all of these.',
   },
   {
     id: 'jobber',
@@ -370,6 +538,18 @@ function buildCustomers(rows, mapping, existingEmails) {
       c.tags = [];
     }
 
+    // Normalise accountStatus → active | suspended | cancelled
+    if (c.accountStatus) {
+      const s = c.accountStatus.toLowerCase().trim();
+      if (s.includes('suspend')) c.accountStatus = 'suspended';
+      else if (s.includes('cancel') || s.includes('inactive') || s.includes('closed')) c.accountStatus = 'cancelled';
+      else c.accountStatus = 'active';
+    }
+
+    // Normalise numeric fields — strip currency symbols
+    if (c.customerBalance) c.customerBalance = parseFloat(String(c.customerBalance).replace(/[^0-9.-]/g, '')) || 0;
+    if (c.pricePerVisit)   c.pricePerVisit   = parseFloat(String(c.pricePerVisit).replace(/[^0-9.-]/g, '')) || null;
+
     // Duplicate check by email
     const isDupe = c.email && existingEmails.has(c.email.toLowerCase());
 
@@ -380,7 +560,120 @@ function buildCustomers(rows, mapping, existingEmails) {
 }
 
 // ─── Step 4: Preview ──────────────────────────────────────────────────────────
-function StepPreview({ rows, mapping, existingEmails, onBack, onImport, importing, importError }) {
+function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, importing, importError }) {
+
+  // ─── CleanerPlanner Jobs preview ────────────────────────────────────────────
+  if (cpData) {
+    const { entries, skipped } = cpData;
+    const fresh = entries.filter(e => !e.isDupe);
+    const dupes = entries.filter(e => e.isDupe);
+    const totalRounds = entries.reduce((sum, e) => sum + e.rounds.length, 0);
+
+    return (
+      <div className="flex flex-col overflow-hidden">
+        <div className="p-6 border-b border-[rgba(153,197,255,0.1)]">
+          <button onClick={onBack} disabled={importing} className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-4 transition-colors disabled:opacity-40">
+            <ArrowLeft size={12} /> Back
+          </button>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-lg">🧹</span>
+            <h2 className="text-xl font-black text-white">CleanerPlanner import</h2>
+          </div>
+          <p className="text-xs text-[rgba(153,197,255,0.5)] mb-3">Jobs format detected — columns mapped automatically.</p>
+          <div className="flex gap-2">
+            <div className="flex-1 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+              <p className="text-lg font-black text-emerald-400">{fresh.length}</p>
+              <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wide mt-0.5">Customers</p>
+            </div>
+            <div className="flex-1 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.12)] text-center">
+              <p className="text-lg font-black text-[#99c5ff]">{totalRounds}</p>
+              <p className="text-[10px] text-[rgba(153,197,255,0.5)] font-bold uppercase tracking-wide mt-0.5">Services</p>
+            </div>
+            {dupes.length > 0 && (
+              <div className="flex-1 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
+                <p className="text-lg font-black text-amber-400">{dupes.length}</p>
+                <p className="text-[10px] text-amber-400/70 font-bold uppercase tracking-wide mt-0.5">Update</p>
+              </div>
+            )}
+            {skipped.length > 0 && (
+              <div className="flex-1 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+                <p className="text-lg font-black text-red-400">{skipped.length}</p>
+                <p className="text-[10px] text-red-400/70 font-bold uppercase tracking-wide mt-0.5">Skipped</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-4 space-y-2">
+          {entries.slice(0, 8).map((e, i) => (
+            <div
+              key={i}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${
+                e.isDupe
+                  ? 'bg-amber-500/5 border-amber-500/15'
+                  : 'bg-[rgba(153,197,255,0.04)] border-[rgba(153,197,255,0.1)]'
+              }`}
+            >
+              <div className="w-8 h-8 rounded-full bg-[rgba(31,72,255,0.2)] flex items-center justify-center shrink-0 text-sm font-bold text-[#99c5ff]">
+                {e.customer.name?.[0]?.toUpperCase() ?? '?'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white truncate">{e.customer.name}</p>
+                <p className="text-[11px] text-[rgba(153,197,255,0.45)] truncate">
+                  {e.rounds.length} round{e.rounds.length !== 1 ? 's' : ''}
+                  {e.rounds[0]?.roundName ? ` · ${e.rounds[0].roundName}` : ''}
+                  {e.rounds[0]?.pricePerVisit != null ? ` · £${e.rounds[0].pricePerVisit}` : ''}
+                </p>
+              </div>
+              {e.isDupe && (
+                <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">
+                  update
+                </span>
+              )}
+            </div>
+          ))}
+          {entries.length > 8 && (
+            <p className="text-xs text-center text-[rgba(153,197,255,0.3)] py-2">
+              + {entries.length - 8} more customers
+            </p>
+          )}
+          {skipped.length > 0 && (
+            <div className="px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.1)] text-xs text-[rgba(153,197,255,0.5)]">
+              {skipped.length} row{skipped.length !== 1 ? 's' : ''} skipped (quotes, missing names, or cancelled).
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 border-t border-[rgba(153,197,255,0.1)] space-y-3">
+          {importError && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+              <AlertCircle size={14} className="shrink-0 mt-0.5" />
+              {importError}
+            </div>
+          )}
+          <button
+            onClick={() => onImport(entries)}
+            disabled={importing || entries.length === 0}
+            className="w-full py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#1f48ff]/30 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {importing ? (
+              <>
+                <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                Importing…
+              </>
+            ) : (
+              <>
+                Import {entries.length} customer{entries.length !== 1 ? 's' : ''} + {totalRounds} round{totalRounds !== 1 ? 's' : ''}
+                <ArrowRight size={14} />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Standard CSV/Excel preview ─────────────────────────────────────────────
   const { customers, skipped } = buildCustomers(rows, mapping, existingEmails);
   const fresh = customers.filter(c => !c.isDupe);
   const dupes = customers.filter(c => c.isDupe);
@@ -487,29 +780,62 @@ function StepPreview({ rows, mapping, existingEmails, onBack, onImport, importin
 }
 
 // ─── Step 5: Done ─────────────────────────────────────────────────────────────
-function StepDone({ imported, onClose }) {
+function StepDone({ imported, rounds, jobs, onClose, onViewScheduler }) {
   return (
     <div className="p-8 flex flex-col items-center text-center gap-5">
       <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
         <Check size={28} className="text-emerald-400" />
       </div>
       <div>
-        <h2 className="text-2xl font-black text-white">All done!</h2>
+        <h2 className="text-2xl font-black text-white">
+          {jobs > 0 ? 'Customers imported & schedule built! 🎉' : 'All done!'}
+        </h2>
         <p className="text-[rgba(153,197,255,0.6)] text-sm mt-2">
-          {imported} customer{imported !== 1 ? 's' : ''} {imported !== 1 ? 'have' : 'has'} been added to Cadi.
+          {imported} customer{imported !== 1 ? 's' : ''} added to Cadi
+          {rounds > 0 ? `, ${rounds} recurring service${rounds !== 1 ? 's' : ''}` : ''}.
         </p>
       </div>
+
+      {/* Job schedule stats */}
+      {jobs > 0 && (
+        <div className="w-full space-y-2">
+          <div className="flex gap-2">
+            <div className="flex-1 px-3 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+              <p className="text-xl font-black text-emerald-400">{imported}</p>
+              <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wide mt-0.5">Customers</p>
+            </div>
+            <div className="flex-1 px-3 py-3 rounded-xl bg-[rgba(31,72,255,0.15)] border border-[#1f48ff]/25 text-center">
+              <p className="text-xl font-black text-[#99c5ff]">{jobs}</p>
+              <p className="text-[10px] text-[rgba(153,197,255,0.6)] font-bold uppercase tracking-wide mt-0.5">Jobs scheduled</p>
+            </div>
+          </div>
+          <div className="px-4 py-3 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.12)] text-xs text-[rgba(153,197,255,0.7)] text-left">
+            Your Scheduler is now populated with the next 4 months of work based on each customer's round and schedule.
+          </div>
+        </div>
+      )}
+
       <div className="w-full px-4 py-3.5 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.15)] text-sm text-[rgba(153,197,255,0.7)] text-left space-y-1.5">
         <p className="font-bold text-white text-sm">What's next?</p>
-        <p>• View and edit each customer from the Customers page</p>
-        <p>• Cadi will automatically suggest upsell and win-back opportunities</p>
-        <p>• Add job history to customers to get the most out of AI insights</p>
+        {jobs > 0 ? (
+          <>
+            <p>• Open Scheduler to see your full work schedule</p>
+            <p>• Assign crew to jobs in the Day view</p>
+            <p>• Check Rounds view to see customers grouped by area</p>
+          </>
+        ) : (
+          <>
+            <p>• View and edit each customer from the Customers page</p>
+            <p>• Cadi will automatically suggest upsell and win-back opportunities</p>
+            <p>• Add job history to customers to get the most out of AI insights</p>
+          </>
+        )}
       </div>
       <button
-        onClick={onClose}
+        onClick={jobs > 0 && onViewScheduler ? onViewScheduler : onClose}
         className="w-full py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-bold rounded-xl transition-colors shadow-lg shadow-[#1f48ff]/30"
       >
-        View my customers
+        {jobs > 0 ? 'Open Scheduler →' : 'View my customers'}
       </button>
     </div>
   );
@@ -677,22 +1003,122 @@ async function storePendingCustomers(customers) {
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
-export default function CustomerImport({ onClose, onImported, existingCustomers = [] }) {
+export default function CustomerImport({ onClose, onImported, onViewScheduler, existingCustomers = [] }) {
   const { isPro } = usePlan();
   const [step, setStep] = useState('source'); // source | upload | map | preview | cap | pick | done
   const [source, setSource] = useState(null);
   const [csvData, setCsvData] = useState(null); // { headers, rows, fileName }
   const [mapping, setMapping] = useState(null);
+  const [cpData, setCpData] = useState(null);   // CleanerPlanner Jobs: { entries, skipped }
   const [importing, setImporting] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
+  const [importedRoundCount, setImportedRoundCount] = useState(0);
+  const [importedJobCount, setImportedJobCount] = useState(0);
   const [importError, setImportError] = useState(null);
-  const [pendingCustomers, setPendingCustomers] = useState([]); // full parsed list when cap fires
+  const [pendingCustomers, setPendingCustomers] = useState([]);
   const [showCap, setShowCap] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
 
-  const existingEmails = new Set(
-    existingCustomers.map(c => c.email?.toLowerCase()).filter(Boolean)
-  );
+  const existingEmails   = new Set(existingCustomers.map(c => c.email?.toLowerCase()).filter(Boolean));
+  const existingCustRefs = new Set(existingCustomers.map(c => c.customer_reference).filter(Boolean));
+
+  // CleanerPlanner Jobs import: create customers, rounds, then auto-schedule jobs
+  const doImportCP = async (entries) => {
+    setImporting(true);
+    setImportError(null);
+    let count = 0;
+    let roundCount = 0;
+    const failures = [];
+    const jobsToCreate = [];
+
+    for (const { customer, rounds } of entries) {
+      try {
+        const saved = await upsertCustomer(customer);
+        count++;
+        if (rounds.length > 0 && saved?.id) {
+          try {
+            await deleteRoundsForCustomer(saved.id);
+            await bulkInsertRounds(rounds.map(r => ({ ...r, customerId: saved.id })));
+            roundCount += rounds.length;
+          } catch (re) {
+            console.warn('Rounds insert failed for', customer.name, re?.message);
+          }
+
+          // Build scheduled jobs for the next 4 months
+          const jobType = detectJobType(customer.name);
+          for (const round of rounds) {
+            if (round.accountStatus === 'cancelled' || round.accountStatus === 'suspended') continue;
+            const dates = generateJobDatesFromRound(round, 4);
+            for (const date of dates) {
+              jobsToCreate.push({
+                customerId:  saved.id,
+                customer:    customer.name,
+                postcode:    customer.postcode || '',
+                date,
+                type:        jobType,
+                service:     round.roundName || 'Window clean',
+                price:       round.pricePerVisit || 0,
+                recurrence:  round.schedule || 'one-off',
+                isRecurring: (parseFrequencyDays(round.schedule) ?? 0) > 0,
+                notes:       round.jobReference ? `Job ref: ${round.jobReference}` : '',
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('CP import row failed:', err?.message, customer.name);
+        failures.push(err?.message || 'Unknown error');
+      }
+    }
+
+    // Bulk-insert all scheduled jobs in one shot
+    let jobCount = 0;
+    if (jobsToCreate.length > 0) {
+      try {
+        await bulkCreateJobs(jobsToCreate);
+        jobCount = jobsToCreate.length;
+      } catch (je) {
+        console.warn('Schedule generation failed:', je?.message);
+      }
+    }
+
+    setImporting(false);
+    if (count > 0) {
+      setImportedCount(count);
+      setImportedRoundCount(roundCount);
+      setImportedJobCount(jobCount);
+      setStep('done');
+      onImported?.();
+    } else {
+      setImportError(`Import failed: ${failures[0] ?? 'Unknown error'}`);
+    }
+  };
+
+  const handleImportCP = async (entries) => {
+    // Resolve existing customer ids so upsert updates rather than inserts duplicates
+    const refToId = new Map(
+      existingCustomers
+        .filter(c => c.customer_reference)
+        .map(c => [c.customer_reference, c.id])
+    );
+    const resolved = entries.map(e => ({
+      ...e,
+      customer: {
+        ...e.customer,
+        id: e.customer.customerReference ? refToId.get(e.customer.customerReference) : undefined,
+      },
+    }));
+
+    if (!isPro) {
+      const fresh = resolved.filter(e => !e.isDupe);
+      if (fresh.length > LITE_CAP) {
+        const dupes = resolved.filter(e => e.isDupe);
+        await doImportCP([...fresh.slice(0, LITE_CAP), ...dupes]);
+        return;
+      }
+    }
+    await doImportCP(resolved);
+  };
 
   const doImport = async (customers, overflow = []) => {
     setImporting(true);
@@ -708,7 +1134,6 @@ export default function CustomerImport({ onClose, onImported, existingCustomers 
         failures.push(err?.message || 'Unknown error');
       }
     }
-    // Store overflow in pending_customers
     if (overflow.length > 0) {
       try { await storePendingCustomers(overflow); } catch (e) { console.warn('pending_customers store failed', e); }
     }
@@ -769,7 +1194,16 @@ export default function CustomerImport({ onClose, onImported, existingCustomers 
           <StepUpload
             source={source}
             onBack={() => setStep('source')}
-            onParsed={(data) => { setCsvData(data); setStep('map'); }}
+            onParsed={(data) => {
+              setCsvData(data);
+              if (isCleanerPlannerJobs(data.headers)) {
+                const built = buildCleanerPlannerData(data.rows, existingCustRefs);
+                setCpData(built);
+                setStep('preview');
+              } else {
+                setStep('map');
+              }
+            }}
           />
         )}
         {step === 'map' && (
@@ -782,17 +1216,18 @@ export default function CustomerImport({ onClose, onImported, existingCustomers 
         )}
         {step === 'preview' && (
           <StepPreview
-            rows={csvData.rows}
-            mapping={mapping}
+            rows={csvData?.rows ?? []}
+            mapping={mapping ?? {}}
             existingEmails={existingEmails}
-            onBack={() => setStep('map')}
-            onImport={handleImport}
+            cpData={cpData}
+            onBack={() => cpData ? setStep('upload') : setStep('map')}
+            onImport={cpData ? handleImportCP : handleImport}
             importing={importing}
             importError={importError}
           />
         )}
         {step === 'done' && (
-          <StepDone imported={importedCount} onClose={onClose} />
+          <StepDone imported={importedCount} rounds={importedRoundCount} jobs={importedJobCount} onClose={onClose} onViewScheduler={onViewScheduler} />
         )}
       </ModalShell>
 

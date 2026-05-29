@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { listCustomers, upsertCustomer, archiveCustomer } from '../lib/db/customersDb';
 import { createJob, listJobs, updateJob as updateJobDb, deleteJob as deleteJobDb } from '../lib/db/jobsDb';
 import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabase';
 
 function mapRow(r) {
   return {
@@ -47,6 +48,7 @@ function mapJobRow(r) {
     status: r.status || 'scheduled',
     assignee: r.assignee || null,
     assignees: r.assignees || [],
+    assigneeIds: r.assignee_ids || [],
     recurrence: r.recurrence || 'one-off',
     notes: r.notes || '',
     day: 0, // will be computed by consumers
@@ -64,18 +66,31 @@ export function DataProvider({ children }) {
   // Load customers from Supabase
   useEffect(() => {
     if (!user) { setCustomers([]); return; }
-    listCustomers({ pageSize: 1000 })
+    listCustomers({ pageSize: 2000 })
       .then(rows => setCustomers(rows.map(mapRow)))
       .catch(() => setCustomers([]));
   }, [user]);
 
-  // Load jobs from Supabase
+  const refreshCustomers = useCallback(() => {
+    if (!user) return;
+    listCustomers({ pageSize: 2000 })
+      .then(rows => setCustomers(rows.map(mapRow)))
+      .catch(() => {});
+  }, [user]);
+
+  // Load jobs from Supabase — scoped to ±6 months so the query stays fast as history grows
   useEffect(() => {
     if (!user) { setJobs([]); return; }
     setJobsLoading(true);
 
+    const now  = new Date();
+    const from = new Date(now); from.setMonth(from.getMonth() - 6);
+    const to   = new Date(now); to.setMonth(to.getMonth() + 4);
+    const dateFrom = from.toISOString().slice(0, 10);
+    const dateTo   = to.toISOString().slice(0, 10);
+
     // Try Supabase first
-    listJobs()
+    listJobs({ from: dateFrom, to: dateTo, pageSize: 2000 })
       .then(rows => {
         if (rows.length > 0) {
           setJobs(rows.map(mapJobRow));
@@ -112,6 +127,22 @@ export function DataProvider({ children }) {
       })
       .finally(() => setJobsLoading(false));
   }, [user]);
+
+  // Realtime: keep the scheduler live when staff update job statuses
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`jobs-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'jobs', filter: `owner_id=eq.${user.id}` },
+        (payload) => {
+          setJobs(prev => prev.map(j => j.id === payload.new.id ? mapJobRow(payload.new) : j));
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
 
   // Hydrate customer services from jobs table (runs after both load)
   // Split completed vs scheduled so lifetime value / totals don't include future jobs
@@ -272,7 +303,7 @@ export function DataProvider({ children }) {
 
   return (
     <DataContext.Provider value={{
-      customers, setCustomers, addCustomer, updateCustomer, deleteCustomer,
+      customers, setCustomers, addCustomer, updateCustomer, deleteCustomer, refreshCustomers,
       resComCount, exteriorCount,
       jobs, setJobs, addJobAndSyncCustomer, updateJob, deleteJob, refreshJobs, jobsLoading,
     }}>

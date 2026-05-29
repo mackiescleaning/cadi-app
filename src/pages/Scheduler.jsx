@@ -16,8 +16,9 @@ import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Plus, Filter, Search, X, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Filter, Search, X, Trash2, Pencil } from "lucide-react";
 import AskCadi from "../components/AskCadi";
+import { listAllRounds } from "../lib/db/customerRoundsDb";
 
 // ─── Theme — light glass ──────────────────────────────────────────────────────
 const TYPE = {
@@ -301,7 +302,7 @@ function Stat({ label, value, color = "text-slate-900", emphasis }) {
 
 // ─── View switcher ───────────────────────────────────────────────────────────
 function ViewTabs({ view, setView, setDayOffset }) {
-  const views = ["Day", "Week", "Month", "Quarter"];
+  const views = ["Day", "Week", "Month", "Quarter", "Rounds"];
   return (
     <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold bg-white/60">
       {views.map(v => (
@@ -336,7 +337,7 @@ function DateNav({ view, dayOffset, setDayOffset }) {
 
   return (
     <div className="flex items-center gap-2">
-      {view !== "Quarter" && (
+      {view !== "Quarter" && view !== "Rounds" && (
         <>
           <button onClick={() => setDayOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-white/60 text-slate-600 transition-colors">
             <ChevronLeft size={18} />
@@ -358,8 +359,10 @@ function DateNav({ view, dayOffset, setDayOffset }) {
           </button>
         </>
       )}
-      {view === "Quarter" && (
-        <div className="text-sm font-bold text-slate-900">{dateLabel}</div>
+      {(view === "Quarter" || view === "Rounds") && (
+        <div className="text-sm font-bold text-slate-900">
+          {view === "Rounds" ? "All rounds" : dateLabel}
+        </div>
       )}
     </div>
   );
@@ -1148,7 +1151,7 @@ function QuarterView({ jobs }) {
 }
 
 // ─── Job drawer ───────────────────────────────────────────────────────────────
-function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
+function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEditJob }) {
   const [status, setStatus] = useState(job.status);
   const [notes, setNotes] = useState(job.notes || '');
   const [saving, setSaving] = useState(false);
@@ -1193,9 +1196,18 @@ function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob }) {
             <p className="font-black text-base text-slate-900">{job.customer}</p>
             <p className="text-xs text-slate-600 mt-0.5">{job.service}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onEditJob?.(job)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+            >
+              <Pencil size={12} />
+              Edit
+            </button>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="p-5 space-y-4">
@@ -1388,37 +1400,55 @@ function buildProfileServiceOptions(profile) {
   return opts;
 }
 
-function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
+function NewJobModal({ onClose, onSave, onUpdate, editJob, preCustomer = "", customers = [] }) {
   const { profile } = useAuth();
   const profileServices = buildProfileServiceOptions(profile);
+
+  const hourToTime = (h) => {
+    const hours = Math.floor(h ?? 9);
+    const mins  = Math.round(((h ?? 9) - hours) * 60);
+    return `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}`;
+  };
+
+  const initAssignees = () => {
+    if (editJob?.assigneeIds?.length > 0) return editJob.assigneeIds;
+    if (editJob?.status === 'unassigned') return ['unassigned'];
+    if (editJob) return ['you'];
+    return ['you'];
+  };
 
   const [staffOptions, setStaffOptions] = useState(DEFAULT_STAFF_OPTIONS);
   useEffect(() => {
     import('../lib/supabase').then(({ supabase }) => {
-      supabase.from('staff_members').select('id, name').eq('active', true)
+      supabase.from('team_members')
+        .select('id, first_name, last_name')
+        .eq('is_active', true)
         .then(({ data }) => {
           if (data && data.length > 0) {
-            const dbStaff = data.map(s => ({ id: s.id, label: s.name }));
+            const dbStaff = data.map(s => ({
+              id: s.id,
+              label: [s.first_name, s.last_name].filter(Boolean).join(' ').trim() || 'Unnamed',
+            }));
             setStaffOptions([{ id: "you", label: "You" }, ...dbStaff, { id: "unassigned", label: "Unassigned" }]);
           }
         }).catch(() => {});
     }).catch(() => {});
   }, []);
 
-  const [customer,     setCustomer]     = useState(preCustomer);
-  const [addressLine1, setAddressLine1] = useState("");
-  const [addressLine2, setAddressLine2] = useState("");
-  const [town,         setTown]         = useState("");
-  const [postcode,     setPostcode]     = useState("");
-  const [date,         setDate]         = useState(() => new Date().toISOString().split('T')[0]);
-  const [startTime,    setStartTime]    = useState("09:00");
-  const [jobType,      setJobType]      = useState("residential");
-  const [service,      setService]      = useState("");
-  const [durationHrs,  setDuration]     = useState("2");
-  const [price,        setPrice]        = useState("");
-  const [assignees,    setAssignees]    = useState(["you"]);
-  const [recurrence,   setRecurrence]   = useState("fortnightly");
-  const [notes,        setNotes]        = useState("");
+  const [customer,     setCustomer]     = useState(editJob?.customer     ?? preCustomer);
+  const [addressLine1, setAddressLine1] = useState(editJob?.addressLine1 ?? "");
+  const [addressLine2, setAddressLine2] = useState(editJob?.addressLine2 ?? "");
+  const [town,         setTown]         = useState(editJob?.town         ?? "");
+  const [postcode,     setPostcode]     = useState(editJob?.postcode     ?? "");
+  const [date,         setDate]         = useState(editJob?.date         ?? new Date().toISOString().split('T')[0]);
+  const [startTime,    setStartTime]    = useState(editJob ? hourToTime(editJob.startHour) : "09:00");
+  const [jobType,      setJobType]      = useState(editJob?.type         ?? "residential");
+  const [service,      setService]      = useState(editJob?.service      ?? "");
+  const [durationHrs,  setDuration]     = useState(editJob ? String(editJob.durationHrs) : "2");
+  const [price,        setPrice]        = useState(editJob ? String(editJob.price)       : "");
+  const [assignees,    setAssignees]    = useState(initAssignees);
+  const [recurrence,   setRecurrence]   = useState(editJob?.recurrence   ?? "fortnightly");
+  const [notes,        setNotes]        = useState(editJob?.notes        ?? "");
   const [customService,setCustomService]= useState("");
   const [serviceMode,  setServiceMode]  = useState("quick");
 
@@ -1468,15 +1498,40 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
     if (!valid) return;
     const [h, m] = startTime.split(":").map(Number);
     const startHour = h + m / 60;
-    const selectedStaff = staffOptions
-      .filter(s => assignees.includes(s.id) && s.id !== "unassigned")
-      .map(s => s.label);
+    const selectedOptions = staffOptions
+      .filter(s => assignees.includes(s.id) && s.id !== "unassigned");
+    const selectedStaff = selectedOptions.map(s => s.label);
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const selectedStaffIds = selectedOptions
+      .map(s => s.id)
+      .filter(id => UUID_RE.test(id));
+
+    if (editJob) {
+      const newStatus = selectedStaff.length === 0
+        ? "unassigned"
+        : editJob.status === 'unassigned' ? "scheduled" : editJob.status;
+      onUpdate?.(editJob.id, {
+        customer, postcode, date,
+        start_hour: startHour,
+        duration_hrs: parseFloat(durationHrs) || 2,
+        type: jobType, service,
+        price: parseFloat(price),
+        assignee_ids: selectedStaffIds,
+        assignees: selectedStaff,
+        assignee: selectedStaff.length > 0 ? selectedStaff.join(", ") : null,
+        recurrence, notes,
+        status: newStatus,
+      });
+      onClose();
+      return;
+    }
 
     const baseJob = {
       customer, addressLine1, addressLine2, town, postcode, startHour,
       durationHrs: parseFloat(durationHrs) || 2,
       type: jobType, service,
       price: parseFloat(price),
+      assignee_ids: selectedStaffIds,
       assignees: selectedStaff,
       assignee: selectedStaff.length > 0 ? selectedStaff.join(", ") : null,
       recurrence, notes,
@@ -1526,8 +1581,8 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
       <div className="relative overflow-hidden w-full max-w-lg max-h-[95vh] flex flex-col shadow-2xl rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200">
         <div className="flex items-center justify-between px-5 py-4 shrink-0 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
           <div>
-            <p className="font-black text-sm text-slate-900">Add New Job</p>
-            {recurrence !== "none" && selectedRec && (
+            <p className="font-black text-sm text-slate-900">{editJob ? 'Edit Job' : 'Add New Job'}</p>
+            {!editJob && recurrence !== "none" && selectedRec && (
               <p className="text-xs text-slate-500 mt-0.5">{selectedRec.label} · recurring</p>
             )}
           </div>
@@ -1666,6 +1721,7 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
             </div>
           </div>
 
+          {!editJob && (
           <div>
             <FL>Schedule / recurrence</FL>
             <div className="flex flex-wrap gap-1.5">
@@ -1684,6 +1740,7 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
               </div>
             )}
           </div>
+          )}
 
           <div>
             <FL>Notes / access details</FL>
@@ -1700,7 +1757,7 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
                 ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
                 : "bg-slate-100 text-slate-400 cursor-not-allowed"
             }`}>
-            {recurrence === "none" ? "Save job" : "Save & schedule recurring"}
+            {editJob ? "Save changes" : recurrence === "none" ? "Save job" : "Save & schedule recurring"}
           </button>
           <button onClick={onClose}
             className="px-5 py-3 border border-slate-200 text-slate-700 text-xs font-bold uppercase hover:bg-white rounded-xl transition-all">
@@ -1708,6 +1765,191 @@ function NewJobModal({ onClose, onSave, preCustomer = "", customers = [] }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Rounds view ─────────────────────────────────────────────────────────────
+// Groups customers by round_name (from CleanerPlanner / Squeegee import).
+// Shows round summary + expandable customer list with schedule, price, status.
+
+const DEMO_ROUNDS = [
+  {
+    roundName: "Monday AM — Kensington",
+    schedule: "Weekly",
+    customers: [
+      { name: "Kensington Block A", postcode: "W8 4AA", pricePerVisit: 45, dueDate: "2026-06-02", accountStatus: "active" },
+      { name: "Kensington Block B", postcode: "W8 4AB", pricePerVisit: 45, dueDate: "2026-06-02", accountStatus: "active" },
+      { name: "Hammond",            postcode: "W8 4BD", pricePerVisit: 25, dueDate: "2026-06-02", accountStatus: "active" },
+      { name: "Clifton",            postcode: "W8 5AA", pricePerVisit: 25, dueDate: "2026-06-02", accountStatus: "suspended" },
+      { name: "Elsworth",           postcode: "W8 5BB", pricePerVisit: 30, dueDate: "2026-06-02", accountStatus: "active" },
+    ],
+  },
+  {
+    roundName: "Wednesday — West Nine",
+    schedule: "Fortnightly",
+    customers: [
+      { name: "Phillips",        postcode: "W9 1AA", pricePerVisit: 25, dueDate: "2026-06-04", accountStatus: "active" },
+      { name: "Nash Apartments", postcode: "W9 1BB", pricePerVisit: 60, dueDate: "2026-06-04", accountStatus: "active" },
+      { name: "Dr. Khan",        postcode: "W9 2CC", pricePerVisit: 25, dueDate: "2026-06-18", accountStatus: "active" },
+      { name: "Fletcher",        postcode: "W9 2DD", pricePerVisit: 95, dueDate: "2026-06-18", accountStatus: "active" },
+    ],
+  },
+  {
+    roundName: "Friday — SW19 Exterior",
+    schedule: "Monthly",
+    customers: [
+      { name: "Meadow House",  postcode: "SW19 1AA", pricePerVisit: 220, dueDate: "2026-06-06", accountStatus: "active" },
+      { name: "Barnes",        postcode: "SW19 2BB", pricePerVisit: 140, dueDate: "2026-06-06", accountStatus: "active" },
+      { name: "Laurel Lodge",  postcode: "SW19 4EE", pricePerVisit: 150, dueDate: "2026-07-04", accountStatus: "cancelled" },
+    ],
+  },
+];
+
+const ACCOUNT_STATUS_STYLES = {
+  active:    "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  suspended: "bg-amber-100 text-amber-700 border border-amber-200",
+  cancelled: "bg-red-50 text-red-600 border border-red-200",
+};
+
+function RoundsView({ onScheduleRound }) {
+  const [expanded, setExpanded] = useState(null);
+  const [dbRounds, setDbRounds] = useState(null); // null = loading
+
+  useEffect(() => {
+    listAllRounds()
+      .then(rows => setDbRounds(rows))
+      .catch(() => setDbRounds([]));
+  }, []);
+
+  const rounds = useMemo(() => {
+    if (!dbRounds || dbRounds.length === 0) return DEMO_ROUNDS;
+    const map = {};
+    dbRounds.forEach(r => {
+      const key = r.round_name || r.job_reference || 'Unassigned';
+      if (!map[key]) map[key] = { roundName: key, schedule: r.schedule || '', customers: [] };
+      map[key].customers.push({
+        name:          r.customers?.name || 'Unknown',
+        postcode:      r.customers?.postcode || '',
+        pricePerVisit: r.price_per_visit ? Number(r.price_per_visit) : null,
+        dueDate:       r.due_date,
+        accountStatus: r.account_status || 'active',
+        jobRef:        r.job_reference,
+      });
+    });
+    return Object.values(map).sort((a, b) => a.roundName.localeCompare(b.roundName));
+  }, [dbRounds]);
+
+  const isDemo = !dbRounds || dbRounds.length === 0;
+
+  return (
+    <div className="space-y-3">
+      {isDemo && (
+        <div className="px-4 py-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-700 flex items-start gap-2">
+          <span className="text-base leading-none">💡</span>
+          <span>
+            <strong>Demo data shown.</strong> Import customers from CleanerPlanner or Squeegee — any customer with a "Round" column will appear here automatically, grouped by round name.
+          </span>
+        </div>
+      )}
+
+      {rounds.map((round) => {
+        const activeCustomers = round.customers.filter(c => c.accountStatus !== 'cancelled');
+        const totalValue      = activeCustomers.reduce((s, c) => s + (c.pricePerVisit || 0), 0);
+        const isOpen          = expanded === round.roundName;
+        const nextDue         = round.customers
+          .filter(c => c.dueDate && c.accountStatus === 'active')
+          .map(c => c.dueDate)
+          .sort()[0];
+
+        return (
+          <LightCard key={round.roundName} className="overflow-hidden">
+            {/* Round header */}
+            <button
+              onClick={() => setExpanded(isOpen ? null : round.roundName)}
+              className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-white/40 transition-colors"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-200 flex items-center justify-center shrink-0">
+                <span className="text-lg">🔄</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-black text-slate-900 truncate">{round.roundName}</p>
+                  {round.schedule && (
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200">
+                      {round.schedule}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
+                  <span>{activeCustomers.length} active customer{activeCustomers.length !== 1 ? 's' : ''}</span>
+                  {totalValue > 0 && <span className="font-semibold text-slate-700">£{totalValue} / visit</span>}
+                  {nextDue && <span>Next due: {new Date(nextDue + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={e => { e.stopPropagation(); onScheduleRound(round); }}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors shadow-sm"
+                >
+                  + Schedule
+                </button>
+                <ChevronRight size={16} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+              </div>
+            </button>
+
+            {/* Expanded customer list */}
+            {isOpen && (
+              <div className="border-t border-slate-100">
+                {round.customers.map((c, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center gap-3 px-5 py-3 text-sm border-b border-slate-50 last:border-0 ${
+                      c.accountStatus === 'cancelled' ? 'opacity-50' : ''
+                    }`}
+                  >
+                    <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center shrink-0 text-xs font-black text-blue-700">
+                      {c.name[0]?.toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 truncate">{c.name}</p>
+                      <p className="text-xs text-slate-400 truncate">
+                        {[c.postcode, c.customerRef && `Ref: ${c.customerRef}`].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 text-right">
+                      {c.pricePerVisit != null && (
+                        <span className="text-xs font-bold text-slate-700">£{c.pricePerVisit}</span>
+                      )}
+                      {c.dueDate && (
+                        <span className="text-[11px] text-slate-400">
+                          {new Date(c.dueDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                      {c.balance > 0 && (
+                        <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">
+                          Owed £{c.balance}
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ACCOUNT_STATUS_STYLES[c.accountStatus] ?? ACCOUNT_STATUS_STYLES.active}`}>
+                        {c.accountStatus}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </LightCard>
+        );
+      })}
+
+      {rounds.length === 0 && (
+        <LightCard className="px-6 py-10 text-center">
+          <p className="text-2xl mb-2">🔄</p>
+          <p className="text-sm font-bold text-slate-700">No rounds yet</p>
+          <p className="text-xs text-slate-400 mt-1">Import from CleanerPlanner or Squeegee — customers with a Round column will appear here.</p>
+        </LightCard>
+      )}
     </div>
   );
 }
@@ -1725,6 +1967,7 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
   const [view,         setView]         = useState("Day");
   const [dayOffset,    setDayOffset]    = useState(0);
   const [activeJob,    setActiveJob]    = useState(null);
+  const [editingJob,   setEditingJob]   = useState(null);
   const [showNewJob,   setShowNewJob]   = useState(false);
   const [preCustomer,  setPreCustomer]  = useState("");
   const [typeFilter,   setTypeFilter]   = useState("all");
@@ -1740,8 +1983,13 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleJobClick   = (job) => { setActiveJob(job); externalJobClick?.(job); };
-  const handleSaveJob    = (newJob) => { addJobAndSyncCustomer(newJob); };
+  const handleJobClick      = (job) => { setActiveJob(job); externalJobClick?.(job); };
+  const handleSaveJob       = (newJob) => { addJobAndSyncCustomer(newJob); };
+  const handleScheduleRound = (round) => {
+    // Pre-fill the new job modal with the round name as a reference
+    setPreCustomer(round.roundName);
+    setShowNewJob(true);
+  };
   const handleUpdateJob  = async (id, updates) => {
     await updateJob?.(id, updates);
     setActiveJob(prev => prev?.id === id ? { ...prev, ...updates } : prev);
@@ -1877,6 +2125,7 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
           {view === "Week"    && <WeekView    jobs={weekJobsWithDay} onJobClick={handleJobClick} weekDates={weekDates} typeFilter={typeFilter} crewFilter={crewFilter} />}
           {view === "Month"   && <MonthView   jobs={nonCancelledJobs} onJobClick={handleJobClick} viewDate={viewDate} />}
           {view === "Quarter" && <QuarterView jobs={nonCancelledJobs} />}
+          {view === "Rounds"  && <RoundsView  onScheduleRound={handleScheduleRound} />}
           <AskCadi tab="scheduler" />
         </div>
       </div>
@@ -1888,6 +2137,7 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
           onClose={() => setActiveJob(null)}
           onUpdateJob={handleUpdateJob}
           onDeleteJob={handleDeleteJob}
+          onEditJob={job => { setActiveJob(null); setEditingJob(job); }}
         />
       )}
 
@@ -1897,6 +2147,16 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
           onClose={() => { setShowNewJob(false); setPreCustomer(""); }}
           onSave={handleSaveJob}
           preCustomer={preCustomer}
+          customers={customers}
+        />
+      )}
+
+      {/* Edit job modal */}
+      {editingJob && (
+        <NewJobModal
+          editJob={editingJob}
+          onClose={() => setEditingJob(null)}
+          onUpdate={handleUpdateJob}
           customers={customers}
         />
       )}

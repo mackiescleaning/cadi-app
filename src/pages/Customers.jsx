@@ -16,6 +16,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { listCustomers, upsertCustomer } from "../lib/db/customersDb";
+import { listRoundsForCustomer } from "../lib/db/customerRoundsDb";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -1316,6 +1317,13 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
   const uniqueTypes  = [...new Set(customer.services.map(s => s.type))];
 
   const [activeTab, setActiveTab] = useState("overview");
+  const [rounds, setRounds] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listRoundsForCustomer(customer.id).then(r => { if (!cancelled) setRounds(r); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [customer.id]);
 
   const TABS = ["overview", "history", "suggestions", "messages", "secure"];
 
@@ -1504,10 +1512,53 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
             </GlassCard>
 
             {/* Notes */}
-            <GlassCard className="p-4">
-              <SL>Notes</SL>
-              <p className="text-sm text-[rgba(153,197,255,0.8)] leading-relaxed">{customer.notes}</p>
-            </GlassCard>
+            {customer.notes && (
+              <GlassCard className="p-4">
+                <SL>Notes</SL>
+                <p className="text-sm text-[rgba(153,197,255,0.8)] leading-relaxed">{customer.notes}</p>
+              </GlassCard>
+            )}
+
+            {/* Rounds & Services (CleanerPlanner / Squeegee imports) */}
+            {rounds.length > 0 && (
+              <GlassCard>
+                <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
+                  <SL>Rounds & Services</SL>
+                  <span className="text-[10px] font-bold text-emerald-400">
+                    £{rounds.reduce((s, r) => s + (r.price_per_visit ?? 0), 0).toFixed(2)}/visit total
+                  </span>
+                </div>
+                <div className="divide-y divide-[rgba(153,197,255,0.06)]">
+                  {rounds.map((r) => {
+                    const statusStyles = {
+                      active:    "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                      suspended: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+                      cancelled: "bg-red-500/10 text-red-400 border-red-500/20",
+                    };
+                    return (
+                      <div key={r.id} className="px-4 py-3 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-bold text-white truncate">{r.round_name || r.job_reference || "Round"}</p>
+                          <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg border ${statusStyles[r.account_status] ?? statusStyles.active}`}>
+                            {r.account_status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] text-[rgba(153,197,255,0.5)]">
+                          {r.price_per_visit != null && (
+                            <span className="font-bold text-emerald-400">£{Number(r.price_per_visit).toFixed(2)}</span>
+                          )}
+                          {r.schedule && <span>{r.schedule}</span>}
+                          {r.due_date && (
+                            <span>Due {new Date(r.due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                          )}
+                          {r.job_reference && <span className="font-mono opacity-60">#{r.job_reference}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </GlassCard>
+            )}
 
             {/* Services */}
             <GlassCard className="p-4">
@@ -2007,7 +2058,7 @@ function AddCustomerModal({ onClose, onSave }) {
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function CustomerTab() {
-  const { customers, addCustomer, updateCustomer, deleteCustomer } = useData();
+  const { customers, addCustomer, updateCustomer, deleteCustomer, refreshCustomers, refreshJobs } = useData();
   const { user } = useAuth();
   const { isPro, customerLimit } = usePlan();
   const navigate = useNavigate();
@@ -2389,7 +2440,15 @@ export default function CustomerTab() {
           onClose={() => setShowImport(false)}
           existingCustomers={customers}
           onImported={() => {
+            refreshCustomers();
+            refreshJobs();
             setShowImport(false);
+          }}
+          onViewScheduler={() => {
+            refreshCustomers();
+            refreshJobs();
+            setShowImport(false);
+            navigate('/scheduler');
           }}
         />
       )}

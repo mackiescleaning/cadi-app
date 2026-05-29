@@ -21,6 +21,7 @@ export async function createJob(job) {
     status: job.status || 'scheduled',
     assignee: job.assignee || null,
     assignees: job.assignees || [],
+    assignee_ids: job.assignee_ids || [],
     recurrence: job.recurrence || 'one-off',
     notes: job.notes || '',
   };
@@ -33,6 +34,33 @@ export async function createJob(job) {
 
   if (error) throw error;
   return data;
+}
+
+export async function bulkCreateJobs(jobs) {
+  if (!jobs.length) return [];
+  const ownerId = await getCurrentUserId();
+  const rows = jobs.map(j => ({
+    owner_id:     ownerId,
+    customer_id:  j.customerId  || null,
+    customer:     j.customer    || '',
+    postcode:     j.postcode    || '',
+    date:         j.date,
+    start_hour:   j.startHour  ?? 9,
+    duration_hrs: j.durationHrs ?? 1,
+    type:         j.type        || 'exterior',
+    service:      j.service     || '',
+    price:        Number(j.price) || 0,
+    status:       'scheduled',
+    recurrence:   j.recurrence  || 'one-off',
+    is_recurring: j.isRecurring ?? false,
+    notes:        j.notes       || '',
+    source:       'import',
+    assignees:    [],
+    assignee_ids: [],
+  }));
+  const { data, error } = await supabase.from('jobs').insert(rows).select('id');
+  if (error) throw error;
+  return data ?? [];
 }
 
 // options: { page, pageSize, from (ISO date), to (ISO date) }
