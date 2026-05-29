@@ -75,6 +75,8 @@ const TruelayerCallback         = lazy(() => import('./pages/TruelayerCallback')
 const DemoLanding         = lazy(() => import('./pages/DemoLanding'));
 const FmDemoApp           = lazy(() => import('./pages/fm-demo/FmDemoApp'));
 const ClientDemoApp       = lazy(() => import('./pages/client-demo/ClientDemoApp'));
+const EmployedStaffDemo   = lazy(() => import('./pages/staff-demo/EmployedStaffDemo'));
+const OperativePortalDemo = lazy(() => import('./pages/operative-demo/OperativePortalDemo'));
 const SchedulerPreview    = lazy(() => import('./pages/SchedulerPreview'));
 
 // ─── Suspense fallback ────────────────────────────────────────────────────────
@@ -127,6 +129,8 @@ function App() {
         <Route path="/demo"              element={<DemoLanding />} />
         <Route path="/fm-demo/*"         element={<FmDemoApp />} />
         <Route path="/client-demo/*"     element={<ClientDemoApp />} />
+        <Route path="/staff-demo"        element={<EmployedStaffDemo />} />
+        <Route path="/operative-demo"    element={<OperativePortalDemo />} />
         <Route path="/scheduler-preview" element={<SchedulerPreview />} />
 
         {/* Manager app */}
