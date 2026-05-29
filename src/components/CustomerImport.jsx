@@ -61,9 +61,10 @@ function parseFile(file) {
       try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
+        if (!workbook.SheetNames.length) throw new Error('No sheets found in file.');
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const raw = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-        if (!raw.length) { resolve({ headers: [], rows: [] }); return; }
+        if (!raw.length) throw new Error('The sheet appears empty — make sure row 1 is the header row and rows 2+ are your customers.');
         const headers = Object.keys(raw[0]);
         const rows = raw.map(r => {
           const obj = {};
@@ -379,10 +380,11 @@ function buildCustomers(rows, mapping, existingEmails) {
 }
 
 // ─── Step 4: Preview ──────────────────────────────────────────────────────────
-function StepPreview({ rows, mapping, existingEmails, onBack, onImport, importing }) {
+function StepPreview({ rows, mapping, existingEmails, onBack, onImport, importing, importError }) {
   const { customers, skipped } = buildCustomers(rows, mapping, existingEmails);
   const fresh = customers.filter(c => !c.isDupe);
   const dupes = customers.filter(c => c.isDupe);
+  const allSkipped = customers.length === 0 && skipped.length > 0;
 
   return (
     <div className="flex flex-col overflow-hidden">
@@ -449,7 +451,19 @@ function StepPreview({ rows, mapping, existingEmails, onBack, onImport, importin
         )}
       </div>
 
-      <div className="p-6 border-t border-[rgba(153,197,255,0.1)]">
+      <div className="p-6 border-t border-[rgba(153,197,255,0.1)] space-y-3">
+        {allSkipped && (
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+            All {skipped.length} rows were skipped because no Name value was found. Go back and make sure a column is mapped to "Name".
+          </div>
+        )}
+        {importError && (
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+            {importError}
+          </div>
+        )}
         <button
           onClick={() => onImport(customers)}
           disabled={importing || customers.length === 0}
@@ -767,24 +781,15 @@ export default function CustomerImport({ onClose, onImported, existingCustomers 
           />
         )}
         {step === 'preview' && (
-          <>
-            <StepPreview
-              rows={csvData.rows}
-              mapping={mapping}
-              existingEmails={existingEmails}
-              onBack={() => setStep('map')}
-              onImport={handleImport}
-              importing={importing}
-            />
-            {importError && (
-              <div className="px-6 pb-4">
-                <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                  {importError}
-                </div>
-              </div>
-            )}
-          </>
+          <StepPreview
+            rows={csvData.rows}
+            mapping={mapping}
+            existingEmails={existingEmails}
+            onBack={() => setStep('map')}
+            onImport={handleImport}
+            importing={importing}
+            importError={importError}
+          />
         )}
         {step === 'done' && (
           <StepDone imported={importedCount} onClose={onClose} />
