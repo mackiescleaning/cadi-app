@@ -129,6 +129,11 @@ function App() {
         <Route path="/client-demo/*"     element={<ClientDemoApp />} />
         <Route path="/scheduler-preview" element={<SchedulerPreview />} />
 
+        {/* Legacy demo URLs — bespoke pages were never committed (see 87a9b4a).
+            Redirect to the Britannia demo hub so shared links stop hitting login. */}
+        <Route path="/operative-demo"    element={<Navigate to="/demo" replace />} />
+        <Route path="/staff-demo"        element={<Navigate to="/demo" replace />} />
+
         {/* Manager app */}
         <Route path="/" element={
           <ProtectedRoute>
