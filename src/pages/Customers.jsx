@@ -577,7 +577,7 @@ function CustomerRow({ customer, onClick, selected, onArchive, density = 'large'
                 <button onClick={() => setConfirmArchive(false)} className="text-[10px] font-black text-[rgba(153,197,255,0.5)] hover:text-white px-1">No</button>
               </div>
             ) : (
-              <button onClick={() => setConfirmArchive(true)} className="w-5 h-5 rounded-full bg-[rgba(255,80,80,0.15)] hover:bg-[rgba(255,80,80,0.3)] border border-red-500/20 flex items-center justify-center text-red-400/70 hover:text-red-400 transition-all text-[10px] font-bold" title="Remove">×</button>
+              <button onClick={() => setConfirmArchive(true)} className="w-7 h-7 rounded-full bg-[rgba(255,80,80,0.15)] hover:bg-[rgba(255,80,80,0.3)] border border-red-500/20 flex items-center justify-center text-red-400/70 hover:text-red-400 transition-all text-xs font-bold" title="Remove">×</button>
             )}
           </div>
         )}
@@ -643,7 +643,7 @@ function CustomerRow({ customer, onClick, selected, onArchive, density = 'large'
                 <button onClick={() => setConfirmArchive(false)} className="text-[10px] font-black text-[rgba(153,197,255,0.5)] hover:text-white px-1">No</button>
               </div>
             ) : (
-              <button onClick={() => setConfirmArchive(true)} className="w-6 h-6 rounded-full bg-[rgba(255,80,80,0.15)] hover:bg-[rgba(255,80,80,0.3)] border border-red-500/20 hover:border-red-500/50 flex items-center justify-center text-red-400/70 hover:text-red-400 transition-all text-xs font-bold" title="Remove customer">×</button>
+              <button onClick={() => setConfirmArchive(true)} className="w-8 h-8 rounded-full bg-[rgba(255,80,80,0.15)] hover:bg-[rgba(255,80,80,0.3)] border border-red-500/20 hover:border-red-500/50 flex items-center justify-center text-red-400/70 hover:text-red-400 transition-all text-sm font-bold" title="Remove customer">×</button>
             )}
           </div>
         )}
