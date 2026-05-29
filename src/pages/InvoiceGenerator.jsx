@@ -103,8 +103,9 @@ function GAlert({ type = "blue", children }) {
     green: "bg-emerald-500/8 border-emerald-500/25 text-emerald-300",
     blue:  "bg-[#1f48ff]/8 border-[#1f48ff]/25 text-[#99c5ff]",
     gold:  "bg-amber-400/8 border-amber-400/25 text-amber-300",
+    red:   "bg-red-500/8 border-red-500/30 text-red-300",
   };
-  const icons = { warn: "⚠️", green: "✅", blue: "ℹ️", gold: "💡" };
+  const icons = { warn: "⚠️", green: "✅", blue: "ℹ️", gold: "💡", red: "⚠️" };
   return (
     <div className={`flex gap-3 p-3.5 border rounded-xl text-xs leading-relaxed ${styles[type]}`}>
       <span className="shrink-0 mt-0.5">{icons[type]}</span><div>{children}</div>
@@ -385,8 +386,75 @@ function MarkPaidModal({ invoice, onConfirm, onClose }) {
   );
 }
 
+// ─── Typed delete confirmation ────────────────────────────────────────────────
+// Forces the user to type the word "INVOICE" before the Delete button activates.
+// Prevents accidental destructive clicks on legally-relevant records.
+function TypedDeleteModal({ invoice, onConfirm, onClose }) {
+  const [typed, setTyped] = useState("");
+  const armed = typed.trim().toUpperCase() === "INVOICE";
+  const calc  = calcInvoice(invoice.lines, false, 12);
+  const isDraft = invoice.status === "draft";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="relative w-full max-w-md rounded-2xl border border-red-500/30 bg-gradient-to-br from-[#010a4f] via-[#05124a] to-[#0d1e78] overflow-hidden shadow-2xl">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-400/60 to-transparent" />
+        <div className="px-5 py-4 border-b border-red-500/15 flex items-center justify-between">
+          <p className="text-sm font-black text-white">Delete invoice {invoice.num}?</p>
+          <button onClick={onClose} className="text-[rgba(153,197,255,0.4)] hover:text-white text-xl leading-none">×</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="rounded-xl border border-[rgba(153,197,255,0.1)] divide-y divide-[rgba(153,197,255,0.06)]">
+            {[
+              { l: "Customer", v: invoice.customer.name,        c: "text-white"   },
+              { l: "Amount",   v: fmt2(calc.total),               c: "text-white"   },
+              { l: "Status",   v: invoice.status,                  c: "text-amber-400" },
+            ].map(({ l, v, c }) => (
+              <div key={l} className="flex justify-between px-4 py-2.5">
+                <span className="text-xs text-[rgba(153,197,255,0.45)]">{l}</span>
+                <span className={`text-xs font-black ${c}`}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <GAlert type="red">
+            {isDraft
+              ? <>This draft will be <strong className="text-white">permanently removed</strong>. It hasn't been sent to the customer.</>
+              : <>This invoice has already been sent. Deleting it removes it from your records but the customer's copy is unaffected. <strong className="text-white">This cannot be undone.</strong></>
+            }
+          </GAlert>
+          <div>
+            <SL className="mb-1.5">Type <strong className="text-red-300">INVOICE</strong> to confirm</SL>
+            <GInput
+              autoFocus
+              value={typed}
+              onChange={e => setTyped(e.target.value)}
+              placeholder="INVOICE"
+              className={armed ? "border-red-400/60" : ""}
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => armed && onConfirm()}
+              disabled={!armed}
+              className={`flex-1 py-3 rounded-xl text-xs font-black transition-colors ${
+                armed
+                  ? "bg-red-500/25 border border-red-400/40 text-red-200 hover:bg-red-500/35 cursor-pointer"
+                  : "bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.1)] text-[rgba(153,197,255,0.3)] cursor-not-allowed"
+              }`}>
+              Delete invoice
+            </button>
+            <button onClick={onClose} className="px-5 py-3 rounded-xl border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.5)] text-xs font-black hover:text-white transition-all">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── SCREEN: Invoice list ─────────────────────────────────────────────────────
-function InvoiceList({ invoices, accounts, onSelect, onCreate, onQuickSend, onQuickPaid }) {
+function InvoiceList({ invoices, accounts, onSelect, onCreate, onQuickSend, onQuickPaid, onDelete }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [showAging, setShowAging] = useState(false);
@@ -557,24 +625,33 @@ function InvoiceList({ invoices, accounts, onSelect, onCreate, onQuickSend, onQu
                 </button>
 
                 {/* Inline quick actions */}
-                {inv.status !== "paid" && (
-                  <div className="flex items-center gap-1.5 pr-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button
-                      onClick={e => { e.stopPropagation(); onQuickSend?.(inv); }}
-                      className="px-2.5 py-1.5 rounded-lg border border-[rgba(153,197,255,0.2)] text-[rgba(153,197,255,0.6)] text-[10px] font-black hover:text-white hover:border-[rgba(153,197,255,0.4)] transition-all"
-                      title="Send invoice"
-                    >
-                      {inv.status === "overdue" ? "Chase" : "Send"}
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); onQuickPaid?.(inv); }}
-                      className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[10px] font-black hover:bg-emerald-500/25 transition-colors"
-                      title="Mark as paid"
-                    >
-                      ✓ Paid
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-1.5 pr-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  {inv.status !== "paid" && (
+                    <>
+                      <button
+                        onClick={e => { e.stopPropagation(); onQuickSend?.(inv); }}
+                        className="px-2.5 py-1.5 rounded-lg border border-[rgba(153,197,255,0.2)] text-[rgba(153,197,255,0.6)] text-[10px] font-black hover:text-white hover:border-[rgba(153,197,255,0.4)] transition-all"
+                        title="Send invoice"
+                      >
+                        {inv.status === "overdue" ? "Chase" : "Send"}
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); onQuickPaid?.(inv); }}
+                        className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[10px] font-black hover:bg-emerald-500/25 transition-colors"
+                        title="Mark as paid"
+                      >
+                        ✓ Paid
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={e => { e.stopPropagation(); onDelete?.(inv); }}
+                    className="px-2.5 py-1.5 rounded-lg border border-red-500/25 text-red-400 text-[10px] font-black hover:bg-red-500/15 hover:border-red-400/40 transition-colors"
+                    title="Delete invoice"
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -1039,7 +1116,7 @@ function InvoicePreview({ draft, accounts, business, onEdit, onSaveAndSend, onBa
 }
 
 // ─── SCREEN: Invoice detail ───────────────────────────────────────────────────
-function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack, onDuplicate }) {
+function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack, onDuplicate, onDelete }) {
   const [showEmail,  setShowEmail]  = useState(false);
   const [showPaid,   setShowPaid]   = useState(false);
   const [chaseMode,  setChaseMode]  = useState(false);
@@ -1086,6 +1163,11 @@ function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack, onDuplic
           <button onClick={() => onDuplicate?.(invoice)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.4)] text-xs font-black hover:text-white hover:border-[rgba(153,197,255,0.3)] transition-all">
             ⧉ Duplicate
+          </button>
+          <button onClick={() => onDelete?.(invoice)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-500/25 text-red-400 text-xs font-black hover:bg-red-500/15 hover:border-red-400/40 transition-colors"
+            title="Delete invoice">
+            🗑 Delete
           </button>
         </div>
       </div>
@@ -1273,6 +1355,7 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
   const [previewDraft, setPreviewDraft] = useState(null);
   const [pendingNum,   setPendingNum]   = useState(null);
   const [quickAction,  setQuickAction]  = useState(null); // { inv, type: 'send'|'paid' }
+  const [deleteInv,    setDeleteInv]    = useState(null); // invoice pending typed-confirm delete
 
   const openCreate = async () => {
     setDraftInv(null);
@@ -1332,9 +1415,18 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
     }
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm('Delete this invoice? This cannot be undone.')) {
-      removeInvoice(id);
+  // Opens the typed-confirmation modal — pass the full invoice so the modal can show its details.
+  const handleDelete = (inv) => {
+    setDeleteInv(typeof inv === 'object' ? inv : invoices.find(i => i.id === inv));
+  };
+
+  // Fires only after the user types "INVOICE" in the modal.
+  const confirmDelete = async () => {
+    if (!deleteInv) return;
+    await removeInvoice(deleteInv.id);
+    setDeleteInv(null);
+    // If we were viewing this invoice, bounce back to the list.
+    if (activeInv?.id === deleteInv.id) {
       setActiveInv(null);
       setScreen("list");
     }
@@ -1389,6 +1481,7 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
             onSelect={handleSelect} onCreate={openCreate}
             onQuickSend={inv => setQuickAction({ inv, type: 'send' })}
             onQuickPaid={inv => setQuickAction({ inv, type: 'paid' })}
+            onDelete={handleDelete}
           />
         )}
         {screen === "create"  && (
@@ -1409,6 +1502,7 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
           <InvoiceDetail
             invoice={activeInv} accounts={accounts} business={BUSINESS}
             onUpdate={handleUpdate} onBack={goBack} onDuplicate={handleDuplicate}
+            onDelete={handleDelete}
           />
         )}
 
@@ -1425,6 +1519,13 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
               setQuickAction(null);
             }}
             onClose={() => setQuickAction(null)}
+          />
+        )}
+        {deleteInv && (
+          <TypedDeleteModal
+            invoice={deleteInv}
+            onConfirm={confirmDelete}
+            onClose={() => setDeleteInv(null)}
           />
         )}
         {quickAction?.type === 'paid' && (

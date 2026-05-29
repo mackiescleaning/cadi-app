@@ -18,7 +18,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
-const RESEND_FROM    = Deno.env.get("RESEND_FROM") ?? "Cadi <invoices@cadi.cleaning>";
+const RESEND_FROM    = Deno.env.get("RESEND_FROM") ?? "Cadi <hello@cadi.cleaning>";
 
 const CORS = {
   "Access-Control-Allow-Origin":  Deno.env.get("APP_ORIGIN") ?? "*",
@@ -292,6 +292,10 @@ serve(async (req: Request) => {
       businessName,
       businessAddress,
       replyTo,
+      // Per-invoice bank details (override the template's stored block if provided)
+      bankName,
+      sortCode,
+      accountNum,
     } = body;
 
     if (!to || !subject) {
@@ -328,6 +332,16 @@ serve(async (req: Request) => {
           .update({ next_invoice_number: (tmpl.next_invoice_number || 1) + 1 })
           .eq("id", tmpl.id);
       }
+    }
+
+    // ── Build bank details from per-invoice fields if provided ──────────────
+    //    Takes precedence over tmpl.bank_details so users can override per send.
+    const perInvoiceBank: string[] = [];
+    if (bankName)  perInvoiceBank.push(`Bank: ${String(bankName).trim()}`);
+    if (sortCode)  perInvoiceBank.push(`Sort code: ${String(sortCode).trim()}`);
+    if (accountNum) perInvoiceBank.push(`Account no: ${String(accountNum).trim()}`);
+    if (perInvoiceBank.length) {
+      tmpl = { ...(tmpl ?? {}), bank_details: perInvoiceBank.join("\n") };
     }
 
     // ── Build plain-text fallback ───────────────────────────────────────────
@@ -378,6 +392,13 @@ serve(async (req: Request) => {
       tmpl,
     });
 
+    // ── Build dynamic FROM — shows business name in customer's inbox ────────
+    //    Email address must stay on the verified cadi.cleaning domain, but
+    //    the display name is what shows up in the customer's "From" field.
+    const fromAddress = RESEND_FROM.match(/<([^>]+)>/)?.[1] || "hello@cadi.cleaning";
+    const cleanName   = (businessName || "Cadi").replace(/[<>"]/g, "").trim();
+    const dynamicFrom = `${cleanName} <${fromAddress}>`;
+
     // ── Send via Resend ─────────────────────────────────────────────────────
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -386,7 +407,7 @@ serve(async (req: Request) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from:     RESEND_FROM,
+        from:     dynamicFrom,
         to:       [to],
         subject,
         text:     plainText,

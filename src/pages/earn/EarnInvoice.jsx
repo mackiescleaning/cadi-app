@@ -7,8 +7,8 @@ const ORANGE = '#C2410C';
 const NAVY   = '#010a4f';
 
 const READY_JOBS = [
-  { id: 'j1', site: 'Premier Inn Luton Airport', client: 'Britannia FM', service: 'Morning clean', date: '08 May', ref: '#BF-4468', po: 'PO-2026-0088', net: 78 },
-  { id: 'j2', site: 'Central Beds Council HQ', client: 'Britannia FM', service: 'Office deep clean', date: '12 May', ref: '#BF-4472', po: 'PO-2026-0090', net: 95 },
+  { id: 'j1', site: 'Premier Inn Luton Airport', client: 'Britannia Group', service: 'Morning clean', date: '08 May', ref: '#BF-4468', po: 'PO-2026-0088', net: 78 },
+  { id: 'j2', site: 'Central Beds Council HQ', client: 'Britannia Group', service: 'Office deep clean', date: '12 May', ref: '#BF-4472', po: 'PO-2026-0090', net: 95 },
 ];
 
 const TERMS_OPTIONS = ['Net 7', 'Net 14', 'Net 30', 'Due on receipt'];
@@ -44,7 +44,7 @@ export default function EarnInvoice() {
   const [selected, setSelected] = useState({ j1: true, j2: false });
   const [fromName, setFromName] = useState('Sarah K.');
   const [fromUtr, setFromUtr] = useState('12345 67890');
-  const [toName, setToName] = useState('Britannia FM Ltd');
+  const [toName, setToName] = useState('Britannia Group Ltd');
   const [invoiceDate, setInvoiceDate] = useState('2026-05-19');
   const [terms, setTerms] = useState('Net 14');
   const [poNumber, setPoNumber] = useState('PO-2026-0088');
@@ -73,7 +73,7 @@ export default function EarnInvoice() {
           <div className="text-sm text-gray-400 mb-1">
             Reference <span className="font-bold" style={{ color: ORANGE }}>#INV-0042</span>
           </div>
-          <div className="text-xs text-gray-300 mb-0.5">Britannia FM notified</div>
+          <div className="text-xs text-gray-300 mb-0.5">Britannia Group notified</div>
           <div className="text-xs text-gray-300">Tracking live in Earnings</div>
           <button
             onClick={() => setSent(false)}
@@ -294,7 +294,7 @@ export default function EarnInvoice() {
           cursor: selectedJobs.length > 0 ? 'pointer' : 'not-allowed',
         }}
       >
-        Send to Britannia FM →
+        Send to Britannia Group →
       </button>
     </div>
   );
