@@ -2166,7 +2166,7 @@ export default function CustomerTab() {
         </div>
 
         {/* Approaching limit warning */}
-        {!isPro && activeCustomers.length >= 45 && activeCustomers.length < FREE_CUSTOMER_LIMIT && (
+        {!isPro && activeCustomers.length >= FREE_CUSTOMER_LIMIT - 5 && activeCustomers.length < FREE_CUSTOMER_LIMIT && (
           <div className="mx-4 mt-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10">
             <p className="text-xs text-amber-300 leading-snug">
               <span className="font-black">{activeCustomers.length}/{FREE_CUSTOMER_LIMIT} customers</span> — you're nearly at your free limit.

@@ -9,8 +9,9 @@ import { X, Upload, ArrowRight, ArrowLeft, Check, AlertCircle, ChevronDown, Crow
 import * as XLSX from 'xlsx';
 import { upsertCustomer } from '../lib/db/customersDb';
 import { supabase } from '../lib/supabase';
+import { usePlan } from '../hooks/usePlan';
 
-const LITE_CAP = 50;
+const LITE_CAP = 30;
 
 // ─── Cadi fields that imports can fill ────────────────────────────────────────
 const CADI_FIELDS = [
@@ -663,6 +664,7 @@ async function storePendingCustomers(customers) {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 export default function CustomerImport({ onClose, onImported, existingCustomers = [] }) {
+  const { isPro } = usePlan();
   const [step, setStep] = useState('source'); // source | upload | map | preview | cap | pick | done
   const [source, setSource] = useState(null);
   const [csvData, setCsvData] = useState(null); // { headers, rows, fileName }
@@ -709,7 +711,7 @@ export default function CustomerImport({ onClose, onImported, existingCustomers 
 
   const handleImport = async (customers) => {
     const freshCustomers = customers.filter(c => !c.isDupe);
-    if (freshCustomers.length > LITE_CAP) {
+    if (!isPro && freshCustomers.length > LITE_CAP) {
       setPendingCustomers(customers);
       setShowCap(true);
       return;

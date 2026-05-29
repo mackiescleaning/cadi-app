@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-export const FREE_CUSTOMER_LIMIT = 50;
+export const FREE_CUSTOMER_LIMIT = 30;
 
 // Tabs locked behind Pro or above
 export const PRO_TABS = ['/money', '/accounts', '/scaling', '/staff', '/review'];
