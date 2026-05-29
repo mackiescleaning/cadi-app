@@ -64,7 +64,7 @@ function InviteModal({ cleaner, onClose }) {
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { id: 'employed', icon: Briefcase, label: 'Employed staff', sub: 'FM-sponsored · free seat' },
-                  { id: 'sub',      icon: Users,     label: 'Subcontractor',   sub: 'Free Connect tier' },
+                  { id: 'sub',      icon: Users,     label: 'Contractor',      sub: 'Free Connect tier' },
                 ].map(({ id, icon: Icon, label, sub }) => (
                   <button key={id} onClick={() => setMode(id)}
                     className="p-3.5 rounded-2xl text-left transition-all"
@@ -83,7 +83,7 @@ function InviteModal({ cleaner, onClose }) {
             <div className="rounded-2xl p-4 space-y-2.5" style={{ background: 'rgba(79,120,255,0.07)', border: '1px solid rgba(79,120,255,0.18)' }}>
               <div className="text-white/40 text-[10px] font-black uppercase tracking-widest">What {cleaner.name.split(' ')[0]} gets</div>
               {(mode === 'employed' ? [
-                { icon: Smartphone, text: 'Instant access to all Britannia FM jobs' },
+                { icon: Smartphone, text: 'Instant access to all Britannia Group jobs' },
                 { icon: Shield,     text: 'Geo-verified completions — no paper sheets' },
                 { icon: Mail,       text: 'Pay tracked automatically through Cadi' },
               ] : [
@@ -114,7 +114,7 @@ function InviteModal({ cleaner, onClose }) {
                 </div>
                 <div className="px-5 py-5 text-center" style={{ background: 'rgba(255,255,255,0.03)' }}>
                   <div className="w-10 h-10 rounded-xl bg-[#4f78ff] flex items-center justify-center text-white font-black text-base mx-auto mb-3 shadow-lg shadow-[#4f78ff]/30">B</div>
-                  <div className="text-white font-black text-sm">Britannia FM invited you</div>
+                  <div className="text-white font-black text-sm">Britannia Group invited you</div>
                   <div className="text-white/45 text-xs mt-1">Join Cadi to access your jobs, submit completions, and get paid — free{mode === 'employed' ? ', sponsored by Britannia' : ''}.</div>
                   <div className="mt-4 flex flex-col gap-2">
                     <div className="py-2 rounded-xl text-xs font-black text-white" style={{ background: '#4f78ff' }}>Create free account →</div>

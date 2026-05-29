@@ -19,7 +19,7 @@ export default function ClientCompliance({ showToast }) {
       items: [
         { name: 'COSHH Assessment — Retail',       value: 'Completed',  expiry: '2026-09-30', status: 'current', provider: 'Internal' },
         { name: 'Risk Assessment — Next Luton',   value: 'Site-specific', expiry: '2026-09-30', status: 'current', provider: 'Internal' },
-        { name: 'Method Statement',               value: 'v3.1',       expiry: null,         status: 'current', provider: 'Britannia FM' },
+        { name: 'Method Statement',               value: 'v3.1',       expiry: null,         status: 'current', provider: 'Britannia Group' },
       ],
     },
     {
@@ -68,10 +68,10 @@ export default function ClientCompliance({ showToast }) {
         <div className="text-3xl mb-3">📋</div>
         <div className="font-bold text-[#010a4f] mb-1">Full audit pack</div>
         <p className="text-xs text-gray-400 mb-4">
-          Download a complete compliance pack for Next Retail UK Ltd — includes all certificates, assessments and DBS documentation for all 3 sites.
+          Download a complete compliance pack for Asda Stores Ltd — includes all certificates, assessments and DBS documentation for all 3 sites.
         </p>
         <button
-          onClick={() => showToast('download Next Retail UK Ltd compliance audit pack')}
+          onClick={() => showToast('download Asda Stores Ltd compliance audit pack')}
           className="px-6 py-3 rounded-xl bg-[#010a4f] text-white text-sm font-bold hover:bg-[#1f48ff] transition-colors"
         >
           Download audit pack (demo)

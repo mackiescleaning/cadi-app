@@ -5,7 +5,7 @@ const PIPELINE = [
     id: 'p1', name: 'Leah Okonkwo', avatar: 'LO', town: 'Luton', postcode: 'LU2 8AA',
     services: ['Retail Clean', 'Office Clean'], connectScore: 81, completions: 94, slaRate: 97,
     matchedTo: 'Luton Central Library', stage: 'trial', appliedDays: 6,
-    notes: 'Strong retail background. Trial clean scheduled Tue 20 May 07:00.',
+    notes: 'Strong retail background. Trial clean scheduled Wed 20 May 07:00.',
   },
   {
     id: 'p2', name: 'Dev Sharma', avatar: 'DS', town: 'Dunstable', postcode: 'LU6 1AA',
@@ -47,11 +47,35 @@ const URGENCY = {
   low:    { color: '#94a3b8', label: 'Planned' },
 };
 
+const IMPACT = [
+  { before: 'Job ads, phone interviews, no quality benchmark', after: 'Sourced via Connect — scored, vetted, ready to deploy', icon: '🎯' },
+  { before: "New hire's reliability unknown until they're on site", after: 'Cadi Score visible before you offer a single shift', icon: '⭐' },
+  { before: 'Average days to hire: 30+', after: '11 days average — faster pipeline, less downtime', icon: '⏱' },
+];
+
 export default function FmHiring({ showToast }) {
   const [tab, setTab] = useState('pipeline');
 
   return (
     <div className="p-6 space-y-5 max-w-4xl">
+
+      {/* Impact strip */}
+      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(79,120,255,0.18)', background: 'rgba(1,8,40,0.6)' }}>
+        <div className="px-5 py-2.5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(79,120,255,0.06)' }}>
+          <span className="text-[9px] font-black uppercase tracking-widest text-white/30">What Cadi replaces</span>
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: '#4f78ff' }}>With Cadi</span>
+        </div>
+        <div className="grid grid-cols-3 divide-x" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {IMPACT.map(({ before, after, icon }) => (
+            <div key={icon} className="px-4 py-3 flex items-start gap-3">
+              <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>
+              <div><div className="text-[10px] text-white/30 line-through decoration-white/20 mb-1 leading-snug">{before}</div>
+              <div className="text-[10px] font-bold leading-snug" style={{ color: '#60a5fa' }}>{after}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">

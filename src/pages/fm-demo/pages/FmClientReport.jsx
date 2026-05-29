@@ -242,7 +242,7 @@ function ClientReportModal({ site, onClose }) {
               <div className="text-sm font-black text-emerald-800">All evidence is geo-verified and tamper-evident</div>
               <div className="text-xs text-emerald-700 mt-1 leading-relaxed">
                 Every photo carries GPS coordinates (±4–7m accuracy), a precise timestamp, and a SHA-256 audit hash recorded at upload.
-                Britannia FM guarantees that all evidence shown here was captured on-site within the agreed SLA window.
+                Britannia Group guarantees that all evidence shown here was captured on-site within the agreed SLA window.
               </div>
             </div>
           </div>
@@ -288,6 +288,12 @@ function GlassCard({ children, className = '', style = {} }) {
   );
 }
 
+const IMPACT = [
+  { before: 'Monthly PDF report built manually, sent by email', after: 'Live client portal — they see it before you send anything', icon: '📊' },
+  { before: 'Clients dispute SLA claims with no proof',         after: 'Geo-verified evidence behind every visit — undisputable',  icon: '🔒' },
+  { before: 'Compliance packs take half a day to compile',      after: 'Exportable with one click — always up to date',            icon: '⚡' },
+];
+
 export default function FmClientReport({ showToast }) {
   const [selectedSite, setSelectedSite] = useState(SITES[0]);
   const [showModal, setShowModal]       = useState(false);
@@ -299,6 +305,24 @@ export default function FmClientReport({ showToast }) {
     <div className="p-8 space-y-6 relative">
 
       {showModal && <ClientReportModal site={s} onClose={() => setShowModal(false)} />}
+
+      {/* Impact strip */}
+      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(79,120,255,0.18)', background: 'rgba(1,8,40,0.6)' }}>
+        <div className="px-5 py-2.5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(79,120,255,0.06)' }}>
+          <span className="text-[9px] font-black uppercase tracking-widest text-white/30">What Cadi replaces</span>
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: '#4f78ff' }}>With Cadi</span>
+        </div>
+        <div className="grid grid-cols-3 divide-x" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {IMPACT.map(({ before, after, icon }) => (
+            <div key={icon} className="px-4 py-3 flex items-start gap-3">
+              <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>
+              <div><div className="text-[10px] text-white/30 line-through decoration-white/20 mb-1 leading-snug">{before}</div>
+              <div className="text-[10px] font-bold leading-snug" style={{ color: '#60a5fa' }}>{after}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Header */}
       <div className="flex items-start justify-between">

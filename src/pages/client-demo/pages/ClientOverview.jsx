@@ -1,265 +1,208 @@
-import { Shield, ChevronRight, Camera, Clock, Star, TrendingUp } from 'lucide-react';
+import { Shield, ChevronRight, Target, Users, Rocket, CheckCircle2, Circle, MapPin, Clock } from 'lucide-react';
 
 const NAVY = '#010a4f';
 
-const PHOTO_THUMBS = [
-  { phase: 'after',  emoji: '✨', label: 'Main entrance — after',   dist: '4m',  bg: 'linear-gradient(135deg,#d4fde8,#a7f3d0)' },
-  { phase: 'before', emoji: '🪑', label: 'Reception — before',      dist: '9m',  bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)' },
-  { phase: 'after',  emoji: '🚿', label: 'Toilets — after',         dist: '7m',  bg: 'linear-gradient(135deg,#ede9fe,#c4b5fd)' },
-  { phase: 'after',  emoji: '✨', label: 'Corridor A — after',      dist: '5m',  bg: 'linear-gradient(135deg,#fef9c3,#fde68a)' },
-  { phase: 'before', emoji: '🚪', label: 'Main entrance — before',  dist: '6m',  bg: 'linear-gradient(135deg,#fce7f3,#fbcfe8)' },
-  { phase: 'after',  emoji: '🪟', label: 'Fitting rooms — after',   dist: '8m',  bg: 'linear-gradient(135deg,#d4fde8,#bbf7d0)' },
+// Day 12 of mobilisation — today is 24 May 2026, contract awarded 12 May 2026
+const MOB_PHASES = [
+  { id: 'award',  label: 'Contract Award',  date: '12 May',     done: true  },
+  { id: 'survey', label: 'Site Surveys',    date: 'T1 done · T2 starts 28 May', done: false, partial: true },
+  { id: 'scope',  label: 'Scope Confirmed', date: '18 May',     done: true  },
+  { id: 'people', label: 'People & TUPE',   date: 'Day 12/28',  done: false, active: true },
+  { id: 'kpis',   label: 'KPIs Agreed',     date: '12 May',     done: true  },
+  { id: 'golive', label: 'Go Live',         date: '01 Jul 2026',done: false  },
 ];
 
 const SITES = [
-  {
-    id: 'lu', name: 'Next – Luton The Mall', address: 'Bute Street, Luton LU1 2TL',
-    status: 'live', service: 'Retail morning clean', jobs: 22, sla: 100,
-    nextClean: 'Today 06:00–08:00', streak: [true, true, true, true, null],
-  },
-  {
-    id: 'mk', name: 'Next – Centre:MK', address: 'Silbury Arcade, Milton Keynes MK9 3EB',
-    status: 'good', service: 'Retail morning clean', jobs: 22, sla: 100,
-    nextClean: 'Today 06:00–08:30', streak: [true, true, true, true, null],
-  },
-  {
-    id: 'wf', name: 'Next – Watford Atria', address: 'The Atria, Watford WD17 1NJ',
-    status: 'warning', service: 'Retail morning clean', jobs: 24, sla: 97,
-    nextClean: 'Today 07:30–08:30', streak: [true, true, true, false, null],
-    note: '16 May — late arrival · logged and resolved',
-  },
+  { id: 'lu', name: 'Asda – Luton Supercentre',     address: 'Gipsy Lane, Luton LU1 3HR',           tier: 1, status: 'live',   lastClean: 'Today 06:15', nextClean: 'Tomorrow 06:00', sla: 100, jobs: 4, streak: [true, true, null, null, null] },
+  { id: 'bm', name: 'Asda – Birmingham Minworth',   address: 'Minworth Industrial Park, B76 1AH',   tier: 1, status: 'live',   lastClean: 'Today 05:50', nextClean: 'Tomorrow 06:00', sla: 100, jobs: 3, streak: [true, true, null, null, null] },
+  { id: 'mk', name: 'Asda – Milton Keynes Central', address: 'Grafton Gate E, MK9 1DA',             tier: 2, status: 'survey', surveyDate: '28 May',  liveDate: '15 Jun 2026' },
+  { id: 'wf', name: 'Asda – Watford Dome',          address: 'Colonial Way, Watford WD24 4WU',      tier: 2, status: 'survey', surveyDate: '28 May',  liveDate: '17 Jun 2026' },
+  { id: 'cv', name: 'Asda – Coventry Arena',        address: 'Arena Park, Coventry CV6 6GE',        tier: 2, status: 'survey', surveyDate: '30 May',  liveDate: '19 Jun 2026' },
+  { id: 'st', name: 'Asda – Stevenage Retail Park', address: 'Roaring Meg Retail Park, SG1 1XN',   tier: 3, status: 'pending', surveyDate: '3 Jun',   liveDate: '01 Jul 2026' },
 ];
 
-const STATUS = {
-  live:    { dot: '#3b82f6', bg: 'rgba(59,130,246,0.09)',  border: 'rgba(59,130,246,0.22)',  text: '#2563eb', label: 'Live now'     },
-  good:    { dot: '#10b981', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.2)',   text: '#059669', label: 'All good'     },
-  warning: { dot: '#f59e0b', bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.2)',   text: '#d97706', label: 'Note on file' },
+const TIER_STYLE = {
+  1: { label: 'Tier 1', color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.25)' },
+  2: { label: 'Tier 2', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)' },
+  3: { label: 'Tier 3', color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.25)' },
 };
 
-function PhotoThumb({ photo, onClick }) {
-  return (
-    <button onClick={onClick}
-      className="aspect-square rounded-xl overflow-hidden relative group cursor-pointer"
-      style={{ background: photo.bg }}>
-      <div className="absolute inset-0 flex items-center justify-center text-3xl opacity-20 group-hover:opacity-35 transition-opacity">
-        {photo.emoji}
-      </div>
-      <div className="absolute top-1.5 right-1.5">
-        <span className="text-[7px] font-black px-1.5 py-0.5 rounded text-white"
-          style={{ background: photo.phase === 'after' ? '#059669' : '#3b82f6' }}>
-          {photo.phase === 'after' ? 'AFT' : 'BEF'}
-        </span>
-      </div>
-      <div className="absolute bottom-1.5 left-1.5">
-        <div className="flex items-center gap-0.5 px-1 py-0.5 rounded"
-          style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <Shield size={7} className="text-emerald-400 shrink-0" />
-          <span className="text-[7px] text-white font-bold">{photo.dist}</span>
-        </div>
-      </div>
-    </button>
-  );
-}
+const STATUS_STYLE = {
+  live:    { label: 'Live',         dot: '#10b981', bg: 'rgba(16,185,129,0.09)',  border: 'rgba(16,185,129,0.25)',  text: '#059669' },
+  survey:  { label: 'Survey booked',dot: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)',  text: '#d97706' },
+  pending: { label: 'Scope set',    dot: '#94a3b8', bg: 'rgba(148,163,184,0.08)',border: 'rgba(148,163,184,0.2)',  text: '#64748b' },
+};
+
+const TUPE_ITEMS = [
+  { label: 'Employee liability info requested from outgoing contractor', done: true },
+  { label: 'Individual staff consultation meetings scheduled', done: true },
+  { label: 'Right-to-work documentation verified', done: false },
+  { label: 'DBS checks initiated', done: false },
+  { label: 'Payroll records transferred', done: false },
+  { label: 'Uniform and access passes ordered', done: false },
+];
 
 export default function ClientOverview({ showToast, onNavigate }) {
+  const liveSites = SITES.filter(s => s.status === 'live').length;
+  const tupeComplete = TUPE_ITEMS.filter(i => i.done).length;
+
   return (
     <div className="p-6 space-y-5 max-w-3xl">
 
-      {/* ── Live Now Hero ── */}
+      {/* ── Mobilisation Status Hero ── */}
       <div className="rounded-2xl overflow-hidden shadow-lg"
         style={{ background: 'linear-gradient(135deg, #010a4f 0%, #0d1f6e 100%)' }}>
-        <div className="px-6 pt-6 pb-4">
-          <div className="flex items-start justify-between gap-4">
+        <div className="px-6 pt-5 pb-4">
+          <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                <span className="text-[10px] font-black text-blue-300 tracking-[0.18em] uppercase">Live right now</span>
+              <div className="flex items-center gap-2 mb-1.5">
+                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-[10px] font-black text-amber-300 tracking-[0.18em] uppercase">Mobilisation in progress</span>
               </div>
-              <h2 className="text-white font-black text-xl leading-tight">Morning clean in progress</h2>
-              <p className="text-blue-200 text-sm mt-1">Next – Luton The Mall · Operative on site since 06:58</p>
-              <div className="flex items-center gap-5 mt-3">
-                <div className="flex items-center gap-1.5">
-                  <Camera size={12} className="text-blue-300" />
-                  <span className="text-[11px] text-blue-200">6 photos uploaded</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Shield size={12} className="text-emerald-400" />
-                  <span className="text-[11px] text-emerald-300 font-bold">SLA on track</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Clock size={12} className="text-blue-300" />
-                  <span className="text-[11px] text-blue-200">Est. complete 08:00</span>
-                </div>
-              </div>
+              <h2 className="text-white font-black text-xl leading-tight">Day 12 · Contract + Exterior</h2>
+              <p className="text-blue-200 text-sm mt-1">{liveSites} of {SITES.length} sites live · Full estate go-live: 01 Jul 2026</p>
             </div>
-            <button onClick={() => onNavigate('live')}
+            <button onClick={() => onNavigate('mobilisation')}
               className="shrink-0 px-4 py-2 rounded-xl text-xs font-black text-white border border-white/20 hover:bg-white/10 transition-colors flex items-center gap-1.5">
-              Watch live <ChevronRight size={12} />
+              View full plan <ChevronRight size={12} />
             </button>
           </div>
-        </div>
-        {/* Progress bar */}
-        <div className="mx-6 mb-2">
-          <div className="flex justify-between text-[9px] text-white/40 mb-1">
-            <span>06:00 start</span>
-            <span className="text-blue-300 font-bold">73% through SLA window</span>
-            <span>08:00 SLA</span>
+
+          {/* Phase dots */}
+          <div className="flex items-center gap-0">
+            {MOB_PHASES.map((phase, i) => {
+              const last = i === MOB_PHASES.length - 1;
+              return (
+                <div key={phase.id} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <div style={{
+                      width: 22, height: 22, borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: phase.done ? '#34d399' : phase.active ? 'rgba(251,191,36,0.25)' : 'rgba(255,255,255,0.08)',
+                      border: phase.done ? '1px solid #34d399' : phase.active ? '2px solid #fbbf24' : '1px solid rgba(255,255,255,0.15)',
+                      fontSize: 9, fontWeight: 900, color: 'white', flexShrink: 0,
+                    }}>
+                      {phase.done ? '✓' : phase.active ? '●' : i + 1}
+                    </div>
+                    <div style={{ fontSize: 8, color: phase.done ? '#34d399' : phase.active ? '#fbbf24' : 'rgba(255,255,255,0.3)', fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'center', lineHeight: 1.2 }}>
+                      {phase.label}
+                    </div>
+                    <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.25)', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                      {phase.date}
+                    </div>
+                  </div>
+                  {!last && <div style={{ flex: 1, height: 1, background: phase.done ? 'rgba(52,211,153,0.4)' : 'rgba(255,255,255,0.1)', margin: '0 4px', marginBottom: 28 }} />}
+                </div>
+              );
+            })}
           </div>
-          <div className="h-1.5 rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-300" style={{ width: '73%' }} />
-          </div>
         </div>
+
         <div className="px-6 py-3 border-t border-white/8 flex items-center justify-between">
-          <span className="text-[10px] text-white/30">Next – Centre:MK clean starts 08:30</span>
-          <span className="text-[10px] text-blue-300/70">3 sites monitored</span>
+          <span className="text-[10px] text-white/35">TUPE window: Day 12 of 28 · {tupeComplete}/6 actions complete</span>
+          <span className="text-[10px] text-blue-300/70">Britannia Group · {SITES.length} sites</span>
         </div>
       </div>
 
       {/* ── Stats ── */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: 'Jobs this month', value: '68',  sub: 'across 3 sites',    color: '#4f78ff' },
-          { label: 'SLA hit rate',    value: '99%', sub: '1 exception logged', color: '#10b981' },
-          { label: 'Photos on file',  value: '312', sub: 'all geo-verified',   color: '#6366f1' },
-          { label: 'Open issues',     value: '0',   sub: 'all resolved',       color: '#059669' },
-        ].map(({ label, value, sub, color }) => (
+          { label: 'Sites live',      value: `${liveSites}/6`,  sub: '2 Tier 1 · active',        color: '#10b981', Icon: MapPin   },
+          { label: 'Job cards active',value: '8/28',            sub: 'live sites only so far',   color: '#4f78ff', Icon: Target   },
+          { label: 'TUPE progress',   value: `${tupeComplete}/6`,sub: `Day 12 of 28-day window`, color: '#f59e0b', Icon: Users    },
+          { label: 'KPIs agreed',     value: '87%',             sub: 'audit pass target',        color: '#6366f1', Icon: Shield   },
+        ].map(({ label, value, sub, color, Icon }) => (
           <div key={label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
-            <div className="text-2xl font-black mt-1 mb-1" style={{ color }}>{value}</div>
+            <div className="flex items-start justify-between mb-1">
+              <div className="text-2xl font-black mt-0.5" style={{ color }}>{value}</div>
+              <Icon size={14} style={{ color, opacity: 0.4, marginTop: 4 }} />
+            </div>
             <div className="text-xs font-bold text-[#010a4f]">{label}</div>
             <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>
           </div>
         ))}
       </div>
 
-      {/* ── Operative Trust Card ── */}
-      <div className="bg-white rounded-2xl border border-[#99c5ff]/30 shadow-sm overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
-          <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">Your assigned operative</div>
-          <span className="text-[9px] font-black px-2.5 py-1 rounded-full"
-            style={{ color: '#34d399', background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)' }}>
-            Cadi Connect Verified
-          </span>
-        </div>
-        <div className="p-5">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black shrink-0"
-              style={{ background: 'linear-gradient(135deg, #f0f4ff, #dbeafe)', color: '#4f78ff' }}>
-              SK
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                <span className="font-black text-[#010a4f]">Sarah K.</span>
-                <div className="flex items-center gap-0.5">
-                  {[1,2,3,4,5].map(i => <span key={i} className="text-amber-400">★</span>)}
-                  <span className="text-xs text-gray-400 ml-1.5">4.8 · 47 jobs</span>
-                </div>
-              </div>
-              <div className="text-xs text-gray-400">Lead operative · Britannia FM · Bedfordshire & Luton</div>
-              <div className="grid grid-cols-4 gap-2 mt-3">
-                {[
-                  { label: 'Connect Score', value: '91', color: '#10b981' },
-                  { label: 'Reliability',   value: '96', color: '#3b82f6' },
-                  { label: 'Evidence',      value: '92', color: '#6366f1' },
-                  { label: 'DBS Status',    value: 'Clear', color: '#059669' },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="rounded-xl bg-[#f8faff] p-2.5 text-center border border-[#99c5ff]/15">
-                    <div className="text-sm font-black" style={{ color }}>{value}</div>
-                    <div className="text-[9px] text-gray-400 mt-0.5 leading-tight">{label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 px-4 py-3 rounded-xl text-xs text-emerald-700 leading-relaxed"
-            style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.18)' }}>
-            <div className="font-bold mb-1 flex items-center gap-1.5">
-              <Shield size={11} /> Independently verified by Cadi Connect
-            </div>
-            Sarah's identity, right to work, DBS certificate, and insurance have been verified by the Cadi network. Her scores are calculated from real job data across all FM companies she works with — not self-reported.
-          </div>
-        </div>
-      </div>
-
-      {/* ── Latest Evidence Strip ── */}
+      {/* ── My Sites ── */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-            Latest evidence — today, 9 May
-          </div>
-          <button onClick={() => onNavigate('evidence')}
-            className="text-xs text-[#4f78ff] font-bold flex items-center gap-1 hover:underline">
-            View all 312 <ChevronRight size={12} />
+          <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">Your 6 sites</div>
+          <button onClick={() => onNavigate('mobilisation')} className="text-xs text-[#4f78ff] font-bold flex items-center gap-1 hover:underline">
+            View rollout plan <ChevronRight size={12} />
           </button>
         </div>
-        <div className="grid grid-cols-6 gap-2">
-          {PHOTO_THUMBS.map((photo, i) => (
-            <PhotoThumb key={i} photo={photo} onClick={() => showToast(`view evidence: ${photo.label}`)} />
-          ))}
-        </div>
-        <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl"
-          style={{ background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.15)' }}>
-          <Shield size={11} className="text-emerald-600 shrink-0" />
-          <span className="text-[10px] text-emerald-700">6/6 photos geo-verified · all within 15m of site boundary · tamper-evident hashes recorded</span>
-        </div>
-      </div>
-
-      {/* ── Sites ── */}
-      <div>
-        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Your sites</div>
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {SITES.map(site => {
-            const st = STATUS[site.status];
+            const st = STATUS_STYLE[site.status];
+            const tier = TIER_STYLE[site.tier];
             return (
-              <div key={site.id}
-                className="bg-white rounded-2xl border shadow-sm p-5 transition-all hover:shadow-md"
-                style={{ borderColor: st.border }}>
-                <div className="flex items-start gap-4">
+              <div key={site.id} className="bg-white rounded-2xl border shadow-sm p-4 transition-all hover:shadow-md"
+                style={{ borderColor: site.status === 'live' ? 'rgba(16,185,129,0.2)' : 'rgba(229,231,235,1)' }}>
+                <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="font-bold text-sm text-[#010a4f]">{site.name}</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <span className="font-bold text-sm" style={{ color: NAVY }}>{site.name}</span>
+                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded" style={{ background: tier.bg, border: `1px solid ${tier.border}`, color: tier.color }}>{tier.label}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
                         style={{ background: st.bg, border: `1px solid ${st.border}`, color: st.text }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: st.dot, display: 'inline-block', flexShrink: 0 }} />
                         {st.label}
                       </span>
                     </div>
-                    <div className="text-xs text-gray-400">{site.address} · {site.service}</div>
-                    {site.note && <div className="text-xs text-amber-600 font-medium mt-0.5">{site.note}</div>}
-                    <div className="flex items-center gap-2 mt-2.5">
-                      <span className="text-[10px] text-gray-400">This week</span>
-                      <div className="flex gap-1">
-                        {['M','T','W','T','F'].map((d, i) => {
-                          const s = site.streak[i];
-                          return (
-                            <div key={i} className="flex flex-col items-center gap-0.5">
-                              <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[9px] font-bold ${
-                                s === true  ? 'bg-emerald-100 text-emerald-700' :
-                                s === false ? 'bg-amber-100 text-amber-700' :
-                                'bg-gray-100 text-gray-400'
-                              }`}>
-                                {s === true ? '✓' : s === false ? '!' : d}
-                              </div>
-                              <span className="text-[8px] text-gray-300">{d}</span>
-                            </div>
-                          );
-                        })}
+                    <div className="text-xs text-gray-400">{site.address}</div>
+
+                    {site.status === 'live' && (
+                      <div className="flex items-center gap-4 mt-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-gray-400">This week</span>
+                          <div className="flex gap-1">
+                            {['M','T','W','T','F'].map((d, i) => {
+                              const s = site.streak[i];
+                              return (
+                                <div key={i} className="flex flex-col items-center gap-0.5">
+                                  <div className={`w-5 h-5 rounded-md flex items-center justify-center text-[8px] font-bold ${
+                                    s === true ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'
+                                  }`}>{s === true ? '✓' : d}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 text-[10px] text-gray-400">
+                          <Clock size={9} /> Next: {site.nextClean}
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {(site.status === 'survey' || site.status === 'pending') && (
+                      <div className="flex items-center gap-4 mt-2">
+                        <span className="text-[10px] text-gray-500">
+                          {site.status === 'survey' ? `Site survey: ${site.surveyDate}` : `Survey: ${site.surveyDate}`}
+                        </span>
+                        <span className="text-[10px] font-bold text-[#4f78ff]">Expected live: {site.liveDate}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-5 shrink-0">
-                    <div className="text-right">
-                      <div className="text-sm font-bold text-[#010a4f]">{site.jobs}</div>
-                      <div className="text-[10px] text-gray-400">jobs</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-bold" style={{ color: site.sla === 100 ? '#10b981' : '#f59e0b' }}>
-                        {site.sla}%
+
+                  <div className="flex items-center gap-4 shrink-0">
+                    {site.status === 'live' && (
+                      <>
+                        <div className="text-right">
+                          <div className="text-sm font-bold" style={{ color: NAVY }}>{site.jobs}</div>
+                          <div className="text-[10px] text-gray-400">job cards</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-bold" style={{ color: '#10b981' }}>{site.sla}%</div>
+                          <div className="text-[10px] text-gray-400">SLA</div>
+                        </div>
+                      </>
+                    )}
+                    {site.status !== 'live' && (
+                      <div className="text-right">
+                        <div className="text-[10px] font-bold" style={{ color: '#f59e0b' }}>Mobilising</div>
+                        <div className="text-[10px] text-gray-400">{site.liveDate}</div>
                       </div>
-                      <div className="text-[10px] text-gray-400">SLA</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs font-semibold text-gray-600">{site.nextClean}</div>
-                      <div className="text-[10px] text-gray-400">next clean</div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -268,31 +211,85 @@ export default function ClientOverview({ showToast, onNavigate }) {
         </div>
       </div>
 
-      {/* ── Quick Actions ── */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Report an issue',          icon: '⚠️', action: () => onNavigate('issue')   },
-          { label: 'Request additional work',   icon: '📋', action: () => showToast('submit additional work request') },
-          { label: 'Download compliance pack',  icon: '📄', action: () => showToast('download portfolio compliance pack') },
-        ].map(({ label, icon, action }) => (
-          <button key={label} onClick={action}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center hover:border-[#4f78ff]/30 hover:shadow-md transition-all">
-            <div className="text-2xl mb-2">{icon}</div>
-            <div className="text-xs font-bold text-[#010a4f]">{label}</div>
-          </button>
-        ))}
+      {/* ── KPI Scorecard ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
+          <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">Agreed KPI framework</div>
+          <span className="text-[9px] font-black px-2.5 py-1 rounded-full" style={{ color: '#34d399', background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.25)' }}>
+            ✓ Locked in contract
+          </span>
+        </div>
+        <div className="grid grid-cols-4 divide-x divide-gray-100">
+          {[
+            { label: 'Audit pass score',    value: '87%',    sub: 'minimum threshold',  color: '#4f78ff' },
+            { label: 'Re-clean response',   value: '24 hrs', sub: 'from complaint',     color: '#10b981' },
+            { label: 'Staff cover rate',    value: '95%',    sub: 'minimum acceptable', color: '#6366f1' },
+            { label: 'Reactive SLA',        value: '4 hrs',  sub: 'emergency call-outs',color: '#f59e0b' },
+          ].map(({ label, value, sub, color }) => (
+            <div key={label} className="px-4 py-4 text-center">
+              <div className="text-xl font-black" style={{ color }}>{value}</div>
+              <div className="text-[11px] font-bold text-[#010a4f] mt-1">{label}</div>
+              <div className="text-[9px] text-gray-400 mt-0.5">{sub}</div>
+            </div>
+          ))}
+        </div>
+        <div className="px-5 py-2.5 border-t border-gray-50 text-[10px] text-gray-400">
+          Tracking begins from go-live for each site. Live sites (Tier 1) are already being measured.
+        </div>
       </div>
 
-      {/* ── Cadi Connect Explainer ── */}
-      <div className="rounded-2xl px-5 py-4 flex items-center gap-4"
-        style={{ background: 'linear-gradient(135deg, rgba(1,10,79,0.03) 0%, rgba(79,120,255,0.06) 100%)', border: '1px solid rgba(79,120,255,0.14)' }}>
-        <TrendingUp size={20} className="text-[#4f78ff] shrink-0" />
-        <div className="flex-1">
-          <div className="text-xs font-black text-[#010a4f]">This level of visibility is only possible through Cadi Connect</div>
-          <div className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">
-            Real-time GPS tracking, geo-verified photo evidence, and independently verified operatives — none of this exists with traditional FM contracts. Britannia FM chose Cadi Connect so every client gets proof, not promises.
+      {/* ── TUPE Tracker ── */}
+      <div className="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-amber-50 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">TUPE — staff transfer</div>
+            <div className="text-xs font-bold text-[#010a4f] mt-0.5">18 staff transferring · Day 12 of 28-day window</div>
+          </div>
+          <span className="text-[9px] font-black px-2.5 py-1 rounded-full" style={{ color: '#d97706', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)' }}>
+            In progress
+          </span>
+        </div>
+        {/* Progress bar */}
+        <div className="px-5 pt-3 pb-2">
+          <div className="flex justify-between text-[9px] text-gray-400 mb-1">
+            <span>Day 1 — 12 May</span>
+            <span className="font-bold text-amber-600">Day 12 today</span>
+            <span>Day 28 — 09 Jun</span>
+          </div>
+          <div className="h-2 rounded-full bg-gray-100">
+            <div className="h-full rounded-full" style={{ width: '43%', background: 'linear-gradient(90deg, #f59e0b, #fbbf24)' }} />
           </div>
         </div>
+        <div className="px-5 pb-4 space-y-1.5">
+          {TUPE_ITEMS.map(({ label, done }) => (
+            <div key={label} className="flex items-center gap-2.5 py-1">
+              {done
+                ? <CheckCircle2 size={13} style={{ color: '#10b981', flexShrink: 0 }} />
+                : <Circle size={13} style={{ color: '#d1d5db', flexShrink: 0 }} />}
+              <span className="text-[11px]" style={{ color: done ? '#374151' : '#9ca3af' }}>{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Quick Actions ── */}
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: 'View mobilisation plan', icon: <Rocket size={18} />, color: '#4f78ff', action: () => onNavigate('mobilisation') },
+          { label: 'Report an issue',        icon: '⚠️',                 color: null,       action: () => onNavigate('issue') },
+          { label: 'Message Britannia',      icon: '💬',                 color: null,       action: () => showToast('open message thread with Britannia ops team') },
+          { label: 'Download compliance',    icon: '📄',                 color: null,       action: () => showToast('download compliance pack') },
+        ].map(({ label, icon, color, action }) => (
+          <button key={label} onClick={action}
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center hover:border-[#4f78ff]/30 hover:shadow-md transition-all">
+            <div className="flex justify-center mb-2">
+              {typeof icon === 'string'
+                ? <span className="text-2xl">{icon}</span>
+                : <div style={{ color: color || '#4f78ff' }}>{icon}</div>}
+            </div>
+            <div className="text-xs font-bold" style={{ color: NAVY }}>{label}</div>
+          </button>
+        ))}
       </div>
 
     </div>

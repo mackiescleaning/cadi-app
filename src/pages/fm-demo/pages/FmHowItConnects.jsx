@@ -56,7 +56,7 @@ const STEPS = [
     icon: PoundSterling,
     label: 'Earnings updated automatically',
     sub: 'The cleaner\'s Earnings tab updates — £92 moves from "pending review" to "awaiting payment".',
-    detail: 'Britannia FM · £92 · ref BF-PAY-0089 · Net 14 · 22 May 2026',
+    detail: 'Britannia Group · £92 · ref BF-PAY-0089 · Net 14 · 22 May 2026',
     color: '#34d399',
   },
   {
@@ -65,7 +65,7 @@ const STEPS = [
     icon: Star,
     label: 'FM rates the visit',
     sub: 'Quick quality rating from the FM feeds directly into the cleaner\'s Cadi Score — transparent, trackable.',
-    detail: '5 stars · "On time, excellent photos, no issues raised" · Britannia FM',
+    detail: '5 stars · "On time, excellent photos, no issues raised" · Britannia Group',
     color: '#fbbf24',
   },
   {

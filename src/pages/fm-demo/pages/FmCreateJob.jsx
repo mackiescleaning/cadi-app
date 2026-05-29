@@ -137,6 +137,12 @@ function SiteConfigCard({ site, config, onChange, onRemove }) {
   );
 }
 
+const IMPACT = [
+  { before: 'Contracts built in Word, emailed for sign-off, filed manually', after: 'Contract created in the portal in under 10 minutes', icon: '📝' },
+  { before: 'SLA windows agreed verbally — disputes follow', after: 'SLA locked into the contract — auto-monitored from day one', icon: '⏱' },
+  { before: 'Operative matched weeks later via ads and calls', after: 'Cadi matches an operative the moment the contract is saved', icon: '🎯' },
+];
+
 // ─── main component ───────────────────────────────────────────────────────────
 
 export default function FmCreateJob({ showToast }) {
@@ -254,7 +260,26 @@ export default function FmCreateJob({ showToast }) {
 
   // ── Wizard layout ─────────────────────────────────────────────────────────────
   return (
-    <div className="p-8">
+    <div className="p-8 space-y-6">
+
+      {/* Impact strip */}
+      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(79,120,255,0.18)', background: 'rgba(1,8,40,0.6)' }}>
+        <div className="px-5 py-2.5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(79,120,255,0.06)' }}>
+          <span className="text-[9px] font-black uppercase tracking-widest text-white/30">What Cadi replaces</span>
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: '#4f78ff' }}>With Cadi</span>
+        </div>
+        <div className="grid grid-cols-3 divide-x" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {IMPACT.map(({ before, after, icon }) => (
+            <div key={icon} className="px-4 py-3 flex items-start gap-3">
+              <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>
+              <div><div className="text-[10px] text-white/30 line-through decoration-white/20 mb-1 leading-snug">{before}</div>
+              <div className="text-[10px] font-bold leading-snug" style={{ color: '#60a5fa' }}>{after}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-[1fr_300px] gap-8 max-w-5xl">
 
         {/* ── Left: form ── */}

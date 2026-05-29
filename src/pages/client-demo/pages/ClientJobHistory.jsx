@@ -9,7 +9,7 @@ const JOBS = [
   { id: 'h5',  date: '05 May 2026', service: 'Morning clean', status: 'completed',   time: '06:58–07:42',   photos: 12, sla: true,  area: 'Full site',   cleaner: 'Your assigned operative' },
   { id: 'h6',  date: '02 May 2026', service: 'Morning clean', status: 'completed',   time: '07:05–07:55',   photos: 10, sla: true,  area: 'Full site',   cleaner: 'Your assigned operative' },
   { id: 'h7',  date: '01 May 2026', service: 'Morning clean', status: 'completed',   time: '06:57–07:48',   photos: 11, sla: true,  area: 'Full site',   cleaner: 'Your assigned operative' },
-  { id: 'h8',  date: '30 Apr 2026', service: 'Morning clean', status: 'completed',   time: '07:12–08:04',   photos: 8,  sla: false, area: 'Full site',   cleaner: 'Your assigned operative', note: 'Late arrival — logged and resolved by Britannia FM' },
+  { id: 'h8',  date: '30 Apr 2026', service: 'Morning clean', status: 'completed',   time: '07:12–08:04',   photos: 8,  sla: false, area: 'Full site',   cleaner: 'Your assigned operative', note: 'Late arrival — logged and resolved by Britannia Group' },
   { id: 'h9',  date: '29 Apr 2026', service: 'Morning clean', status: 'completed',   time: '07:00–07:52',   photos: 10, sla: true,  area: 'Full site',   cleaner: 'Your assigned operative' },
   { id: 'h10', date: '28 Apr 2026', service: 'Morning clean', status: 'completed',   time: '06:55–07:47',   photos: 11, sla: true,  area: 'Full site',   cleaner: 'Your assigned operative' },
   { id: 'h11', date: '25 Apr 2026', service: 'Deep clean',    status: 'completed',   time: '07:00–10:45',   photos: 31, sla: true,  area: 'Hall + rooms', cleaner: 'Your assigned operative' },

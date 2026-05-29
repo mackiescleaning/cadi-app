@@ -34,7 +34,7 @@ const ONBOARDEES = [
       dbs:      { done: true, date: '12 May', note: 'DBS cleared same day — Cadi verified' },
       app:      { done: true, date: '13 May', note: 'App setup complete, library access codes issued' },
       briefing: { done: true, date: '15 May', note: 'Briefed by area supervisor — checklist reviewed' },
-      trial:    { done: false, date: '20 May', note: 'Trial clean booked Tue 20 May 07:00 — supervisor attending' },
+      trial:    { done: false, date: '20 May', note: 'Trial clean booked Wed 20 May 07:00 — supervisor attending' },
       live:     { done: false, date: '22 May', note: 'Projected go-live' },
     },
     daysIn: 6,
@@ -90,6 +90,12 @@ function StageBar({ stages, currentStage }) {
   );
 }
 
+const IMPACT = [
+  { before: 'New operative induction: paper forms, phone calls, 2-week DBS wait', after: 'Digital onboarding — DBS tracked, docs collected, portal access day one', icon: '📋' },
+  { before: 'No visibility of where each new hire is in the process', after: 'Every operative tracked stage by stage — nothing falls through', icon: '👁' },
+  { before: 'Compliance gaps discovered on site, contract at risk', after: 'Compliance gated before first shift — FM protected', icon: '🔒' },
+];
+
 export default function FmCleanerOnboarding({ showToast }) {
   const [expanded, setExpanded] = useState(null);
 
@@ -98,6 +104,24 @@ export default function FmCleanerOnboarding({ showToast }) {
 
   return (
     <div className="p-6 space-y-5 max-w-4xl">
+
+      {/* Impact strip */}
+      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(79,120,255,0.18)', background: 'rgba(1,8,40,0.6)' }}>
+        <div className="px-5 py-2.5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(79,120,255,0.06)' }}>
+          <span className="text-[9px] font-black uppercase tracking-widest text-white/30">What Cadi replaces</span>
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: '#4f78ff' }}>With Cadi</span>
+        </div>
+        <div className="grid grid-cols-3 divide-x" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {IMPACT.map(({ before, after, icon }) => (
+            <div key={icon} className="px-4 py-3 flex items-start gap-3">
+              <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>
+              <div><div className="text-[10px] text-white/30 line-through decoration-white/20 mb-1 leading-snug">{before}</div>
+              <div className="text-[10px] font-bold leading-snug" style={{ color: '#60a5fa' }}>{after}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">

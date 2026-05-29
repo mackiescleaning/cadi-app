@@ -14,7 +14,7 @@ export default function ClientSiteDashboard({ showToast, onNavigate }) {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
         <div className="text-sm text-gray-400 mb-1">Good morning</div>
         <h1 className="text-xl font-black text-[#010a4f]">Next – Luton The Mall</h1>
-        <p className="text-sm text-gray-500 mt-1">Next Retail UK Ltd · Managed by Britannia FM</p>
+        <p className="text-sm text-gray-500 mt-1">Asda Stores Ltd · Managed by Britannia Group</p>
       </div>
 
       {/* Today's status */}
@@ -76,7 +76,7 @@ export default function ClientSiteDashboard({ showToast, onNavigate }) {
             { label: 'Time window',   value: '06:00–08:00' },
             { label: 'Your operative', value: 'Your assigned operative' },
             { label: 'Contract value', value: '£1,800/month' },
-            { label: 'FM contact',    value: 'Britannia FM · 0800 123 4567' },
+            { label: 'FM contact',    value: 'Britannia Group · 0800 123 4567' },
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between text-sm">
               <span className="text-gray-400">{label}</span>

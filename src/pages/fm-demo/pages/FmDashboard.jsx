@@ -154,6 +154,13 @@ function GlassCard({ children, className = '', style = {} }) {
   );
 }
 
+const IMPACT = [
+  { before: 'Morning ops round: calls, WhatsApp, chasing no-shows', after: 'Every site, every region — covered or flagged, no calls needed', icon: '📍' },
+  { before: 'SLA breach discovered when the client calls you',       after: 'Site flagged before the window closes — you act, not your client', icon: '⏱' },
+  { before: 'Cover gap at 5am — 2 hours of calls to fill it',        after: 'Cover pool visible in advance — gaps filled before the shift starts', icon: '🔄' },
+  { before: 'Margin erosion invisible until the contract review',    after: 'Cost vs revenue per contract visible every week',                    icon: '💷' },
+];
+
 export default function FmDashboard({ showToast, onNavigate }) {
   const today      = jobs.filter(j => j.date === '2026-05-09');
   const inProgress = today.filter(j => j.status === 'in-progress').length;
@@ -162,6 +169,24 @@ export default function FmDashboard({ showToast, onNavigate }) {
 
   return (
     <div className="p-8 space-y-6 min-h-full">
+
+      {/* Before → With Cadi strip */}
+      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(79,120,255,0.18)', background: 'rgba(1,8,40,0.6)' }}>
+        <div className="px-5 py-3 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(79,120,255,0.06)' }}>
+          <div className="text-[9px] font-black uppercase tracking-widest text-white/30">What Cadi replaces</div>
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: '#4f78ff' }}>With Cadi</div>
+        </div>
+        <div className="grid grid-cols-4 divide-x" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {IMPACT.map(({ before, after, icon }) => (
+            <div key={icon} className="px-4 py-3.5">
+              <div className="text-lg mb-2">{icon}</div>
+              <div className="text-[10px] text-white/30 leading-snug mb-2 line-through decoration-white/20">{before}</div>
+              <div className="text-[10px] font-bold leading-snug" style={{ color: '#60a5fa' }}>{after}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* SLA alert strip */}
       {alerts > 0 && (
@@ -190,6 +215,47 @@ export default function FmDashboard({ showToast, onNavigate }) {
         </div>
       )}
 
+      {/* TUPE active alert card */}
+      <button
+        onClick={() => onNavigate('tupe')}
+        className="w-full text-left rounded-2xl overflow-hidden transition-all"
+        style={{
+          background: 'rgba(99,102,241,0.06)',
+          border: '1px solid rgba(99,102,241,0.28)',
+          boxShadow: '0 0 24px rgba(99,102,241,0.06)',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.11)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.45)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.06)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.28)'; }}
+      >
+        <div className="flex items-center gap-4 px-5 py-3.5 relative">
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: 'linear-gradient(180deg, transparent, #6366f1, transparent)', borderRadius: '2px 0 0 2px' }} />
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-base"
+            style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)' }}>
+            👥
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="text-sm font-black text-white">TUPE in progress</span>
+              <span className="text-[9px] font-black px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.35)', color: '#a5b4fc' }}>
+                ACTIVE
+              </span>
+            </div>
+            <div className="text-xs text-white/45">
+              Asda Luton — 24 staff transferring · <span style={{ color: '#a5b4fc', fontWeight: 700 }}>Day 12 of 28</span> · 3 actions outstanding
+            </div>
+          </div>
+          {/* Progress bar */}
+          <div className="shrink-0 flex flex-col items-end gap-1">
+            <div className="text-[10px] font-black text-white/30">43% complete</div>
+            <div className="w-28 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <div className="h-full rounded-full" style={{ width: '43%', background: 'linear-gradient(90deg, #6366f1, #818cf8)' }} />
+            </div>
+          </div>
+          <div className="text-indigo-400 text-sm shrink-0">→</div>
+        </div>
+      </button>
+
       {/* Stat cards */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
@@ -208,9 +274,9 @@ export default function FmDashboard({ showToast, onNavigate }) {
           sparkData={[3,4,2,5,3,4,3,2]}
         />
         <StatCard
-          label="SLA hit rate" value="98%"            sub="this month"
-          color="#a78bfa"  sparkId="sla"
-          sparkData={[94,95,96,95,97,96,98,98]}  trend="↑ 2pts"
+          label="Cover rate"   value="97%"            sub="shifts filled this week"
+          color="#a78bfa"  sparkId="cover"
+          sparkData={[91,93,94,92,95,96,96,97]}  trend="↑ 3pts vs last week"
         />
       </div>
 
@@ -237,8 +303,8 @@ export default function FmDashboard({ showToast, onNavigate }) {
             <MapContainer
               center={[52.0, -0.5]} zoom={9}
               style={{ width: '100%', height: '100%' }}
-              zoomControl={false} attributionControl={false}
-              dragging={false} scrollWheelZoom={false} doubleClickZoom={false}
+              zoomControl={true} attributionControl={false}
+              dragging={true} scrollWheelZoom={true} doubleClickZoom={true}
             >
               <MapStyler />
               <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" subdomains="abcd" maxZoom={19} />

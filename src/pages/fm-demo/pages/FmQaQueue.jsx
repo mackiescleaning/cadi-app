@@ -7,12 +7,12 @@ import { getServiceColour } from '../utils/colours';
 import { Shield, MapPin, Clock, Camera, CheckCircle2, Star } from 'lucide-react';
 
 const EVIDENCE_MOCK = [
-  { type: 'Before', label: 'Main entrance',      time: '07:41', geo: '52.13618, -0.46008', accuracy: '±4m', hue: 220 },
-  { type: 'Before', label: 'Reception area',     time: '07:43', geo: '52.13619, -0.46011', accuracy: '±5m', hue: 220 },
-  { type: 'After',  label: 'Main entrance',      time: '08:31', geo: '52.13617, -0.46009', accuracy: '±4m', hue: 160 },
-  { type: 'After',  label: 'Reception area',     time: '08:34', geo: '52.13620, -0.46007', accuracy: '±6m', hue: 160 },
-  { type: 'After',  label: 'Toilets — 1st floor',time: '08:38', geo: '52.13621, -0.46012', accuracy: '±5m', hue: 160 },
-  { type: 'Sign',   label: 'Site supervisor',    time: '08:44', geo: '52.13618, -0.46008', accuracy: '±3m', hue: 270 },
+  { type: 'Before', label: 'Main entrance',       time: '07:41', geo: '52.13618, -0.46008', accuracy: '±4m' },
+  { type: 'Before', label: 'Reception area',      time: '07:43', geo: '52.13619, -0.46011', accuracy: '±5m' },
+  { type: 'After',  label: 'Main entrance',       time: '08:31', geo: '52.13617, -0.46009', accuracy: '±4m' },
+  { type: 'After',  label: 'Reception area',      time: '08:34', geo: '52.13620, -0.46007', accuracy: '±6m' },
+  { type: 'After',  label: 'Toilets — 1st floor', time: '08:38', geo: '52.13621, -0.46012', accuracy: '±5m' },
+  { type: 'Sign',   label: 'Site supervisor',     time: '08:44', geo: '52.13618, -0.46008', accuracy: '±3m' },
 ];
 
 const SLA_CHECKS = [
@@ -54,17 +54,9 @@ function PhotoCard({ ev, onView }) {
       onMouseEnter={e => { e.currentTarget.style.borderColor = `${accent}40`; e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
     >
-      {/* Mock photo thumbnail */}
-      <div className="h-20 relative overflow-hidden" style={{
-        background: `linear-gradient(135deg, hsl(${ev.hue},30%,12%) 0%, hsl(${ev.hue},25%,18%) 100%)`,
-      }}>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Camera size={20} style={{ color: `hsl(${ev.hue},60%,55%)`, opacity: 0.4 }} />
-        </div>
-        {/* Simulated photo content lines */}
-        <div className="absolute inset-0" style={{
-          backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 8px, rgba(255,255,255,0.015) 8px, rgba(255,255,255,0.015) 9px)`,
-        }} />
+      {/* Photo thumbnail */}
+      <div className="h-20 relative overflow-hidden flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${accent}18, ${accent}08)` }}>
+        <Camera size={22} style={{ color: `${accent}50` }} />
         <div className="absolute top-2 right-2">
           <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full"
             style={{ background: `${accent}25`, border: `1px solid ${accent}40`, color: accent }}>
@@ -84,6 +76,12 @@ function PhotoCard({ ev, onView }) {
     </button>
   );
 }
+
+const IMPACT = [
+  { before: 'FM chases cleaners for evidence via WhatsApp & email', after: 'Geo-stamped photos auto-arrive — nothing to chase', icon: '📷' },
+  { before: 'SLA disputes with no proof to resolve them',           after: 'SHA-256 tamper-evident evidence, always on record',  icon: '🔒' },
+  { before: 'QA sign-off takes days, holds up invoices',            after: 'One-click approval — invoice can be raised same day', icon: '⚡' },
+];
 
 export default function FmQaQueue({ showToast }) {
   const [selected, setSelected] = useState(null);
@@ -110,7 +108,23 @@ export default function FmQaQueue({ showToast }) {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Impact strip */}
+      <div className="flex-shrink-0 flex divide-x" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(1,8,40,0.7)', borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div className="px-4 py-2 flex items-center gap-2 flex-shrink-0">
+          <span className="text-[9px] font-black uppercase tracking-widest text-white/25">What Cadi replaces</span>
+        </div>
+        {IMPACT.map(({ before, after, icon }) => (
+          <div key={icon} className="flex-1 flex items-center gap-3 px-4 py-2.5">
+            <span className="text-base flex-shrink-0">{icon}</span>
+            <div className="min-w-0">
+              <div className="text-[9px] text-white/25 line-through decoration-white/15 truncate">{before}</div>
+              <div className="text-[10px] font-bold truncate" style={{ color: '#60a5fa' }}>{after}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-1 overflow-hidden">
 
       {/* ── Left: queue list ── */}
       <div className="w-[40%] flex flex-col overflow-hidden flex-shrink-0" style={{ borderRight: '1px solid rgba(255,255,255,0.07)' }}>
@@ -209,15 +223,8 @@ export default function FmQaQueue({ showToast }) {
       {/* ── Right: evidence review panel ── */}
       <div className="flex-1 overflow-y-auto">
         {!sel ? (
-          <div className="h-full flex flex-col items-center justify-center gap-4 text-center px-8">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <Shield size={24} style={{ color: 'rgba(255,255,255,0.2)' }} />
-            </div>
-            <div>
-              <div className="text-white/40 text-sm font-bold">Select a job to review</div>
-              <div className="text-white/20 text-xs mt-1">Evidence, geo-stamps and SLA checks in one view</div>
-            </div>
+          <div className="flex items-center justify-center h-full">
+            <div className="text-white/15 text-xs text-center">Select an item to view details</div>
           </div>
         ) : (
           <div className="p-6 space-y-5">
@@ -368,6 +375,7 @@ export default function FmQaQueue({ showToast }) {
 
           </div>
         )}
+      </div>
       </div>
     </div>
   );

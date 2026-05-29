@@ -8,10 +8,10 @@ const TABS = [
 ];
 
 const TEAM = [
-  { name: 'James Harper',  email: 'j.harper@britanniafm.co.uk',  role: 'Admin',      last: '5 min ago'   },
-  { name: 'Claire Moss',   email: 'c.moss@britanniafm.co.uk',    role: 'Dispatcher', last: '2 hours ago' },
-  { name: 'Tom Reeves',    email: 't.reeves@britanniafm.co.uk',  role: 'Dispatcher', last: 'Yesterday'   },
-  { name: 'Helen Grant',   email: 'h.grant@britanniafm.co.uk',   role: 'Reports',    last: '3 days ago'  },
+  { name: 'James Harper',  email: 'j.harper@britanniagroup.co.uk',  role: 'Admin',      last: '5 min ago'   },
+  { name: 'Claire Moss',   email: 'c.moss@britanniagroup.co.uk',    role: 'Dispatcher', last: '2 hours ago' },
+  { name: 'Tom Reeves',    email: 't.reeves@britanniagroup.co.uk',  role: 'Dispatcher', last: 'Yesterday'   },
+  { name: 'Helen Grant',   email: 'h.grant@britanniagroup.co.uk',   role: 'Reports',    last: '3 days ago'  },
 ];
 
 const SLA_TEMPLATES = [
@@ -100,10 +100,10 @@ export default function FmSettings({ showToast }) {
 
             <GlassCard className="px-6">
               <SettingRow label="Organisation name" sub="Shown on cleaner-facing job cards">
-                <input defaultValue="Britannia FM" style={{ ...inputStyle, width: 220 }} />
+                <input defaultValue="Britannia Group" style={{ ...inputStyle, width: 220 }} />
               </SettingRow>
               <SettingRow label="Primary contact email" sub="Notifications and billing">
-                <input defaultValue="ops@britanniafm.co.uk" style={{ ...inputStyle, width: 220 }} />
+                <input defaultValue="ops@britanniagroup.co.uk" style={{ ...inputStyle, width: 220 }} />
               </SettingRow>
               <SettingRow label="Default currency" sub="Used on invoices and reports">
                 <select defaultValue="GBP" style={{ ...inputStyle, width: 120, appearance: 'none' }}>
@@ -143,7 +143,7 @@ export default function FmSettings({ showToast }) {
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-[#4f78ff]/20 border border-[#4f78ff]/25 flex items-center justify-center text-white font-black text-xl">B</div>
                 <div>
-                  <div className="text-white font-medium text-sm">Britannia FM logo</div>
+                  <div className="text-white font-medium text-sm">Britannia Group logo</div>
                   <div className="text-white/35 text-xs mt-0.5">Shown on cleaner job cards and client portals</div>
                   <button onClick={() => showToast('upload organisation logo')}
                     className="text-xs font-bold text-[#4f78ff] hover:text-[#60a5fa] transition-colors mt-1.5">
@@ -224,7 +224,7 @@ export default function FmSettings({ showToast }) {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-white font-black text-base">Team & permissions</div>
-                <div className="text-white/40 text-sm mt-0.5">Who has access to the Britannia FM Ops Portal</div>
+                <div className="text-white/40 text-sm mt-0.5">Who has access to the Britannia Group Ops Portal</div>
               </div>
               <button onClick={() => showToast('invite new team member')}
                 className="px-4 py-2 rounded-xl text-sm font-bold text-white transition-colors"
@@ -275,7 +275,7 @@ export default function FmSettings({ showToast }) {
           <div className="max-w-2xl space-y-5">
             <div>
               <div className="text-white font-black text-base">Integrations & API</div>
-              <div className="text-white/40 text-sm mt-0.5">Connect Britannia FM's systems to Cadi</div>
+              <div className="text-white/40 text-sm mt-0.5">Connect Britannia Group's systems to Cadi</div>
             </div>
             <GlassCard className="px-6 py-5 space-y-5">
               <div>

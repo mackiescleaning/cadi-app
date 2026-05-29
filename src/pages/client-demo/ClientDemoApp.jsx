@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { LayoutDashboard, Activity, Images, ClipboardList, ShieldCheck, BarChart2, AlertTriangle, MessageSquare, Settings, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Activity, Images, ClipboardList, ShieldCheck, BarChart2, AlertTriangle, MessageSquare, Settings, Menu, X, Rocket } from 'lucide-react';
 import ClientOverview      from './pages/ClientOverview';
+import ClientMobilisation  from './pages/ClientMobilisation';
 import ClientLiveActivity  from './pages/ClientLiveActivity';
 import ClientEvidence      from './pages/ClientEvidence';
 import ClientJobHistory    from './pages/ClientJobHistory';
@@ -11,27 +12,32 @@ import ClientComms         from './pages/ClientComms';
 import ClientSettings      from './pages/ClientSettings';
 
 const SITES = [
-  { id: 'lu', name: 'Next – Luton The Mall',  status: 'good'    },
-  { id: 'mk', name: 'Next – Centre:MK',       status: 'good'    },
-  { id: 'wf', name: 'Next – Watford Atria',   status: 'warning' },
+  { id: 'lu', name: 'Asda – Luton Supercentre',     status: 'live'    },
+  { id: 'bm', name: 'Asda – Birmingham Minworth',   status: 'live'    },
+  { id: 'mk', name: 'Asda – Milton Keynes Central', status: 'warning' },
+  { id: 'wf', name: 'Asda – Watford Dome',          status: 'warning' },
+  { id: 'cv', name: 'Asda – Coventry Arena',        status: 'warning' },
+  { id: 'st', name: 'Asda – Stevenage Retail Park', status: 'warning' },
 ];
 
 const STATUS_DOT = {
+  live:    '#10b981',
   good:    '#10b981',
   warning: '#f59e0b',
   breach:  '#ef4444',
 };
 
 const PAGES = [
-  { id: 'overview',    label: 'Overview',        icon: LayoutDashboard, component: ClientOverview,    badge: 'live' },
-  { id: 'live',        label: 'Live Activity',    icon: Activity,        component: ClientLiveActivity, badge: 'live' },
-  { id: 'evidence',    label: 'Photo Evidence',   icon: Images,          component: ClientEvidence,    badge: '312'  },
-  { id: 'history',     label: 'Job History',      icon: ClipboardList,   component: ClientJobHistory   },
-  { id: 'compliance',  label: 'Compliance Pack',  icon: ShieldCheck,     component: ClientCompliance   },
-  { id: 'reports',     label: 'Reports',          icon: BarChart2,       component: ClientReports      },
-  { id: 'issue',       label: 'Report an Issue',  icon: AlertTriangle,   component: ClientIssue        },
-  { id: 'comms',       label: 'Messages',         icon: MessageSquare,   component: ClientComms        },
-  { id: 'settings',    label: 'Settings',         icon: Settings,        component: ClientSettings     },
+  { id: 'overview',       label: 'Overview',          icon: LayoutDashboard, component: ClientOverview,    badge: 'live' },
+  { id: 'mobilisation',   label: 'Mobilisation',      icon: Rocket,          component: ClientMobilisation, badge: 'day12' },
+  { id: 'live',           label: 'Live Activity',      icon: Activity,        component: ClientLiveActivity, badge: 'live' },
+  { id: 'evidence',       label: 'Photo Evidence',     icon: Images,          component: ClientEvidence,    badge: '47'   },
+  { id: 'history',        label: 'Job History',        icon: ClipboardList,   component: ClientJobHistory   },
+  { id: 'compliance',     label: 'Compliance Pack',    icon: ShieldCheck,     component: ClientCompliance   },
+  { id: 'reports',        label: 'Reports',            icon: BarChart2,       component: ClientReports      },
+  { id: 'issue',          label: 'Report an Issue',    icon: AlertTriangle,   component: ClientIssue        },
+  { id: 'comms',          label: 'Messages',           icon: MessageSquare,   component: ClientComms        },
+  { id: 'settings',       label: 'Settings',           icon: Settings,        component: ClientSettings     },
 ];
 
 function DemoToast({ msg, onClose }) {
@@ -46,7 +52,7 @@ function DemoToast({ msg, onClose }) {
 
 export default function ClientDemoApp() {
   const [page,        setPage]        = useState('overview');
-  const [activeSite,  setActiveSite]  = useState('rp');
+  const [activeSite,  setActiveSite]  = useState('all');
   const [sitesOpen,   setSitesOpen]   = useState(true);
   const [toast,       setToast]       = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -76,9 +82,12 @@ export default function ClientDemoApp() {
 
         {/* Branding */}
         <div className="px-5 py-5 border-b border-gray-100 flex-shrink-0">
-          <div className="text-[10px] font-black tracking-widest text-gray-400 uppercase mb-0.5">Britannia FM</div>
-          <div className="text-sm font-black text-[#010a4f]">Client Portal</div>
-          <div className="text-[10px] text-gray-300 mt-0.5">powered by Cadi</div>
+          <div className="text-[10px] font-black tracking-widest text-gray-400 uppercase mb-0.5">Britannia Group</div>
+          <div className="text-sm font-black text-[#010a4f]">Asda Stores Ltd</div>
+          <div className="flex items-center gap-1.5 mt-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wider">Mobilising · Day 12</span>
+          </div>
           <button className="md:hidden absolute top-4 right-4 p-1 hover:bg-gray-100 rounded" onClick={() => setSidebarOpen(false)}>
             <X size={16} className="text-gray-400" />
           </button>
@@ -134,7 +143,10 @@ export default function ClientDemoApp() {
                   <span className="text-[9px] font-black text-blue-600">LIVE</span>
                 </div>
               )}
-              {badge && badge !== 'live' && (
+              {badge === 'day12' && (
+                <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full shrink-0">D12</span>
+              )}
+              {badge && badge !== 'live' && badge !== 'day12' && (
                 <span className="text-[9px] font-black text-[#4f78ff] bg-[#f0f4ff] px-1.5 py-0.5 rounded-full shrink-0">{badge}</span>
               )}
               {id === 'comms' && !badge && (
@@ -146,9 +158,15 @@ export default function ClientDemoApp() {
 
         {/* Footer */}
         <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
-          <div className="text-[10px] text-gray-300 leading-relaxed">
-            Next Retail UK Ltd · 3 sites
+          <div className="text-[10px] text-gray-300 leading-relaxed mb-3">
+            Asda Stores Ltd · 6 sites · mobilising
           </div>
+          <a href="/demo" className="flex items-center gap-1.5 no-underline transition-colors group"
+            style={{ color: 'rgba(1,10,79,0.4)' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'rgba(1,10,79,0.8)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'rgba(1,10,79,0.4)'}>
+            <span style={{ fontSize: '0.65rem', fontWeight: 700 }}>← Demo home</span>
+          </a>
         </div>
       </aside>
 
@@ -167,7 +185,7 @@ export default function ClientDemoApp() {
           </button>
           <div className="flex-1 min-w-0">
             <div className="text-[10px] text-gray-400 truncate">
-              {activeSite === 'all' ? 'Next Retail UK Ltd — All sites' : currentSite?.name + ' · Next Retail UK Ltd'}
+              {activeSite === 'all' ? 'Asda Stores Ltd — All sites' : currentSite?.name + ' · Asda Stores Ltd'}
             </div>
             <h1 className="text-sm font-bold text-[#010a4f] truncate">{PAGES.find(p => p.id === page)?.label}</h1>
           </div>

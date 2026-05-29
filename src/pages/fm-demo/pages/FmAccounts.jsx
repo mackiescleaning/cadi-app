@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   CheckCircle2, Clock, FileText, ChevronDown, ChevronUp,
-  Download, AlertTriangle, Building2, CreditCard, Hash
+  Download, AlertTriangle, Building2, CreditCard, Hash, Mail, MapPin, Zap
 } from 'lucide-react';
 
 const card = {
@@ -11,12 +11,37 @@ const card = {
 
 const INVOICES = [
   {
+    id: 'INV-0043',
+    from: 'W. Draper & Sons',
+    site: 'Magnet, Gaogate Place, Stafford',
+    client: 'Britannia Group',
+    amountNet: 20.00,
+    amountVat: 0,
+    amountTotal: 20.00,
+    vatRegistered: false,
+    received: 'Just now',
+    po: 'BF-2026-0145',
+    invoiceRef: '056',
+    submittedVia: 'Cadi Connect',
+    stages: [
+      { label: 'Received', done: true },
+      { label: 'Under Review', done: false, active: true },
+      { label: 'Approved', done: false },
+      { label: 'Exported', done: false },
+      { label: 'Paid', done: false },
+    ],
+    currentStageLabel: 'Under Review',
+    lines: [
+      { desc: 'Window cleaning — Magnet, Gaogate Place', date: '28 Apr', ref: 'BF-2026-0145', net: 20.00 },
+    ],
+  },
+  {
     id: 'INV-0042',
-    from: 'Sarah K.',
-    client: 'Britannia FM',
-    amountNet: 144.17,
-    amountVat: 28.83,
-    amountTotal: 173,
+    from: 'ProWash Midlands',
+    client: 'Britannia Group',
+    amountNet: 168.00,
+    amountVat: 33.60,
+    amountTotal: 201.60,
     received: '19 May',
     po: 'PO-2026-0088',
     stages: [
@@ -28,17 +53,17 @@ const INVOICES = [
     ],
     currentStageLabel: 'Under Review',
     lines: [
-      { desc: 'Morning clean – Premier Inn Luton Airport', date: '08 May', ref: '#BF-4468', net: 78 },
-      { desc: 'Office deep clean – Central Beds Council HQ', date: '12 May', ref: '#BF-4472', net: 95 },
+      { desc: 'Jet washing – NHS Luton Outpatients (exterior)', date: '14 May', ref: 'BF-2026-0188', net: 88 },
+      { desc: 'Pressure washing – Aldi Dunstable RDC yard', date: '16 May', ref: 'BF-2026-0191', net: 80 },
     ],
   },
   {
     id: 'INV-0041',
-    from: 'Priya N.',
-    client: 'Britannia FM',
-    amountNet: 294.17,
-    amountVat: 58.83,
-    amountTotal: 353,
+    from: 'CleanFront UK',
+    client: 'Britannia Group',
+    amountNet: 399.00,
+    amountVat: 79.80,
+    amountTotal: 478.80,
     received: '10 May',
     po: 'PO-2026-0082',
     stages: [
@@ -51,17 +76,17 @@ const INVOICES = [
     currentStageLabel: 'Exported to Xero',
     exportRef: 'Xero · 11 May 09:42',
     lines: [
-      { desc: 'Evening clean – Luton Central Library', date: '08 May', ref: '#BF-4465', net: 165 },
-      { desc: 'Morning clean – Houghton Regis Leisure', date: '09 May', ref: '#BF-4466', net: 129.17 },
+      { desc: 'Window cleaning – Next Luton The Mall (all elevations)', date: '08 May', ref: 'BF-2026-0179', net: 210 },
+      { desc: 'Window cleaning – Watford Life Sciences Park', date: '09 May', ref: 'BF-2026-0181', net: 189 },
     ],
   },
   {
     id: 'INV-0040',
-    from: 'Marcus T.',
-    client: 'Britannia FM',
-    amountNet: 350,
-    amountVat: 70,
-    amountTotal: 420,
+    from: 'Capital Gutters Ltd',
+    client: 'Britannia Group',
+    amountNet: 350.00,
+    amountVat: 70.00,
+    amountTotal: 420.00,
     received: '5 May',
     po: 'PO-2026-0078',
     stages: [
@@ -75,8 +100,8 @@ const INVOICES = [
     paymentRef: 'BF-PAY-0512',
     paidDate: '7 May',
     lines: [
-      { desc: 'Full site clean – Bedford Hospital South Wing', date: '04 May', ref: '#BF-4458', net: 210 },
-      { desc: 'Specialist clean – Luton & Dunstable Hospital', date: '05 May', ref: '#BF-4460', net: 140 },
+      { desc: 'Gutter clearing – L&D Hospital Main Tower', date: '04 May', ref: 'BF-2026-0164', net: 180 },
+      { desc: 'Gutter clearing – Next Watford Atria', date: '05 May', ref: 'BF-2026-0166', net: 170 },
     ],
   },
 ];
@@ -115,10 +140,9 @@ function StagePipeline({ stages }) {
 }
 
 function InvoiceRow({ inv }) {
-  const [open, setOpen] = useState(inv.id === 'INV-0042');
-  const [approved, setApproved] = useState(false);
-  const [queried, setQueried] = useState(false);
+  const [open, setOpen] = useState(inv.id === 'INV-0043' || inv.id === 'INV-0042');
   const [action, setAction] = useState(null);
+  const [emailed, setEmailed] = useState(false);
 
   const allPaid = inv.stages.every(s => s.done);
   const isUnderReview = inv.currentStageLabel === 'Under Review';
@@ -150,9 +174,19 @@ function InvoiceRow({ inv }) {
               {isUnderReview && <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#fbbf24', marginLeft: 5, animation: 'fmpulse 1.4s infinite', verticalAlign: 'middle' }} />}
             </span>
           </div>
-          <div style={{ color: 'rgba(226,232,240,0.5)', fontSize: '0.78rem' }}>
-            From {inv.from} · Received {inv.received}
+          <div style={{ color: 'rgba(226,232,240,0.5)', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span>From {inv.from} · Received {inv.received}</span>
+            {inv.submittedVia && (
+              <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '1px 7px', borderRadius: '999px', background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.25)', color: '#fb923c' }}>
+                via {inv.submittedVia}
+              </span>
+            )}
           </div>
+          {inv.site && (
+            <div style={{ color: 'rgba(226,232,240,0.35)', fontSize: '0.72rem', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <MapPin size={10} /> {inv.site}
+            </div>
+          )}
           <StagePipeline stages={inv.stages} />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem', flexShrink: 0 }}>
@@ -264,24 +298,49 @@ function InvoiceRow({ inv }) {
               color: action === 'approved' ? '#4ade80' : action === 'queried' ? '#fbbf24' : '#f87171',
               fontWeight: 700, fontSize: '0.85rem',
             }}>
-              {action === 'approved' && 'Invoice approved ✓ — ready to export'}
-              {action === 'queried' && 'Query raised — Sarah K. notified'}
-              {action === 'rejected' && 'Invoice rejected — Sarah K. notified'}
+              {action === 'approved' && 'Invoice approved ✓ — ready to export and email'}
+              {action === 'queried' && `Query raised — ${inv.from} notified`}
+              {action === 'rejected' && `Invoice rejected — ${inv.from} notified`}
             </div>
           )}
 
-          {/* Export buttons — enabled after approve */}
+          {/* Email to accounts + export buttons — enabled after approve */}
           {action === 'approved' && (
-            <div style={{ marginTop: '0.75rem' }}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(226,232,240,0.35)', marginBottom: '0.5rem' }}>
-                Export to
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                {['Xero', 'Sage', 'QuickBooks'].map(exp => (
-                  <button key={exp} style={{ padding: '0.4rem 1rem', borderRadius: '999px', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
-                    {exp}
+            <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {/* Email accounts button */}
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(226,232,240,0.35)', marginBottom: '0.5rem' }}>
+                  Send to accounts
+                </div>
+                {!emailed ? (
+                  <button
+                    onClick={() => setEmailed(true)}
+                    style={{
+                      padding: '0.55rem 1.15rem', borderRadius: '0.65rem',
+                      background: 'rgba(251,146,60,0.1)', border: '1px solid rgba(251,146,60,0.3)',
+                      color: '#fb923c', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '0.45rem',
+                    }}
+                  >
+                    <Mail size={13} /> Email to accounts@britanniagroup.co.uk
                   </button>
-                ))}
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#4ade80', fontSize: '0.8rem', fontWeight: 700 }}>
+                    <CheckCircle2 size={14} /> Sent to accounts@britanniagroup.co.uk
+                  </div>
+                )}
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(226,232,240,0.35)', marginBottom: '0.5rem' }}>
+                  Export to
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {['Xero', 'Sage', 'QuickBooks'].map(exp => (
+                    <button key={exp} style={{ padding: '0.4rem 1rem', borderRadius: '999px', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                      {exp}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -290,6 +349,12 @@ function InvoiceRow({ inv }) {
     </div>
   );
 }
+
+const IMPACT = [
+  { before: 'Invoices arrive by email, manually matched to jobs', after: 'Every invoice auto-linked to verified job records', icon: '🔗' },
+  { before: 'Disputes delay payment — no evidence to hand', after: 'Geo-verified evidence attached — disputes resolved instantly', icon: '🔒' },
+  { before: 'Xero export is a manual copy-paste job', after: 'One-click Xero export — approved invoices leave in seconds', icon: '⚡' },
+];
 
 export default function FmAccounts() {
   return (
@@ -301,6 +366,24 @@ export default function FmAccounts() {
         }
       `}</style>
 
+      {/* Impact strip */}
+      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(79,120,255,0.18)', background: 'rgba(1,8,40,0.6)' }}>
+        <div className="px-5 py-2.5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(79,120,255,0.06)' }}>
+          <span className="text-[9px] font-black uppercase tracking-widest text-white/30">What Cadi replaces</span>
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: '#4f78ff' }}>With Cadi</span>
+        </div>
+        <div className="grid grid-cols-3 divide-x" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {IMPACT.map(({ before, after, icon }) => (
+            <div key={icon} className="px-4 py-3 flex items-start gap-3">
+              <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>
+              <div><div className="text-[10px] text-white/30 line-through decoration-white/20 mb-1 leading-snug">{before}</div>
+              <div className="text-[10px] font-bold leading-snug" style={{ color: '#60a5fa' }}>{after}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div>
         <h1 style={{ color: 'white', fontWeight: 900, fontSize: '1.5rem', margin: 0, marginBottom: '0.2rem' }}>Accounts</h1>
         <p style={{ color: 'rgba(226,232,240,0.4)', fontSize: '0.875rem', margin: 0 }}>Invoice inbox, approvals and accounting exports</p>
@@ -311,7 +394,7 @@ export default function FmAccounts() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fbbf24', display: 'inline-block', animation: 'fmpulse 1.4s infinite' }} />
           <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fbbf24' }}>Awaiting review</span>
-          <span style={{ fontWeight: 900, color: 'white', fontFamily: 'monospace' }}>1</span>
+          <span style={{ fontWeight: 900, color: 'white', fontFamily: 'monospace' }}>2</span>
         </div>
         <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.09)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

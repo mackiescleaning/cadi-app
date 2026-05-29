@@ -16,7 +16,7 @@ export default function FmTraining({ showToast }) {
           style={{ background: 'rgba(79,120,255,0.15)', border: '1px solid rgba(79,120,255,0.3)' }}>🎓</div>
         <div>
           <div className="text-white font-black text-sm">Cadi Training Hub</div>
-          <div className="text-white/45 text-xs mt-0.5">Short, focused modules to get your team up to speed — built around how Britannia FM actually works.</div>
+          <div className="text-white/45 text-xs mt-0.5">Short, focused modules to get your team up to speed — built around how Britannia Group actually works.</div>
         </div>
       </div>
 

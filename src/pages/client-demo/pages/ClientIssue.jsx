@@ -30,7 +30,7 @@ export default function ClientIssue({ showToast, onNavigate }) {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 w-full text-left space-y-2">
           {[
             { label: 'Reference',  value: '#4471' },
-            { label: 'Reported to', value: 'Britannia FM' },
+            { label: 'Reported to', value: 'Britannia Group' },
             { label: 'Response',   value: 'Within 4 business hours' },
             { label: 'Area',       value: form.area || 'Main entrance' },
             { label: 'Severity',   value: form.severity || 'Medium' },
@@ -53,7 +53,7 @@ export default function ClientIssue({ showToast, onNavigate }) {
     <div className="p-6 max-w-md space-y-5">
       <div>
         <h2 className="font-black text-[#010a4f] text-lg">Report an issue</h2>
-        <p className="text-xs text-gray-400 mt-0.5">Reported directly to Britannia FM. Reference number issued on submission.</p>
+        <p className="text-xs text-gray-400 mt-0.5">Reported directly to Britannia Group. Reference number issued on submission.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">

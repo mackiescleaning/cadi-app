@@ -22,7 +22,7 @@ export default function ClientSettings({ showToast }) {
     weeklyDigest:      true,
   });
   const [branding, setBranding] = useState({
-    portalName:   'Britannia FM',
+    portalName:   'Britannia Group',
     showPowered:  true,
     showLogo:     false,
   });
@@ -155,7 +155,7 @@ export default function ClientSettings({ showToast }) {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-50">
           <div className="text-xs font-black uppercase tracking-widest text-gray-400">Portal branding</div>
-          <div className="text-xs text-gray-400 mt-1">Managed by Britannia FM — contact your account manager to update</div>
+          <div className="text-xs text-gray-400 mt-1">Managed by Britannia Group — contact your account manager to update</div>
         </div>
         <div className="px-5 py-4 space-y-3">
           <div className="flex items-center justify-between py-2">
@@ -187,10 +187,10 @@ export default function ClientSettings({ showToast }) {
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#010a4f] flex items-center justify-center text-white text-sm font-black shrink-0">BF</div>
           <div className="flex-1">
-            <div className="text-sm font-bold text-[#010a4f]">Britannia FM — Account Team</div>
-            <div className="text-xs text-gray-400">0800 123 4567 · accounts@britanniafm.co.uk</div>
+            <div className="text-sm font-bold text-[#010a4f]">Britannia Group — Account Team</div>
+            <div className="text-xs text-gray-400">0800 123 4567 · accounts@britanniagroup.co.uk</div>
           </div>
-          <button onClick={() => showToast('open message thread with Britannia FM')}
+          <button onClick={() => showToast('open message thread with Britannia Group')}
             className="px-4 py-2 rounded-xl bg-[#010a4f] text-white text-xs font-bold hover:bg-[#1f48ff] transition-colors">
             Message
           </button>

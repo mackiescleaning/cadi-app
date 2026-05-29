@@ -198,7 +198,7 @@ export default function ClientReports({ showToast }) {
       <div className="bg-[#f8faff] rounded-2xl border border-[#99c5ff]/20 p-5 flex items-center gap-5">
         <div className="flex-1">
           <div className="font-bold text-[#010a4f]">Monthly performance report</div>
-          <div className="text-xs text-gray-400 mt-0.5">Branded Britannia FM report · PDF or shareable link</div>
+          <div className="text-xs text-gray-400 mt-0.5">Branded Britannia Group report · PDF or shareable link</div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => showToast(`download ${month} PDF report`)}

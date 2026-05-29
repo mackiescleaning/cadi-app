@@ -397,6 +397,12 @@ function IssueRow({ issue, expanded, onToggle, showToast }) {
   );
 }
 
+const IMPACT = [
+  { before: 'Issues reported via email, forgotten in inboxes',  after: 'Every issue logged, tracked, and resolved in one place', icon: '🎫' },
+  { before: 'No audit trail — he said/she said disputes',       after: 'Full timeline, evidence attached, client-shareable',     icon: '📋' },
+  { before: 'Helpdesk tickets scattered across WhatsApp & email',after: 'Raised automatically from QA failures — zero manual effort', icon: '⚡' },
+];
+
 export default function FmIssues({ showToast }) {
   const [expanded,    setExpanded]    = useState('ISS-0041');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -419,6 +425,24 @@ export default function FmIssues({ showToast }) {
 
   return (
     <div className="p-8 space-y-6">
+
+      {/* Impact strip */}
+      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(79,120,255,0.18)', background: 'rgba(1,8,40,0.6)' }}>
+        <div className="px-5 py-2.5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(79,120,255,0.06)' }}>
+          <span className="text-[9px] font-black uppercase tracking-widest text-white/30">What Cadi replaces</span>
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: '#4f78ff' }}>With Cadi</span>
+        </div>
+        <div className="grid grid-cols-3 divide-x" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {IMPACT.map(({ before, after, icon }) => (
+            <div key={icon} className="px-4 py-3 flex items-start gap-3">
+              <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>
+              <div><div className="text-[10px] text-white/30 line-through decoration-white/20 mb-1 leading-snug">{before}</div>
+              <div className="text-[10px] font-bold leading-snug" style={{ color: '#60a5fa' }}>{after}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Header */}
       <div className="flex items-start justify-between">

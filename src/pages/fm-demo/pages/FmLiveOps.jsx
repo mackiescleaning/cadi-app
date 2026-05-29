@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import HowItWorks from '../components/HowItWorks';
 import 'leaflet/dist/leaflet.css';
 import jobs     from '../mock/jobs.json';
 import cleaners from '../mock/cleaners.json';
@@ -56,6 +57,26 @@ function MapStyler() {
   return null;
 }
 
+function MapZoomButtons() {
+  const map = useMap();
+  return (
+    <div className="absolute top-4 right-4 flex flex-col gap-1 z-[1000]">
+      <button onClick={() => map.zoomIn()}
+        className="w-8 h-8 rounded-lg text-white font-bold text-lg flex items-center justify-center transition-colors hover:brightness-125"
+        style={{ background: 'rgba(2,12,62,0.85)', border: '1px solid rgba(255,255,255,0.15)' }}>+</button>
+      <button onClick={() => map.zoomOut()}
+        className="w-8 h-8 rounded-lg text-white font-bold text-lg flex items-center justify-center transition-colors hover:brightness-125"
+        style={{ background: 'rgba(2,12,62,0.85)', border: '1px solid rgba(255,255,255,0.15)' }}>−</button>
+    </div>
+  );
+}
+
+const IMPACT = [
+  { before: 'Calling cleaners to find out if they\'re on site', after: 'Check-in status live per site — no calls needed',  icon: '📍' },
+  { before: 'SLA breach discovered when client complains',      after: 'Flagged automatically — intervene in minutes',     icon: '⚡' },
+  { before: 'Emergency cover: 2–3 hrs of phone calls',         after: 'Find a verified contractor in under 15 minutes', icon: '🔄' },
+];
+
 export default function FmLiveOps({ showToast }) {
   const [selected, setSelected] = useState(null);
 
@@ -73,7 +94,41 @@ export default function FmLiveOps({ showToast }) {
   const assignedCount   = liveJobs.filter(j => j.status === 'assigned').length;
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
+
+      <div style={{ padding: '0.875rem 1rem 0', flexShrink: 0 }}>
+        <HowItWorks
+          setupTime="Automatic"
+          youSetUp={[
+            'Geo-fence radius per site (default 100m — we set this up)',
+            'Shift start and end times come from job cards automatically',
+          ]}
+          cadiHandles={[
+            'Geo-stamps every check-in and check-out',
+            'Saves photo evidence directly to the job card',
+            'Alerts if no check-in by shift start time',
+            'Feeds confirmed hours straight into payroll — no manual entry',
+          ]}
+        />
+      </div>
+
+      {/* Before → With Cadi strip */}
+      <div className="flex-shrink-0 flex divide-x" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(1,8,40,0.7)', borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div className="px-4 py-2 flex items-center gap-2 flex-shrink-0">
+          <span className="text-[9px] font-black uppercase tracking-widest text-white/25">What Cadi replaces</span>
+        </div>
+        {IMPACT.map(({ before, after, icon }) => (
+          <div key={icon} className="flex-1 flex items-center gap-3 px-4 py-2.5">
+            <span className="text-base flex-shrink-0">{icon}</span>
+            <div className="min-w-0">
+              <div className="text-[9px] text-white/25 line-through decoration-white/15 truncate">{before}</div>
+              <div className="text-[10px] font-bold truncate" style={{ color: '#60a5fa' }}>{after}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
 
       {/* ── Left: job list ── */}
       <div className="w-72 flex flex-col overflow-hidden flex-shrink-0"
@@ -138,6 +193,7 @@ export default function FmLiveOps({ showToast }) {
           style={{ width: '100%', height: '100%', background: '#020c3e' }}
           zoomControl={false}
           attributionControl={false}
+          scrollWheelZoom={true}
         >
           <MapStyler />
           <TileLayer
@@ -160,6 +216,8 @@ export default function FmLiveOps({ showToast }) {
               }}
             />
           ))}
+
+          <MapZoomButtons />
 
           {/* Job pins */}
           {liveJobs.map(job => {
@@ -219,22 +277,14 @@ export default function FmLiveOps({ showToast }) {
           </div>
         </div>
 
-        {/* Zoom buttons */}
-        <div className="absolute top-4 right-4 flex flex-col gap-1 z-[1000]">
-          <button className="w-8 h-8 rounded-lg text-white font-bold text-lg flex items-center justify-center transition-colors"
-            style={{ background: 'rgba(2,12,62,0.85)', border: '1px solid rgba(255,255,255,0.15)' }}>+</button>
-          <button className="w-8 h-8 rounded-lg text-white font-bold text-lg flex items-center justify-center transition-colors"
-            style={{ background: 'rgba(2,12,62,0.85)', border: '1px solid rgba(255,255,255,0.15)' }}>−</button>
-        </div>
       </div>
 
       {/* ── Right: selected job detail ── */}
       <div className="w-80 flex-shrink-0 overflow-y-auto"
         style={{ borderLeft: '1px solid rgba(255,255,255,0.07)' }}>
         {!sel ? (
-          <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-6">
-            <div className="text-3xl opacity-25">📍</div>
-            <div className="text-white/35 text-sm font-medium">Select a job from the list or click a map pin</div>
+          <div className="flex items-center justify-center h-full">
+            <div className="text-white/15 text-xs text-center">Select an item to view details</div>
           </div>
         ) : (
           <div className="p-5 space-y-4">
@@ -313,6 +363,20 @@ export default function FmLiveOps({ showToast }) {
                 onMouseLeave={e => e.currentTarget.style.background = 'rgba(79,120,255,0.2)'}>
                 Contact cleaner
               </button>
+              <a
+                href="/staff-demo"
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-3 rounded-xl font-black flex items-center justify-between px-4 transition-all"
+                style={{ background: 'linear-gradient(135deg, rgba(234,88,12,0.18), rgba(194,65,12,0.12))', border: '1px solid rgba(234,88,12,0.4)', color: '#fb923c', textDecoration: 'none', display: 'flex', fontSize: '0.8rem', boxShadow: '0 4px 16px rgba(234,88,12,0.12)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(234,88,12,0.28), rgba(194,65,12,0.2))'; e.currentTarget.style.boxShadow = '0 4px 24px rgba(234,88,12,0.22)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(234,88,12,0.18), rgba(194,65,12,0.12))'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(234,88,12,0.12)'; }}>
+                <div>
+                  <div>👁 See what your cleaner sees</div>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 600, color: 'rgba(251,146,60,0.6)', marginTop: 2 }}>Opens Staff App in new tab →</div>
+                </div>
+                <span style={{ fontSize: '1rem' }}>↗</span>
+              </a>
               {sel.status === 'awaiting-qa' && (
                 <button onClick={() => showToast(`review QA evidence for job at ${selSite?.name}`)}
                   className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-colors"
@@ -334,6 +398,7 @@ export default function FmLiveOps({ showToast }) {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

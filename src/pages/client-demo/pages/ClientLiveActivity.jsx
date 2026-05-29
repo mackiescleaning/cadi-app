@@ -1,30 +1,30 @@
 import { Shield, MapPin, Clock, Camera, ChevronRight } from 'lucide-react';
 
 const PHOTO_FEED = [
-  { id: 'p7', time: '07:57', label: 'Corridor A — after',      emoji: '✨', phase: 'after',  dist: '5m',  accuracy: '±4m', bg: 'linear-gradient(135deg,#fef9c3,#fde68a)',  lat: '51.87971', lng: '-0.41380' },
-  { id: 'p6', time: '07:52', label: 'Toilets — after',         emoji: '🚿', phase: 'after',  dist: '11m', accuracy: '±7m', bg: 'linear-gradient(135deg,#ede9fe,#c4b5fd)',  lat: '51.87976', lng: '-0.41386' },
-  { id: 'p5', time: '07:45', label: 'Reception — after',       emoji: '🪑', phase: 'after',  dist: '8m',  accuracy: '±5m', bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)',  lat: '51.87973', lng: '-0.41384' },
-  { id: 'p4', time: '07:41', label: 'Main entrance — after',   emoji: '✨', phase: 'after',  dist: '6m',  accuracy: '±4m', bg: 'linear-gradient(135deg,#d4fde8,#a7f3d0)',  lat: '51.87972', lng: '-0.41381' },
-  { id: 'p3', time: '07:08', label: 'Corridor A — before',     emoji: '🚶', phase: 'before', dist: '7m',  accuracy: '±5m', bg: 'linear-gradient(135deg,#fce7f3,#fbcfe8)',  lat: '51.87973', lng: '-0.41382' },
-  { id: 'p2', time: '07:04', label: 'Reception — before',      emoji: '🪑', phase: 'before', dist: '9m',  accuracy: '±6m', bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)',  lat: '51.87975', lng: '-0.41385' },
-  { id: 'p1', time: '07:01', label: 'Main entrance — before',  emoji: '🚪', phase: 'before', dist: '5m',  accuracy: '±4m', bg: 'linear-gradient(135deg,#d4fde8,#bbf7d0)',  lat: '51.87971', lng: '-0.41380' },
+  { id: 'p7', time: '06:54', label: 'Checkout lanes — after',      emoji: '✨', phase: 'after',  dist: '4m',  accuracy: '±3m', bg: 'linear-gradient(135deg,#fef9c3,#fde68a)',  lat: '51.87416', lng: '-0.44897' },
+  { id: 'p6', time: '06:48', label: 'Customer toilets — after',    emoji: '🚿', phase: 'after',  dist: '9m',  accuracy: '±6m', bg: 'linear-gradient(135deg,#ede9fe,#c4b5fd)',  lat: '51.87421', lng: '-0.44903' },
+  { id: 'p5', time: '06:41', label: 'Entrance & foyer — after',    emoji: '✨', phase: 'after',  dist: '6m',  accuracy: '±4m', bg: 'linear-gradient(135deg,#d4fde8,#a7f3d0)',  lat: '51.87418', lng: '-0.44900' },
+  { id: 'p4', time: '06:38', label: 'Customer service — after',    emoji: '🪑', phase: 'after',  dist: '7m',  accuracy: '±5m', bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)',  lat: '51.87419', lng: '-0.44901' },
+  { id: 'p3', time: '06:05', label: 'Checkout lanes — before',     emoji: '🛒', phase: 'before', dist: '5m',  accuracy: '±4m', bg: 'linear-gradient(135deg,#fce7f3,#fbcfe8)',  lat: '51.87417', lng: '-0.44898' },
+  { id: 'p2', time: '06:02', label: 'Entrance & foyer — before',   emoji: '🚪', phase: 'before', dist: '8m',  accuracy: '±5m', bg: 'linear-gradient(135deg,#d4fde8,#bbf7d0)',  lat: '51.87416', lng: '-0.44897' },
+  { id: 'p1', time: '05:59', label: 'Customer service — before',   emoji: '🪑', phase: 'before', dist: '6m',  accuracy: '±4m', bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)',  lat: '51.87420', lng: '-0.44902' },
 ];
 
 const TIMELINE = [
-  { time: '06:00', label: 'Clean scheduled',                 status: 'done',    icon: '📋' },
-  { time: '06:58', label: 'Operative arrived on site',       status: 'done',    icon: '📍', note: 'GPS confirmed within 10m of site' },
-  { time: '07:01', label: 'Before photos uploaded — 3 of 3', status: 'done',    icon: '📷', note: 'All geo-verified within 15m' },
-  { time: '07:41', label: 'After photos uploading…',         status: 'done',    icon: '✅', note: '4 uploaded so far, 2 expected' },
-  { time: '08:00', label: 'Clean expected complete',         status: 'current', icon: '⏳', note: 'SLA window closes — on track' },
-  { time: '08:00', label: 'FM sign-off requested',           status: 'upcoming',icon: '🔔' },
+  { time: '05:30', label: 'Clean scheduled',                  status: 'done',    icon: '📋' },
+  { time: '05:57', label: 'Operative arrived on site',        status: 'done',    icon: '📍', note: 'GPS confirmed within 8m of site boundary' },
+  { time: '05:59', label: 'Before photos uploaded — 3 of 3',  status: 'done',    icon: '📷', note: 'All geo-verified within 10m' },
+  { time: '06:54', label: 'After photos uploaded — 4 of 4',   status: 'done',    icon: '✅', note: 'All areas signed off' },
+  { time: '08:00', label: 'SLA window closes',                status: 'current', icon: '⏳', note: 'Completed 1hr 6min before deadline — on track' },
+  { time: '08:00', label: 'FM sign-off requested',            status: 'upcoming',icon: '🔔' },
 ];
 
 const WEEK = [
-  { day: 'Mon', date: '5 May',  done: true,  checkout: '07:42', photos: 12, sla: true  },
-  { day: 'Tue', date: '6 May',  done: true,  checkout: '07:39', photos: 11, sla: true  },
-  { day: 'Wed', date: '7 May',  done: true,  checkout: '07:51', photos: 9,  sla: true  },
-  { day: 'Thu', date: '8 May',  done: true,  checkout: '07:44', photos: 14, sla: true  },
-  { day: 'Fri', date: '9 May',  done: false, checkout: null,    photos: 7,  sla: null, live: true },
+  { day: 'Mon', date: '25 May', done: true,  checkout: '07:02', photos: 12, sla: true  },
+  { day: 'Tue', date: '26 May', done: true,  checkout: '06:58', photos: 11, sla: true  },
+  { day: 'Wed', date: '27 May', done: true,  checkout: '07:05', photos: 9,  sla: true  },
+  { day: 'Thu', date: '28 May', done: true,  checkout: '06:59', photos: 14, sla: true  },
+  { day: 'Fri', date: '29 May', done: false, checkout: null,    photos: 7,  sla: null, live: true },
 ];
 
 function PhotoCard({ photo, showToast }) {
@@ -80,10 +80,10 @@ export default function ClientLiveActivity({ showToast, onNavigate }) {
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
-                <span className="text-[10px] font-black text-blue-300 tracking-[0.2em] uppercase">Live · 9 May 2026</span>
+                <span className="text-[10px] font-black text-blue-300 tracking-[0.2em] uppercase">Live · 24 May 2026</span>
               </div>
-              <div className="text-white font-black text-lg">Next – Luton The Mall</div>
-              <div className="text-blue-200 text-sm mt-0.5">Retail morning clean · SLA window 06:00–08:00</div>
+              <div className="text-white font-black text-lg">Asda – Luton Supercentre</div>
+              <div className="text-blue-200 text-sm mt-0.5">Early morning clean · SLA window 05:30–08:00</div>
               <div className="grid grid-cols-3 gap-3 mt-4">
                 {[
                   { label: 'On site since', value: '06:58', icon: <MapPin size={12} className="text-blue-300" /> },
@@ -175,7 +175,7 @@ export default function ClientLiveActivity({ showToast, onNavigate }) {
 
       {/* ── This Week ── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4">This week — Next – Luton</div>
+        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4">This week — Asda Luton Supercentre</div>
         <div className="space-y-2.5">
           {WEEK.map(({ day, date, done, checkout, photos, sla, live }) => (
             <div key={day} className="flex items-center gap-3">

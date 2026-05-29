@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 const INITIAL_MESSAGES = [
   {
-    id: 1, from: 'fm', sender: 'Britannia FM', time: '08:05',
+    id: 1, from: 'fm', sender: 'Britannia Group', time: '08:05',
     text: 'Good morning — your morning clean at Next – Luton The Mall is complete. 12 photos uploaded. All areas signed off per the schedule.',
   },
   {
@@ -10,7 +10,7 @@ const INITIAL_MESSAGES = [
     text: 'Thanks — can we look at scheduling a one-off deep clean of the stockroom and fitting rooms ahead of the summer sale starting 23 May?',
   },
   {
-    id: 3, from: 'fm', sender: 'Britannia FM', time: '09:44',
+    id: 3, from: 'fm', sender: 'Britannia Group', time: '09:44',
     text: "Absolutely. I'll get a quote over to you by end of day. Would a Sunday morning work? That's typically best for retail sites — no trading disruption.",
   },
   {
@@ -18,7 +18,7 @@ const INITIAL_MESSAGES = [
     text: 'Sunday works perfectly — 18 May if possible? A 07:00 start would be ideal so everything is done well before the doors open.',
   },
   {
-    id: 5, from: 'fm', sender: 'Britannia FM', time: '10:15',
+    id: 5, from: 'fm', sender: 'Britannia Group', time: '10:15',
     text: "Confirmed for Sun 18 May, 07:00–11:00. I'll add it to your schedule and send the quote and booking confirmation this afternoon. Our deep clean team will cover the stockroom, fitting rooms, and all toilet facilities.",
   },
   {
@@ -26,7 +26,7 @@ const INITIAL_MESSAGES = [
     text: 'Perfect — thank you. Please also include the checkout area near the main entrance if there\'s time.',
   },
   {
-    id: 7, from: 'fm', sender: 'Britannia FM', time: '14:35',
+    id: 7, from: 'fm', sender: 'Britannia Group', time: '14:35',
     text: "Quote attached (PDF). Deep clean includes stockroom, fitting rooms, toilets, and checkout zone — £385 + VAT. Happy to proceed once you have internal sign-off.",
   },
 ];
@@ -55,7 +55,7 @@ export default function ClientComms({ showToast }) {
     };
     setMessages(prev => [...prev, msg]);
     setDraft('');
-    showToast('message sent to Britannia FM');
+    showToast('message sent to Britannia Group');
   }
 
   return (
@@ -75,7 +75,7 @@ export default function ClientComms({ showToast }) {
             {id === 'notifications' && <span className="ml-1.5 bg-[#4f78ff] text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">1</span>}
           </button>
         ))}
-        <div className="ml-auto text-xs text-gray-400">Next – Luton The Mall · Britannia FM</div>
+        <div className="ml-auto text-xs text-gray-400">Next – Luton The Mall · Britannia Group</div>
       </div>
 
       {tab === 'messages' ? (
@@ -109,7 +109,7 @@ export default function ClientComms({ showToast }) {
                 type="text"
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
-                placeholder="Message Britannia FM…"
+                placeholder="Message Britannia Group…"
                 className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#4f78ff] bg-gray-50"
               />
               <button type="submit"
@@ -118,7 +118,7 @@ export default function ClientComms({ showToast }) {
                 Send
               </button>
             </form>
-            <div className="text-[10px] text-gray-400 mt-2">Messages go directly to your Britannia FM account manager. Typical response within 2 hours.</div>
+            <div className="text-[10px] text-gray-400 mt-2">Messages go directly to your Britannia Group account manager. Typical response within 2 hours.</div>
           </div>
         </>
       ) : (
