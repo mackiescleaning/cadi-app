@@ -29,6 +29,21 @@ function addDays(date, days) {
   return next;
 }
 
+// UK self-employed tax (2025/26 rates) — mirrors MoneyTracker.jsx calcSelfEmployedTax
+function calcSelfEmployedTax(profit) {
+  const PA = 12570; const BRT = 50270; const BR = 0.20; const HR = 0.40;
+  const NI_LOW = 0.06; const NI_HIGH = 0.02;
+  const taxable = Math.max(profit - PA, 0);
+  const incomeTax = taxable <= (BRT - PA)
+    ? taxable * BR
+    : (BRT - PA) * BR + (taxable - (BRT - PA)) * HR;
+  const niBase = taxable;
+  const ni = niBase <= (BRT - PA)
+    ? niBase * NI_LOW
+    : (BRT - PA) * NI_LOW + (niBase - (BRT - PA)) * NI_HIGH;
+  return Math.round(incomeTax + ni);
+}
+
 function startOfTaxYear() {
   const now = new Date();
   const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
@@ -94,7 +109,8 @@ function mapAccountsData({ profile, settings, moneyEntries }) {
   const monthlyTarget = annualTarget / 12;
   const taxRate = settings?.tax_rate ?? (settings?.vat_registered ? 0.2 : 0.25);
   const taxReserve = parseAmount(settings?.setup_data?.tax_reserve_saved);
-  const taxReserveTarget = ytdIncome * taxRate;
+  const ytdProfit = Math.max(ytdIncome - ytdExpenses, 0);
+  const taxReserveTarget = calcSelfEmployedTax(ytdProfit);
 
   return {
     vatRegistered: Boolean(settings?.vat_registered),

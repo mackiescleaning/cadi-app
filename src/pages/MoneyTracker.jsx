@@ -326,7 +326,8 @@ function PeriodHero({ period, setPeriod, weekRevenue, monthIncome, monthlyData, 
   };
 
   const hero = heroMap[period];
-  const taxAside = hero.value * (accounts.taxRate || 0.20);
+  const effectiveTaxRate = accounts.ytdIncome > 0 ? accounts.taxReserveTarget / accounts.ytdIncome : 0;
+  const taxAside = Math.round(hero.value * effectiveTaxRate);
 
   return (
     <GCard className="p-5">
@@ -379,7 +380,7 @@ function PeriodHero({ period, setPeriod, weekRevenue, monthIncome, monthlyData, 
         <div className="mt-4 grid grid-cols-3 gap-2">
           {[
             { label: "Gross",     val: fmt(hero.value),                               color: "text-white"       },
-            { label: `Tax (${Math.round((accounts.taxRate || 0.20) * 100)}%)`, val: `-${fmt(taxAside)}`, color: "text-amber-400"   },
+            { label: "Tax (est.)", val: taxAside > 0 ? `-${fmt(taxAside)}` : "£0", color: taxAside > 0 ? "text-amber-400" : "text-emerald-400" },
             { label: "Available", val: fmt(hero.value - taxAside),                    color: "text-emerald-400" },
           ].map(({ label, val, color }) => (
             <div key={label} className="text-center px-2 py-2 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
