@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import AskCadi from "../components/AskCadi";
 import { createMoneyEntry, listMoneyEntries, updateMoneyEntry, deleteMoneyEntry } from "../lib/db/moneyDb";
 import { listQuotes, updateQuoteStatus } from "../lib/db/quotesDb";
+import { getBusinessSettings } from "../lib/db/settingsDb";
 import { useAuth } from "../context/AuthContext";
 import { useInvoices } from "../context/InvoiceContext";
 import { supabase } from "../lib/supabase";
@@ -147,7 +148,7 @@ function SectionLabel({ children, className = "" }) {
 }
 
 // ─── Open Banking Banner ──────────────────────────────────────────────────────
-function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete }) {
+function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpenseFromBank }) {
   const { user } = useAuth();
   const [connected,         setConnected]         = useState(false);
   const [loading,           setLoading]           = useState(false);
@@ -205,14 +206,25 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete }) {
 
   const handleCategorise = async (txId, isBusiness, category) => {
     try {
+      const tx = bankTxs.find(t => t.id === txId);
       await tlInvoke('truelayer-api', { action: 'categorise', transactionId: txId, isBusiness, category });
       setBankTxs(prev => {
         const updated = prev.map(t => t.id === txId ? { ...t, is_business: isBusiness, is_personal: !isBusiness, needs_review: false, category } : t);
         const remaining = updated.filter(t => t.needs_review).length;
         if (remaining === 0) { setShowAllClear(true); setTimeout(() => setShowAllClear(false), 4000); }
-        setReviewIdx(0); // always show next from top
+        setReviewIdx(0);
         return updated;
       });
+      // Live-push confirmed business debits straight into the expense sorter
+      if (isBusiness && tx && tx.transaction_type === 'debit') {
+        onExpenseFromBank?.({
+          id: `bk-${txId}`,
+          date: tx.date,
+          label: tx.merchant_name || tx.description || 'Expense',
+          amount: Number(tx.amount) || 0,
+          category: category || 'other',
+        });
+      }
     } catch (e) { setError(e.message); }
   };
 
@@ -616,7 +628,8 @@ function MonthlyReport({ monthlyData, expenses, accounts }) {
 }
 
 // ─── P&L Waterfall ────────────────────────────────────────────────────────────
-function PnLWaterfall({ period, monthlyData, weekRevenue, weekExpenses, dayIncome, dayExpenses }) {
+function PnLWaterfall({ period, monthlyData, weekRevenue, weekExpenses, dayIncome, dayExpenses, accounts = {} }) {
+  const isLtd   = accounts.entityType === 'limited_company';
   const curr     = monthlyData.find(m => m.isCurrent) ?? { income: 0, expenses: 0 };
   const qMonths  = monthlyData.slice(-3);
   const qIncome  = qMonths.reduce((s,m) => s + m.income, 0);
@@ -629,18 +642,27 @@ function PnLWaterfall({ period, monthlyData, weekRevenue, weekExpenses, dayIncom
     Quarter: { income: qIncome, expenses: qExp, label: "This quarter" },
   };
 
-  const d       = dataMap[period] ?? dataMap.Month;
-  const taxRate = 0.20; // default — will be overridden by accounts when passed
-  const tax     = Math.round(d.income * taxRate);
+  const d = dataMap[period] ?? dataMap.Month;
+
+  // Ltd: CT is levied on profit (income − expenses), not on gross income
+  // Sole trader: simple 20% income tax reserve on gross (NI handled separately)
+  const preTaxProfit = Math.max(0, d.income - d.expenses);
+  const tax          = isLtd ? calcCorpTax(preTaxProfit) : Math.round(d.income * 0.20);
+  const taxLabel     = isLtd ? "Corp. tax" : "Tax reserve";
+  const profitLabel  = isLtd ? "Retained" : "Take-home";
+  const taxRateStat  = isLtd
+    ? (preTaxProfit <= 50000 ? "19% CT" : preTaxProfit >= 250000 ? "25% CT" : "Marginal CT")
+    : "20% IT est.";
+
   const profit  = Math.max(d.income - d.expenses - tax, 0);
   const retPct  = d.income > 0 ? Math.round((profit / d.income) * 100) : 0;
   const maxBar  = d.income;
 
   const rows = [
-    { label: "Gross income",  val: d.income,         bar: 100,                                   color: "bg-[#1f48ff]",        text: "text-[#99c5ff]",    sign: "" },
-    { label: "Expenses",      val: d.expenses,        bar: d.income > 0 ? (d.expenses / maxBar) * 100 : 0,  color: "bg-rose-500",         text: "text-rose-400",     sign: "−" },
-    { label: "Tax reserve",   val: tax,               bar: d.income > 0 ? (tax / maxBar) * 100 : 0,         color: "bg-amber-400",        text: "text-amber-400",    sign: "−" },
-    { label: "Take-home",     val: profit,            bar: d.income > 0 ? (profit / maxBar) * 100 : 0,      color: "bg-emerald-400",      text: "text-emerald-400",  sign: "", bold: true },
+    { label: "Gross income",  val: d.income,    bar: 100,                                             color: "bg-[#1f48ff]",   text: "text-[#99c5ff]",   sign: "" },
+    { label: "Expenses",      val: d.expenses,  bar: d.income > 0 ? (d.expenses / maxBar) * 100 : 0, color: "bg-rose-500",    text: "text-rose-400",    sign: "−" },
+    { label: taxLabel,        val: tax,         bar: d.income > 0 ? (tax / maxBar) * 100 : 0,        color: "bg-amber-400",   text: "text-amber-400",   sign: "−" },
+    { label: profitLabel,     val: profit,      bar: d.income > 0 ? (profit / maxBar) * 100 : 0,     color: "bg-emerald-400", text: "text-emerald-400", sign: "", bold: true },
   ];
 
   // 6-month chart
@@ -672,7 +694,7 @@ function PnLWaterfall({ period, monthlyData, weekRevenue, weekExpenses, dayIncom
             <div className="flex gap-4 flex-wrap">
               {[
                 { label: "Expense ratio", val: fmtPct(d.income > 0 ? (d.expenses / d.income) * 100 : 0), good: d.income > 0 && (d.expenses / d.income) < 0.22 },
-                { label: "Tax rate",      val: "25%",  good: true },
+                { label: "Tax rate",      val: taxRateStat, good: true },
                 { label: "Net margin",    val: fmtPct(retPct), good: retPct >= 55 },
               ].map(({ label, val, good }) => (
                 <div key={label} className="text-center">
@@ -829,12 +851,13 @@ function AddExpenseModal({ onSave, onClose }) {
   );
 }
 
-function ExpenseSorter({ expenses, onAdd, onBulkCategorize, onBulkDelete }) {
+function ExpenseSorter({ expenses, onAdd, onBulkCategorize, onBulkDelete, bankConnected = false, onRecategorizeBankExpense }) {
   const [catFilter,   setCatFilter]   = useState("all");
   const [sortBy,      setSortBy]      = useState("recent");
   const [selected,    setSelected]    = useState(new Set());
   const [showAdd,     setShowAdd]     = useState(false);
   const [bulkCat,     setBulkCat]     = useState(null);
+  const [expandedId,  setExpandedId]  = useState(null); // inline category picker
 
   const filtered = useMemo(() => {
     let list = catFilter === "all" ? expenses : expenses.filter(e => e.category === catFilter);
@@ -846,6 +869,9 @@ function ExpenseSorter({ expenses, onAdd, onBulkCategorize, onBulkDelete }) {
 
   const totalFiltered = filtered.reduce((s,e) => s + Number(e.amount), 0);
   const allSelected   = filtered.length > 0 && filtered.every(e => selected.has(e.id));
+
+  const bankCount  = expenses.filter(e => String(e.id).startsWith("bk-")).length;
+  const manualCount = expenses.length - bankCount;
 
   // Category spend breakdown
   const catTotals = useMemo(() => {
@@ -875,11 +901,14 @@ function ExpenseSorter({ expenses, onAdd, onBulkCategorize, onBulkDelete }) {
         <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
           <div>
             <SectionLabel>Expenses</SectionLabel>
-            {topCat && (
+            {topCat ? (
               <p className="text-[10px] text-[rgba(153,197,255,0.4)] mt-0.5">
                 Biggest: {catById(topCat[0]).emoji} {catById(topCat[0]).label} — {fmt(topCat[1])}
+                {bankCount > 0 && <span className="ml-1.5 text-[#99c5ff]/50">· {bankCount} from bank</span>}
               </p>
-            )}
+            ) : bankConnected ? (
+              <p className="text-[10px] text-[#99c5ff]/50 mt-0.5">🏦 Bank connected — business debits auto-imported</p>
+            ) : null}
           </div>
           <button onClick={() => setShowAdd(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1f48ff]/20 border border-[#1f48ff]/40 text-xs font-black text-white hover:bg-[#1f48ff]/35 transition-colors">
@@ -888,96 +917,155 @@ function ExpenseSorter({ expenses, onAdd, onBulkCategorize, onBulkDelete }) {
         </div>
 
         {/* Category spend pills */}
-        <div className="px-4 pt-3 pb-2">
-          <div className="flex gap-1.5 flex-wrap">
-            <button onClick={() => setCatFilter("all")}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-black border transition-all ${catFilter === "all" ? "bg-[#1f48ff] text-white border-[#1f48ff]" : "border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.5)] hover:text-white"}`}>
-              All · {fmt(expenses.reduce((s,e)=>s+Number(e.amount),0))}
-            </button>
-            {EXPENSE_CATS.filter(c => catTotals[c.id]).map(c => (
-              <button key={c.id} onClick={() => setCatFilter(c.id)}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-black border transition-all ${catFilter === c.id ? "bg-[#1f48ff] text-white border-[#1f48ff]" : `${c.pill} border`}`}>
-                {c.emoji} {fmt(catTotals[c.id])}
+        {expenses.length > 0 && (
+          <div className="px-4 pt-3 pb-2">
+            <div className="flex gap-1.5 flex-wrap">
+              <button onClick={() => setCatFilter("all")}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-black border transition-all ${catFilter === "all" ? "bg-[#1f48ff] text-white border-[#1f48ff]" : "border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.5)] hover:text-white"}`}>
+                All · {fmt(expenses.reduce((s,e)=>s+Number(e.amount),0))}
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Sort + bulk actions row */}
-        <div className="px-4 py-2 border-y border-[rgba(153,197,255,0.06)] flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
-            {/* Select all */}
-            <button onClick={() => setSelected(allSelected ? new Set() : new Set(filtered.map(e => e.id)))}
-              className="w-4 h-4 rounded border border-[rgba(153,197,255,0.2)] flex items-center justify-center text-[8px] text-[rgba(153,197,255,0.5)] hover:border-[rgba(153,197,255,0.4)] transition-all shrink-0">
-              {allSelected ? "✓" : ""}
-            </button>
-            <span className="text-[10px] text-[rgba(153,197,255,0.35)] ml-1">
-              {selected.size > 0 ? `${selected.size} selected` : `${filtered.length} items · ${fmt(totalFiltered)}`}
-            </span>
-          </div>
-
-          {selected.size > 0 ? (
-            <div className="flex items-center gap-1.5">
-              <select value={bulkCat ?? ""} onChange={e => setBulkCat(e.target.value)}
-                className="bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none">
-                <option value="">Move to…</option>
-                {EXPENSE_CATS.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
-              </select>
-              {bulkCat && (
-                <button onClick={() => { onBulkCategorize([...selected], bulkCat); setSelected(new Set()); setBulkCat(null); }}
-                  className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-[#1f48ff]/20 border border-[#1f48ff]/40 text-white hover:bg-[#1f48ff]/35 transition-colors">
-                  Apply
-                </button>
-              )}
-              <button onClick={() => { onBulkDelete([...selected]); setSelected(new Set()); }}
-                className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors">
-                Delete
-              </button>
-            </div>
-          ) : (
-            <div className="flex gap-1">
-              {["recent","amount","category"].map(s => (
-                <button key={s} onClick={() => setSortBy(s)}
-                  className={`px-2 py-1 rounded-md text-[9px] font-black capitalize transition-all ${sortBy === s ? "bg-[#1f48ff]/20 text-[#99c5ff] border border-[#1f48ff]/30" : "text-[rgba(153,197,255,0.3)] hover:text-[rgba(153,197,255,0.6)]"}`}>
-                  {s}
+              {EXPENSE_CATS.filter(c => catTotals[c.id]).map(c => (
+                <button key={c.id} onClick={() => setCatFilter(c.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black border transition-all ${catFilter === c.id ? "bg-[#1f48ff] text-white border-[#1f48ff]" : `${c.pill} border`}`}>
+                  {c.emoji} {fmt(catTotals[c.id])}
                 </button>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Sort + bulk actions row */}
+        {expenses.length > 0 && (
+          <div className="px-4 py-2 border-y border-[rgba(153,197,255,0.06)] flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              <button onClick={() => setSelected(allSelected ? new Set() : new Set(filtered.map(e => e.id)))}
+                className="w-4 h-4 rounded border border-[rgba(153,197,255,0.2)] flex items-center justify-center text-[8px] text-[rgba(153,197,255,0.5)] hover:border-[rgba(153,197,255,0.4)] transition-all shrink-0">
+                {allSelected ? "✓" : ""}
+              </button>
+              <span className="text-[10px] text-[rgba(153,197,255,0.35)] ml-1">
+                {selected.size > 0 ? `${selected.size} selected` : `${filtered.length} items · ${fmt(totalFiltered)}`}
+              </span>
+            </div>
+
+            {selected.size > 0 ? (
+              <div className="flex items-center gap-1.5">
+                <select value={bulkCat ?? ""} onChange={e => setBulkCat(e.target.value)}
+                  className="bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none">
+                  <option value="">Move to…</option>
+                  {EXPENSE_CATS.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+                </select>
+                {bulkCat && (
+                  <button onClick={() => { onBulkCategorize([...selected], bulkCat); setSelected(new Set()); setBulkCat(null); }}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-[#1f48ff]/20 border border-[#1f48ff]/40 text-white hover:bg-[#1f48ff]/35 transition-colors">
+                    Apply
+                  </button>
+                )}
+                <button onClick={() => { onBulkDelete([...selected]); setSelected(new Set()); }}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors">
+                  Delete
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-1">
+                {["recent","amount","category"].map(s => (
+                  <button key={s} onClick={() => setSortBy(s)}
+                    className={`px-2 py-1 rounded-md text-[9px] font-black capitalize transition-all ${sortBy === s ? "bg-[#1f48ff]/20 text-[#99c5ff] border border-[#1f48ff]/30" : "text-[rgba(153,197,255,0.3)] hover:text-[rgba(153,197,255,0.6)]"}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Expense rows */}
         <div className="divide-y divide-[rgba(153,197,255,0.05)] max-h-80 overflow-y-auto">
-          {filtered.length === 0 ? (
-            <div className="py-8 text-center">
-              <p className="text-2xl mb-2">📭</p>
-              <p className="text-sm font-bold text-[rgba(153,197,255,0.4)]">No expenses yet</p>
-              <p className="text-xs text-[rgba(153,197,255,0.25)] mt-0.5">Tap "+ Add expense" to log one</p>
+          {expenses.length === 0 && catFilter === "all" ? (
+            /* ── True empty state ── */
+            <div className="py-10 px-6 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-[#1f48ff]/15 border border-[#1f48ff]/25 flex items-center justify-center text-2xl mx-auto mb-3">🏦</div>
+              <p className="text-sm font-black text-white mb-1">No expenses yet</p>
+              {!bankConnected ? (
+                <>
+                  <p className="text-xs text-[rgba(153,197,255,0.45)] leading-relaxed mb-3">
+                    Connect your bank above and business spending is imported automatically — sorted, categorised, and ready for your P&L.
+                  </p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.25)]">Or tap "+ Add expense" to log one manually.</p>
+                </>
+              ) : (
+                <p className="text-xs text-[rgba(153,197,255,0.45)] leading-relaxed">
+                  Business debits from your connected bank will appear here as they come in. You can also add expenses manually.
+                </p>
+              )}
+            </div>
+          ) : filtered.length === 0 ? (
+            /* ── Filtered to nothing ── */
+            <div className="py-6 text-center">
+              <p className="text-xs text-[rgba(153,197,255,0.3)]">No expenses in this category</p>
             </div>
           ) : (
             filtered.map(e => {
-              const cat = catById(e.category);
+              const cat        = catById(e.category);
               const isSelected = selected.has(e.id);
+              const isBank     = String(e.id).startsWith("bk-");
+              const isExpanded = expandedId === e.id;
               return (
-                <div key={e.id}
-                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${isSelected ? "bg-[#1f48ff]/10" : "hover:bg-[rgba(153,197,255,0.03)]"}`}>
-                  {/* Checkbox */}
-                  <button onClick={() => toggleSelect(e.id)}
-                    className={`w-4 h-4 rounded border flex items-center justify-center text-[8px] transition-all shrink-0 ${
-                      isSelected ? "bg-[#1f48ff] border-[#1f48ff] text-white" : "border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.4)]"
-                    }`}>
-                    {isSelected ? "✓" : ""}
-                  </button>
-                  {/* Dot */}
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.dot }} />
-                  {/* Details */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-white truncate">{e.label}</p>
-                    <p className="text-[10px] text-[rgba(153,197,255,0.4)]">
-                      {new Date(e.date).toLocaleDateString("en-GB", { day:"numeric", month:"short" })} · {cat.emoji} {cat.label}
-                    </p>
+                <div key={e.id}>
+                  <div className={`flex items-center gap-3 px-4 py-3 transition-colors ${isSelected ? "bg-[#1f48ff]/10" : "hover:bg-[rgba(153,197,255,0.03)]"}`}>
+                    {/* Checkbox */}
+                    <button onClick={() => toggleSelect(e.id)}
+                      className={`w-4 h-4 rounded border flex items-center justify-center text-[8px] transition-all shrink-0 ${
+                        isSelected ? "bg-[#1f48ff] border-[#1f48ff] text-white" : "border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.4)]"
+                      }`}>
+                      {isSelected ? "✓" : ""}
+                    </button>
+                    {/* Source dot */}
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.dot }} />
+                    {/* Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-xs font-bold text-white truncate">{e.label}</p>
+                        {isBank && (
+                          <span className="shrink-0 text-[8px] font-black px-1.5 py-0.5 rounded-full bg-[#1f48ff]/15 border border-[#1f48ff]/25 text-[#99c5ff]">
+                            🏦
+                          </span>
+                        )}
+                      </div>
+                      {/* Category row — tappable for bank expenses to open recategorize picker */}
+                      <button
+                        onClick={() => isBank && onRecategorizeBankExpense && setExpandedId(isExpanded ? null : e.id)}
+                        className={`text-left text-[10px] text-[rgba(153,197,255,0.4)] mt-0.5 ${isBank && onRecategorizeBankExpense ? "hover:text-[#99c5ff] transition-colors" : "cursor-default"}`}
+                      >
+                        {new Date(e.date).toLocaleDateString("en-GB", { day:"numeric", month:"short" })} · {cat.emoji} {cat.label}
+                        {isBank && onRecategorizeBankExpense && (
+                          <span className="ml-1 opacity-40">{isExpanded ? "▲" : "▼"}</span>
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-sm font-black text-[rgba(153,197,255,0.8)] tabular-nums shrink-0">{fmt2(e.amount)}</p>
                   </div>
-                  <p className="text-sm font-black text-[rgba(153,197,255,0.8)] tabular-nums shrink-0">{fmt2(e.amount)}</p>
+
+                  {/* ── Inline category picker (bank expenses only) ── */}
+                  {isExpanded && isBank && (
+                    <div className="px-4 pb-3 pt-2 border-t border-[rgba(153,197,255,0.06)] bg-[rgba(153,197,255,0.02)]">
+                      <p className="text-[9px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.3)] mb-2">Change category</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {EXPENSE_CATS.map(c => (
+                          <button key={c.id} onClick={() => {
+                            onRecategorizeBankExpense(e.id, c.id);
+                            setExpandedId(null);
+                          }}
+                            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all ${
+                              e.category === c.id
+                                ? "bg-[#1f48ff]/20 border-[#1f48ff]/50 text-[#99c5ff]"
+                                : "border-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.3)] hover:border-[rgba(153,197,255,0.2)] hover:text-[rgba(153,197,255,0.6)]"
+                            }`}>
+                            <span>{c.emoji}</span>{c.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -1592,21 +1680,242 @@ function ReminderModal({ invoice, onClose }) {
   );
 }
 
+// ─── Corp tax helper (mirrors AccountsTab.jsx calculateCT) ───────────────────
+function calcCorpTax(profit) {
+  if (profit <= 0)      return 0;
+  if (profit <= 50000)  return Math.round(profit * 0.19);
+  if (profit >= 250000) return Math.round(profit * 0.25);
+  return Math.round(profit * 0.265 - 3750);
+}
+
+// Return the next upcoming company year-end date given the year-end month (1-12)
+function nextYearEnd(yearEndMonth) {
+  const now = new Date();
+  const yr  = now.getFullYear();
+  const lastDayOfMonth = new Date(yr, yearEndMonth, 0).getDate();
+  const candidate = new Date(yr, yearEndMonth - 1, lastDayOfMonth);
+  return candidate >= now ? candidate : new Date(yr + 1, yearEndMonth - 1, lastDayOfMonth);
+}
+
+function addMonths(date, n) {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + n);
+  return d;
+}
+
+function daysUntil(date) { return Math.ceil((date - new Date()) / 86400000); }
+
+function fmtDate(d) { return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
+
+// ─── Ltd Company Money Dashboard ─────────────────────────────────────────────
+function LtdMoneyDashboard({ accounts, expenses, monthlyData }) {
+  const yearEndMonth  = accounts.accountingYearEndMonth ?? 3;
+  const dirSalaryAnnual = accounts.directorSalaryAnnual ?? 9100;
+  const taxReserve    = accounts.taxReserve ?? 0;
+
+  const ytdIncome = monthlyData.reduce((s, m) => s + m.income, 0);
+  const totalExp  = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const netProfit = Math.max(0, ytdIncome - totalExp);
+
+  // Company year timing
+  const yearEnd       = nextYearEnd(yearEndMonth);
+  const yearStart     = addMonths(new Date(yearEnd.getFullYear() - 1, yearEnd.getMonth(), yearEnd.getDate()), 0);
+  yearStart.setDate(yearStart.getDate() + 1);
+  const monthsElapsed = Math.max(1,
+    (new Date().getFullYear() - yearStart.getFullYear()) * 12 +
+    (new Date().getMonth() - yearStart.getMonth()) + 1
+  );
+  const annualisedProfit = Math.max(0, netProfit * (12 / monthsElapsed) - dirSalaryAnnual);
+  const ctAnnual     = calcCorpTax(annualisedProfit);
+  const ctYtd        = Math.round(ctAnnual * (monthsElapsed / 12));
+  const ctMonthly    = Math.round(ctAnnual / 12);
+  const ctReservedPct = ctYtd > 0 ? Math.min(100, Math.round((taxReserve / ctYtd) * 100)) : 0;
+
+  // Key dates
+  const ctPaymentDate = new Date(yearEnd); ctPaymentDate.setMonth(ctPaymentDate.getMonth() + 9); ctPaymentDate.setDate(ctPaymentDate.getDate() + 1);
+  const ct600Date     = new Date(yearEnd.getFullYear() + 1, yearEnd.getMonth(), yearEnd.getDate());
+  const chAccDate     = addMonths(yearEnd, 9);
+  const saDate        = new Date(yearEnd.getFullYear() + (new Date() >= yearEnd ? 2 : 1), 0, 31);
+
+  const keyDates = [
+    { label: "Company year end",        date: yearEnd,         icon: "📅" },
+    { label: "CT payment due",          date: ctPaymentDate,   icon: "💰" },
+    { label: "CT600 return",            date: ct600Date,       icon: "📋" },
+    { label: "Companies House accounts",date: chAccDate,       icon: "🏛️"  },
+    { label: "Self-assessment (SA)",    date: saDate,          icon: "📝" },
+  ].map(d => ({ ...d, days: daysUntil(d.date), fmtd: fmtDate(d.date) }))
+   .sort((a, b) => a.days - b.days);
+
+  // Optimal extraction this month
+  const divAllowance  = 500;
+  const distributable = Math.max(0, netProfit - dirSalaryAnnual * (monthsElapsed / 12) - ctYtd);
+  const safeMonthlyDiv = Math.round(distributable / Math.max(1, monthsElapsed));
+  const divTaxOnExtra = Math.max(0, safeMonthlyDiv - divAllowance / 12) * 0.0875;
+  const personalTaxEst = Math.round(divTaxOnExtra * monthsElapsed);
+
+  if (ytdIncome === 0) return null;
+
+  return (
+    <GCard className="overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.1)] flex items-center gap-3">
+        <span className="text-xl">🏢</span>
+        <div>
+          <SectionLabel>Corporation Tax Dashboard</SectionLabel>
+          <p className="text-xs text-white font-bold mt-0.5">
+            {ctAnnual > 0 ? `~${fmt(ctAnnual)} CT est. this accounting year` : 'Profit below CT threshold'}
+          </p>
+        </div>
+      </div>
+
+      <div className="p-4 space-y-4">
+
+        {/* Company P&L strip */}
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "Turnover YTD",  val: fmt(ytdIncome), color: "text-emerald-400" },
+            { label: "Expenses YTD",  val: `−${fmt(totalExp)}`, color: "text-red-400" },
+            { label: "Net profit",    val: fmt(netProfit), color: "text-white"       },
+          ].map(({ label, val, color }) => (
+            <div key={label} className="text-center p-2 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
+              <p className="text-[9px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.35)] mb-1">{label}</p>
+              <p className={`text-sm font-black tabular-nums ${color}`}>{val}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* CT reserve ring */}
+        <div className="rounded-xl bg-[rgba(153,197,255,0.03)] border border-[rgba(153,197,255,0.1)] p-4">
+          <div className="flex items-center gap-4">
+            {/* Ring */}
+            <div className="relative w-16 h-16 shrink-0">
+              <svg viewBox="0 0 64 64" className="w-16 h-16 -rotate-90">
+                <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(153,197,255,0.08)" strokeWidth="6" />
+                <circle cx="32" cy="32" r="26" fill="none"
+                  stroke={ctReservedPct >= 100 ? "#10b981" : ctReservedPct >= 50 ? "#f59e0b" : "#ef4444"}
+                  strokeWidth="6" strokeLinecap="round"
+                  strokeDasharray={`${2 * Math.PI * 26}`}
+                  strokeDashoffset={`${2 * Math.PI * 26 * (1 - ctReservedPct / 100)}`}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-[11px] font-black text-white">{ctReservedPct}%</span>
+              </div>
+            </div>
+            {/* Text */}
+            <div className="flex-1">
+              <p className="text-xs font-black text-white mb-1">CT reserve</p>
+              <p className="text-[11px] text-[rgba(153,197,255,0.5)]">
+                {fmt(taxReserve)} reserved of {fmt(ctYtd)} needed YTD
+              </p>
+              {ctMonthly > 0 && (
+                <p className="text-[11px] text-amber-300 font-semibold mt-1">
+                  Set aside ~{fmt(ctMonthly)}/mo to cover your CT bill
+                </p>
+              )}
+            </div>
+          </div>
+          {/* CT breakdown */}
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: "CT rate",     val: annualisedProfit <= 50000 ? "19%" : annualisedProfit >= 250000 ? "25%" : "Marginal" },
+              { label: "YTD est.",    val: fmt(ctYtd)    },
+              { label: "Annual est.", val: fmt(ctAnnual) },
+            ].map(({ label, val }) => (
+              <div key={label}>
+                <p className="text-[9px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.35)]">{label}</p>
+                <p className="text-xs font-black text-amber-400 tabular-nums mt-0.5">{val}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Optimal extraction */}
+        <div className="rounded-xl bg-[rgba(153,197,255,0.03)] border border-[rgba(153,197,255,0.1)] p-4 space-y-2">
+          <p className="text-[9px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.35)] mb-2">💰 Optimal extraction this month</p>
+          {[
+            { label: "Director salary (no NI)",    val: `£${Math.round(dirSalaryAnnual / 12)}/mo`,  color: "text-emerald-400", note: "£9,100/yr threshold" },
+            { label: "Safe monthly dividend",       val: fmt(safeMonthlyDiv),                         color: "text-[#99c5ff]",   note: `from ${fmt(distributable)} distributable profit` },
+            { label: "Your personal tax est.",      val: `~${fmt(personalTaxEst)}`,                    color: "text-amber-400",   note: "8.75% on dividends above £500 allowance" },
+          ].map(({ label, val, color, note }) => (
+            <div key={label} className="flex items-start justify-between gap-3 py-1.5 border-b border-[rgba(153,197,255,0.05)] last:border-0">
+              <div>
+                <p className="text-xs text-white font-semibold">{label}</p>
+                <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-0.5">{note}</p>
+              </div>
+              <p className={`text-sm font-black tabular-nums shrink-0 ${color}`}>{val}</p>
+            </div>
+          ))}
+          <div className="mt-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+            <p className="text-[11px] text-emerald-300 font-semibold">
+              Total you can take: {fmt(Math.round(dirSalaryAnnual / 12) + safeMonthlyDiv)}/mo — keeping {fmt(ctYtd - taxReserve)} still needed for CT.
+            </p>
+          </div>
+        </div>
+
+        {/* Key dates countdown */}
+        <div>
+          <p className="text-[9px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.35)] mb-2">📅 Key dates</p>
+          <div className="space-y-2">
+            {keyDates.map(({ label, fmtd, days, icon }) => {
+              const color  = days < 30  ? 'text-red-400'    : days < 90  ? 'text-amber-400' : 'text-emerald-400';
+              const bgCol  = days < 30  ? 'bg-red-500/10 border-red-500/20'    : days < 90 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-[rgba(153,197,255,0.04)] border-[rgba(153,197,255,0.08)]';
+              return (
+                <div key={label} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${bgCol}`}>
+                  <span className="text-base shrink-0">{icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-white">{label}</p>
+                    <p className="text-[10px] text-[rgba(153,197,255,0.4)] mt-0.5">{fmtd}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className={`text-xs font-black tabular-nums ${color}`}>
+                      {days <= 0 ? 'Due now' : days === 1 ? 'Tomorrow' : `${days}d`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </GCard>
+  );
+}
+
 // ─── Tax Savings Counter ──────────────────────────────────────────────────────
-function TaxSavingsCounter({ expenses, monthlyData }) {
+function TaxSavingsCounter({ expenses, monthlyData, accounts = {} }) {
   const ytdIncome = monthlyData.reduce((s, m) => s + m.income, 0);
   if (ytdIncome === 0) return null;
   const totalExp = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
   if (totalExp < 10) return null;
-  const saving = Math.round(totalExp * 0.26);
+
+  const isLtd = accounts.entityType === 'limited_company';
+
+  // Ltd: marginal CT rate at current profit level (19% / marginal 26.5% / 25%)
+  // Sole trader: IT 20% + Class 4 NI 6% = 26%
+  let savingRate;
+  if (isLtd) {
+    const netProfit = Math.max(0, ytdIncome - totalExp);
+    savingRate = netProfit <= 50000 ? 0.19 : netProfit >= 250000 ? 0.25 : 0.265;
+  } else {
+    savingRate = 0.26;
+  }
+
+  const saving = Math.round(totalExp * savingRate);
   if (saving < 1) return null;
+
   return (
     <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent p-4 flex items-center gap-3">
       <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/25 flex items-center justify-center text-lg shrink-0">💰</div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-black text-emerald-400">You've saved ~£{saving.toLocaleString()} in tax this year</p>
+        <p className="text-sm font-black text-emerald-400">
+          {isLtd
+            ? `CT deductions worth ~£${saving.toLocaleString()}`
+            : `You've saved ~£${saving.toLocaleString()} in tax this year`}
+        </p>
         <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">
           {expenses.length} business expense{expenses.length !== 1 ? 's' : ''} tracked · £{Math.round(totalExp).toLocaleString()} in deductions
+          {isLtd ? ` · ${Math.round(savingRate * 100)}% CT rate` : ' · 20% IT + 6% NI'}
         </p>
       </div>
     </div>
@@ -1682,7 +1991,29 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
   const onNavigate = onNavigateProp || ((tab) => routerNavigate(`/${tab}`));
   const { user } = useAuth();
   const isLive = Boolean(user);
-  const accounts = { ...DEFAULT_ACCOUNTS, ...(accountsData ?? {}) };
+
+  // Fetch business settings (entity type, director salary, year end, etc.)
+  const [fetchedSettings, setFetchedSettings] = useState(null);
+  useEffect(() => {
+    if (!isLive || user?.id === 'demo-user') return;
+    getBusinessSettings()
+      .then(s => {
+        if (!s) return;
+        setFetchedSettings({
+          entityType:              s.entity_type              ?? undefined,
+          directorSalaryAnnual:    s.director_salary_annual   ?? undefined,
+          accountingYearEndMonth:  s.accounting_year_end_month ?? undefined,
+          annualTarget:            s.annual_target             ?? undefined,
+          vatRegistered:           s.vat_registered            ?? undefined,
+          taxRate:                 s.tax_rate                  ?? undefined,
+          taxReserve:              s.tax_reserve               ?? undefined,
+          taxReserveTarget:        s.tax_reserve_target        ?? undefined,
+        });
+      })
+      .catch(() => {}); // silent — falls back to defaults
+  }, [isLive, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const accounts = { ...DEFAULT_ACCOUNTS, ...(fetchedSettings ?? {}), ...(accountsData ?? {}) };
 
   // Build dynamic week grid from real dates
   const weekData = useMemo(() => {
@@ -1895,6 +2226,34 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
     if (failed > 0) setSaveError(`${failed} item${failed !== 1 ? 's' : ''} couldn't be deleted. Refresh and try again.`);
   };
 
+  // Called by OpenBankingBanner when a transaction is marked as Business —
+  // immediately drops it into the expense sorter without a reload
+  const handleExpenseFromBank = (exp) => {
+    setExpenses(prev => {
+      if (prev.some(e => e.id === exp.id)) return prev; // already present from initial load
+      return [exp, ...prev].sort((a, b) => new Date(b.date) - new Date(a.date));
+    });
+    setMonthlyData(prev => prev.map(m => {
+      const expMonth = exp.date?.slice(0, 7);
+      return m.key === expMonth ? { ...m, expenses: m.expenses + Number(exp.amount) } : m;
+    }));
+  };
+
+  // Called by ExpenseSorter when user changes the category on a bank expense inline
+  const handleRecategorizeBankExpense = async (expId, newCat) => {
+    setExpenses(prev => prev.map(e => e.id === expId ? { ...e, category: newCat } : e));
+    const txId = expId.replace(/^bk-/, '');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await supabase.functions.invoke('truelayer-api', {
+        body: { action: 'categorise', transactionId: txId, isBusiness: true, category: newCat },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+    } catch (e) {
+      console.error('Failed to recategorize bank expense:', e);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#010a4f] via-[#05124a] to-[#0d1e78] relative">
       {/* Grid texture */}
@@ -1928,6 +2287,7 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
         <OpenBankingBanner
           bankTxs={bankTxs}
           setBankTxs={setBankTxs}
+          onExpenseFromBank={handleExpenseFromBank}
           onSyncComplete={(txs) => {
             // Re-apply full merge after a manual sync from the banner
             const bizRows    = txs.filter(b => b.is_business);
@@ -1962,7 +2322,7 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
         <MonthlyReport monthlyData={monthlyData} expenses={expenses} accounts={accounts} />
 
         {/* P&L waterfall */}
-        <PnLWaterfall period={period} monthlyData={monthlyData}
+        <PnLWaterfall period={period} monthlyData={monthlyData} accounts={accounts}
           weekRevenue={weekRevenue}
           weekExpenses={expenses.filter(e => { const d = new Date(); const mon = new Date(d); mon.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1)); return e.date >= mon.toISOString().split('T')[0]; }).reduce((s,e) => s + e.amount, 0)}
           dayIncome={transactions.filter(t => t.date === new Date().toISOString().split('T')[0]).reduce((s,t) => s + t.amount, 0)}
@@ -1975,14 +2335,23 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
           <MoneyGoals accounts={accounts} weekRevenue={weekRevenue} monthlyData={monthlyData} transactions={transactions} onNavigate={onNavigate} />
         </div>
 
-        {/* Tax estimate */}
-        <TaxEstimate monthlyData={monthlyData} expenses={expenses} accounts={accounts} />
+        {/* Tax estimate — sole trader only; Ltd companies get the full CT dashboard */}
+        {accounts.entityType !== 'limited_company' && (
+          <TaxEstimate monthlyData={monthlyData} expenses={expenses} accounts={accounts} />
+        )}
 
-        {/* Tax savings counter — the "wow" reward for tracking expenses */}
-        <TaxSavingsCounter expenses={expenses} monthlyData={monthlyData} />
+        {/* Ltd company CT dashboard */}
+        {accounts.entityType === 'limited_company' && (
+          <LtdMoneyDashboard accounts={accounts} expenses={expenses} monthlyData={monthlyData} />
+        )}
 
-        {/* Real take-home breakdown */}
-        <RealTakeHome monthlyData={monthlyData} expenses={expenses} />
+        {/* Tax savings counter — reward for tracking expenses (both business types) */}
+        <TaxSavingsCounter expenses={expenses} monthlyData={monthlyData} accounts={accounts} />
+
+        {/* Real take-home breakdown — sole traders only (Ltd uses CT dashboard above) */}
+        {accounts.entityType !== 'limited_company' && (
+          <RealTakeHome monthlyData={monthlyData} expenses={expenses} />
+        )}
 
         {/* Expense sorter */}
         <ExpenseSorter
@@ -1990,6 +2359,8 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
           onAdd={handleAddExpense}
           onBulkCategorize={handleBulkCategorize}
           onBulkDelete={handleBulkDelete}
+          bankConnected={bankTxs.length > 0}
+          onRecategorizeBankExpense={handleRecategorizeBankExpense}
         />
 
         {/* Income stream */}
