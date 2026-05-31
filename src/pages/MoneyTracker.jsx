@@ -1709,9 +1709,13 @@ function fmtDate(d) { return d.toLocaleDateString('en-GB', { day: 'numeric', mon
 
 // ─── Ltd Company Money Dashboard ─────────────────────────────────────────────
 function LtdMoneyDashboard({ accounts, expenses, monthlyData }) {
-  const yearEndMonth  = accounts.accountingYearEndMonth ?? 3;
-  const dirSalaryAnnual = accounts.directorSalaryAnnual ?? 9100;
-  const taxReserve    = accounts.taxReserve ?? 0;
+  const yearEndMonth    = accounts.accountingYearEndMonth ?? 3;
+  const dir1Name        = accounts.director1Name || 'Director 1';
+  const dir1Salary      = accounts.directorSalaryAnnual ?? 9100;
+  const dir2Name        = accounts.director2Name || null;
+  const dir2Salary      = accounts.director2SalaryAnnual ?? 0;
+  const dirSalaryAnnual = dir1Salary + dir2Salary; // combined for CT + distributable calc
+  const taxReserve      = accounts.taxReserve ?? 0;
 
   const ytdIncome = monthlyData.reduce((s, m) => s + m.income, 0);
   const totalExp  = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
@@ -1833,10 +1837,36 @@ function LtdMoneyDashboard({ accounts, expenses, monthlyData }) {
         {/* Optimal extraction */}
         <div className="rounded-xl bg-[rgba(153,197,255,0.03)] border border-[rgba(153,197,255,0.1)] p-4 space-y-2">
           <p className="text-[9px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.35)] mb-2">💰 Optimal extraction this month</p>
+          {/* Director salaries — show individually when two directors */}
+          {dir2Name ? (
+            <>
+              <div className="flex items-start justify-between gap-3 py-1.5 border-b border-[rgba(153,197,255,0.05)]">
+                <div>
+                  <p className="text-xs text-white font-semibold">{dir1Name} salary</p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-0.5">no NI below £9,100/yr</p>
+                </div>
+                <p className="text-sm font-black tabular-nums shrink-0 text-emerald-400">£{Math.round(dir1Salary / 12)}/mo</p>
+              </div>
+              <div className="flex items-start justify-between gap-3 py-1.5 border-b border-[rgba(153,197,255,0.05)]">
+                <div>
+                  <p className="text-xs text-white font-semibold">{dir2Name} salary</p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-0.5">no NI below £9,100/yr</p>
+                </div>
+                <p className="text-sm font-black tabular-nums shrink-0 text-emerald-400">£{Math.round(dir2Salary / 12)}/mo</p>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-start justify-between gap-3 py-1.5 border-b border-[rgba(153,197,255,0.05)]">
+              <div>
+                <p className="text-xs text-white font-semibold">Director salary (no NI)</p>
+                <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-0.5">£9,100/yr threshold</p>
+              </div>
+              <p className="text-sm font-black tabular-nums shrink-0 text-emerald-400">£{Math.round(dir1Salary / 12)}/mo</p>
+            </div>
+          )}
           {[
-            { label: "Director salary (no NI)",    val: `£${Math.round(dirSalaryAnnual / 12)}/mo`,  color: "text-emerald-400", note: "£9,100/yr threshold" },
-            { label: "Safe monthly dividend",       val: fmt(safeMonthlyDiv),                         color: "text-[#99c5ff]",   note: `from ${fmt(distributable)} distributable profit` },
-            { label: "Your personal tax est.",      val: `~${fmt(personalTaxEst)}`,                    color: "text-amber-400",   note: "8.75% on dividends above £500 allowance" },
+            { label: "Safe monthly dividend",  val: fmt(safeMonthlyDiv),   color: "text-[#99c5ff]",  note: `from ${fmt(distributable)} distributable profit` },
+            { label: "Personal tax est. (all)", val: `~${fmt(personalTaxEst)}`, color: "text-amber-400", note: "8.75% on dividends above £500 allowance" },
           ].map(({ label, val, color, note }) => (
             <div key={label} className="flex items-start justify-between gap-3 py-1.5 border-b border-[rgba(153,197,255,0.05)] last:border-0">
               <div>
@@ -1848,7 +1878,7 @@ function LtdMoneyDashboard({ accounts, expenses, monthlyData }) {
           ))}
           <div className="mt-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
             <p className="text-[11px] text-emerald-300 font-semibold">
-              Total you can take: {fmt(Math.round(dirSalaryAnnual / 12) + safeMonthlyDiv)}/mo — keeping {fmt(ctYtd - taxReserve)} still needed for CT.
+              Total salaries + dividend: {fmt(Math.round(dirSalaryAnnual / 12) + safeMonthlyDiv)}/mo — {fmt(Math.max(ctYtd - taxReserve, 0))} still needed for CT.
             </p>
           </div>
         </div>
@@ -2000,14 +2030,17 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
       .then(s => {
         if (!s) return;
         setFetchedSettings({
-          entityType:              s.entity_type              ?? undefined,
-          directorSalaryAnnual:    s.director_salary_annual   ?? undefined,
-          accountingYearEndMonth:  s.accounting_year_end_month ?? undefined,
-          annualTarget:            s.annual_target             ?? undefined,
-          vatRegistered:           s.vat_registered            ?? undefined,
-          taxRate:                 s.tax_rate                  ?? undefined,
-          taxReserve:              s.tax_reserve               ?? undefined,
-          taxReserveTarget:        s.tax_reserve_target        ?? undefined,
+          entityType:               s.entity_type              ?? undefined,
+          director1Name:            s.director_1_name          ?? undefined,
+          directorSalaryAnnual:     s.director_salary_annual   ?? undefined,
+          director2Name:            s.director_2_name          ?? undefined,
+          director2SalaryAnnual:    s.director_2_salary_annual ?? undefined,
+          accountingYearEndMonth:   s.accounting_year_end_month ?? undefined,
+          annualTarget:             s.annual_target             ?? undefined,
+          vatRegistered:            s.vat_registered            ?? undefined,
+          taxRate:                  s.tax_rate                  ?? undefined,
+          taxReserve:               s.tax_reserve               ?? undefined,
+          taxReserveTarget:         s.tax_reserve_target        ?? undefined,
         });
       })
       .catch(() => {}); // silent — falls back to defaults

@@ -163,12 +163,37 @@ function StaffSection({ user }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // team_members is canonical (migration 019). Map to the shape the UI expects
+  // (name / active) so the JSX below doesn't need to change.
+  const ALLOWED_ROLES = ['cleaner', 'supervisor', 'manager'];
+  const normaliseRole = (r) => {
+    const lower = (r || '').trim().toLowerCase();
+    return ALLOWED_ROLES.includes(lower) ? lower : 'cleaner';
+  };
+  const splitName = (full) => {
+    const trimmed = (full || '').trim();
+    const i = trimmed.indexOf(' ');
+    return i === -1
+      ? { first_name: trimmed || 'Unnamed', last_name: null }
+      : { first_name: trimmed.slice(0, i), last_name: trimmed.slice(i + 1).trim() || null };
+  };
+  const fromTeamRow = (r) => ({
+    id: r.id,
+    owner_id: r.business_id,
+    name: [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || 'Unnamed',
+    role: r.role || 'cleaner',
+    pin_hash: r.pin_hash || '',
+    hourly_rate: r.hourly_rate,
+    active: r.is_active,
+    created_at: r.created_at,
+  });
+
   const loadStaff = useCallback(async () => {
     const [{ data: staffData }, { data: bizData }] = await Promise.all([
-      supabase.from('staff_members').select('*').eq('owner_id', user.id).order('created_at', { ascending: true }),
+      supabase.from('team_members').select('*').eq('business_id', user.id).order('created_at', { ascending: true }),
       supabase.from('business_settings').select('staff_login_token').eq('owner_id', user.id).single(),
     ]);
-    setStaff(staffData ?? []);
+    setStaff((staffData ?? []).map(fromTeamRow));
     if (bizData?.staff_login_token) setLoginToken(bizData.staff_login_token);
   }, [user.id]);
 
@@ -181,13 +206,15 @@ function StaffSection({ user }) {
     }
     setBusy(true); setMsg(null);
     try {
-      const { error } = await supabase.from('staff_members').insert({
-        owner_id:    user.id,
-        name:        name.trim(),
-        role:        role.trim(),
+      const { first_name, last_name } = splitName(name);
+      const { error } = await supabase.from('team_members').insert({
+        business_id: user.id,
+        first_name,
+        last_name,
+        role:        normaliseRole(role),
         pin_hash:    pin,
         hourly_rate: rate ? parseFloat(rate) : null,
-        active:      true,
+        is_active:   true,
       });
       if (error) throw error;
       setMsg({ type: 'ok', text: `${name} added` });
@@ -201,8 +228,12 @@ function StaffSection({ user }) {
   async function handleUpdate(member) {
     setBusy(true);
     try {
-      const { error } = await supabase.from('staff_members')
-        .update({ pin_hash: member.pin_hash, hourly_rate: member.hourly_rate, role: member.role })
+      const { error } = await supabase.from('team_members')
+        .update({
+          pin_hash: member.pin_hash,
+          hourly_rate: member.hourly_rate,
+          role: normaliseRole(member.role),
+        })
         .eq('id', member.id);
       if (error) throw error;
       setEditingId(null);
@@ -211,7 +242,7 @@ function StaffSection({ user }) {
   }
 
   async function handleToggleActive(member) {
-    await supabase.from('staff_members').update({ active: !member.active }).eq('id', member.id);
+    await supabase.from('team_members').update({ is_active: !member.active }).eq('id', member.id);
     await loadStaff();
   }
 
@@ -772,7 +803,10 @@ export default function Settings() {
     startTime: '08:00', endTime: '18:00',
     entityType: 'sole_trader',
     corporationTaxUtr: '',
+    director1Name: '',
     directorSalary: '12570',
+    director2Name: '',
+    director2Salary: '',
     accountingYearEndMonth: '3',
   });
 
@@ -877,7 +911,10 @@ export default function Settings() {
           companyNumber: settings.companies_house_number || prev.companyNumber,
           entityType: settings.entity_type || prev.entityType,
           corporationTaxUtr: settings.corporation_tax_utr || prev.corporationTaxUtr,
+          director1Name: settings.director_1_name || prev.director1Name,
           directorSalary: settings.director_salary_annual != null ? String(settings.director_salary_annual) : prev.directorSalary,
+          director2Name: settings.director_2_name || prev.director2Name,
+          director2Salary: settings.director_2_salary_annual != null ? String(settings.director_2_salary_annual) : prev.director2Salary,
           accountingYearEndMonth: settings.accounting_year_end_month != null ? String(settings.accounting_year_end_month) : prev.accountingYearEndMonth,
         }));
 
@@ -996,7 +1033,10 @@ export default function Settings() {
         vat_scheme: business.vatScheme || 'none',
         companies_house_number: business.companyNumber || null,
         corporation_tax_utr: business.corporationTaxUtr || null,
+        director_1_name: business.director1Name || null,
         director_salary_annual: Number(business.directorSalary) || 0,
+        director_2_name: business.director2Name || null,
+        director_2_salary_annual: business.director2Salary ? Number(business.director2Salary) : null,
         accounting_year_end_month: Number(business.accountingYearEndMonth) || 3,
       });
 
@@ -1285,9 +1325,41 @@ export default function Settings() {
                   <InputField label="Corporation Tax UTR" value={business.corporationTaxUtr}
                     onChange={v => updateBusiness('corporationTaxUtr', v)} placeholder="10-digit UTR" />
                 </div>
+                {/* Director 1 */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <InputField label="Director Salary (annual, £)" value={business.directorSalary} type="number"
+                  <InputField label="Director 1 Name" value={business.director1Name}
+                    onChange={v => updateBusiness('director1Name', v)} placeholder="e.g. Jane Smith" />
+                  <InputField label="Director 1 Salary (annual, £)" value={business.directorSalary} type="number"
                     onChange={v => updateBusiness('directorSalary', v)} placeholder="e.g. 12570" />
+                </div>
+
+                {/* Director 2 — toggle */}
+                {!business.director2Name && !business.director2Salary ? (
+                  <button
+                    type="button"
+                    onClick={() => updateBusiness('director2Name', ' ')}
+                    className="text-xs font-semibold text-[#1f48ff] hover:underline text-left"
+                  >
+                    + Add second director
+                  </button>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-gray-100">
+                    <InputField label="Director 2 Name" value={business.director2Name.trim()}
+                      onChange={v => updateBusiness('director2Name', v)} placeholder="e.g. John Smith" />
+                    <InputField label="Director 2 Salary (annual, £)" value={business.director2Salary} type="number"
+                      onChange={v => updateBusiness('director2Salary', v)} placeholder="e.g. 12570" />
+                    <button
+                      type="button"
+                      onClick={() => { updateBusiness('director2Name', ''); updateBusiness('director2Salary', ''); }}
+                      className="text-xs text-gray-400 hover:text-red-500 text-left col-span-full"
+                    >
+                      Remove second director
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="hidden sm:block" />{/* spacer */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 mb-1">Accounting Year End Month</label>
                     <select
