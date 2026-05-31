@@ -7,7 +7,8 @@ import { useNavigate } from "react-router-dom";
 import AskCadi from "../components/AskCadi";
 import { createMoneyEntry, listMoneyEntries, updateMoneyEntry, deleteMoneyEntry } from "../lib/db/moneyDb";
 import { listQuotes, updateQuoteStatus } from "../lib/db/quotesDb";
-import { getBusinessSettings } from "../lib/db/settingsDb";
+import { getBusinessSettings, upsertBusinessSettings } from "../lib/db/settingsDb";
+import { logMileage, listMileageLogs, calcMileageAllowance } from "../lib/db/mileageDb";
 import { useAuth } from "../context/AuthContext";
 import { useInvoices } from "../context/InvoiceContext";
 import { supabase } from "../lib/supabase";
@@ -2015,6 +2016,357 @@ function RealTakeHome({ monthlyData, expenses }) {
   );
 }
 
+// ─── Mileage helpers ─────────────────────────────────────────────────────────
+function taxYearStart() {
+  const now = new Date();
+  const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${year}-04-06`;
+}
+
+function projectedAnnualAllowance(weeklyMiles) {
+  const annual = weeklyMiles * 52;
+  return Math.round((Math.min(annual, 10000) * 0.45 + Math.max(annual - 10000, 0) * 0.25) * 100) / 100;
+}
+
+// ─── Mileage setup card (first-time prompt) ───────────────────────────────────
+function MileageSetupCard({ onSetupComplete }) {
+  const [ytdMiles,    setYtdMiles]    = useState('');
+  const [weeklyMiles, setWeeklyMiles] = useState('');
+  const [saving,      setSaving]      = useState(false);
+  const [dismissed,   setDismissed]   = useState(() => localStorage.getItem('cadi_mileage_dismissed') === '1');
+
+  if (dismissed) return null;
+
+  const weekly  = parseFloat(weeklyMiles) || 0;
+  const annual  = projectedAnnualAllowance(weekly);
+  const taxSave = Math.round(annual * 0.26);
+
+  const handleSave = async () => {
+    if (!weekly) return;
+    setSaving(true);
+    try {
+      await upsertBusinessSettings({
+        mileage_setup_done:   true,
+        ytd_miles_at_setup:   parseFloat(ytdMiles) || 0,
+        typical_weekly_miles: weekly,
+      });
+      onSetupComplete({ ytdMiles: parseFloat(ytdMiles) || 0, typicalWeeklyMiles: weekly });
+    } catch (e) {
+      console.error('Mileage setup error:', e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDismiss = () => {
+    localStorage.setItem('cadi_mileage_dismissed', '1');
+    setDismissed(true);
+  };
+
+  return (
+    <div className="rounded-2xl border border-[#1f48ff]/30 bg-gradient-to-r from-[#1f48ff]/10 via-[#1f48ff]/5 to-transparent overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#1f48ff]/20 border border-[#1f48ff]/30 flex items-center justify-center text-xl shrink-0">🚗</div>
+            <div>
+              <p className="text-sm font-black text-white">Track your mileage</p>
+              <p className="text-xs text-[rgba(153,197,255,0.55)] mt-0.5">HMRC lets you claim 45p per mile — Cadi does the maths</p>
+            </div>
+          </div>
+          <button onClick={handleDismiss} className="text-[rgba(153,197,255,0.3)] hover:text-white text-lg leading-none shrink-0 transition-colors">×</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <p className="text-[10px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Miles driven this tax year so far</p>
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)]">
+              <input type="number" min="0" value={ytdMiles} onChange={e => setYtdMiles(e.target.value)}
+                placeholder="e.g. 1200"
+                className="flex-1 bg-transparent text-sm font-bold text-white placeholder-[rgba(153,197,255,0.2)] focus:outline-none w-0 min-w-0" />
+              <span className="text-[10px] text-[rgba(153,197,255,0.35)] shrink-0">mi</span>
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Typical miles per week</p>
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)]">
+              <input type="number" min="0" value={weeklyMiles} onChange={e => setWeeklyMiles(e.target.value)}
+                placeholder="e.g. 80"
+                className="flex-1 bg-transparent text-sm font-bold text-white placeholder-[rgba(153,197,255,0.2)] focus:outline-none w-0 min-w-0" />
+              <span className="text-[10px] text-[rgba(153,197,255,0.35)] shrink-0">mi/wk</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Live projection */}
+        {weekly > 0 && (
+          <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-3">
+            <span className="text-lg shrink-0">💡</span>
+            <div>
+              <p className="text-xs font-black text-emerald-300">
+                That's ~£{annual.toLocaleString()} in HMRC allowance this year
+              </p>
+              <p className="text-[10px] text-emerald-400/70 mt-0.5">
+                Worth ~£{taxSave.toLocaleString()} off your tax bill · Cadi logs it automatically
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button onClick={handleSave} disabled={saving || !weekly}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-black transition-all ${weekly ? 'bg-[#1f48ff] text-white hover:bg-[#3a5eff]' : 'bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.25)] cursor-not-allowed'}`}>
+            {saving ? 'Saving…' : 'Start tracking →'}
+          </button>
+          <button onClick={handleDismiss}
+            className="px-4 py-2.5 rounded-xl border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.4)] text-xs font-black hover:text-white transition-all">
+            Later
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Mileage card (ongoing) + log modal ──────────────────────────────────────
+function LogMileageModal({ ytdMilesBefore, onSave, onClose }) {
+  const now = new Date();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1));
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  const toISO = d => d.toISOString().slice(0, 10);
+
+  const [miles,  setMiles]  = useState('');
+  const [period, setPeriod] = useState('week'); // 'week' | 'month' | 'custom'
+  const [start,  setStart]  = useState(toISO(monday));
+  const [end,    setEnd]    = useState(toISO(now));
+  const [notes,  setNotes]  = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const mi = parseFloat(miles) || 0;
+  const allowance = calcMileageAllowance(mi, ytdMilesBefore);
+  const taxSave   = Math.round(allowance * 0.26);
+
+  const periodStart = period === 'week' ? toISO(monday) : period === 'month'
+    ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01` : start;
+  const periodEnd = period === 'week' ? toISO(sunday) : period === 'month' ? toISO(now) : end;
+
+  const handleSave = async () => {
+    if (!mi) return;
+    setSaving(true);
+    try {
+      await onSave({ miles: mi, allowance, periodStart, periodEnd, notes });
+      onClose();
+    } catch (e) {
+      console.error('Log mileage error:', e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="relative w-full max-w-md rounded-2xl border border-[rgba(153,197,255,0.15)] bg-gradient-to-br from-[#010a4f] via-[#05124a] to-[#0d1e78] overflow-hidden shadow-2xl">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/50 to-transparent" />
+        <div className="px-5 py-4 border-b border-[rgba(153,197,255,0.1)] flex items-center justify-between">
+          <p className="text-sm font-black text-white">🚗 Log mileage</p>
+          <button onClick={onClose} className="text-[rgba(153,197,255,0.4)] hover:text-white text-xl leading-none">×</button>
+        </div>
+        <div className="p-5 space-y-4">
+          {/* Period picker */}
+          <div className="flex gap-1 p-1 bg-[rgba(0,0,0,0.2)] rounded-xl w-fit">
+            {[['week','This week'],['month','This month'],['custom','Custom']].map(([v, l]) => (
+              <button key={v} onClick={() => setPeriod(v)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${period === v ? 'bg-[#1f48ff] text-white' : 'text-[rgba(153,197,255,0.45)] hover:text-white'}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {period === 'custom' && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] font-bold text-[rgba(153,197,255,0.4)] mb-1">From</p>
+                <input type="date" value={start} onChange={e => setStart(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.12)] text-sm text-white focus:outline-none" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-[rgba(153,197,255,0.4)] mb-1">To</p>
+                <input type="date" value={end} onChange={e => setEnd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.12)] text-sm text-white focus:outline-none" />
+              </div>
+            </div>
+          )}
+
+          {/* Miles input */}
+          <div className="flex items-center gap-3 px-4 py-4 rounded-xl bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.12)]">
+            <span className="text-2xl">🛣️</span>
+            <input type="number" min="0" step="1" value={miles} onChange={e => setMiles(e.target.value)}
+              placeholder="0" autoFocus
+              className="flex-1 bg-transparent text-3xl font-black text-white placeholder-[rgba(153,197,255,0.15)] focus:outline-none w-0 min-w-0 tabular-nums" />
+            <span className="text-sm font-bold text-[rgba(153,197,255,0.4)] shrink-0">miles</span>
+          </div>
+
+          {/* Optional notes */}
+          <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
+            placeholder="Notes (optional — e.g. client visits, supply run)"
+            className="w-full px-4 py-2.5 rounded-xl bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.12)] text-sm text-white placeholder-[rgba(153,197,255,0.25)] focus:outline-none" />
+
+          {/* Cadi's calculation */}
+          {mi > 0 && (
+            <div className="rounded-xl border border-[rgba(153,197,255,0.1)] divide-y divide-[rgba(153,197,255,0.06)] text-sm">
+              {[
+                { l: 'Miles logged',      v: `${mi} mi`,           c: 'text-white' },
+                { l: 'HMRC allowance',    v: `£${allowance.toFixed(2)}`, c: 'text-[#99c5ff]', note: ytdMilesBefore >= 10000 ? '25p/mi' : ytdMilesBefore + mi > 10000 ? 'mixed rate' : '45p/mi' },
+                { l: 'Tax saving (est.)', v: `~£${taxSave}`,        c: 'text-emerald-400 font-black' },
+              ].map(({ l, v, c, note }) => (
+                <div key={l} className="flex justify-between items-center px-4 py-2.5">
+                  <span className="text-[rgba(153,197,255,0.5)] text-xs">{l}{note && <span className="ml-1 text-[9px] opacity-60">{note}</span>}</span>
+                  <span className={`text-xs tabular-nums font-bold ${c}`}>{v}</span>
+                </div>
+              ))}
+              <div className="px-4 py-2.5 bg-emerald-500/5">
+                <p className="text-[11px] text-emerald-300 font-semibold">
+                  I'll add £{allowance.toFixed(2)} to your Vehicle expenses automatically ✓
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button onClick={handleSave} disabled={saving || !mi}
+              className={`flex-1 py-3 rounded-xl text-xs font-black transition-all ${mi ? 'bg-[#1f48ff] text-white hover:bg-[#3a5eff]' : 'bg-[rgba(153,197,255,0.05)] text-[rgba(153,197,255,0.25)] cursor-not-allowed'}`}>
+              {saving ? 'Saving…' : 'Log mileage'}
+            </button>
+            <button onClick={onClose}
+              className="px-5 py-3 rounded-xl border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.5)] text-xs font-black hover:text-white transition-all">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MileageCard({ mileageLogs, ytdMilesAtSetup, typicalWeeklyMiles, taxRate = 0.26, onLog }) {
+  const [showModal, setShowModal] = useState(false);
+
+  const THRESHOLD = 10000;
+  const loggedMiles    = mileageLogs.reduce((s, l) => s + Number(l.miles), 0);
+  const ytdMiles       = loggedMiles + (ytdMilesAtSetup || 0);
+  const ytdAllowance   = mileageLogs.reduce((s, l) => s + Number(l.allowance_pence), 0);
+  const ytdTaxSave     = Math.round(ytdAllowance * taxRate);
+  const pctOfThreshold = Math.min((ytdMiles / THRESHOLD) * 100, 100);
+  const nearThreshold  = ytdMiles >= 8000 && ytdMiles < THRESHOLD;
+  const overThreshold  = ytdMiles >= THRESHOLD;
+
+  // Last entry date
+  const lastLog     = mileageLogs[0];
+  const lastLogDate = lastLog ? new Date(lastLog.period_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null;
+  const daysSinceLast = lastLog ? Math.floor((Date.now() - new Date(lastLog.period_end)) / 86400000) : null;
+  const dueForLog   = daysSinceLast === null || daysSinceLast >= 7;
+
+  return (
+    <>
+      {showModal && (
+        <LogMileageModal
+          ytdMilesBefore={ytdMiles}
+          onSave={onLog}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+
+      <GCard className="overflow-hidden">
+        <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">🚗</span>
+            <div>
+              <SectionLabel>Mileage</SectionLabel>
+              {lastLogDate && (
+                <p className="text-[10px] text-[rgba(153,197,255,0.4)] mt-0.5">
+                  Last logged {lastLogDate}{dueForLog ? ' · ' : ''}{dueForLog && <span className="text-amber-400 font-bold">log due</span>}
+                </p>
+              )}
+            </div>
+          </div>
+          <button onClick={() => setShowModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1f48ff]/20 border border-[#1f48ff]/40 text-xs font-black text-white hover:bg-[#1f48ff]/35 transition-colors">
+            + Log miles
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Stats row */}
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Miles this year', val: ytdMiles.toLocaleString(), unit: 'mi', color: 'text-white' },
+              { label: 'HMRC allowance',  val: `£${Math.round(ytdAllowance).toLocaleString()}`, color: 'text-[#99c5ff]' },
+              { label: 'Tax saved (est.)', val: `~£${ytdTaxSave.toLocaleString()}`, color: 'text-emerald-400' },
+            ].map(({ label, val, color }) => (
+              <div key={label} className="text-center p-2.5 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
+                <p className="text-[9px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.35)] mb-1">{label}</p>
+                <p className={`text-sm font-black tabular-nums ${color}`}>{val}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* HMRC 10,000-mile threshold bar */}
+          <div>
+            <div className="flex justify-between text-[10px] text-[rgba(153,197,255,0.4)] mb-1.5">
+              <span>HMRC threshold (45p → 25p/mi at 10,000)</span>
+              <span className={overThreshold ? 'text-amber-400 font-bold' : ''}>{ytdMiles.toLocaleString()} / 10,000 mi</span>
+            </div>
+            <div className="h-2 rounded-full bg-[rgba(153,197,255,0.06)] overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${overThreshold ? 'bg-amber-400' : nearThreshold ? 'bg-amber-400' : 'bg-[#1f48ff]'}`}
+                style={{ width: `${pctOfThreshold}%` }}
+              />
+            </div>
+            {nearThreshold && (
+              <p className="mt-1.5 text-[10px] text-amber-400 font-semibold">
+                ⚠️ {(THRESHOLD - ytdMiles).toLocaleString()} miles until your rate drops to 25p/mi
+              </p>
+            )}
+            {overThreshold && (
+              <p className="mt-1.5 text-[10px] text-amber-400">
+                Over 10,000 miles — remaining miles claim at 25p/mi
+              </p>
+            )}
+          </div>
+
+          {/* Recent log history */}
+          {mileageLogs.length > 0 && (
+            <div className="space-y-1.5">
+              {mileageLogs.slice(0, 3).map(log => (
+                <div key={log.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-[rgba(153,197,255,0.03)] border border-[rgba(153,197,255,0.06)]">
+                  <div>
+                    <p className="text-xs font-semibold text-white">{Number(log.miles).toLocaleString()} miles</p>
+                    <p className="text-[10px] text-[rgba(153,197,255,0.35)]">
+                      {new Date(log.period_start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                      {log.period_start !== log.period_end && ` – ${new Date(log.period_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`}
+                      {log.notes && ` · ${log.notes}`}
+                    </p>
+                  </div>
+                  <p className="text-xs font-black text-[#99c5ff] tabular-nums">£{Number(log.allowance_pence).toFixed(2)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {mileageLogs.length === 0 && (
+            <div className="text-center py-2">
+              <p className="text-xs text-[rgba(153,197,255,0.3)]">
+                {typicalWeeklyMiles ? `You typically drive ${typicalWeeklyMiles} miles/week — tap "+ Log miles" to start` : 'Log your first journey to start claiming'}
+              </p>
+            </div>
+          )}
+        </div>
+      </GCard>
+    </>
+  );
+}
+
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNavigateProp }) {
   const routerNavigate = useNavigate();
@@ -2030,17 +2382,20 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
       .then(s => {
         if (!s) return;
         setFetchedSettings({
-          entityType:               s.entity_type              ?? undefined,
-          director1Name:            s.director_1_name          ?? undefined,
-          directorSalaryAnnual:     s.director_salary_annual   ?? undefined,
-          director2Name:            s.director_2_name          ?? undefined,
-          director2SalaryAnnual:    s.director_2_salary_annual ?? undefined,
+          entityType:               s.entity_type               ?? undefined,
+          director1Name:            s.director_1_name           ?? undefined,
+          directorSalaryAnnual:     s.director_salary_annual    ?? undefined,
+          director2Name:            s.director_2_name           ?? undefined,
+          director2SalaryAnnual:    s.director_2_salary_annual  ?? undefined,
           accountingYearEndMonth:   s.accounting_year_end_month ?? undefined,
-          annualTarget:             s.annual_target             ?? undefined,
-          vatRegistered:            s.vat_registered            ?? undefined,
-          taxRate:                  s.tax_rate                  ?? undefined,
-          taxReserve:               s.tax_reserve               ?? undefined,
-          taxReserveTarget:         s.tax_reserve_target        ?? undefined,
+          annualTarget:             s.annual_target              ?? undefined,
+          vatRegistered:            s.vat_registered             ?? undefined,
+          taxRate:                  s.tax_rate                   ?? undefined,
+          taxReserve:               s.tax_reserve                ?? undefined,
+          taxReserveTarget:         s.tax_reserve_target         ?? undefined,
+          mileageSetupDone:         s.mileage_setup_done         ?? false,
+          ytdMilesAtSetup:          s.ytd_miles_at_setup         ?? 0,
+          typicalWeeklyMiles:       s.typical_weekly_miles       ?? undefined,
         });
       })
       .catch(() => {}); // silent — falls back to defaults
@@ -2095,6 +2450,7 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
   const [monthlyData,  setMonthlyData]  = useState(isLive ? buildLastSixMonths([]) : MONTHLY_DATA);
   const [expenses,     setExpenses]     = useState(isLive ? [] : DEMO_EXPENSES);
   const [bankTxs,      setBankTxs]     = useState([]);
+  const [mileageLogs,  setMileageLogs]  = useState([]);
   const manualRowsRef  = useRef([]);
   const [period,       setPeriod]       = useState("Month");
   const [showPayment,  setShowPayment]  = useState(false);
@@ -2106,6 +2462,11 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
     let mounted = true;
     (async () => {
       let manualMoneyRows = [];
+
+      // Load mileage logs for current tax year (silent fail)
+      listMileageLogs({ taxYearStart: taxYearStart() })
+        .then(logs => { if (mounted) setMileageLogs(logs); })
+        .catch(() => {});
 
       try {
         const [quoteRows, moneyRows] = await Promise.all([
@@ -2259,6 +2620,25 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
     if (failed > 0) setSaveError(`${failed} item${failed !== 1 ? 's' : ''} couldn't be deleted. Refresh and try again.`);
   };
 
+  // Mileage setup completed — update accounts state without page reload
+  const handleMileageSetup = ({ ytdMiles, typicalWeeklyMiles }) => {
+    setFetchedSettings(prev => ({
+      ...(prev ?? {}),
+      mileageSetupDone: true,
+      ytdMilesAtSetup: ytdMiles,
+      typicalWeeklyMiles,
+    }));
+  };
+
+  // Mileage logged — save to DB + add vehicle expense entry
+  const handleLogMileage = async ({ miles, allowance, periodStart, periodEnd, notes }) => {
+    const log = await logMileage({ periodStart, periodEnd, miles, allowancePence: allowance, notes });
+    setMileageLogs(prev => [log, ...prev]);
+    // Auto-create vehicle expense at the HMRC allowance value
+    const label = `Mileage ${new Date(periodStart).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}${periodStart !== periodEnd ? ` – ${new Date(periodEnd).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}`;
+    await handleAddExpense({ amount: allowance, label, category: 'vehicle', date: periodEnd });
+  };
+
   // Called by OpenBankingBanner when a transaction is marked as Business —
   // immediately drops it into the expense sorter without a reload
   const handleExpenseFromBank = (exp) => {
@@ -2384,6 +2764,20 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
         {/* Real take-home breakdown — sole traders only (Ltd uses CT dashboard above) */}
         {accounts.entityType !== 'limited_company' && (
           <RealTakeHome monthlyData={monthlyData} expenses={expenses} />
+        )}
+
+        {/* Mileage — setup prompt (first visit) then ongoing card */}
+        {isLive && !accounts.mileageSetupDone && (
+          <MileageSetupCard onSetupComplete={handleMileageSetup} />
+        )}
+        {isLive && accounts.mileageSetupDone && (
+          <MileageCard
+            mileageLogs={mileageLogs}
+            ytdMilesAtSetup={accounts.ytdMilesAtSetup ?? 0}
+            typicalWeeklyMiles={accounts.typicalWeeklyMiles}
+            taxRate={accounts.entityType === 'limited_company' ? 0.19 : 0.26}
+            onLog={handleLogMileage}
+          />
         )}
 
         {/* Expense sorter */}
