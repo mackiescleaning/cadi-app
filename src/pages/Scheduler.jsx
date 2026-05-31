@@ -205,8 +205,8 @@ function getViewDate(dayOffset, view) {
     return mon;
   } else if (view === "Month") {
     const d = new Date(today);
+    d.setDate(1); // clamp first so month arithmetic never overflows (e.g. May 31 + 1mo = July 1)
     d.setMonth(d.getMonth() + dayOffset);
-    d.setDate(1);
     return d;
   }
   return today;
