@@ -2058,10 +2058,23 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
     );
   }, [allJobs, viewDate, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const quarterJobs = useMemo(() => {
+    const q = getCurrentQuarter();
+    const qStartStr = isoDate(new Date(q.year, q.startMonth, 1));
+    const qEndStr   = isoDate(new Date(q.year, q.startMonth + 3, 0));
+    return allJobs.filter(j =>
+      j.date >= qStartStr && j.date <= qEndStr &&
+      j.status !== 'cancelled'
+    );
+  }, [allJobs]);
+
   // Crews derived from currently-visible day jobs (for the filter bar)
   const dayCrews = useMemo(() => deriveCrews(todayJobs), [todayJobs]);
 
-  const headerJobs = view === "Day" ? todayJobs : view === "Month" ? monthJobs : weekJobs;
+  const headerJobs = view === "Day"     ? todayJobs   :
+                     view === "Month"   ? monthJobs   :
+                     view === "Quarter" ? quarterJobs :
+                     weekJobs;
 
   return (
     <div className="relative flex flex-col min-h-full overflow-hidden" style={{
