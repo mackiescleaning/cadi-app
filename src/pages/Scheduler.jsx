@@ -1421,13 +1421,14 @@ function NewJobModal({ onClose, onSave, onUpdate, editJob, preCustomer = "", cus
   useEffect(() => {
     import('../lib/supabase').then(({ supabase }) => {
       supabase.from('team_members')
-        .select('id, first_name, last_name')
+        .select('id, first_name, last_name, work_pattern')
         .eq('is_active', true)
         .then(({ data }) => {
           if (data && data.length > 0) {
             const dbStaff = data.map(s => ({
               id: s.id,
               label: [s.first_name, s.last_name].filter(Boolean).join(' ').trim() || 'Unnamed',
+              work_pattern: s.work_pattern ?? null,
             }));
             setStaffOptions([{ id: "you", label: "You" }, ...dbStaff, { id: "unassigned", label: "Unassigned" }]);
           }
@@ -1713,11 +1714,24 @@ function NewJobModal({ onClose, onSave, onUpdate, editJob, preCustomer = "", cus
           <div>
             <FL>Assign to</FL>
             <div className="grid grid-cols-4 gap-2">
-              {staffOptions.map(s => (
-                <button key={s.id} onClick={() => toggleAssignee(s.id)} className={chip(assignees.includes(s.id))}>
-                  {s.label}
-                </button>
-              ))}
+              {staffOptions.map(s => {
+                const isSelected = assignees.includes(s.id);
+                const isOffDay = (() => {
+                  if (!s.work_pattern || !date || s.id === 'you' || s.id === 'unassigned') return false;
+                  const dow   = new Date(date + 'T12:00:00').getDay();
+                  const entry = s.work_pattern[String(dow)];
+                  return !entry;
+                })();
+                return (
+                  <button key={s.id} onClick={() => toggleAssignee(s.id)}
+                    className={`${chip(isSelected)} flex flex-col items-center gap-0.5`}>
+                    <span>{s.label}</span>
+                    {isOffDay && !isSelected && (
+                      <span className="text-[8px] font-bold text-amber-500 leading-none">Off</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -2031,10 +2045,23 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
     allJobs.filter(j => j.status !== 'cancelled'),
   [allJobs]);
 
+  const monthJobs = useMemo(() => {
+    const year  = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const monthEnd   = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+    return allJobs.filter(j =>
+      j.date >= monthStart && j.date <= monthEnd &&
+      j.status !== 'cancelled' &&
+      (!search || j.customer?.toLowerCase().includes(searchLower) || j.postcode?.toLowerCase().includes(searchLower))
+    );
+  }, [allJobs, viewDate, search]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Crews derived from currently-visible day jobs (for the filter bar)
   const dayCrews = useMemo(() => deriveCrews(todayJobs), [todayJobs]);
 
-  const headerJobs = view === "Day" ? todayJobs : weekJobs;
+  const headerJobs = view === "Day" ? todayJobs : view === "Month" ? monthJobs : weekJobs;
 
   return (
     <div className="relative flex flex-col min-h-full overflow-hidden" style={{
