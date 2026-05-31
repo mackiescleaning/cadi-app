@@ -30,7 +30,7 @@ const InvoiceSettings     = lazy(() => import('./pages/InvoiceSettings'));
 const InvoiceGenerator    = lazy(() => import('./pages/InvoiceGenerator'));
 const Quotes              = lazy(() => import('./pages/Quotes'));
 const Services            = lazy(() => import('./pages/Services'));
-const TrainingStaff       = lazy(() => import('./pages/TrainingStaff'));
+const Staff               = lazy(() => import('./pages/Staff'));
 const InboxPage           = lazy(() => import('./pages/Inbox'));
 const ProUpgradePage      = lazy(() => import('./components/ui/ProUpgrade'));
 const BankingSettings     = lazy(() => import('./pages/BankingSettings'));
@@ -152,7 +152,7 @@ function App() {
           <Route path="invoices"   element={<Navigate to="/payments?tab=invoices" replace />} />
           <Route path="quotes"     element={<Navigate to="/payments?tab=quotes" replace />} />
           <Route path="inventory"  element={<InventoryPage />} />
-          <Route path="staff"      element={<TrainingStaff />} />
+          <Route path="staff"      element={<Staff />} />
           <Route path="review"     element={<AnnualReview />} />
           <Route path="accounts"   element={<AccountsTab />} />
           <Route path="settings"         element={<Settings />} />

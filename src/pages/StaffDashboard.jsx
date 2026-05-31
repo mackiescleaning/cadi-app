@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStaff } from '../context/StaffContext';
 import {
@@ -59,6 +59,17 @@ function formatDateLabel(dateStr) {
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+function formatClockTime(isoStr) {
+  const d = new Date(isoStr);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function Spinner() {
+  return <div className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin flex-shrink-0" />;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ─── Demo jobs (week-relative so they always show correctly) ──────────────────
 function buildDemoJobs(staffName) {
   const sn = staffName || 'Sarah';
@@ -103,14 +114,115 @@ function TeammateChips({ assignees, myName }) {
   );
 }
 
-// ─── Job card (expandable) ────────────────────────────────────────────────────
-function JobCard({ job, myName, onStatusChange }) {
-  const [expanded, setExpanded] = useState(false);
-  const t = TYPE_THEME[job.type] || TYPE_THEME.residential;
+// ─── Job card (expandable, with GPS clock-in/out) ────────────────────────────
+function JobCard({ job, myName, staffMember, externalTimesheet, onStatusChange }) {
+  const [expanded,      setExpanded]  = useState(false);
+  const [localTs,       setLocalTs]   = useState(null);
+  const [clockingIn,    setClockingIn]  = useState(false);
+  const [clockingOut,   setClockingOut] = useState(false);
+  const [locStatus,     setLocStatus]   = useState(''); // '' | 'acquiring' | 'on-site' | 'away' | 'no-gps'
+
+  const timesheet  = localTs ?? externalTimesheet ?? null;
+  const isClocked  = timesheet?.status === 'clocked_in' || timesheet?.status === 'flagged';
+  const isClockedOut = timesheet?.status === 'clocked_out';
+
+  const t         = TYPE_THEME[job.type] || TYPE_THEME.residential;
   const startHour = parseHour(job);
   const endHour   = startHour + (job.durationHrs || 1);
-  const isDone    = job.status === 'complete' || job.status === 'completed';
-  const isActive  = job.status === 'in-progress';
+  const isDone    = isClockedOut || job.status === 'complete' || job.status === 'completed';
+  const isActive  = isClocked;
+
+  // Auto-expand when clocked in so clock-out button is visible
+  useEffect(() => { if (isClocked) setExpanded(true); }, [isClocked]);
+
+  async function getGPS() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) { reject(new Error('no-gps')); return; }
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000, maximumAge: 30000 });
+    });
+  }
+
+  async function handleClockIn() {
+    setClockingIn(true);
+    setLocStatus('acquiring');
+
+    let lat = null, lng = null, accuracy = null;
+    try {
+      const pos = await getGPS();
+      lat = pos.coords.latitude; lng = pos.coords.longitude;
+      accuracy = Math.round(pos.coords.accuracy);
+    } catch { setLocStatus('no-gps'); }
+
+    // Demo / no real session
+    if (!staffMember?.id || !staffMember?.ownerId) {
+      setLocalTs({ id: 'demo-' + Date.now(), clock_in_at: new Date().toISOString(), site_distance_m: null, status: 'clocked_in' });
+      onStatusChange(job.id, 'in-progress');
+      setClockingIn(false);
+      return;
+    }
+
+    try {
+      const SB  = import.meta.env.VITE_SUPABASE_URL;
+      const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const res = await fetch(`${SB}/functions/v1/staff-timesheet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: KEY },
+        body: JSON.stringify({
+          staff_id: staffMember.id, owner_id: staffMember.ownerId,
+          job_id: UUID_RE.test(String(job.id)) ? job.id : null,
+          date: job.date, action: 'clock_in', lat, lng, accuracy,
+        }),
+      });
+      const d = await res.json();
+      if (d.timesheet) {
+        setLocalTs(d.timesheet);
+        const dist = d.timesheet.site_distance_m;
+        setLocStatus(dist == null ? 'no-gps' : dist <= 200 ? 'on-site' : 'away');
+        onStatusChange(job.id, 'in-progress');
+      }
+    } catch (err) { console.error('Clock-in error:', err); }
+    setClockingIn(false);
+  }
+
+  async function handleClockOut() {
+    setClockingOut(true);
+
+    let lat = null, lng = null, accuracy = null;
+    try {
+      const pos = await getGPS();
+      lat = pos.coords.latitude; lng = pos.coords.longitude;
+      accuracy = Math.round(pos.coords.accuracy);
+    } catch {}
+
+    // Demo
+    if (!staffMember?.id || !staffMember?.ownerId) {
+      setLocalTs(prev => ({ ...(prev ?? {}), clock_out_at: new Date().toISOString(), status: 'clocked_out' }));
+      onStatusChange(job.id, 'complete');
+      setClockingOut(false); setLocStatus('');
+      return;
+    }
+
+    try {
+      const SB  = import.meta.env.VITE_SUPABASE_URL;
+      const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const res = await fetch(`${SB}/functions/v1/staff-timesheet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: KEY },
+        body: JSON.stringify({
+          staff_id: staffMember.id, owner_id: staffMember.ownerId,
+          job_id: UUID_RE.test(String(job.id)) ? job.id : null,
+          date: job.date, action: 'clock_out', lat, lng, accuracy,
+        }),
+      });
+      const d = await res.json();
+      if (d.timesheet) {
+        setLocalTs(d.timesheet);
+        setLocStatus('');
+        onStatusChange(job.id, 'complete');
+      }
+    } catch (err) { console.error('Clock-out error:', err); }
+    setClockingOut(false);
+  }
 
   return (
     <div className={`rounded-2xl border-2 overflow-hidden transition-all ${
@@ -139,15 +251,20 @@ function JobCard({ job, myName, onStatusChange }) {
           </div>
 
           <div className="flex flex-col items-end gap-1.5 shrink-0">
-            <span className="text-sm font-black text-emerald-600">£{job.price}</span>
+            {staffMember?.hourlyRate > 0 && job.durationHrs > 0 && (
+              <span className="text-sm font-black text-emerald-600">
+                £{(staffMember.hourlyRate * job.durationHrs).toFixed(2)}
+              </span>
+            )}
             {isDone && (
               <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                 <CheckCircle size={9} /> Done
               </span>
             )}
             {isActive && (
-              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
-                In progress
+              <span className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                {timesheet?.clock_in_at ? formatClockTime(timesheet.clock_in_at) : 'Clocked in'}
               </span>
             )}
             {!isDone && !isActive && (
@@ -187,29 +304,51 @@ function JobCard({ job, myName, onStatusChange }) {
             </div>
           )}
 
-          {!isDone && (
-            <div className="flex gap-2 pt-1">
-              {job.status === 'scheduled' && (
-                <button
-                  onClick={() => onStatusChange(job.id, 'in-progress')}
-                  className="flex-1 py-2.5 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 transition-colors"
-                >
-                  Start Job
-                </button>
-              )}
-              <button
-                onClick={() => onStatusChange(job.id, 'complete')}
-                className="flex-1 py-2.5 bg-emerald-500 text-white text-xs font-bold rounded-xl hover:bg-emerald-600 transition-colors flex items-center justify-center gap-1.5"
-              >
-                <CheckCircle size={13} /> Mark Complete
+          {/* ── Clock in / out actions ── */}
+          {isDone ? (
+            <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-xl">
+              <CheckCircle size={14} className="text-emerald-500 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-emerald-700">Job completed</p>
+                {timesheet?.clock_in_at && timesheet?.clock_out_at && (
+                  <p className="text-[10px] text-emerald-600 mt-0.5">
+                    {formatClockTime(timesheet.clock_in_at)} – {formatClockTime(timesheet.clock_out_at)}
+                    {' · '}
+                    {Math.round((new Date(timesheet.clock_out_at) - new Date(timesheet.clock_in_at)) / 60000)}m on site
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : isClocked ? (
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-xl">
+                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-bold text-amber-700">
+                    Clocked in {timesheet?.clock_in_at ? formatClockTime(timesheet.clock_in_at) : ''}
+                  </span>
+                  {timesheet?.site_distance_m != null && (
+                    <span className="text-[10px] ml-2 text-amber-600">
+                      {timesheet.site_distance_m <= 200
+                        ? `📍 ${timesheet.site_distance_m}m from site`
+                        : `⚠ ${(timesheet.site_distance_m / 1000).toFixed(1)}km from site`}
+                    </span>
+                  )}
+                  {locStatus === 'no-gps' && <span className="text-[10px] text-gray-400 ml-2">no GPS</span>}
+                </div>
+              </div>
+              <button onClick={handleClockOut} disabled={clockingOut}
+                className="w-full py-2.5 bg-emerald-500 text-white text-xs font-bold rounded-xl hover:bg-emerald-600 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50">
+                {clockingOut ? <><Spinner /> Clocking out…</> : <><CheckCircle size={13} /> Clock Out</>}
               </button>
             </div>
-          )}
-          {isDone && (
-            <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-xl">
-              <CheckCircle size={14} className="text-emerald-500" />
-              <p className="text-xs font-semibold text-emerald-700">Job completed</p>
-            </div>
+          ) : (
+            <button onClick={handleClockIn} disabled={clockingIn}
+              className="w-full py-2.5 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50">
+              {clockingIn
+                ? <><Spinner /> {locStatus === 'acquiring' ? 'Getting location…' : 'Clocking in…'}</>
+                : <><MapPin size={13} /> Clock In</>}
+            </button>
           )}
         </div>
       )}
@@ -218,7 +357,7 @@ function JobCard({ job, myName, onStatusChange }) {
 }
 
 // ─── Week grid — day selector + expandable job list ───────────────────────────
-function WeekGrid({ weekDates, jobs, myName, onStatusChange }) {
+function WeekGrid({ weekDates, jobs, myName, staffMember, timesheets, onStatusChange }) {
   const todayStr = isoDate(new Date());
   const [expandedDay, setExpandedDay] = useState(() => {
     const idx = weekDates.findIndex(d => isoDate(d) === todayStr);
@@ -275,12 +414,14 @@ function WeekGrid({ weekDates, jobs, myName, onStatusChange }) {
         const ds      = isoDate(d);
         const dayJobs = jobs.filter(j => j.date === ds).sort((a,b) => parseHour(a) - parseHour(b));
         const label   = formatDateLabel(ds);
-        const rev     = dayJobs.reduce((s,j) => s + (j.price || 0), 0);
+        const dayEarn = staffMember?.hourlyRate > 0
+          ? dayJobs.reduce((s,j) => s + (staffMember.hourlyRate * (j.durationHrs || 0)), 0)
+          : 0;
         return (
           <div>
             <div className="flex items-center justify-between mb-2 px-1">
               <p className="text-xs font-bold text-[#010a4f]">{label}</p>
-              {rev > 0 && <p className="text-xs font-black text-emerald-600">£{rev} day value</p>}
+              {dayEarn > 0 && <p className="text-xs font-black text-emerald-600">£{dayEarn.toFixed(2)} est. pay</p>}
             </div>
             {dayJobs.length === 0 ? (
               <div className="bg-white/70 rounded-2xl border border-[#99c5ff]/20 px-4 py-8 text-center">
@@ -290,7 +431,7 @@ function WeekGrid({ weekDates, jobs, myName, onStatusChange }) {
             ) : (
               <div className="space-y-2">
                 {dayJobs.map(job => (
-                  <JobCard key={job.id} job={job} myName={myName} onStatusChange={onStatusChange} />
+                  <JobCard key={job.id} job={job} myName={myName} staffMember={staffMember} externalTimesheet={timesheets?.[job.id] ?? null} onStatusChange={onStatusChange} />
                 ))}
               </div>
             )}
@@ -306,9 +447,13 @@ export default function StaffDashboard() {
   const { staffMember, logoutStaff } = useStaff();
   const navigate = useNavigate();
 
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [activeTab,  setActiveTab]  = useState('week');
-  const [jobs,       setJobs]       = useState(() => buildDemoJobs(staffMember?.name));
+  const [weekOffset,    setWeekOffset]    = useState(0);
+  const [activeTab,     setActiveTab]     = useState('week');
+  const [jobs,          setJobs]          = useState([]);
+  const [jobsLoading,   setJobsLoading]   = useState(true);
+  const [timesheets,    setTimesheets]    = useState({}); // job_id → timesheet row
+  const [payslips,      setPayslips]      = useState([]);
+  const [payslipsLoaded, setPayslipsLoaded] = useState(false);
 
   const weekDates = useMemo(() => {
     const mon = getMonday(new Date());
@@ -319,6 +464,88 @@ export default function StaffDashboard() {
       return d;
     });
   }, [weekOffset]);
+
+  const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
+  const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  const loadPayslips = useCallback(async () => {
+    if (!staffMember?.id || !staffMember?.ownerId) return;
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/functions/v1/staff-payslip?staff_id=${staffMember.id}&owner_id=${staffMember.ownerId}`,
+        { headers: { apikey: SUPABASE_ANON } },
+      );
+      const { payslips: rows } = await res.json();
+      if (Array.isArray(rows)) setPayslips(rows);
+    } catch {
+      // network error — silently ignore, estimates remain visible
+    } finally {
+      setPayslipsLoaded(true);
+    }
+  }, [staffMember, SUPABASE_URL, SUPABASE_ANON]);
+
+  useEffect(() => {
+    if (activeTab === 'pay' && !payslipsLoaded) loadPayslips();
+  }, [activeTab, payslipsLoaded, loadPayslips]);
+
+  // Load real jobs from the staff-jobs edge function
+  useEffect(() => {
+    if (!staffMember?.id || !staffMember?.ownerId) {
+      // No credentials — fall back to demo data so the UI isn't empty
+      setJobs(buildDemoJobs(staffMember?.name));
+      setJobsLoading(false);
+      return;
+    }
+    setJobsLoading(true);
+    fetch(
+      `${SUPABASE_URL}/functions/v1/staff-jobs?staff_id=${staffMember.id}&owner_id=${staffMember.ownerId}`,
+      { headers: { apikey: SUPABASE_ANON } },
+    )
+      .then(r => r.json())
+      .then(({ jobs: rows }) => {
+        if (Array.isArray(rows)) {
+          setJobs(rows.map(r => ({
+            id:          r.id,
+            customer:    r.customer || '',
+            type:        r.type || 'residential',
+            service:     r.service || '',
+            postcode:    r.postcode || '',
+            startHour:   Number(r.start_hour) || 9,
+            durationHrs: Number(r.duration_hrs) || 2,
+            price:       Number(r.price) || 0,
+            status:      r.status || 'scheduled',
+            assignees:   r.assignees || [],
+            assignee:    r.assignee || null,
+            notes:       r.notes || '',
+            date:        r.date,
+          })));
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load staff jobs:', err);
+        setJobs(buildDemoJobs(staffMember?.name));
+      })
+      .finally(() => setJobsLoading(false));
+  }, [staffMember?.id, staffMember?.ownerId]);
+
+  // Load today's timesheets so clock-in state survives page refresh
+  useEffect(() => {
+    if (!staffMember?.id || !staffMember?.ownerId) return;
+    const today = isoDate(new Date());
+    fetch(
+      `${SUPABASE_URL}/functions/v1/staff-timesheet?staff_id=${staffMember.id}&owner_id=${staffMember.ownerId}&date=${today}`,
+      { headers: { apikey: SUPABASE_ANON } },
+    )
+      .then(r => r.json())
+      .then(({ timesheets: rows }) => {
+        if (Array.isArray(rows)) {
+          const map = {};
+          rows.forEach(t => { if (t.job_id) map[t.job_id] = t; });
+          setTimesheets(map);
+        }
+      })
+      .catch(() => {});
+  }, [staffMember?.id, staffMember?.ownerId]);
 
   if (!staffMember) {
     navigate('/staff-login');
@@ -345,9 +572,32 @@ export default function StaffDashboard() {
     : weekOffset === -1 ? 'Last week'
     : `${weekDates[0].getDate()} ${weekDates[0].toLocaleString('en-GB',{month:'short'})} – ${weekDates[6].getDate()} ${weekDates[6].toLocaleString('en-GB',{month:'short'})}`;
 
-  const handleStatusChange = (jobId, newStatus) => {
+  const handleStatusChange = useCallback(async (jobId, newStatus) => {
+    // Optimistic update
     setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: newStatus } : j));
-  };
+
+    if (!staffMember?.id || !staffMember?.ownerId) return; // demo mode — local only
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/staff-jobs`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON },
+        body:    JSON.stringify({
+          staff_id: staffMember.id,
+          owner_id: staffMember.ownerId,
+          job_id:   jobId,
+          status:   newStatus,
+        }),
+      });
+      if (!res.ok) {
+        // Roll back on failure
+        setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: j._prevStatus || j.status } : j));
+        console.error('Status update failed:', await res.text());
+      }
+    } catch (err) {
+      console.error('Status update error:', err);
+    }
+  }, [staffMember?.id, staffMember?.ownerId]);
 
   const handleLogout = () => {
     logoutStaff();
@@ -445,7 +695,11 @@ export default function StaffDashboard() {
               <div className="text-center">
                 <p className="text-sm font-black text-[#010a4f]">{weekLabel}</p>
                 <p className="text-[10px] text-gray-400">
-                  {weekJobs.length} job{weekJobs.length !== 1 ? 's' : ''} · £{weekJobs.reduce((s,j) => s + (j.price||0), 0)}
+                  {weekJobs.length} job{weekJobs.length !== 1 ? 's' : ''}
+                  {staffMember?.hourlyRate > 0 && (() => {
+                    const weekEarn = weekJobs.reduce((s,j) => s + (staffMember.hourlyRate * (j.durationHrs||0)), 0);
+                    return weekEarn > 0 ? ` · £${weekEarn.toFixed(2)} est. pay` : null;
+                  })()}
                 </p>
               </div>
               <button
@@ -460,6 +714,8 @@ export default function StaffDashboard() {
               weekDates={weekDates}
               jobs={weekJobs}
               myName={staffMember.name}
+              staffMember={staffMember}
+              timesheets={timesheets}
               onStatusChange={handleStatusChange}
             />
           </div>
@@ -479,10 +735,14 @@ export default function StaffDashboard() {
             ) : (
               <>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider px-1">
-                  {todayJobs.length} job{todayJobs.length !== 1 ? 's' : ''} today · £{todayJobs.reduce((s,j)=>s+(j.price||0),0)}
+                  {todayJobs.length} job{todayJobs.length !== 1 ? 's' : ''} today
+                  {staffMember?.hourlyRate > 0 && (() => {
+                    const todayEarn = todayJobs.reduce((s,j) => s + (staffMember.hourlyRate * (j.durationHrs||0)), 0);
+                    return todayEarn > 0 ? ` · £${todayEarn.toFixed(2)} est. pay` : null;
+                  })()}
                 </p>
                 {todayJobs.map(job => (
-                  <JobCard key={job.id} job={job} myName={staffMember.name} onStatusChange={handleStatusChange} />
+                  <JobCard key={job.id} job={job} myName={staffMember.name} staffMember={staffMember} externalTimesheet={timesheets[job.id] ?? null} onStatusChange={handleStatusChange} />
                 ))}
               </>
             )}
@@ -513,7 +773,7 @@ export default function StaffDashboard() {
               <div className="flex items-start gap-2">
                 <AlertCircle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-amber-700">
-                  Estimates are based on scheduled hours at your agreed hourly rate. Actual pay is confirmed by your manager — speak to them for payslip queries.
+                  Estimates are based on scheduled hours at your agreed hourly rate. Actual pay is confirmed by your manager each pay period.
                 </p>
               </div>
             </div>
@@ -521,7 +781,7 @@ export default function StaffDashboard() {
             {/* Job breakdown */}
             <div className="bg-white rounded-2xl border border-[#99c5ff]/20 overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Job breakdown</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Job breakdown this week</p>
               </div>
               {weekJobs.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-6">No jobs this week</p>
@@ -543,6 +803,63 @@ export default function StaffDashboard() {
                         </div>
                       </div>
                     ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Confirmed payslips ── */}
+            <div className="bg-white rounded-2xl border border-[#99c5ff]/20 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Payslips</p>
+                {!payslipsLoaded && (
+                  <div className="w-4 h-4 border-2 border-[#1f48ff]/20 border-t-[#1f48ff] rounded-full animate-spin" />
+                )}
+              </div>
+              {payslips.length === 0 ? (
+                <div className="px-5 py-6 text-center">
+                  <p className="text-sm text-gray-400">No payslips yet</p>
+                  <p className="text-xs text-gray-300 mt-1">Confirmed payslips from your manager will appear here</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-50">
+                  {payslips.map(p => {
+                    const run = p.pay_runs;
+                    return (
+                      <div key={p.id} className="px-5 py-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <p className="text-sm font-semibold text-[#010a4f]">
+                              {run?.tax_year} · Period {run?.period_no}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              Pay date: {run?.payment_date ?? '—'}
+                              {run?.period_start && ` · ${run.period_start} to ${run.period_end}`}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-base font-bold text-green-700">£{Number(p.net_pay).toFixed(2)}</p>
+                            <p className="text-[10px] text-gray-400 uppercase tracking-wide">Net pay</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          {[
+                            { label: 'Gross',    value: `£${Number(p.gross_pay).toFixed(2)}`,           color: 'text-gray-700' },
+                            { label: 'Tax',      value: `£${Number(p.tax_period).toFixed(2)}`,          color: 'text-red-500'  },
+                            { label: 'NI',       value: `£${Number(p.ni_employee_period).toFixed(2)}`,  color: 'text-amber-600'},
+                            { label: 'Hours',    value: `${Number(p.hours_worked).toFixed(1)} hrs`,     color: 'text-gray-600' },
+                            { label: 'Tax YTD',  value: `£${Number(p.tax_ytd).toFixed(2)}`,            color: 'text-red-400'  },
+                            { label: 'NI YTD',   value: `£${Number(p.ni_employee_ytd).toFixed(2)}`,    color: 'text-amber-500'},
+                          ].map(({ label, value, color }) => (
+                            <div key={label} className="bg-gray-50 rounded-lg p-2">
+                              <p className="text-[10px] text-gray-400 mb-0.5">{label}</p>
+                              <p className={`font-semibold ${color}`}>{value}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-2">Tax code: {p.tax_code} · NI category: {p.ni_category}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

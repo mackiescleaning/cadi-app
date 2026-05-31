@@ -61,7 +61,7 @@ export default function StaffLogin() {
     setChecking(true);
     try {
       const member = await validatePin(token, enteredPin);
-      loginAsStaff({ id: member.id, name: member.name, role: member.role, hourlyRate: member.hourly_rate });
+      loginAsStaff({ id: member.id, name: member.name, role: member.role, hourlyRate: member.hourly_rate, ownerId: member.owner_id });
       navigate('/staff-dashboard');
     } catch (err) {
       setShake(true);
