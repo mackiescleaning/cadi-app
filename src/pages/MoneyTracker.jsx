@@ -145,7 +145,7 @@ function GCard({ children, className = "" }) {
 }
 
 function SectionLabel({ children, className = "" }) {
-  return <p className={`text-[10px] font-black tracking-[0.15em] uppercase text-[rgba(153,197,255,0.45)] ${className}`}>{children}</p>;
+  return <p className={`text-[10px] font-black tracking-[0.15em] uppercase text-[rgba(153,197,255,0.55)] ${className}`}>{children}</p>;
 }
 
 // ─── Open Banking Banner ──────────────────────────────────────────────────────
@@ -397,7 +397,7 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
         <div className="border-t border-emerald-500/20 bg-emerald-500/5 px-4 py-5 text-center">
           <p className="text-3xl mb-2">🎉</p>
           <p className="text-sm font-black text-emerald-400">All caught up!</p>
-          <p className="text-xs text-[rgba(153,197,255,0.45)] mt-1">Every transaction sorted. Your P&L is fully up to date.</p>
+          <p className="text-xs text-[rgba(153,197,255,0.55)] mt-1">Every transaction sorted. Your P&L is fully up to date.</p>
         </div>
       )}
 
@@ -487,7 +487,7 @@ function PeriodHero({ period, setPeriod, weekRevenue, monthIncome, monthlyData, 
           <div className="flex items-center gap-3 mt-2.5">
             <span className={`text-sm font-bold ${hero.vsUp ? "text-emerald-400" : "text-red-400"}`}>{hero.vs}</span>
           </div>
-          <p className="text-xs text-[rgba(153,197,255,0.45)] mt-1">{hero.sub}</p>
+          <p className="text-xs text-[rgba(153,197,255,0.55)] mt-1">{hero.sub}</p>
         </div>
 
         {/* Tax ring */}
@@ -748,7 +748,7 @@ function WeekGrid({ weekData }) {
     <GCard className="overflow-hidden">
       <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
         <SectionLabel>This week</SectionLabel>
-        <span className="text-xs text-[rgba(153,197,255,0.45)]">{fmt(total)} scheduled · {weekData.reduce((s,d)=>s+d.jobs,0)} jobs</span>
+        <span className="text-xs text-[rgba(153,197,255,0.55)]">{fmt(total)} scheduled · {weekData.reduce((s,d)=>s+d.jobs,0)} jobs</span>
       </div>
       <div className="grid grid-cols-7 gap-px bg-[rgba(153,197,255,0.04)] p-px">
         {weekData.map((d) => (
@@ -988,13 +988,13 @@ function ExpenseSorter({ expenses, onAdd, onBulkCategorize, onBulkDelete, bankCo
               <p className="text-sm font-black text-white mb-1">No expenses yet</p>
               {!bankConnected ? (
                 <>
-                  <p className="text-xs text-[rgba(153,197,255,0.45)] leading-relaxed mb-3">
+                  <p className="text-xs text-[rgba(153,197,255,0.55)] leading-relaxed mb-3">
                     Connect your bank above and business spending is imported automatically — sorted, categorised, and ready for your P&L.
                   </p>
                   <p className="text-[10px] text-[rgba(153,197,255,0.25)]">Or tap "+ Add expense" to log one manually.</p>
                 </>
               ) : (
-                <p className="text-xs text-[rgba(153,197,255,0.45)] leading-relaxed">
+                <p className="text-xs text-[rgba(153,197,255,0.55)] leading-relaxed">
                   Business debits from your connected bank will appear here as they come in. You can also add expenses manually.
                 </p>
               )}
@@ -1944,7 +1944,7 @@ function TaxSavingsCounter({ expenses, monthlyData, accounts = {} }) {
             ? `CT deductions worth ~£${saving.toLocaleString()}`
             : `You've saved ~£${saving.toLocaleString()} in tax this year`}
         </p>
-        <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">
+        <p className="text-xs text-[rgba(153,197,255,0.55)] mt-0.5">
           {expenses.length} business expense{expenses.length !== 1 ? 's' : ''} tracked · £{Math.round(totalExp).toLocaleString()} in deductions
           {isLtd ? ` · ${Math.round(savingRate * 100)}% CT rate` : ' · 20% IT + 6% NI'}
         </p>
@@ -2025,7 +2025,7 @@ function taxYearStart() {
 
 function projectedAnnualAllowance(weeklyMiles) {
   const annual = weeklyMiles * 52;
-  return Math.round((Math.min(annual, 10000) * 0.45 + Math.max(annual - 10000, 0) * 0.25) * 100) / 100;
+  return Math.round((Math.min(annual, 10000) * 0.55 + Math.max(annual - 10000, 0) * 0.25) * 100) / 100;
 }
 
 // ─── Mileage setup card (first-time prompt) ───────────────────────────────────
@@ -2071,7 +2071,7 @@ function MileageSetupCard({ onSetupComplete }) {
             <div className="w-10 h-10 rounded-xl bg-[#1f48ff]/20 border border-[#1f48ff]/30 flex items-center justify-center text-xl shrink-0">🚗</div>
             <div>
               <p className="text-sm font-black text-white">Track your mileage</p>
-              <p className="text-xs text-[rgba(153,197,255,0.55)] mt-0.5">HMRC lets you claim 45p per mile — Cadi does the maths</p>
+              <p className="text-xs text-[rgba(153,197,255,0.55)] mt-0.5">HMRC lets you claim 55p per mile — Cadi does the maths</p>
             </div>
           </div>
           <button onClick={handleDismiss} className="text-[rgba(153,197,255,0.3)] hover:text-white text-lg leading-none shrink-0 transition-colors">×</button>
@@ -2079,7 +2079,7 @@ function MileageSetupCard({ onSetupComplete }) {
 
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <p className="text-[10px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Miles driven this tax year so far</p>
+            <p className="text-[10px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.55)] mb-1.5">Miles driven this tax year so far</p>
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)]">
               <input type="number" min="0" value={ytdMiles} onChange={e => setYtdMiles(e.target.value)}
                 placeholder="e.g. 1200"
@@ -2088,7 +2088,7 @@ function MileageSetupCard({ onSetupComplete }) {
             </div>
           </div>
           <div>
-            <p className="text-[10px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Typical miles per week</p>
+            <p className="text-[10px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.55)] mb-1.5">Typical miles per week</p>
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)]">
               <input type="number" min="0" value={weeklyMiles} onChange={e => setWeeklyMiles(e.target.value)}
                 placeholder="e.g. 80"
@@ -2177,7 +2177,7 @@ function LogMileageModal({ ytdMilesBefore, onSave, onClose }) {
           <div className="flex gap-1 p-1 bg-[rgba(0,0,0,0.2)] rounded-xl w-fit">
             {[['week','This week'],['month','This month'],['custom','Custom']].map(([v, l]) => (
               <button key={v} onClick={() => setPeriod(v)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${period === v ? 'bg-[#1f48ff] text-white' : 'text-[rgba(153,197,255,0.45)] hover:text-white'}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${period === v ? 'bg-[#1f48ff] text-white' : 'text-[rgba(153,197,255,0.55)] hover:text-white'}`}>
                 {l}
               </button>
             ))}
@@ -2217,7 +2217,7 @@ function LogMileageModal({ ytdMilesBefore, onSave, onClose }) {
             <div className="rounded-xl border border-[rgba(153,197,255,0.1)] divide-y divide-[rgba(153,197,255,0.06)] text-sm">
               {[
                 { l: 'Miles logged',      v: `${mi} mi`,           c: 'text-white' },
-                { l: 'HMRC allowance',    v: `£${allowance.toFixed(2)}`, c: 'text-[#99c5ff]', note: ytdMilesBefore >= 10000 ? '25p/mi' : ytdMilesBefore + mi > 10000 ? 'mixed rate' : '45p/mi' },
+                { l: 'HMRC allowance',    v: `£${allowance.toFixed(2)}`, c: 'text-[#99c5ff]', note: ytdMilesBefore >= 10000 ? '25p/mi' : ytdMilesBefore + mi > 10000 ? 'mixed rate' : '55p/mi' },
                 { l: 'Tax saving (est.)', v: `~£${taxSave}`,        c: 'text-emerald-400 font-black' },
               ].map(({ l, v, c, note }) => (
                 <div key={l} className="flex justify-between items-center px-4 py-2.5">
@@ -2314,7 +2314,7 @@ function MileageCard({ mileageLogs, ytdMilesAtSetup, typicalWeeklyMiles, taxRate
           {/* HMRC 10,000-mile threshold bar */}
           <div>
             <div className="flex justify-between text-[10px] text-[rgba(153,197,255,0.4)] mb-1.5">
-              <span>HMRC threshold (45p → 25p/mi at 10,000)</span>
+              <span>HMRC threshold (55p → 25p/mi at 10,000)</span>
               <span className={overThreshold ? 'text-amber-400 font-bold' : ''}>{ytdMiles.toLocaleString()} / 10,000 mi</span>
             </div>
             <div className="h-2 rounded-full bg-[rgba(153,197,255,0.06)] overflow-hidden">
