@@ -21,9 +21,7 @@ import Onboarding from './pages/Onboarding';
 
 // ─── Lazy — loaded only when first visited ────────────────────────────────────
 const Calculator          = lazy(() => import('./pages/Calculator'));
-const InventoryPage       = lazy(() => import('./pages/Inventory'));
 const BusinessLab         = lazy(() => import('./pages/BusinessLab'));
-const RoutePlanner        = lazy(() => import('./pages/RoutePlanner'));
 const AnnualReview        = lazy(() => import('./pages/AnnualReview'));
 const AccountsTab         = lazy(() => import('./components/AccountsTab'));
 const InvoiceSettings     = lazy(() => import('./pages/InvoiceSettings'));
@@ -147,11 +145,9 @@ function App() {
           <Route path="money"      element={<MoneyTracker />} />
           <Route path="scaling"       element={<BusinessLab />} />
           <Route path="business-lab"  element={<BusinessLab />} />
-          <Route path="routes"     element={<RoutePlanner />} />
           <Route path="payments"   element={<Payments />} />
           <Route path="invoices"   element={<Navigate to="/payments?tab=invoices" replace />} />
           <Route path="quotes"     element={<Navigate to="/payments?tab=quotes" replace />} />
-          <Route path="inventory"  element={<InventoryPage />} />
           <Route path="staff"      element={<Staff />} />
           <Route path="review"     element={<AnnualReview />} />
           <Route path="accounts"   element={<AccountsTab />} />

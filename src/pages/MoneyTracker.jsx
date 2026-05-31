@@ -11,18 +11,49 @@ import { useAuth } from "../context/AuthContext";
 import { useInvoices } from "../context/InvoiceContext";
 import { supabase } from "../lib/supabase";
 
-// ─── Expense categories ───────────────────────────────────────────────────────
+// ─── Expense categories (with HMRC MTD mapping) ───────────────────────────────
 const EXPENSE_CATS = [
-  { id: "fuel",      label: "Fuel",       emoji: "⛽", dot: "#f59e0b", pill: "bg-amber-500/15 border-amber-500/25 text-amber-300"  },
-  { id: "supplies",  label: "Supplies",   emoji: "🧴", dot: "#3b82f6", pill: "bg-blue-500/15 border-blue-500/25 text-blue-300"    },
-  { id: "equipment", label: "Equipment",  emoji: "🔧", dot: "#8b5cf6", pill: "bg-purple-500/15 border-purple-500/25 text-purple-300"},
-  { id: "insurance", label: "Insurance",  emoji: "🛡️", dot: "#10b981", pill: "bg-emerald-500/15 border-emerald-500/25 text-emerald-300"},
-  { id: "marketing", label: "Marketing",  emoji: "📣", dot: "#f43f5e", pill: "bg-rose-500/15 border-rose-500/25 text-rose-300"    },
-  { id: "vehicle",   label: "Vehicle",    emoji: "🚐", dot: "#06b6d4", pill: "bg-cyan-500/15 border-cyan-500/25 text-cyan-300"    },
-  { id: "other",     label: "Other",      emoji: "📦", dot: "#6b7280", pill: "bg-gray-500/15 border-gray-500/25 text-gray-300"    },
+  { id: "fuel",         label: "Fuel & travel",    emoji: "⛽", hmrc: "travelCosts",              dot: "#f59e0b", pill: "bg-amber-500/15 border-amber-500/25 text-amber-300"    },
+  { id: "supplies",     label: "Supplies",          emoji: "🧴", hmrc: "costOfGoodsBought",        dot: "#3b82f6", pill: "bg-blue-500/15 border-blue-500/25 text-blue-300"      },
+  { id: "equipment",    label: "Equipment",         emoji: "🔧", hmrc: "maintenanceCosts",         dot: "#8b5cf6", pill: "bg-purple-500/15 border-purple-500/25 text-purple-300"},
+  { id: "insurance",    label: "Insurance",         emoji: "🛡️", hmrc: "otherAllowableCharges",    dot: "#10b981", pill: "bg-emerald-500/15 border-emerald-500/25 text-emerald-300"},
+  { id: "marketing",    label: "Marketing",         emoji: "📣", hmrc: "advertisingCosts",         dot: "#f43f5e", pill: "bg-rose-500/15 border-rose-500/25 text-rose-300"      },
+  { id: "vehicle",      label: "Vehicle",           emoji: "🚐", hmrc: "maintenanceCosts",         dot: "#06b6d4", pill: "bg-cyan-500/15 border-cyan-500/25 text-cyan-300"      },
+  { id: "staff",        label: "Staff costs",       emoji: "👥", hmrc: "staffCosts",               dot: "#ec4899", pill: "bg-pink-500/15 border-pink-500/25 text-pink-300"      },
+  { id: "premises",     label: "Premises",          emoji: "🏢", hmrc: "premisesRunningCosts",     dot: "#14b8a6", pill: "bg-teal-500/15 border-teal-500/25 text-teal-300"      },
+  { id: "professional", label: "Professional fees", emoji: "⚖️",  hmrc: "professionalFees",        dot: "#7c3aed", pill: "bg-violet-500/15 border-violet-500/25 text-violet-300"},
+  { id: "other",        label: "Other",             emoji: "📦", hmrc: "otherAllowableCharges",    dot: "#6b7280", pill: "bg-gray-500/15 border-gray-500/25 text-gray-300"      },
 ];
 
 const catById = (id) => EXPENSE_CATS.find(c => c.id === id) ?? EXPENSE_CATS[EXPENSE_CATS.length - 1];
+
+// ─── Merchant auto-suggest ─────────────────────────────────────────────────────
+const MERCHANT_RULES = [
+  { re: /shell|bp |esso|texaco|total ?energ|gulf|jet |petrol|diesel|morrisons fuel|tesco fuel|asda fuel/i,     cat: "fuel"         },
+  { re: /prochem|chemspec|jangro|bunzl|cleanline|selgros|initial clean|janitorial|cloths|mop |bleach|detergent|cleaning supply|hygiene supply/i, cat: "supplies"  },
+  { re: /screwfix|toolstation|b&?q |wickes|machine mart|karcher|numatic|henry hoover|dyson|vacuum|tool /i,    cat: "equipment"    },
+  { re: /amazon|ebay|aliexpress/i,                                                                             cat: "equipment"    },
+  { re: /insurance|aviva|axa |zurich|allianz|direct ?line|hiscox|simply business|premierline|covea/i,         cat: "insurance"    },
+  { re: /google ads|meta ads|facebook|instagram|mailchimp|checkatrade|rated people|bark\.com|yell |adverti/i, cat: "marketing"    },
+  { re: /kwik ?fit|halfords|mot |tyres?|car servi|vehicl repai|autoparts|evans halshaw/i,                     cat: "vehicle"      },
+  { re: /sage |xero |quickbooks|accountant|bookkeep|hmrc |companies house|freeagent|clearbooks/i,             cat: "professional" },
+  { re: /rent |rates |council tax|electricity|gas |water board|thames water|british gas|eon |edf |npower|broadband|bt |virgin media/i, cat: "premises" },
+  { re: /wages |salary|payroll|staff pay/i,                                                                    cat: "staff"        },
+];
+
+function suggestCategory(merchantName = "", description = "") {
+  const text = `${merchantName} ${description}`;
+  for (const { re, cat } of MERCHANT_RULES) {
+    if (re.test(text)) return cat;
+  }
+  return null;
+}
+
+// Estimated tax saving using basic-rate flat (20% IT + 6% Class 4 NI).
+// Accurate for cleaning business owners earning £12,570–£50,270 — the vast majority.
+function quickTaxSaving(amount) {
+  return Math.round(amount * 0.26 * 100) / 100;
+}
 
 // ─── Demo / default data ──────────────────────────────────────────────────────
 const DEFAULT_ACCOUNTS = {
@@ -125,6 +156,8 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete }) {
   const [success,           setSuccess]           = useState(null);
   const [showTxs,           setShowTxs]           = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [showAllClear,      setShowAllClear]      = useState(false);
+  const [reviewIdx,         setReviewIdx]         = useState(0); // which needs-review tx to show
 
   const tlInvoke = async (fn, body) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -173,7 +206,13 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete }) {
   const handleCategorise = async (txId, isBusiness, category) => {
     try {
       await tlInvoke('truelayer-api', { action: 'categorise', transactionId: txId, isBusiness, category });
-      setBankTxs(prev => prev.map(t => t.id === txId ? { ...t, is_business: isBusiness, is_personal: !isBusiness, needs_review: false, category } : t));
+      setBankTxs(prev => {
+        const updated = prev.map(t => t.id === txId ? { ...t, is_business: isBusiness, is_personal: !isBusiness, needs_review: false, category } : t);
+        const remaining = updated.filter(t => t.needs_review).length;
+        if (remaining === 0) { setShowAllClear(true); setTimeout(() => setShowAllClear(false), 4000); }
+        setReviewIdx(0); // always show next from top
+        return updated;
+      });
     } catch (e) { setError(e.message); }
   };
 
@@ -255,46 +294,129 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete }) {
         {personalTotal > 0 && (
           <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
             <p className="text-xs text-amber-300 font-bold">💡 Personal spend this period: £{personalTotal.toFixed(2)}</p>
-            <p className="text-[10px] text-amber-300/70 mt-0.5">These aren't included in your P&L. Review them to make sure nothing business-related slipped through.</p>
+            <p className="text-[10px] text-amber-300/70 mt-0.5">Not included in your P&L — check none slipped through as business.</p>
           </div>
         )}
       </div>
 
-      {/* Transaction triage */}
-      {showTxs && bankTxs.length > 0 && (
-        <div className="border-t border-[rgba(153,197,255,0.08)] max-h-96 overflow-y-auto">
-          {needsReview.length > 0 && (
-            <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20">
-              <p className="text-[10px] font-bold text-red-400 uppercase tracking-wide">{needsReview.length} need review — business or personal?</p>
-            </div>
-          )}
-          {bankTxs.map(tx => (
-            <div key={tx.id} className={`flex items-center gap-3 px-4 py-3 border-b border-[rgba(153,197,255,0.05)] last:border-0 ${tx.needs_review ? 'bg-amber-500/5' : ''}`}>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-white font-semibold truncate">{tx.merchant_name || tx.description}</p>
-                <p className="text-[10px] text-[rgba(153,197,255,0.4)]">{tx.date} · {tx.category}</p>
+      {/* ── Smart review stack ── */}
+      {needsReview.length > 0 && (() => {
+        const tx = needsReview[reviewIdx] ?? needsReview[0];
+        const suggested = suggestCategory(tx.merchant_name, tx.description);
+        const saving = quickTaxSaving(Number(tx.amount));
+        const catOptions = EXPENSE_CATS.filter(c => c.id !== 'other');
+        // Controlled selected category lives on the tx annotation (local state via bankTxs)
+        const pendingCat = tx._pendingCat ?? suggested ?? 'other';
+        const catObj = catById(pendingCat);
+        const setPendingCat = (cat) => setBankTxs(prev => prev.map(t => t.id === tx.id ? { ...t, _pendingCat: cat } : t));
+        return (
+          <div className="border-t border-amber-500/25">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2.5 bg-amber-500/8">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                <p className="text-xs font-black text-amber-300">{needsReview.length} transaction{needsReview.length !== 1 ? 's' : ''} to sort</p>
               </div>
-              <p className={`text-xs font-bold shrink-0 ${tx.transaction_type === 'credit' ? 'text-emerald-400' : 'text-white'}`}>
-                {tx.transaction_type === 'debit' ? '-' : '+'}£{Number(tx.amount).toFixed(2)}
-              </p>
-              {tx.needs_review ? (
-                <div className="flex gap-1 shrink-0">
-                  <button onClick={() => handleCategorise(tx.id, true, tx.category)}
-                    className="px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/30 transition-all">
-                    Biz
-                  </button>
-                  <button onClick={() => handleCategorise(tx.id, false, 'personal')}
-                    className="px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] font-bold hover:bg-amber-500/30 transition-all">
-                    Personal
-                  </button>
-                </div>
-              ) : (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${tx.is_business ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'}`}>
-                  {tx.is_business ? 'Biz' : 'Personal'}
-                </span>
+              {needsReview.length > 1 && (
+                <p className="text-[10px] text-[rgba(153,197,255,0.35)]">
+                  {reviewIdx + 1} of {needsReview.length}
+                </p>
               )}
             </div>
-          ))}
+
+            {/* Card */}
+            <div className="px-4 py-4 space-y-3">
+              {/* Transaction info */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-base font-black text-white leading-tight truncate">{tx.merchant_name || tx.description}</p>
+                  <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">{tx.date}</p>
+                </div>
+                <p className="text-2xl font-black text-white tabular-nums shrink-0">£{Number(tx.amount).toFixed(2)}</p>
+              </div>
+
+              {/* Auto-suggested category pill */}
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{catObj.emoji}</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${catObj.pill}`}>{catObj.label}</span>
+                {suggested && <span className="text-[10px] text-[rgba(153,197,255,0.35)]">auto-detected</span>}
+              </div>
+
+              {/* Category grid */}
+              <div className="grid grid-cols-2 gap-1.5">
+                {catOptions.map(c => (
+                  <button key={c.id} onClick={() => setPendingCat(c.id)}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all ${
+                      pendingCat === c.id
+                        ? 'bg-[#1f48ff]/20 border-[#1f48ff]/50 text-[#99c5ff]'
+                        : 'border-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.3)] hover:border-[rgba(153,197,255,0.2)] hover:text-[rgba(153,197,255,0.6)]'
+                    }`}>
+                    <span>{c.emoji}</span>{c.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tax saving hint */}
+              <div className="text-center py-0.5">
+                <p className="text-xs text-emerald-400/70">
+                  If business → <span className="font-black text-emerald-400">saves ~£{saving.toFixed(2)}</span> in tax
+                </p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => handleCategorise(tx.id, false, 'personal')}
+                  className="py-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-black hover:bg-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+                  ✗ Personal
+                </button>
+                <button onClick={() => handleCategorise(tx.id, true, pendingCat)}
+                  className="py-3 rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 text-sm font-black hover:bg-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2">
+                  ✓ Business
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── All clear celebration ── */}
+      {showAllClear && (
+        <div className="border-t border-emerald-500/20 bg-emerald-500/5 px-4 py-5 text-center">
+          <p className="text-3xl mb-2">🎉</p>
+          <p className="text-sm font-black text-emerald-400">All caught up!</p>
+          <p className="text-xs text-[rgba(153,197,255,0.45)] mt-1">Every transaction sorted. Your P&L is fully up to date.</p>
+        </div>
+      )}
+
+      {/* ── Browse all transactions toggle ── */}
+      {connected && bankTxs.length > 0 && needsReview.length === 0 && !showAllClear && (
+        <div className="border-t border-[rgba(153,197,255,0.06)]">
+          <button onClick={() => setShowTxs(v => !v)}
+            className="w-full px-4 py-2.5 text-[11px] text-[rgba(153,197,255,0.4)] hover:text-[#99c5ff] font-semibold transition-colors flex items-center justify-center gap-1.5">
+            {showTxs ? '↑ Hide' : '↓ Browse all'} transactions ({bankTxs.length})
+          </button>
+          {showTxs && (
+            <div className="max-h-80 overflow-y-auto border-t border-[rgba(153,197,255,0.06)]">
+              {bankTxs.map(tx => {
+                const catObj = catById(tx.category);
+                return (
+                  <div key={tx.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-[rgba(153,197,255,0.04)] last:border-0">
+                    <span className="text-base shrink-0">{catObj.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white font-semibold truncate">{tx.merchant_name || tx.description}</p>
+                      <p className="text-[10px] text-[rgba(153,197,255,0.35)]">{tx.date} · {catObj.label}</p>
+                    </div>
+                    <p className={`text-xs font-bold shrink-0 ${tx.transaction_type === 'credit' ? 'text-emerald-400' : 'text-white'}`}>
+                      {tx.transaction_type === 'debit' ? '−' : '+'}£{Number(tx.amount).toFixed(2)}
+                    </p>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${tx.is_business ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'}`}>
+                      {tx.is_business ? 'Biz' : 'Personal'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1470,6 +1592,90 @@ function ReminderModal({ invoice, onClose }) {
   );
 }
 
+// ─── Tax Savings Counter ──────────────────────────────────────────────────────
+function TaxSavingsCounter({ expenses, monthlyData }) {
+  const ytdIncome = monthlyData.reduce((s, m) => s + m.income, 0);
+  if (ytdIncome === 0) return null;
+  const totalExp = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+  if (totalExp < 10) return null;
+  const saving = Math.round(totalExp * 0.26);
+  if (saving < 1) return null;
+  return (
+    <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent p-4 flex items-center gap-3">
+      <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/25 flex items-center justify-center text-lg shrink-0">💰</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-black text-emerald-400">You've saved ~£{saving.toLocaleString()} in tax this year</p>
+        <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">
+          {expenses.length} business expense{expenses.length !== 1 ? 's' : ''} tracked · £{Math.round(totalExp).toLocaleString()} in deductions
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Real Take-Home ───────────────────────────────────────────────────────────
+function RealTakeHome({ monthlyData, expenses }) {
+  const ytdIncome = monthlyData.reduce((s, m) => s + m.income, 0);
+  if (ytdIncome === 0) return null;
+  const totalExp  = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const profit    = Math.max(0, ytdIncome - totalExp);
+  // Inline 2025/26 tax calc
+  const PA = 12570; const BRT = 50270; const BR = 0.20; const HR = 0.40;
+  const NI_LOW = 0.06; const NI_HIGH = 0.02;
+  const taxable = Math.max(profit - PA, 0);
+  const incomeTax = taxable <= (BRT - PA) ? taxable * BR : (BRT - PA) * BR + (taxable - (BRT - PA)) * HR;
+  const niBase = Math.max(profit - PA, 0);
+  const ni = niBase <= (BRT - PA) ? niBase * NI_LOW : (BRT - PA) * NI_LOW + (niBase - (BRT - PA)) * NI_HIGH;
+  const totalTax  = Math.round(incomeTax + ni);
+  const takeHome  = Math.max(0, profit - totalTax);
+  const keepPct   = ytdIncome > 0 ? Math.round((takeHome / ytdIncome) * 100) : 0;
+  const perHundred = Math.round(takeHome / ytdIncome * 100);
+  const months    = monthlyData.filter(m => m.income > 0).length || 1;
+  const monthlyTH = Math.round(takeHome / months);
+
+  return (
+    <GCard className="p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-lg">💎</span>
+        <SectionLabel>Real take-home</SectionLabel>
+      </div>
+
+      {/* Three headline figures */}
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        {[
+          { label: "Tax year to date",  value: fmt(takeHome),   color: "text-emerald-400", sub: "after tax & expenses" },
+          { label: "For every £100",    value: `£${perHundred}`, color: "text-white",       sub: "you keep"             },
+          { label: "Monthly avg.",      value: fmt(monthlyTH),  color: "text-[#99c5ff]",   sub: "take-home"            },
+        ].map(({ label, value, color, sub }) => (
+          <div key={label} className="text-center p-2.5 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)]">
+            <p className="text-[9px] font-black tracking-wider uppercase text-[rgba(153,197,255,0.35)] mb-1">{label}</p>
+            <p className={`text-base font-black tabular-nums ${color}`}>{value}</p>
+            <p className="text-[9px] text-[rgba(153,197,255,0.3)] mt-0.5">{sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Income waterfall bars */}
+      <div className="space-y-2">
+        {[
+          { label: "Income",      val: ytdIncome, pct: 100,     color: "bg-emerald-400",  bold: false },
+          { label: "− Expenses",  val: totalExp,  pct: Math.min(100, Math.round(totalExp / ytdIncome * 100)),   color: "bg-[#1f48ff]/80", bold: false },
+          { label: "− Tax (est.)", val: totalTax, pct: Math.min(100, Math.round(totalTax / ytdIncome * 100)),   color: "bg-amber-400",    bold: false },
+          { label: "= You keep",  val: takeHome,  pct: keepPct, color: "bg-emerald-400",  bold: true  },
+        ].map(({ label, val, pct, color, bold }) => (
+          <div key={label} className="flex items-center gap-3">
+            <p className={`text-[10px] w-24 shrink-0 ${bold ? 'font-black text-emerald-400' : 'text-[rgba(153,197,255,0.4)]'}`}>{label}</p>
+            <div className="flex-1 h-2 rounded-full bg-[rgba(153,197,255,0.06)] overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-700 ${color}`} style={{ width: `${pct}%` }} />
+            </div>
+            <p className={`text-xs tabular-nums w-16 text-right shrink-0 ${bold ? 'font-black text-emerald-400' : 'text-white font-semibold'}`}>{fmt(val)}</p>
+          </div>
+        ))}
+      </div>
+    </GCard>
+  );
+}
+
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNavigateProp }) {
   const routerNavigate = useNavigate();
@@ -1771,6 +1977,12 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
 
         {/* Tax estimate */}
         <TaxEstimate monthlyData={monthlyData} expenses={expenses} accounts={accounts} />
+
+        {/* Tax savings counter — the "wow" reward for tracking expenses */}
+        <TaxSavingsCounter expenses={expenses} monthlyData={monthlyData} />
+
+        {/* Real take-home breakdown */}
+        <RealTakeHome monthlyData={monthlyData} expenses={expenses} />
 
         {/* Expense sorter */}
         <ExpenseSorter
