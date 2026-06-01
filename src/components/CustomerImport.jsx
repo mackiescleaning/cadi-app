@@ -216,7 +216,9 @@ function generateJobDatesFromRound(round, windowMonths = 4) {
   const dates = [];
   const cur = new Date(start);
   while (cur <= windowEnd) {
-    dates.push(cur.toISOString().slice(0, 10));
+    // Shift Sunday → Monday (window cleaners don't typically work Sundays)
+    if (cur.getDay() === 0) cur.setDate(cur.getDate() + 1);
+    if (cur <= windowEnd) dates.push(cur.toISOString().slice(0, 10));
     cur.setDate(cur.getDate() + freqDays);
   }
   return dates;
