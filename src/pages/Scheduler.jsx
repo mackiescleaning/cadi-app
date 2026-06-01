@@ -12,11 +12,19 @@
 //
 // Data: useData() provides live jobs + CRUD. DEMO_JOBS used when logged out.
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Plus, Filter, Search, X, Trash2, Pencil, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Filter, Search, X, Trash2, Pencil, Check, GripVertical } from "lucide-react";
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor,
+  useSensor, useSensors, DragOverlay,
+} from "@dnd-kit/core";
+import {
+  SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import AskCadi from "../components/AskCadi";
 import { listAllRounds } from "../lib/db/customerRoundsDb";
 
@@ -626,7 +634,86 @@ function CrewLane({ jobs, onJobClick }) {
   );
 }
 
-// ─── DAY VIEW — run sheet (replaces time-grid, works on mobile + desktop) ─────
+// ─── Sortable job card ────────────────────────────────────────────────────────
+function SortableJobCard({ job, idx, onJobClick, updateJob, custById, isDragging }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSelfDragging } = useSortable({ id: job.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isSelfDragging ? 0.35 : 1,
+    zIndex: isSelfDragging ? 10 : 'auto',
+  };
+
+  const isDone = job.status === 'complete';
+  const t      = TYPE[job.type] || TYPE.residential;
+  const cust   = job.customerId ? custById.get(job.customerId) : null;
+  const postcode = cust?.postcode || job.postcode || '';
+  const address  = cust?.addressLine1 || '';
+  const location = [address, postcode].filter(Boolean).join(' · ');
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-stretch rounded-2xl overflow-hidden border transition-colors duration-200 ${
+        isDone
+          ? 'bg-slate-50/70 border-slate-200/60 opacity-60'
+          : 'bg-white/85 border-white/70 shadow-sm'
+      }`}
+    >
+      {/* Type colour bar */}
+      <div className="w-1 shrink-0" style={{ background: isDone ? '#cbd5e1' : t.bar }} />
+
+      {/* Drag handle — only on incomplete jobs */}
+      <div
+        {...(isDone ? {} : { ...attributes, ...listeners })}
+        className={`w-8 shrink-0 flex items-center justify-center border-r border-slate-100 ${
+          isDone ? 'cursor-default' : 'cursor-grab active:cursor-grabbing touch-none'
+        }`}
+      >
+        {isDone
+          ? <span className="text-xs font-black text-slate-300 tabular-nums">{idx + 1}</span>
+          : <GripVertical size={14} className="text-slate-300" />
+        }
+      </div>
+
+      {/* Job info — tap to open drawer */}
+      <button
+        onClick={() => onJobClick(job)}
+        className="flex-1 min-w-0 px-3 py-3 text-left active:bg-slate-50/50 transition-colors"
+      >
+        <p className={`text-sm font-bold leading-tight truncate ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+          {job.customer}
+        </p>
+        {(job.service || location) && (
+          <p className="text-xs text-slate-500 truncate mt-0.5">
+            {[job.service, location].filter(Boolean).join(' · ')}
+          </p>
+        )}
+        <p className={`text-sm font-black tabular-nums mt-1.5 ${isDone ? 'text-slate-400' : 'text-emerald-600'}`}>
+          £{fmtMoney(job.price)}
+        </p>
+      </button>
+
+      {/* Done / Undo button */}
+      <button
+        onClick={() => updateJob(job.id, { status: isDone ? 'scheduled' : 'complete' })}
+        className={`shrink-0 w-16 flex flex-col items-center justify-center gap-0.5 border-l border-slate-100 transition-all active:scale-95 select-none ${
+          isDone
+            ? 'bg-white hover:bg-slate-50 text-slate-400'
+            : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600'
+        }`}
+      >
+        <Check size={20} strokeWidth={2.5} />
+        <span className="text-[9px] font-bold uppercase tracking-wider">
+          {isDone ? 'Undo' : 'Done'}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+// ─── DAY VIEW — run sheet with drag-to-reorder ───────────────────────────────
 function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
   const { customers } = useData();
 
@@ -640,27 +727,77 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
     return true;
   });
 
-  // Incomplete first (by startHour then name), complete pushed to bottom
-  const sorted = [...filteredJobs].sort((a, b) => {
-    const aDone = a.status === 'complete';
-    const bDone = b.status === 'complete';
-    if (aDone !== bDone) return aDone ? 1 : -1;
-    if (a.startHour !== b.startHour) return a.startHour - b.startHour;
-    return (a.customer || '').localeCompare(b.customer || '');
-  });
+  // Local order state — incomplete jobs are draggable, complete always at bottom
+  const initialOrder = useMemo(() => {
+    return [...filteredJobs]
+      .sort((a, b) => {
+        const aDone = a.status === 'complete';
+        const bDone = b.status === 'complete';
+        if (aDone !== bDone) return aDone ? 1 : -1;
+        if (a.startHour !== b.startHour) return a.startHour - b.startHour;
+        return (a.customer || '').localeCompare(b.customer || '');
+      })
+      .map(j => j.id);
+  }, [filteredJobs.map(j => j.id + j.status).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const total   = filteredJobs.length;
-  const done    = filteredJobs.filter(j => j.status === 'complete').length;
-  const earned  = filteredJobs.filter(j => j.status === 'complete').reduce((s, j) => s + (j.price || 0), 0);
-  const toGo    = filteredJobs.filter(j => j.status !== 'complete').reduce((s, j) => s + (j.price || 0), 0);
-  const pct     = total > 0 ? Math.round((done / total) * 100) : 0;
+  const [order, setOrder] = useState(initialOrder);
+  const [activeId, setActiveId] = useState(null);
 
-  // Customer lookup for address / postcode
+  // Re-sync when jobs load or day changes
+  useEffect(() => { setOrder(initialOrder); }, [initialOrder.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sorted = useMemo(() => {
+    const byId = new Map(filteredJobs.map(j => [j.id, j]));
+    // Keep complete jobs at the bottom regardless of drag order
+    const incomplete = order.filter(id => byId.get(id) && byId.get(id).status !== 'complete');
+    const complete   = order.filter(id => byId.get(id) && byId.get(id).status === 'complete');
+    return [...incomplete, ...complete].map(id => byId.get(id)).filter(Boolean);
+  }, [order, filteredJobs]);
+
+  const total  = filteredJobs.length;
+  const done   = filteredJobs.filter(j => j.status === 'complete').length;
+  const earned = filteredJobs.filter(j => j.status === 'complete').reduce((s, j) => s + (j.price || 0), 0);
+  const toGo   = filteredJobs.filter(j => j.status !== 'complete').reduce((s, j) => s + (j.price || 0), 0);
+  const pct    = total > 0 ? Math.round((done / total) * 100) : 0;
+
   const custById = useMemo(() => {
     const m = new Map();
     customers.forEach(c => m.set(c.id, c));
     return m;
   }, [customers]);
+
+  // dnd-kit sensors — pointer for desktop, touch for mobile (delay avoids scroll conflict)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
+
+  const handleDragStart = useCallback(({ active }) => setActiveId(active.id), []);
+
+  const handleDragEnd = useCallback(({ active, over }) => {
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+    setOrder(prev => {
+      const oldIdx = prev.indexOf(active.id);
+      const newIdx = prev.indexOf(over.id);
+      if (oldIdx === -1 || newIdx === -1) return prev;
+      return arrayMove(prev, oldIdx, newIdx);
+    });
+    // Persist order via start_hour: assign fractional hours so relative order is saved
+    // (done lazily — no await needed, fire and forget)
+    setOrder(prev => {
+      const byId = new Map(filteredJobs.map(j => [j.id, j]));
+      prev.forEach((id, i) => {
+        const job = byId.get(id);
+        if (job && job.status !== 'complete' && job.startHour !== i) {
+          updateJob(id, { start_hour: i });
+        }
+      });
+      return prev;
+    });
+  }, [filteredJobs, updateJob]);
+
+  const activeJob = activeId ? filteredJobs.find(j => j.id === activeId) : null;
 
   if (total === 0) {
     return (
@@ -682,11 +819,11 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
           <div className="flex items-start justify-between mb-2">
             <div>
               <p className="text-base font-black text-slate-900">
-                {done === total && total > 0 ? '🎉 All done!' : `${done} of ${total} complete`}
+                {done === total && total > 0 ? "🎉 All done!" : `${done} of ${total} complete`}
               </p>
               <p className="text-xs text-slate-500 mt-0.5">
                 {done > 0 && `£${fmtMoney(earned)} earned`}
-                {done > 0 && toGo > 0 && ' · '}
+                {done > 0 && toGo > 0 && " · "}
                 {toGo > 0 && `£${fmtMoney(toGo)} to go`}
               </p>
             </div>
@@ -704,71 +841,47 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
         </div>
       </LightCard>
 
-      {/* ── Run sheet list ─────────────────────────────────────────────────── */}
-      <div className="space-y-2">
-        {sorted.map((job, idx) => {
-          const isDone = job.status === 'complete';
-          const t      = TYPE[job.type] || TYPE.residential;
-          const cust   = job.customerId ? custById.get(job.customerId) : null;
-          const postcode = cust?.postcode || job.postcode || '';
-          const address  = cust?.addressLine1 || '';
-          const location = [address, postcode].filter(Boolean).join(' · ');
+      {/* ── Sortable run sheet ─────────────────────────────────────────────── */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={sorted.map(j => j.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {sorted.map((job, idx) => (
+              <SortableJobCard
+                key={job.id}
+                job={job}
+                idx={idx}
+                onJobClick={onJobClick}
+                updateJob={updateJob}
+                custById={custById}
+              />
+            ))}
+          </div>
+        </SortableContext>
 
-          return (
-            <div
-              key={job.id}
-              className={`flex items-stretch rounded-2xl overflow-hidden border transition-all duration-200 ${
-                isDone
-                  ? 'bg-slate-50/70 border-slate-200/60 opacity-60'
-                  : 'bg-white/85 border-white/70 shadow-sm'
-              }`}
-            >
-              {/* Type colour bar */}
-              <div className="w-1 shrink-0 transition-colors duration-300" style={{ background: isDone ? '#cbd5e1' : t.bar }} />
-
-              {/* Order number */}
-              <div className="w-9 shrink-0 flex items-center justify-center border-r border-slate-100">
-                <span className={`text-sm font-black tabular-nums ${isDone ? 'text-slate-300' : 'text-slate-400'}`}>
-                  {idx + 1}
-                </span>
+        {/* Drag overlay — floating copy while dragging */}
+        <DragOverlay dropAnimation={{ duration: 150, easing: "ease" }}>
+          {activeJob && (
+            <div className="flex items-stretch rounded-2xl overflow-hidden border border-white/70 bg-white shadow-xl shadow-slate-900/15 rotate-1 scale-[1.02]">
+              <div className="w-1 shrink-0" style={{ background: (TYPE[activeJob.type] || TYPE.residential).bar }} />
+              <div className="w-8 shrink-0 flex items-center justify-center border-r border-slate-100">
+                <GripVertical size={14} className="text-slate-400" />
               </div>
-
-              {/* Job info — tap to open drawer */}
-              <button
-                onClick={() => onJobClick(job)}
-                className="flex-1 min-w-0 px-3 py-3 text-left active:bg-slate-50/50 transition-colors"
-              >
-                <p className={`text-sm font-bold leading-tight truncate ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                  {job.customer}
-                </p>
-                {(job.service || location) && (
-                  <p className="text-xs text-slate-500 truncate mt-0.5">
-                    {[job.service, location].filter(Boolean).join(' · ')}
-                  </p>
-                )}
-                <p className={`text-sm font-black tabular-nums mt-1.5 ${isDone ? 'text-slate-400' : 'text-emerald-600'}`}>
-                  £{fmtMoney(job.price)}
-                </p>
-              </button>
-
-              {/* Done / Undo button */}
-              <button
-                onClick={() => updateJob(job.id, { status: isDone ? 'scheduled' : 'complete' })}
-                className={`shrink-0 w-16 flex flex-col items-center justify-center gap-0.5 border-l border-slate-100 transition-all active:scale-95 select-none ${
-                  isDone
-                    ? 'bg-white hover:bg-slate-50 text-slate-400'
-                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600'
-                }`}
-              >
+              <div className="flex-1 min-w-0 px-3 py-3">
+                <p className="text-sm font-bold text-slate-900 truncate">{activeJob.customer}</p>
+                <p className="text-sm font-black text-emerald-600 mt-1">£{fmtMoney(activeJob.price)}</p>
+              </div>
+              <div className="shrink-0 w-16 flex flex-col items-center justify-center gap-0.5 border-l border-slate-100 bg-emerald-50 text-emerald-600">
                 <Check size={20} strokeWidth={2.5} />
-                <span className="text-[9px] font-bold uppercase tracking-wider">
-                  {isDone ? 'Undo' : 'Done'}
-                </span>
-              </button>
+              </div>
             </div>
-          );
-        })}
-      </div>
+          )}
+        </DragOverlay>
+      </DndContext>
     </div>
   );
 }
