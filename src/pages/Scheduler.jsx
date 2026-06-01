@@ -116,6 +116,12 @@ const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS     = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const GRID_HOURS = [6,7,8,9,10,11,12,13,14,15,16,17,18];
 
+// Round to pence before displaying to avoid floating-point garbage (e.g. £6379.029999…)
+function fmtMoney(v) {
+  const n = Math.round((Number(v) || 0) * 100) / 100;
+  return n.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 // ─── Shared UI primitives ─────────────────────────────────────────────────────
 function LightCard({ children, className = "" }) {
   return (
@@ -282,7 +288,7 @@ function StatStrip({ jobs }) {
   return (
     <div className="flex items-center gap-4 flex-wrap text-xs">
       <Stat label="Jobs"        value={total} />
-      <Stat label="Revenue"     value={`£${revenue.toLocaleString()}`} emphasis color="text-slate-900" />
+      <Stat label="Revenue"     value={`£${fmtMoney(revenue)}`} emphasis color="text-slate-900" />
       <Stat label="Done"        value={done}       color="text-emerald-600" />
       <Stat label="In progress" value={inProgress} color="text-amber-600" />
       <Stat label="Upcoming"    value={upcoming}   color="text-slate-600" />
@@ -777,7 +783,7 @@ function WeekView({ jobs, onJobClick, weekDates = [], typeFilter = "all", crewFi
                 </div>
                 <div className="text-right shrink-0">
                   <p className={`text-sm font-black tabular-nums ${dayRevenue > 0 ? "text-emerald-600" : "text-slate-300"}`}>
-                    £{dayRevenue}
+                    £{fmtMoney(dayRevenue)}
                   </p>
                 </div>
               </button>
@@ -830,7 +836,7 @@ function WeekView({ jobs, onJobClick, weekDates = [], typeFilter = "all", crewFi
                 <p className={`text-sm font-bold ${weekDates[i] && isoDate(weekDates[i]) === isoDate(getToday()) ? 'text-blue-600' : 'text-slate-900'}`}>
                   {weekDates[i]?.getDate() ?? 6 + i}
                 </p>
-                <p className="text-xs text-emerald-600 font-semibold tabular-nums">£{rev}</p>
+                <p className="text-xs text-emerald-600 font-semibold tabular-nums">£{fmtMoney(rev)}</p>
               </div>
             );
           })}
@@ -976,7 +982,7 @@ function MonthView({ jobs, onJobClick, viewDate }) {
                         ))}
                         {cell.jobCount > 6 && <span className="text-[10px] text-slate-500 font-bold">+{cell.jobCount-6}</span>}
                       </div>
-                      <p className="text-[11px] font-bold text-emerald-600 tabular-nums">£{cell.revenue}</p>
+                      <p className="text-[11px] font-bold text-emerald-600 tabular-nums">£{fmtMoney(cell.revenue)}</p>
                       {cell.hasUnassigned && <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-0.5" />}
                     </>
                   )}
@@ -991,7 +997,7 @@ function MonthView({ jobs, onJobClick, viewDate }) {
         <LightCard>
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/60">
             <SectionLabel>
-              {expandedDay.day} {monthLabel} — {expandedDay.jobCount} jobs · £{expandedDay.revenue}
+              {expandedDay.day} {monthLabel} — {expandedDay.jobCount} jobs · £{fmtMoney(expandedDay.revenue)}
             </SectionLabel>
             <button onClick={() => setSelectedDay(null)} className="text-slate-400 hover:text-slate-700 transition-colors">
               <X size={16} />
