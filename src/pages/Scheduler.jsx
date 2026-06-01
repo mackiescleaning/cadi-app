@@ -631,10 +631,10 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
   const { customers } = useData();
 
   const filteredJobs = jobs.filter(j => {
-    if (typeFilter !== “all” && j.type !== typeFilter) return false;
-    if (crewFilter !== “all”) {
+    if (typeFilter !== "all" && j.type !== typeFilter) return false;
+    if (crewFilter !== "all") {
       const assignees = getJobAssignees(j);
-      if (crewFilter === “__unassigned__”) return assignees.length === 0;
+      if (crewFilter === "__unassigned__") return assignees.length === 0;
       if (!assignees.includes(crewFilter)) return false;
     }
     return true;
@@ -665,39 +665,39 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
   if (total === 0) {
     return (
       <LightCard>
-        <div className=”px-6 py-12 text-center text-slate-500”>
-          <p className=”text-sm”>No jobs scheduled for this day.</p>
-          <p className=”text-xs mt-1 text-slate-400”>Use the “+ New job” button to add one.</p>
+        <div className="px-6 py-12 text-center text-slate-500">
+          <p className="text-sm">No jobs scheduled for this day.</p>
+          <p className="text-xs mt-1 text-slate-400">Use the "+ New job" button to add one.</p>
         </div>
       </LightCard>
     );
   }
 
   return (
-    <div className=”space-y-3 max-w-2xl mx-auto”>
+    <div className="space-y-3 max-w-2xl mx-auto">
 
       {/* ── Progress strip ─────────────────────────────────────────────────── */}
       <LightCard>
-        <div className=”px-4 pt-3 pb-3”>
-          <div className=”flex items-start justify-between mb-2”>
+        <div className="px-4 pt-3 pb-3">
+          <div className="flex items-start justify-between mb-2">
             <div>
-              <p className=”text-base font-black text-slate-900”>
+              <p className="text-base font-black text-slate-900">
                 {done === total && total > 0 ? '🎉 All done!' : `${done} of ${total} complete`}
               </p>
-              <p className=”text-xs text-slate-500 mt-0.5”>
+              <p className="text-xs text-slate-500 mt-0.5">
                 {done > 0 && `£${fmtMoney(earned)} earned`}
                 {done > 0 && toGo > 0 && ' · '}
                 {toGo > 0 && `£${fmtMoney(toGo)} to go`}
               </p>
             </div>
-            <div className=”text-right”>
-              <p className=”text-2xl font-black text-slate-900 tabular-nums”>{total}</p>
-              <p className=”text-[10px] font-bold uppercase tracking-widest text-slate-400”>jobs</p>
+            <div className="text-right">
+              <p className="text-2xl font-black text-slate-900 tabular-nums">{total}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">jobs</p>
             </div>
           </div>
-          <div className=”h-2 bg-slate-100 rounded-full overflow-hidden”>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
             <div
-              className=”h-full bg-emerald-500 rounded-full transition-all duration-500 ease-out”
+              className="h-full bg-emerald-500 rounded-full transition-all duration-500 ease-out"
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -705,7 +705,7 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
       </LightCard>
 
       {/* ── Run sheet list ─────────────────────────────────────────────────── */}
-      <div className=”space-y-2”>
+      <div className="space-y-2">
         {sorted.map((job, idx) => {
           const isDone = job.status === 'complete';
           const t      = TYPE[job.type] || TYPE.residential;
@@ -724,10 +724,10 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
               }`}
             >
               {/* Type colour bar */}
-              <div className=”w-1 shrink-0 transition-colors duration-300” style={{ background: isDone ? '#cbd5e1' : t.bar }} />
+              <div className="w-1 shrink-0 transition-colors duration-300" style={{ background: isDone ? '#cbd5e1' : t.bar }} />
 
               {/* Order number */}
-              <div className=”w-9 shrink-0 flex items-center justify-center border-r border-slate-100”>
+              <div className="w-9 shrink-0 flex items-center justify-center border-r border-slate-100">
                 <span className={`text-sm font-black tabular-nums ${isDone ? 'text-slate-300' : 'text-slate-400'}`}>
                   {idx + 1}
                 </span>
@@ -736,13 +736,13 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
               {/* Job info — tap to open drawer */}
               <button
                 onClick={() => onJobClick(job)}
-                className=”flex-1 min-w-0 px-3 py-3 text-left active:bg-slate-50/50 transition-colors”
+                className="flex-1 min-w-0 px-3 py-3 text-left active:bg-slate-50/50 transition-colors"
               >
                 <p className={`text-sm font-bold leading-tight truncate ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
                   {job.customer}
                 </p>
                 {(job.service || location) && (
-                  <p className=”text-xs text-slate-500 truncate mt-0.5”>
+                  <p className="text-xs text-slate-500 truncate mt-0.5">
                     {[job.service, location].filter(Boolean).join(' · ')}
                   </p>
                 )}
@@ -761,7 +761,7 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
                 }`}
               >
                 <Check size={20} strokeWidth={2.5} />
-                <span className=”text-[9px] font-bold uppercase tracking-wider”>
+                <span className="text-[9px] font-bold uppercase tracking-wider">
                   {isDone ? 'Undo' : 'Done'}
                 </span>
               </button>
