@@ -187,15 +187,15 @@ function detectJobType(customerName) {
 }
 
 function generateJobDatesFromRound(round, windowMonths = 4) {
-  if (!round.dueDate) return [];
   const freqDays = parseFrequencyDays(round.schedule);
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const windowEnd = new Date(today);
   windowEnd.setMonth(windowEnd.getMonth() + windowMonths);
 
-  // One-off: single job on due date (even if past — skip if already > 1yr ago)
+  // One-off: single job on due date (skip if no date or > 1yr stale)
   if (freqDays === 0) {
+    if (!round.dueDate) return [];
     const d = new Date(round.dueDate + 'T00:00:00');
     const msAgo = today - d;
     if (msAgo > 365 * 86400000) return []; // skip very stale one-offs
@@ -203,8 +203,10 @@ function generateJobDatesFromRound(round, windowMonths = 4) {
   }
   if (!freqDays) return [];
 
-  // Advance from due date to first occurrence on or after today
-  const start = new Date(round.dueDate + 'T00:00:00');
+  // Advance from due date (or today if none) to first occurrence on or after today
+  const start = round.dueDate
+    ? new Date(round.dueDate + 'T00:00:00')
+    : new Date(today);
   if (start < today) {
     const diff = today - start;
     const skips = Math.ceil(diff / (freqDays * 86400000));
