@@ -16,7 +16,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Plus, Filter, Search, X, Trash2, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Filter, Search, X, Trash2, Pencil, Check } from "lucide-react";
 import AskCadi from "../components/AskCadi";
 import { listAllRounds } from "../lib/db/customerRoundsDb";
 
@@ -626,97 +626,150 @@ function CrewLane({ jobs, onJobClick }) {
   );
 }
 
-function DayView({ jobs, onJobClick, typeFilter, crewFilter }) {
+// ─── DAY VIEW — run sheet (replaces time-grid, works on mobile + desktop) ─────
+function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
+  const { customers } = useData();
+
   const filteredJobs = jobs.filter(j => {
-    if (typeFilter !== "all" && j.type !== typeFilter) return false;
-    if (crewFilter !== "all") {
+    if (typeFilter !== “all” && j.type !== typeFilter) return false;
+    if (crewFilter !== “all”) {
       const assignees = getJobAssignees(j);
-      if (crewFilter === "__unassigned__") return assignees.length === 0;
+      if (crewFilter === “__unassigned__”) return assignees.length === 0;
       if (!assignees.includes(crewFilter)) return false;
     }
     return true;
   });
 
-  const crews = useMemo(() => deriveCrews(filteredJobs), [filteredJobs]);
+  // Incomplete first (by startHour then name), complete pushed to bottom
+  const sorted = [...filteredJobs].sort((a, b) => {
+    const aDone = a.status === 'complete';
+    const bDone = b.status === 'complete';
+    if (aDone !== bDone) return aDone ? 1 : -1;
+    if (a.startHour !== b.startHour) return a.startHour - b.startHour;
+    return (a.customer || '').localeCompare(b.customer || '');
+  });
 
-  if (crews.length === 0) {
+  const total   = filteredJobs.length;
+  const done    = filteredJobs.filter(j => j.status === 'complete').length;
+  const earned  = filteredJobs.filter(j => j.status === 'complete').reduce((s, j) => s + (j.price || 0), 0);
+  const toGo    = filteredJobs.filter(j => j.status !== 'complete').reduce((s, j) => s + (j.price || 0), 0);
+  const pct     = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  // Customer lookup for address / postcode
+  const custById = useMemo(() => {
+    const m = new Map();
+    customers.forEach(c => m.set(c.id, c));
+    return m;
+  }, [customers]);
+
+  if (total === 0) {
     return (
       <LightCard>
-        <div className="px-6 py-12 text-center text-slate-500">
-          <p className="text-sm">No jobs scheduled for this day.</p>
-          <p className="text-xs mt-1 text-slate-400">Use the “+ New job” button to add one.</p>
+        <div className=”px-6 py-12 text-center text-slate-500”>
+          <p className=”text-sm”>No jobs scheduled for this day.</p>
+          <p className=”text-xs mt-1 text-slate-400”>Use the “+ New job” button to add one.</p>
         </div>
       </LightCard>
     );
   }
 
   return (
-    <>
-      {/* Mobile: time-sorted agenda list */}
-      <div className="sm:hidden space-y-1.5">
-        {[...filteredJobs].sort((a, b) => a.startHour - b.startHour).map(job => {
-          const t = TYPE[job.type] || TYPE.residential;
+    <div className=”space-y-3 max-w-2xl mx-auto”>
+
+      {/* ── Progress strip ─────────────────────────────────────────────────── */}
+      <LightCard>
+        <div className=”px-4 pt-3 pb-3”>
+          <div className=”flex items-start justify-between mb-2”>
+            <div>
+              <p className=”text-base font-black text-slate-900”>
+                {done === total && total > 0 ? '🎉 All done!' : `${done} of ${total} complete`}
+              </p>
+              <p className=”text-xs text-slate-500 mt-0.5”>
+                {done > 0 && `£${fmtMoney(earned)} earned`}
+                {done > 0 && toGo > 0 && ' · '}
+                {toGo > 0 && `£${fmtMoney(toGo)} to go`}
+              </p>
+            </div>
+            <div className=”text-right”>
+              <p className=”text-2xl font-black text-slate-900 tabular-nums”>{total}</p>
+              <p className=”text-[10px] font-bold uppercase tracking-widest text-slate-400”>jobs</p>
+            </div>
+          </div>
+          <div className=”h-2 bg-slate-100 rounded-full overflow-hidden”>
+            <div
+              className=”h-full bg-emerald-500 rounded-full transition-all duration-500 ease-out”
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+      </LightCard>
+
+      {/* ── Run sheet list ─────────────────────────────────────────────────── */}
+      <div className=”space-y-2”>
+        {sorted.map((job, idx) => {
+          const isDone = job.status === 'complete';
+          const t      = TYPE[job.type] || TYPE.residential;
+          const cust   = job.customerId ? custById.get(job.customerId) : null;
+          const postcode = cust?.postcode || job.postcode || '';
+          const address  = cust?.addressLine1 || '';
+          const location = [address, postcode].filter(Boolean).join(' · ');
+
           return (
-            <button
+            <div
               key={job.id}
-              onClick={() => onJobClick(job)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/75 backdrop-blur border border-white/70 shadow-sm text-left hover:bg-white/90 active:scale-[0.99] transition-all"
+              className={`flex items-stretch rounded-2xl overflow-hidden border transition-all duration-200 ${
+                isDone
+                  ? 'bg-slate-50/70 border-slate-200/60 opacity-60'
+                  : 'bg-white/85 border-white/70 shadow-sm'
+              }`}
             >
-              <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background: t.bar }} />
-              <div className="w-14 shrink-0">
-                <p className="text-xs font-semibold tabular-nums text-slate-700">{fmtTime(job.startHour)}</p>
-                <p className="text-[10px] text-slate-400">{durLabel(job.durationHrs)}</p>
+              {/* Type colour bar */}
+              <div className=”w-1 shrink-0 transition-colors duration-300” style={{ background: isDone ? '#cbd5e1' : t.bar }} />
+
+              {/* Order number */}
+              <div className=”w-9 shrink-0 flex items-center justify-center border-r border-slate-100”>
+                <span className={`text-sm font-black tabular-nums ${isDone ? 'text-slate-300' : 'text-slate-400'}`}>
+                  {idx + 1}
+                </span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-bold text-slate-900 truncate ${job.status === 'complete' ? 'line-through opacity-50' : ''}`}>
+
+              {/* Job info — tap to open drawer */}
+              <button
+                onClick={() => onJobClick(job)}
+                className=”flex-1 min-w-0 px-3 py-3 text-left active:bg-slate-50/50 transition-colors”
+              >
+                <p className={`text-sm font-bold leading-tight truncate ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
                   {job.customer}
                 </p>
-                <p className="text-xs text-slate-500 truncate">{job.service || job.postcode}</p>
-              </div>
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
-                <p className="text-sm font-black tabular-nums text-emerald-600">£{job.price}</p>
-                <StatusChip status={job.status} />
-              </div>
-            </button>
+                {(job.service || location) && (
+                  <p className=”text-xs text-slate-500 truncate mt-0.5”>
+                    {[job.service, location].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                <p className={`text-sm font-black tabular-nums mt-1.5 ${isDone ? 'text-slate-400' : 'text-emerald-600'}`}>
+                  £{fmtMoney(job.price)}
+                </p>
+              </button>
+
+              {/* Done / Undo button */}
+              <button
+                onClick={() => updateJob(job.id, { status: isDone ? 'scheduled' : 'complete' })}
+                className={`shrink-0 w-16 flex flex-col items-center justify-center gap-0.5 border-l border-slate-100 transition-all active:scale-95 select-none ${
+                  isDone
+                    ? 'bg-white hover:bg-slate-50 text-slate-400'
+                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600'
+                }`}
+              >
+                <Check size={20} strokeWidth={2.5} />
+                <span className=”text-[9px] font-bold uppercase tracking-wider”>
+                  {isDone ? 'Undo' : 'Done'}
+                </span>
+              </button>
+            </div>
           );
         })}
       </div>
-
-      {/* Desktop: per-crew lane grid */}
-      <LightCard className="hidden sm:block">
-        {/* Crew header row */}
-        <div className="flex border-b border-white/60 bg-white/40 backdrop-blur rounded-t-2xl">
-          <div className="w-14 shrink-0 border-r border-white/60" />
-          {crews.map((c) => {
-            const rev = c.jobs.reduce((s, j) => s + (j.price || 0), 0);
-            return (
-              <div key={c.id} className="flex-1 min-w-[180px] border-r border-white/60 last:border-r-0 px-3 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm"
-                    style={{ background: c.tint }}
-                  >{c.init}</span>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-900 leading-tight truncate">{c.name}</div>
-                    <div className="text-[10.5px] text-slate-500 leading-tight tabular-nums">
-                      {c.jobs.length} {c.jobs.length === 1 ? "job" : "jobs"} · £{rev}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Grid */}
-        <div className="flex overflow-x-auto">
-          <HourRuler />
-          {crews.map((c) => (
-            <CrewLane key={c.id} jobs={c.jobs} onJobClick={onJobClick} />
-          ))}
-        </div>
-      </LightCard>
-    </>
+    </div>
   );
 }
 
@@ -2167,7 +2220,7 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
       {/* Main content */}
       <div className="relative z-0 flex-1 overflow-y-auto p-4 lg:p-6">
         <div className="max-w-[1600px] mx-auto space-y-4">
-          {view === "Day"     && <DayView     jobs={todayJobs} onJobClick={handleJobClick} typeFilter={typeFilter} crewFilter={crewFilter} />}
+          {view === "Day"     && <DayView     jobs={todayJobs} onJobClick={handleJobClick} typeFilter={typeFilter} crewFilter={crewFilter} updateJob={updateJob} />}
           {view === "Week"    && <WeekView    jobs={weekJobsWithDay} onJobClick={handleJobClick} weekDates={weekDates} typeFilter={typeFilter} crewFilter={crewFilter} />}
           {view === "Month"   && <MonthView   jobs={nonCancelledJobs} onJobClick={handleJobClick} viewDate={viewDate} />}
           {view === "Quarter" && <QuarterView jobs={nonCancelledJobs} />}
