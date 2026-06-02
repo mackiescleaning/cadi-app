@@ -48,11 +48,11 @@ function fmtDateShort(d) {
 }
 
 const STATUS_COLOR = {
-  scheduled:   { bg: '#f0f4ff', text: '#1f48ff', dot: '#1f48ff' },
-  in_progress: { bg: '#fef9ec', text: '#b45309', dot: '#f59e0b' },
-  completed:   { bg: '#f0fdf4', text: '#15803d', dot: '#16a34a' },
-  cancelled:   { bg: '#fef2f2', text: '#b91c1c', dot: '#ef4444' },
-  unassigned:  { bg: '#f9fafb', text: '#6b7280', dot: '#d1d5db' },
+  scheduled:   { bg: 'rgba(31,72,255,0.15)',  text: '#99c5ff', dot: '#1f48ff' },
+  in_progress: { bg: 'rgba(245,158,11,0.15)', text: '#fcd34d', dot: '#f59e0b' },
+  completed:   { bg: 'rgba(16,185,129,0.15)', text: '#6ee7b7', dot: '#10b981' },
+  cancelled:   { bg: 'rgba(239,68,68,0.15)',  text: '#fca5a5', dot: '#ef4444' },
+  unassigned:  { bg: 'rgba(153,197,255,0.08)', text: 'rgba(153,197,255,0.4)', dot: 'rgba(153,197,255,0.3)' },
 };
 
 const ROLE_LABELS = { cleaner: 'Cleaner', supervisor: 'Supervisor', manager: 'Manager' };
@@ -62,9 +62,10 @@ const ROLE_LABELS = { cleaner: 'Cleaner', supervisor: 'Supervisor', manager: 'Ma
 function Card({ children, className = '', style = {} }) {
   return (
     <div
-      className={`bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden ${className}`}
-      style={style}
+      className={`relative overflow-hidden rounded-2xl border border-[rgba(153,197,255,0.12)] ${className}`}
+      style={{ background: 'linear-gradient(135deg, #05124a 0%, #0a1860 100%)', ...style }}
     >
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/30 to-transparent" />
       {children}
     </div>
   );
@@ -72,10 +73,10 @@ function Card({ children, className = '', style = {} }) {
 
 function CardHeader({ title, subtitle, action }) {
   return (
-    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+    <div className="px-5 py-4 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
       <div>
-        <h3 className="font-bold text-[#010a4f] text-sm">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+        <h3 className="font-bold text-white text-sm">{title}</h3>
+        {subtitle && <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -83,11 +84,11 @@ function CardHeader({ title, subtitle, action }) {
 }
 
 function RotaStat({ value, sub, color = 'normal' }) {
-  const bg   = { normal: 'bg-white border-[#99c5ff]/20', green: 'bg-green-50 border-green-100', amber: 'bg-amber-50 border-amber-100', red: 'bg-red-50 border-red-100' };
-  const val  = { normal: 'text-[#010a4f]', green: 'text-green-700', amber: 'text-amber-700', red: 'text-red-600' };
-  const sub_ = { normal: 'text-gray-400',  green: 'text-green-600', amber: 'text-amber-600', red: 'text-red-400' };
+  const bg   = { normal: 'bg-[rgba(153,197,255,0.04)] border-[rgba(153,197,255,0.12)]', green: 'bg-emerald-500/10 border-emerald-500/20', amber: 'bg-amber-500/10 border-amber-500/20', red: 'bg-red-500/10 border-red-500/20' };
+  const val  = { normal: 'text-white', green: 'text-emerald-300', amber: 'text-amber-300', red: 'text-red-300' };
+  const sub_ = { normal: 'text-[rgba(153,197,255,0.5)]', green: 'text-emerald-400', amber: 'text-amber-400', red: 'text-red-400' };
   return (
-    <div className={`rounded-xl p-3 border shadow-sm ${bg[color]}`}>
+    <div className={`rounded-xl p-3 border ${bg[color]}`}>
       <div className={`text-xl font-bold ${val[color]}`}>{value}</div>
       <div className={`text-[11px] mt-0.5 ${sub_[color]}`}>{sub}</div>
     </div>
@@ -147,8 +148,8 @@ function StaffHub({ staff, jobs, absences, training, loading, onTabChange }) {
                 <s.icon size={16} style={{ color: s.color }} />
               </div>
               <div>
-                <div className="text-xl font-black text-[#010a4f]">{loading ? '—' : s.value}</div>
-                <div className="text-[11px] text-gray-400 leading-tight">{s.label}</div>
+                <div className="text-xl font-black text-white">{loading ? '—' : s.value}</div>
+                <div className="text-[11px] text-[rgba(153,197,255,0.5)] leading-tight">{s.label}</div>
               </div>
             </div>
           </Card>
@@ -160,23 +161,23 @@ function StaffHub({ staff, jobs, absences, training, loading, onTabChange }) {
         {actionCards.length > 0 && (
           <Card>
             <CardHeader title="Needs attention" />
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-[rgba(153,197,255,0.08)]">
               {actionCards.map((a, i) => (
                 <button
                   key={i}
                   onClick={() => onTabChange(a.tab)}
-                  className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-5 py-3 hover:bg-[rgba(153,197,255,0.05)] transition-colors text-left"
                 >
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: a.bg }}>
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 bg-[rgba(255,255,255,0.06)]">
                     <a.icon size={13} style={{ color: a.color }} />
                   </div>
-                  <span className="text-xs text-gray-700 flex-1">{a.text}</span>
-                  <ArrowRight size={13} className="text-gray-300 flex-shrink-0" />
+                  <span className="text-xs text-[rgba(153,197,255,0.8)] flex-1">{a.text}</span>
+                  <ArrowRight size={13} className="text-[rgba(153,197,255,0.3)] flex-shrink-0" />
                 </button>
               ))}
               {actionCards.length === 0 && (
-                <div className="px-5 py-4 flex items-center gap-2 text-xs text-gray-400">
-                  <CheckCircle size={13} className="text-green-500" /> All clear
+                <div className="px-5 py-4 flex items-center gap-2 text-xs text-[rgba(153,197,255,0.5)]">
+                  <CheckCircle size={13} className="text-emerald-400" /> All clear
                 </div>
               )}
             </div>
@@ -187,11 +188,11 @@ function StaffHub({ staff, jobs, absences, training, loading, onTabChange }) {
         <Card>
           <CardHeader title="Today's jobs" subtitle={fmtDateShort(new Date())} />
           {loading ? (
-            <div className="px-5 py-6 text-xs text-gray-400">Loading…</div>
+            <div className="px-5 py-6 text-xs text-[rgba(153,197,255,0.5)]">Loading…</div>
           ) : todayJobs.length === 0 ? (
-            <div className="px-5 py-6 text-xs text-gray-400">No jobs scheduled today</div>
+            <div className="px-5 py-6 text-xs text-[rgba(153,197,255,0.5)]">No jobs scheduled today</div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-[rgba(153,197,255,0.08)]">
               {todayJobs.slice(0, 6).map(j => {
                 const sc = STATUS_COLOR[j.status] || STATUS_COLOR.scheduled;
                 const names = j.assignees?.length > 0 ? j.assignees.join(', ') : j.assignee || 'Unassigned';
@@ -199,8 +200,8 @@ function StaffHub({ staff, jobs, absences, training, loading, onTabChange }) {
                   <div key={j.id} className="px-5 py-3 flex items-center gap-3">
                     <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: sc.dot }} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-semibold text-[#010a4f] truncate">{j.customer}</div>
-                      <div className="text-[11px] text-gray-400 truncate">{names} · {fmtHour(j.start_hour)}</div>
+                      <div className="text-xs font-semibold text-white truncate">{j.customer}</div>
+                      <div className="text-[11px] text-[rgba(153,197,255,0.5)] truncate">{names} · {fmtHour(j.start_hour)}</div>
                     </div>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: sc.bg, color: sc.text }}>
                       {j.status?.replace('_', ' ')}
@@ -209,7 +210,7 @@ function StaffHub({ staff, jobs, absences, training, loading, onTabChange }) {
                 );
               })}
               {todayJobs.length > 6 && (
-                <button onClick={() => onTabChange('rota')} className="w-full px-5 py-3 text-xs text-[#1f48ff] hover:bg-gray-50 text-left">
+                <button onClick={() => onTabChange('rota')} className="w-full px-5 py-3 text-xs text-[#99c5ff] hover:bg-[rgba(153,197,255,0.06)] text-left">
                   +{todayJobs.length - 6} more → view rota
                 </button>
               )}
@@ -228,34 +229,34 @@ function StaffHub({ staff, jobs, absences, training, loading, onTabChange }) {
             }
           />
           {loading ? (
-            <div className="px-5 py-6 text-xs text-gray-400">Loading…</div>
+            <div className="px-5 py-6 text-xs text-[rgba(153,197,255,0.5)]">Loading…</div>
           ) : activeStaff.length === 0 ? (
             <div className="px-5 py-6 text-center">
-              <p className="text-xs text-gray-400 mb-3">No staff added yet</p>
-              <button onClick={() => onTabChange('people')} className="text-xs text-[#1f48ff] font-semibold">
+              <p className="text-xs text-[rgba(153,197,255,0.5)] mb-3">No staff added yet</p>
+              <button onClick={() => onTabChange('people')} className="text-xs text-[#99c5ff] font-semibold">
                 Add your first team member →
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-[rgba(153,197,255,0.08)]">
               {activeStaff.slice(0, 5).map(s => (
                 <div key={s.id} className="px-5 py-3 flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-full bg-[#010a4f] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-[rgba(31,72,255,0.3)] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
                     {(s.first_name?.[0] || '') + (s.last_name?.[0] || '')}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-[#010a4f] truncate">
+                    <div className="text-xs font-semibold text-white truncate">
                       {[s.first_name, s.last_name].filter(Boolean).join(' ')}
                     </div>
-                    <div className="text-[11px] text-gray-400">{ROLE_LABELS[s.role] || s.role}</div>
+                    <div className="text-[11px] text-[rgba(153,197,255,0.5)]">{ROLE_LABELS[s.role] || s.role}</div>
                   </div>
                   {s.hourly_rate && (
-                    <span className="text-[11px] text-gray-400 flex-shrink-0">£{Number(s.hourly_rate).toFixed(0)}/hr</span>
+                    <span className="text-[11px] text-[rgba(153,197,255,0.5)] flex-shrink-0">£{Number(s.hourly_rate).toFixed(0)}/hr</span>
                   )}
                 </div>
               ))}
               {activeStaff.length > 5 && (
-                <button onClick={() => onTabChange('people')} className="w-full px-5 py-3 text-xs text-[#1f48ff] hover:bg-gray-50 text-left">
+                <button onClick={() => onTabChange('people')} className="w-full px-5 py-3 text-xs text-[#99c5ff] hover:bg-[rgba(153,197,255,0.06)] text-left">
                   +{activeStaff.length - 5} more staff
                 </button>
               )}
@@ -305,16 +306,16 @@ function complianceStatus(s, trainingForStaff = []) {
 }
 
 const COMP_CFG = {
-  compliant: { label: 'Compliant',     bg: 'bg-green-50',  text: 'text-green-700', dot: 'bg-green-500'  },
-  expiring:  { label: 'Expiring soon', bg: 'bg-amber-50',  text: 'text-amber-700', dot: 'bg-amber-500'  },
-  expired:   { label: 'Action needed', bg: 'bg-red-50',    text: 'text-red-700',   dot: 'bg-red-500'    },
-  not_set:   { label: 'Not recorded',  bg: 'bg-gray-100',  text: 'text-gray-500',  dot: 'bg-gray-300'   },
+  compliant: { label: 'Compliant',     bg: 'bg-emerald-500/15', text: 'text-emerald-300', dot: 'bg-emerald-400', border: 'border border-emerald-500/25' },
+  expiring:  { label: 'Expiring soon', bg: 'bg-amber-500/15',   text: 'text-amber-300',   dot: 'bg-amber-400',   border: 'border border-amber-500/25'   },
+  expired:   { label: 'Action needed', bg: 'bg-red-500/15',     text: 'text-red-300',     dot: 'bg-red-400',     border: 'border border-red-500/25'     },
+  not_set:   { label: 'Not recorded',  bg: 'bg-white/[0.08]',   text: 'text-[rgba(153,197,255,0.4)]', dot: 'bg-[rgba(153,197,255,0.3)]', border: 'border border-[rgba(153,197,255,0.12)]' },
 };
 
 function ComplianceBadge({ status }) {
   const c = COMP_CFG[status] || COMP_CFG.not_set;
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${c.bg} ${c.text}`}>
+    <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${c.bg} ${c.text} ${c.border}`}>
       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${c.dot}`} />
       {c.label}
     </span>
@@ -359,10 +360,10 @@ function daysUntil(d) {
   return Math.ceil((new Date(d) - new Date()) / 86400000);
 }
 
-function DrawerRow({ label, value, valueClass = 'font-semibold text-[#010a4f]' }) {
+function DrawerRow({ label, value, valueClass = 'font-semibold text-white' }) {
   return (
     <div className="flex items-start justify-between gap-2 text-xs">
-      <span className="text-gray-500 flex-shrink-0">{label}</span>
+      <span className="text-[rgba(153,197,255,0.5)] flex-shrink-0">{label}</span>
       <span className={`text-right ${valueClass}`}>{value || '—'}</span>
     </div>
   );
@@ -374,8 +375,8 @@ function ExpiryRow({ label, date }) {
   const soon    = days !== null && days >= 0 && days <= 30;
   return (
     <div className="flex items-start justify-between gap-2 text-xs">
-      <span className="text-gray-500 flex-shrink-0">{label}</span>
-      <span className={`text-right font-semibold ${expired ? 'text-red-600' : soon ? 'text-amber-600' : 'text-[#010a4f]'}`}>
+      <span className="text-[rgba(153,197,255,0.5)] flex-shrink-0">{label}</span>
+      <span className={`text-right font-semibold ${expired ? 'text-red-300' : soon ? 'text-amber-300' : 'text-white'}`}>
         {fmtDateGB(date)}
         {expired && ' (expired)'}
         {!expired && soon && ` (${days}d left)`}
@@ -386,8 +387,8 @@ function ExpiryRow({ label, date }) {
 
 // ─── TrainingModal ────────────────────────────────────────────────────────────
 function TrainingModal({ staffMember, onSave, onClose }) {
-  const inp = 'w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10';
-  const lbl = 'block text-xs font-semibold text-gray-500 mb-1';
+  const inp = 'w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.35)] focus:outline-none focus:border-[#99c5ff] transition-colors';
+  const lbl = 'block text-xs font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-1';
 
   const [form, setForm] = useState({ cert_type: '', obtained_date: '', expiry_date: '', notes: '' });
   const [saving, setSaving] = useState(false);
@@ -431,15 +432,15 @@ function TrainingModal({ staffMember, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-5 border-b border-[rgba(153,197,255,0.08)]">
           <div>
-            <h3 className="font-bold text-[#010a4f]">Add certification</h3>
-            <p className="text-xs text-gray-400 mt-0.5">{staffMember.first_name} {staffMember.last_name || ''}</p>
+            <h3 className="font-bold text-white">Add certification</h3>
+            <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">{staffMember.first_name} {staffMember.last_name || ''}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-            <X size={16} className="text-gray-500" />
+          <button onClick={onClose} className="p-1.5 hover:bg-[rgba(153,197,255,0.08)] rounded-lg transition-colors">
+            <X size={16} className="text-[rgba(153,197,255,0.5)]" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
@@ -462,7 +463,7 @@ function TrainingModal({ staffMember, onSave, onClose }) {
               <input type="date" value={form.expiry_date}
                 onChange={e => setForm(f => ({ ...f, expiry_date: e.target.value }))}
                 className={inp} />
-              <p className="text-[10px] text-gray-400 mt-0.5">Auto-set from cert type</p>
+              <p className="text-[10px] text-[rgba(153,197,255,0.4)] mt-0.5">Auto-set from cert type</p>
             </div>
           </div>
           <div>
@@ -472,11 +473,11 @@ function TrainingModal({ staffMember, onSave, onClose }) {
           </div>
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-colors">
+              className="flex-1 py-2.5 border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.6)] text-sm font-semibold rounded-xl hover:border-[rgba(153,197,255,0.3)] transition-colors">
               Cancel
             </button>
             <button type="submit" disabled={saving}
-              className="flex-1 py-2.5 bg-[#010a4f] text-white text-sm font-semibold rounded-xl hover:bg-[#010a4f]/90 disabled:opacity-50 transition-colors">
+              className="flex-1 py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-bold rounded-xl disabled:opacity-50 transition-colors">
               {saving ? 'Saving…' : 'Save certificate'}
             </button>
           </div>
@@ -699,8 +700,8 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
     onStaffChange();
   }
 
-  const inp = 'w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10';
-  const lbl = 'block text-xs font-semibold text-gray-500 mb-1';
+  const inp = 'w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.35)] focus:outline-none focus:border-[#99c5ff] transition-colors';
+  const lbl = 'block text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-1';
   const needsActionCount = (compCounts.expired || 0) + (compCounts.not_set || 0);
 
   return (
@@ -713,17 +714,17 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
         {staff.length > 0 && (
           <div className="grid grid-cols-4 gap-2">
             {[
-              { key: 'all',          label: 'All staff',     count: baseFiltered.length,          activeBg: 'bg-[#010a4f]',   inactiveBg: 'bg-white border border-gray-100',   countColor: 'text-[#010a4f]'   },
-              { key: 'compliant',    label: 'Compliant',     count: compCounts.compliant || 0,     activeBg: 'bg-green-600',   inactiveBg: 'bg-green-50 border border-green-100', countColor: 'text-green-700'   },
-              { key: 'expiring',     label: 'Expiring soon', count: compCounts.expiring  || 0,     activeBg: 'bg-amber-500',   inactiveBg: 'bg-amber-50 border border-amber-100', countColor: 'text-amber-700'   },
-              { key: 'needs_action', label: 'Needs action',  count: needsActionCount,              activeBg: 'bg-red-600',     inactiveBg: 'bg-red-50 border border-red-100',     countColor: 'text-red-700'     },
+              { key: 'all',          label: 'All staff',     count: baseFiltered.length,      activeBg: 'bg-[#1f48ff]',        inactiveBg: 'bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)]', countColor: 'text-white'        },
+              { key: 'compliant',    label: 'Compliant',     count: compCounts.compliant || 0, activeBg: 'bg-emerald-600',      inactiveBg: 'bg-emerald-500/10 border border-emerald-500/20',                     countColor: 'text-emerald-300'  },
+              { key: 'expiring',     label: 'Expiring soon', count: compCounts.expiring  || 0, activeBg: 'bg-amber-500',        inactiveBg: 'bg-amber-500/10 border border-amber-500/20',                         countColor: 'text-amber-300'    },
+              { key: 'needs_action', label: 'Needs action',  count: needsActionCount,          activeBg: 'bg-red-600',          inactiveBg: 'bg-red-500/10 border border-red-500/20',                             countColor: 'text-red-300'      },
             ].map(({ key, label, count, activeBg, inactiveBg, countColor }) => {
               const active = compFilter === key;
               return (
                 <button key={key} onClick={() => setCompFilter(key)}
                   className={`rounded-xl p-3 text-left transition-all ${active ? `${activeBg} shadow-sm` : inactiveBg}`}>
                   <div className={`text-xl font-bold ${active ? 'text-white' : countColor}`}>{count}</div>
-                  <div className={`text-[11px] mt-0.5 ${active ? 'text-white/80' : 'text-gray-500'}`}>{label}</div>
+                  <div className={`text-[11px] mt-0.5 ${active ? 'text-white/80' : 'text-[rgba(153,197,255,0.5)]'}`}>{label}</div>
                 </button>
               );
             })}
@@ -733,43 +734,43 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
         {/* Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[180px]">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgba(153,197,255,0.4)]" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search staff…"
-              className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10" />
+              className="w-full pl-8 pr-3 py-2 bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl text-sm text-white placeholder-[rgba(153,197,255,0.35)] focus:outline-none focus:border-[#99c5ff] transition-colors" />
           </div>
-          <div className="flex rounded-xl border border-gray-200 overflow-hidden text-xs">
+          <div className="flex rounded-xl border border-[rgba(153,197,255,0.15)] overflow-hidden text-xs">
             {['active','inactive','all'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
-                className={`px-3 py-2 capitalize transition-colors ${filter === f ? 'bg-[#010a4f] text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+                className={`px-3 py-2 capitalize transition-colors ${filter === f ? 'bg-[#1f48ff] text-white' : 'text-[rgba(153,197,255,0.5)] hover:bg-[rgba(153,197,255,0.06)]'}`}>
                 {f}
               </button>
             ))}
           </div>
           <button onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#010a4f] text-white text-xs font-semibold rounded-xl hover:bg-[#010a4f]/90 transition-colors">
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-semibold rounded-xl transition-colors">
             <Plus size={13} /> Add staff
           </button>
         </div>
 
         <Card>
           {loading ? (
-            <div className="px-5 py-8 text-center text-xs text-gray-400">Loading staff…</div>
+            <div className="px-5 py-8 text-center text-xs text-[rgba(153,197,255,0.5)]">Loading staff…</div>
           ) : displayed.length === 0 ? (
             <div className="px-5 py-8 text-center">
-              <p className="text-sm text-gray-400 mb-3">
+              <p className="text-sm text-[rgba(153,197,255,0.5)] mb-3">
                 {search ? 'No staff match your search'
                   : compFilter !== 'all' ? 'No staff in this compliance group'
                   : filter === 'active' ? 'No active staff yet' : 'No staff'}
               </p>
               {!search && compFilter === 'all' && filter === 'active' && (
-                <button onClick={() => setShowAdd(true)} className="text-xs text-[#1f48ff] font-semibold">
+                <button onClick={() => setShowAdd(true)} className="text-xs text-[#99c5ff] font-semibold">
                   Add your first team member →
                 </button>
               )}
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
-              <div className="grid grid-cols-12 gap-2 px-5 py-2.5 bg-gray-50 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+            <div className="divide-y divide-[rgba(153,197,255,0.08)]">
+              <div className="grid grid-cols-12 gap-2 px-5 py-2.5 bg-[rgba(153,197,255,0.06)] text-[10px] font-semibold text-[rgba(153,197,255,0.4)] uppercase tracking-wide">
                 <div className="col-span-4">Name</div>
                 <div className="col-span-2">Role</div>
                 <div className="col-span-2">Rate</div>
@@ -782,27 +783,27 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
                 const cStatus  = complianceStatus(s, (training ?? []).filter(t => t.staff_id === s.id));
                 return (
                   <button key={s.id} onClick={() => setSelected(selected?.id === s.id ? null : s)}
-                    className={`w-full grid grid-cols-12 gap-2 px-5 py-3 text-left hover:bg-gray-50 transition-colors ${selected?.id === s.id ? 'bg-blue-50/40' : ''}`}>
+                    className={`w-full grid grid-cols-12 gap-2 px-5 py-3 text-left hover:bg-[rgba(153,197,255,0.05)] transition-colors ${selected?.id === s.id ? 'bg-[rgba(31,72,255,0.12)]' : ''}`}>
                     <div className="col-span-4 flex items-center gap-2.5 min-w-0">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 ${s.is_active ? 'bg-[#010a4f]' : 'bg-gray-300'}`}>
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 ${s.is_active ? 'bg-[rgba(31,72,255,0.4)]' : 'bg-[rgba(153,197,255,0.12)]'}`}>
                         {initials}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-xs font-semibold text-[#010a4f] truncate">{name}</div>
-                        {s.email && <div className="text-[10px] text-gray-400 truncate">{s.email}</div>}
-                        {!s.is_active && <span className="text-[10px] text-gray-400">Inactive</span>}
+                        <div className="text-xs font-semibold text-white truncate">{name}</div>
+                        {s.email && <div className="text-[10px] text-[rgba(153,197,255,0.5)] truncate">{s.email}</div>}
+                        {!s.is_active && <span className="text-[10px] text-[rgba(153,197,255,0.4)]">Inactive</span>}
                       </div>
                     </div>
                     <div className="col-span-2 flex items-center">
-                      <span className="text-[11px] text-gray-500 capitalize">{ROLE_LABELS[s.role] || s.role}</span>
+                      <span className="text-[11px] text-[rgba(153,197,255,0.6)] capitalize">{ROLE_LABELS[s.role] || s.role}</span>
                     </div>
                     <div className="col-span-2 flex items-center">
-                      <span className="text-[11px] text-gray-500">
+                      <span className="text-[11px] text-[rgba(153,197,255,0.6)]">
                         {s.hourly_rate ? `£${Number(s.hourly_rate).toFixed(2)}/hr` : '—'}
                       </span>
                     </div>
                     <div className="col-span-2 flex items-center">
-                      <span className="text-[11px] text-gray-500">{CONTRACT_TYPES[s.contract_type] || '—'}</span>
+                      <span className="text-[11px] text-[rgba(153,197,255,0.6)]">{CONTRACT_TYPES[s.contract_type] || '—'}</span>
                     </div>
                     <div className="col-span-2 flex items-center">
                       <ComplianceBadge status={cStatus} />
@@ -819,52 +820,52 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
       {selected && (
         <div className="w-80 flex-shrink-0">
           <Card>
-            <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-              <span className="font-bold text-[#010a4f] text-sm">Staff record</span>
-              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+            <div className="px-5 py-3.5 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
+              <span className="font-bold text-white text-sm">Staff record</span>
+              <button onClick={() => setSelected(null)} className="text-[rgba(153,197,255,0.5)] hover:text-white"><X size={14} /></button>
             </div>
             <div className="p-5 space-y-5 overflow-y-auto max-h-[calc(100vh-200px)]">
 
               {/* Avatar */}
               <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white text-base font-bold flex-shrink-0 ${selected.is_active ? 'bg-[#010a4f]' : 'bg-gray-300'}`}>
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white text-base font-bold flex-shrink-0 ${selected.is_active ? 'bg-[rgba(31,72,255,0.4)]' : 'bg-[rgba(153,197,255,0.12)]'}`}>
                   {(selected.first_name?.[0] || '') + (selected.last_name?.[0] || '')}
                 </div>
                 <div>
-                  <div className="font-bold text-[#010a4f] text-sm">{[selected.first_name, selected.last_name].filter(Boolean).join(' ')}</div>
-                  <div className="text-xs text-gray-400 capitalize">{ROLE_LABELS[selected.role] || selected.role}</div>
+                  <div className="font-bold text-white text-sm">{[selected.first_name, selected.last_name].filter(Boolean).join(' ')}</div>
+                  <div className="text-xs text-[rgba(153,197,255,0.5)] capitalize">{ROLE_LABELS[selected.role] || selected.role}</div>
                   <div className="mt-1"><ComplianceBadge status={complianceStatus(selected, (training ?? []).filter(t => t.staff_id === selected.id))} /></div>
                 </div>
               </div>
 
               {/* Contact */}
               <section className="space-y-2">
-                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Contact</div>
+                <div className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">Contact</div>
                 {selected.phone
-                  ? <div className="flex items-center gap-2 text-xs text-gray-600"><Phone size={11} className="text-gray-400 flex-shrink-0" />{selected.phone}</div>
-                  : <p className="text-xs text-gray-300 italic">No phone added</p>}
+                  ? <div className="flex items-center gap-2 text-xs text-[rgba(153,197,255,0.8)]"><Phone size={11} className="text-[rgba(153,197,255,0.4)] flex-shrink-0" />{selected.phone}</div>
+                  : <p className="text-xs text-[rgba(153,197,255,0.3)] italic">No phone added</p>}
                 {selected.email
-                  ? <div className="flex items-center gap-2 text-xs text-gray-600 break-all"><Mail size={11} className="text-gray-400 flex-shrink-0" />{selected.email}</div>
-                  : <p className="text-xs text-gray-300 italic">No email added</p>}
+                  ? <div className="flex items-center gap-2 text-xs text-[rgba(153,197,255,0.8)] break-all"><Mail size={11} className="text-[rgba(153,197,255,0.4)] flex-shrink-0" />{selected.email}</div>
+                  : <p className="text-xs text-[rgba(153,197,255,0.3)] italic">No email added</p>}
               </section>
 
               {/* Employment */}
               <section className="space-y-2">
-                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Employment</div>
+                <div className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">Employment</div>
                 <DrawerRow label="Contract"        value={CONTRACT_TYPES[selected.contract_type] || '—'} />
                 <DrawerRow label="Started"         value={fmtDateGB(selected.contract_start_date) || '—'} />
                 <DrawerRow label="Rate"            value={selected.hourly_rate ? `£${Number(selected.hourly_rate).toFixed(2)}/hr` : '—'} />
                 <DrawerRow label="Contracted hrs"  value={selected.contracted_hours ? `${selected.contracted_hours} hrs/wk` : '—'} />
-                <DrawerRow label="Status"          value={selected.is_active ? 'Active' : 'Inactive'} valueClass={`font-semibold ${selected.is_active ? 'text-green-600' : 'text-gray-400'}`} />
-                {selected.pin_hash && <DrawerRow label="Staff app PIN" value="Set ✓" valueClass="font-semibold text-green-600" />}
+                <DrawerRow label="Status"          value={selected.is_active ? 'Active' : 'Inactive'} valueClass={`font-semibold ${selected.is_active ? 'text-emerald-400' : 'text-[rgba(153,197,255,0.4)]'}`} />
+                {selected.pin_hash && <DrawerRow label="Staff app PIN" value="Set ✓" valueClass="font-semibold text-emerald-400" />}
               </section>
 
               {/* Right to Work */}
               <section className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Right to Work</div>
+                  <div className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">Right to Work</div>
                   {!selected.rtw_check_date && (
-                    <span className="text-[10px] text-red-500 font-semibold">Legally required</span>
+                    <span className="text-[10px] text-red-400 font-semibold">Legally required</span>
                   )}
                 </div>
                 {selected.rtw_check_date ? (
@@ -873,16 +874,16 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
                     <DrawerRow label="Checked"  value={fmtDateGB(selected.rtw_check_date)} />
                     {selected.rtw_expiry_date
                       ? <ExpiryRow label="Expires" date={selected.rtw_expiry_date} />
-                      : <DrawerRow label="Expires" value="No expiry" valueClass="font-semibold text-green-600" />}
+                      : <DrawerRow label="Expires" value="No expiry" valueClass="font-semibold text-emerald-400" />}
                     {selected.rtw_doc_path && (
                       <button onClick={() => handleViewDoc(selected.rtw_doc_path)}
-                        className="flex items-center gap-1.5 text-[11px] text-[#1f48ff] font-medium hover:underline">
+                        className="flex items-center gap-1.5 text-[11px] text-[#99c5ff] font-medium hover:underline">
                         <FileText size={11} /> View RTW document
                       </button>
                     )}
                   </>
                 ) : (
-                  <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-[11px] text-red-700 leading-relaxed">
+                  <div className="bg-red-500/10 border border-red-500/25 rounded-xl p-3 text-[11px] text-red-300 leading-relaxed">
                     Not recorded. Click "Update compliance record" below to add it.
                   </div>
                 )}
@@ -890,30 +891,30 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
 
               {/* DBS Check */}
               <section className="space-y-2">
-                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">DBS Check</div>
+                <div className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">DBS Check</div>
                 {selected.dbs_check_date ? (
                   <>
                     <DrawerRow label="Type"      value={DBS_TYPES[selected.dbs_type] || selected.dbs_type || '—'} />
                     <DrawerRow label="Obtained"  value={fmtDateGB(selected.dbs_check_date)} />
                     {selected.dbs_expiry_date
                       ? <ExpiryRow label="Review by" date={selected.dbs_expiry_date} />
-                      : <DrawerRow label="Review by" value="Not set" valueClass="text-gray-400" />}
+                      : <DrawerRow label="Review by" value="Not set" valueClass="text-[rgba(153,197,255,0.4)]" />}
                     {selected.dbs_doc_path && (
                       <button onClick={() => handleViewDoc(selected.dbs_doc_path)}
-                        className="flex items-center gap-1.5 text-[11px] text-[#1f48ff] font-medium hover:underline">
+                        className="flex items-center gap-1.5 text-[11px] text-[#99c5ff] font-medium hover:underline">
                         <FileText size={11} /> View DBS certificate
                       </button>
                     )}
                   </>
                 ) : (
-                  <p className="text-[11px] text-gray-400 italic">Not recorded — add if required for this role</p>
+                  <p className="text-[11px] text-[rgba(153,197,255,0.4)] italic">Not recorded — add if required for this role</p>
                 )}
               </section>
 
               {/* Emergency contact */}
               {(selected.emergency_contact_name || selected.emergency_contact_phone) && (
                 <section className="space-y-2">
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Emergency contact</div>
+                  <div className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">Emergency contact</div>
                   {selected.emergency_contact_name  && <DrawerRow label="Name"  value={selected.emergency_contact_name} />}
                   {selected.emergency_contact_phone && <DrawerRow label="Phone" value={selected.emergency_contact_phone} />}
                 </section>
@@ -928,31 +929,31 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
                 return (
                   <section className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Training & Certifications</div>
+                      <div className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">Training & Certifications</div>
                       <button onClick={() => setShowTraining(true)}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-[#1f48ff] hover:opacity-80 transition-opacity">
+                        className="flex items-center gap-1 text-[11px] font-semibold text-[#99c5ff] hover:opacity-80 transition-opacity">
                         <Plus size={11} /> Add
                       </button>
                     </div>
                     {certs.length === 0 ? (
-                      <p className="text-[11px] text-gray-400 italic">No certifications recorded</p>
+                      <p className="text-[11px] text-[rgba(153,197,255,0.4)] italic">No certifications recorded</p>
                     ) : (
                       <div className="space-y-1.5">
                         {certs.map(t => {
                           const expired = t.expiry_date && t.expiry_date < todayStr;
                           const soon    = t.expiry_date && !expired && t.expiry_date <= in30Str;
                           return (
-                            <div key={t.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-gray-50 last:border-0">
+                            <div key={t.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-[rgba(153,197,255,0.08)] last:border-0">
                               <div className="min-w-0 flex-1">
-                                <p className="text-xs font-semibold text-[#010a4f] truncate">{t.cert_label}</p>
-                                <p className={`text-[10px] mt-0.5 ${expired ? 'text-red-500 font-semibold' : soon ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
+                                <p className="text-xs font-semibold text-white truncate">{t.cert_label}</p>
+                                <p className={`text-[10px] mt-0.5 ${expired ? 'text-red-400 font-semibold' : soon ? 'text-amber-400 font-medium' : 'text-[rgba(153,197,255,0.5)]'}`}>
                                   {t.expiry_date
                                     ? `${expired ? 'Expired' : 'Expires'} ${fmtDateGB(t.expiry_date)}`
                                     : `Obtained ${fmtDateGB(t.obtained_date)} · No expiry`}
                                 </p>
                               </div>
                               <button onClick={() => handleDeleteTraining(t.id)}
-                                className="p-1 hover:bg-red-50 rounded text-gray-300 hover:text-red-400 transition-colors flex-shrink-0">
+                                className="p-1 hover:bg-red-500/10 rounded text-[rgba(153,197,255,0.3)] hover:text-red-400 transition-colors flex-shrink-0">
                                 <X size={12} />
                               </button>
                             </div>
@@ -967,15 +968,15 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
               {/* Notes */}
               {selected.notes && (
                 <section className="space-y-1">
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Notes</div>
-                  <p className="text-xs text-gray-600 leading-relaxed">{selected.notes}</p>
+                  <div className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">Notes</div>
+                  <p className="text-xs text-[rgba(153,197,255,0.8)] leading-relaxed">{selected.notes}</p>
                 </section>
               )}
 
               {/* Payroll */}
               {(selected.ni_number || selected.tax_code) && (
                 <section className="space-y-2">
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Payroll</div>
+                  <div className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">Payroll</div>
                   {selected.ni_number && (
                     <DrawerRow label="NI Number" value={`${selected.ni_number.slice(0,2)}•••••${selected.ni_number.slice(-1)}`} />
                   )}
@@ -988,18 +989,18 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
               {/* Actions */}
               <div className="space-y-2 pt-1">
                 <button onClick={() => openCompModal(selected)}
-                  className="w-full py-2 rounded-xl bg-[#010a4f]/5 text-[#010a4f] text-xs font-semibold hover:bg-[#010a4f]/10 transition-colors flex items-center justify-center gap-2">
+                  className="w-full py-2 rounded-xl bg-[rgba(153,197,255,0.08)] hover:bg-[rgba(153,197,255,0.14)] text-[#99c5ff] text-xs font-semibold border border-[rgba(153,197,255,0.15)] transition-colors flex items-center justify-center gap-2">
                   <ShieldCheck size={13} />
                   {selected.rtw_check_date ? 'Update compliance record' : 'Record compliance details'}
                 </button>
                 <button onClick={() => setShowPayroll(true)}
-                  className="w-full py-2 rounded-xl bg-[#010a4f]/5 text-[#010a4f] text-xs font-semibold hover:bg-[#010a4f]/10 transition-colors flex items-center justify-center gap-2">
+                  className="w-full py-2 rounded-xl bg-[rgba(153,197,255,0.08)] hover:bg-[rgba(153,197,255,0.14)] text-[#99c5ff] text-xs font-semibold border border-[rgba(153,197,255,0.15)] transition-colors flex items-center justify-center gap-2">
                   <DollarSign size={13} />
                   {selected.ni_number ? 'Update payroll details' : 'Add payroll details'}
                 </button>
                 <button onClick={() => handleToggleActive(selected)}
-                  className={`w-full py-2 rounded-xl text-xs font-semibold transition-colors ${
-                    selected.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-700 hover:bg-green-100'
+                  className={`w-full py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                    selected.is_active ? 'bg-red-500/10 text-red-300 border-red-500/25 hover:bg-red-500/20' : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/20'
                   }`}>
                   {selected.is_active ? 'Mark as inactive' : 'Reactivate'}
                 </button>
@@ -1011,11 +1012,11 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
 
       {/* ── Add staff modal ─────────────────────────────────────────────────── */}
       {showAdd && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowAdd(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-bold text-[#010a4f]">Add team member</h3>
-              <button onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowAdd(false)}>
+          <div className="bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
+              <h3 className="font-bold text-white">Add team member</h3>
+              <button onClick={() => setShowAdd(false)} className="text-[rgba(153,197,255,0.5)] hover:text-white"><X size={16} /></button>
             </div>
             <form onSubmit={handleAdd} className="p-6 space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -1060,7 +1061,7 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
               <div>
                 <label className={lbl}>Contracted hours / week</label>
                 <input value={form.contracted_hours} onChange={e => setForm(f => ({ ...f, contracted_hours: e.target.value }))} className={inp} placeholder="e.g. 20 or 37.5" type="number" step="0.5" min="0" max="168" />
-                <p className="text-[11px] text-gray-400 mt-1">Used to auto-calculate holiday entitlement in hours</p>
+                <p className="text-[11px] text-[rgba(153,197,255,0.5)] mt-1">Used to auto-calculate holiday entitlement in hours</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1075,11 +1076,11 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
               <div>
                 <label className={lbl}>Staff app PIN (4 digits)</label>
                 <input value={form.pin_hash} onChange={e => setForm(f => ({ ...f, pin_hash: e.target.value }))} className={inp} placeholder="1234" maxLength={4} pattern="\d{4}" />
-                <p className="text-[11px] text-gray-400 mt-1">Staff use this to log into the Cadi team app</p>
+                <p className="text-[11px] text-[rgba(153,197,255,0.5)] mt-1">Staff use this to log into the Cadi team app</p>
               </div>
               {formErr && <p className="text-xs text-red-500">{formErr}</p>}
               <button type="submit" disabled={adding}
-                className="w-full py-2.5 bg-[#010a4f] text-white text-sm font-semibold rounded-xl hover:bg-[#010a4f]/90 transition-colors disabled:opacity-50">
+                className="w-full py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50">
                 {adding ? 'Adding…' : 'Add team member'}
               </button>
             </form>
@@ -1105,31 +1106,31 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
       )}
 
       {showComp && selected && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowComp(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowComp(false)}>
+          <div className="bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-[#010a4f]">Compliance record</h3>
-                <p className="text-xs text-gray-400 mt-0.5">{[selected.first_name, selected.last_name].filter(Boolean).join(' ')}</p>
+                <h3 className="font-bold text-white">Compliance record</h3>
+                <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">{[selected.first_name, selected.last_name].filter(Boolean).join(' ')}</p>
               </div>
-              <button onClick={() => setShowComp(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+              <button onClick={() => setShowComp(false)} className="text-[rgba(153,197,255,0.5)] hover:text-white"><X size={16} /></button>
             </div>
 
             {/* Status bar — what makes the badge go green */}
-            <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-3 text-[11px]">
-              <span className={`flex items-center gap-1 font-medium ${compForm.rtw_check_date ? 'text-green-600' : 'text-gray-400'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${compForm.rtw_check_date ? 'bg-green-500' : 'bg-gray-300'}`} />
+            <div className="px-6 py-3 bg-[rgba(153,197,255,0.04)] border-b border-[rgba(153,197,255,0.08)] flex items-center gap-3 text-[11px]">
+              <span className={`flex items-center gap-1 font-medium ${compForm.rtw_check_date ? 'text-emerald-400' : 'text-[rgba(153,197,255,0.4)]'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${compForm.rtw_check_date ? 'bg-emerald-400' : 'bg-[rgba(153,197,255,0.2)]'}`} />
                 RTW checked
               </span>
-              <span className={`flex items-center gap-1 font-medium ${compForm.dbs_type ? 'text-green-600' : 'text-gray-400'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${compForm.dbs_type ? 'bg-green-500' : 'bg-gray-300'}`} />
+              <span className={`flex items-center gap-1 font-medium ${compForm.dbs_type ? 'text-emerald-400' : 'text-[rgba(153,197,255,0.4)]'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${compForm.dbs_type ? 'bg-emerald-400' : 'bg-[rgba(153,197,255,0.2)]'}`} />
                 DBS
               </span>
-              <span className={`flex items-center gap-1 font-medium ${compForm.emergency_contact_name ? 'text-green-600' : 'text-gray-400'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${compForm.emergency_contact_name ? 'bg-green-500' : 'bg-gray-300'}`} />
+              <span className={`flex items-center gap-1 font-medium ${compForm.emergency_contact_name ? 'text-emerald-400' : 'text-[rgba(153,197,255,0.4)]'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${compForm.emergency_contact_name ? 'bg-emerald-400' : 'bg-[rgba(153,197,255,0.2)]'}`} />
                 Emergency contact
               </span>
-              <span className="ml-auto text-gray-400">Fill in RTW date to go green</span>
+              <span className="ml-auto text-[rgba(153,197,255,0.4)]">Fill in RTW date to go green</span>
             </div>
 
             <form onSubmit={handleSaveCompliance} className="p-6 space-y-6">
@@ -1137,9 +1138,9 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
               {/* Right to Work */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck size={14} className="text-[#010a4f]" />
-                  <h4 className="font-semibold text-[#010a4f] text-sm">Right to Work</h4>
-                  <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">Legally required</span>
+                  <ShieldCheck size={14} className="text-[#99c5ff]" />
+                  <h4 className="font-semibold text-white text-sm">Right to Work</h4>
+                  <span className="text-[10px] bg-[rgba(31,72,255,0.15)] text-[#99c5ff] px-1.5 py-0.5 rounded-full font-medium border border-[rgba(31,72,255,0.25)]">Legally required</span>
                 </div>
                 <div>
                   <label className={lbl}>What document did you check?</label>
@@ -1156,24 +1157,24 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
                   <div>
                     <label className={lbl}>Document expiry (if any)</label>
                     <input value={compForm.rtw_expiry_date} onChange={e => setCompForm(f => ({ ...f, rtw_expiry_date: e.target.value }))} className={inp} type="date" />
-                    <p className="text-[10px] text-gray-400 mt-1">UK/Irish passport — leave blank</p>
+                    <p className="text-[10px] text-[rgba(153,197,255,0.5)] mt-1">UK/Irish passport — leave blank</p>
                   </div>
                 </div>
                 {/* RTW document upload */}
                 <div>
                   <label className={lbl}>Upload document (photo or PDF)</label>
                   {selected.rtw_doc_path ? (
-                    <div className="flex items-center gap-2 px-3 py-2.5 bg-green-50 rounded-xl border border-green-100">
-                      <CheckCircle size={13} className="text-green-500 flex-shrink-0" />
-                      <span className="text-xs text-green-700 flex-1 truncate">{selected.rtw_doc_path.split('/').pop()}</span>
-                      <button type="button" onClick={() => handleViewDoc(selected.rtw_doc_path)} className="text-xs text-[#1f48ff] font-medium">View</button>
-                      <button type="button" onClick={() => handleRemoveDoc('rtw')} className="text-xs text-red-500 font-medium ml-1">Remove</button>
+                    <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/25">
+                      <CheckCircle size={13} className="text-emerald-400 flex-shrink-0" />
+                      <span className="text-xs text-emerald-300 flex-1 truncate">{selected.rtw_doc_path.split('/').pop()}</span>
+                      <button type="button" onClick={() => handleViewDoc(selected.rtw_doc_path)} className="text-xs text-[#99c5ff] font-medium">View</button>
+                      <button type="button" onClick={() => handleRemoveDoc('rtw')} className="text-xs text-red-400 font-medium ml-1">Remove</button>
                     </div>
                   ) : (
-                    <label className={`flex items-center gap-2 px-3 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploadingDoc.rtw ? 'border-gray-200 bg-gray-50' : 'border-gray-200 hover:border-[#1f48ff]/40 hover:bg-blue-50/20'}`}>
+                    <label className={`flex items-center gap-2 px-3 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploadingDoc.rtw ? 'border-[rgba(153,197,255,0.15)] bg-[rgba(153,197,255,0.04)]' : 'border-[rgba(153,197,255,0.15)] hover:border-[#99c5ff]/40 hover:bg-[rgba(153,197,255,0.06)]'}`}>
                       {uploadingDoc.rtw
-                        ? <><RefreshCw size={12} className="text-gray-400 animate-spin" /><span className="text-xs text-gray-400">Uploading…</span></>
-                        : <><Plus size={12} className="text-gray-400" /><span className="text-xs text-gray-500">Upload passport, BRP, or other RTW document</span></>}
+                        ? <><RefreshCw size={12} className="text-[rgba(153,197,255,0.4)] animate-spin" /><span className="text-xs text-[rgba(153,197,255,0.4)]">Uploading…</span></>
+                        : <><Plus size={12} className="text-[rgba(153,197,255,0.4)]" /><span className="text-xs text-[rgba(153,197,255,0.5)]">Upload passport, BRP, or other RTW document</span></>}
                       <input type="file" className="sr-only" accept="image/*,.pdf" disabled={uploadingDoc.rtw}
                         onChange={e => e.target.files?.[0] && handleUploadDoc('rtw', e.target.files[0])} />
                     </label>
@@ -1181,14 +1182,14 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
                 </div>
               </div>
 
-              <div className="border-t border-gray-100" />
+              <div className="border-t border-[rgba(153,197,255,0.08)]" />
 
               {/* DBS Check */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <FileText size={14} className="text-[#010a4f]" />
-                  <h4 className="font-semibold text-[#010a4f] text-sm">DBS Check</h4>
-                  <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium">If required for this role</span>
+                  <FileText size={14} className="text-[#99c5ff]" />
+                  <h4 className="font-semibold text-white text-sm">DBS Check</h4>
+                  <span className="text-[10px] bg-[rgba(153,197,255,0.08)] text-[rgba(153,197,255,0.5)] px-1.5 py-0.5 rounded-full font-medium border border-[rgba(153,197,255,0.15)]">If required for this role</span>
                 </div>
                 <div>
                   <label className={lbl}>DBS type</label>
@@ -1209,24 +1210,24 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
                       <div>
                         <label className={lbl}>Review by date</label>
                         <input value={compForm.dbs_expiry_date} onChange={e => setCompForm(f => ({ ...f, dbs_expiry_date: e.target.value }))} className={inp} type="date" />
-                        <p className="text-[10px] text-gray-400 mt-1">Typically every 3 years</p>
+                        <p className="text-[10px] text-[rgba(153,197,255,0.5)] mt-1">Typically every 3 years</p>
                       </div>
                     </div>
                     {/* DBS document upload */}
                     <div>
                       <label className={lbl}>Upload certificate (photo or PDF)</label>
                       {selected.dbs_doc_path ? (
-                        <div className="flex items-center gap-2 px-3 py-2.5 bg-green-50 rounded-xl border border-green-100">
-                          <CheckCircle size={13} className="text-green-500 flex-shrink-0" />
-                          <span className="text-xs text-green-700 flex-1 truncate">{selected.dbs_doc_path.split('/').pop()}</span>
-                          <button type="button" onClick={() => handleViewDoc(selected.dbs_doc_path)} className="text-xs text-[#1f48ff] font-medium">View</button>
-                          <button type="button" onClick={() => handleRemoveDoc('dbs')} className="text-xs text-red-500 font-medium ml-1">Remove</button>
+                        <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/25">
+                          <CheckCircle size={13} className="text-emerald-400 flex-shrink-0" />
+                          <span className="text-xs text-emerald-300 flex-1 truncate">{selected.dbs_doc_path.split('/').pop()}</span>
+                          <button type="button" onClick={() => handleViewDoc(selected.dbs_doc_path)} className="text-xs text-[#99c5ff] font-medium">View</button>
+                          <button type="button" onClick={() => handleRemoveDoc('dbs')} className="text-xs text-red-400 font-medium ml-1">Remove</button>
                         </div>
                       ) : (
-                        <label className={`flex items-center gap-2 px-3 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploadingDoc.dbs ? 'border-gray-200 bg-gray-50' : 'border-gray-200 hover:border-[#1f48ff]/40 hover:bg-blue-50/20'}`}>
+                        <label className={`flex items-center gap-2 px-3 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploadingDoc.dbs ? 'border-[rgba(153,197,255,0.15)] bg-[rgba(153,197,255,0.04)]' : 'border-[rgba(153,197,255,0.15)] hover:border-[#99c5ff]/40 hover:bg-[rgba(153,197,255,0.06)]'}`}>
                           {uploadingDoc.dbs
-                            ? <><RefreshCw size={12} className="text-gray-400 animate-spin" /><span className="text-xs text-gray-400">Uploading…</span></>
-                            : <><Plus size={12} className="text-gray-400" /><span className="text-xs text-gray-500">Upload DBS certificate</span></>}
+                            ? <><RefreshCw size={12} className="text-[rgba(153,197,255,0.4)] animate-spin" /><span className="text-xs text-[rgba(153,197,255,0.4)]">Uploading…</span></>
+                            : <><Plus size={12} className="text-[rgba(153,197,255,0.4)]" /><span className="text-xs text-[rgba(153,197,255,0.5)]">Upload DBS certificate</span></>}
                           <input type="file" className="sr-only" accept="image/*,.pdf" disabled={uploadingDoc.dbs}
                             onChange={e => e.target.files?.[0] && handleUploadDoc('dbs', e.target.files[0])} />
                         </label>
@@ -1236,13 +1237,13 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
                 )}
               </div>
 
-              <div className="border-t border-gray-100" />
+              <div className="border-t border-[rgba(153,197,255,0.08)]" />
 
               {/* Employment */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <Briefcase size={14} className="text-[#010a4f]" />
-                  <h4 className="font-semibold text-[#010a4f] text-sm">Employment</h4>
+                  <Briefcase size={14} className="text-[#99c5ff]" />
+                  <h4 className="font-semibold text-white text-sm">Employment</h4>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1262,17 +1263,17 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
                 <div>
                   <label className={lbl}>Contracted hours / week</label>
                   <input value={compForm.contracted_hours} onChange={e => setCompForm(f => ({ ...f, contracted_hours: e.target.value }))} className={inp} placeholder="e.g. 20 or 37.5" type="number" step="0.5" min="0" max="168" />
-                  <p className="text-[11px] text-gray-400 mt-1">Used to auto-calculate holiday entitlement in hours</p>
+                  <p className="text-[11px] text-[rgba(153,197,255,0.5)] mt-1">Used to auto-calculate holiday entitlement in hours</p>
                 </div>
               </div>
 
-              <div className="border-t border-gray-100" />
+              <div className="border-t border-[rgba(153,197,255,0.08)]" />
 
               {/* Emergency contact */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <Phone size={14} className="text-[#010a4f]" />
-                  <h4 className="font-semibold text-[#010a4f] text-sm">Emergency contact</h4>
+                  <Phone size={14} className="text-[#99c5ff]" />
+                  <h4 className="font-semibold text-white text-sm">Emergency contact</h4>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1286,7 +1287,7 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
                 </div>
               </div>
 
-              <div className="border-t border-gray-100" />
+              <div className="border-t border-[rgba(153,197,255,0.08)]" />
 
               {/* Notes */}
               <div>
@@ -1298,8 +1299,8 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
               <button type="submit" disabled={savingComp || savedOk}
                 className={`w-full py-2.5 text-sm font-semibold rounded-xl transition-all ${
                   savedOk
-                    ? 'bg-green-500 text-white'
-                    : 'bg-[#010a4f] text-white hover:bg-[#010a4f]/90 disabled:opacity-50'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-[#1f48ff] hover:bg-[#3a5eff] text-white disabled:opacity-50'
                 }`}>
                 {savedOk ? '✓ Saved — compliance updated' : savingComp ? 'Saving…' : 'Save compliance record'}
               </button>
@@ -1314,11 +1315,11 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
 // ─── Sub-tab: ROTA ────────────────────────────────────────────────────────────
 
 const ABSENCE_TYPES = {
-  holiday:  { label: 'Holiday',  bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
-  sick:     { label: 'Sick',     bg: '#fff7ed', text: '#c2410c', border: '#fed7aa' },
-  training: { label: 'Training', bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' },
-  unpaid:   { label: 'Unpaid',   bg: '#f9fafb', text: '#6b7280', border: '#e5e7eb' },
-  other:    { label: 'Other',    bg: '#fdf4ff', text: '#7e22ce', border: '#e9d5ff' },
+  holiday:  { label: 'Holiday',  bg: 'rgba(31,72,255,0.15)',   text: '#99c5ff',              border: 'rgba(31,72,255,0.3)'    },
+  sick:     { label: 'Sick',     bg: 'rgba(239,68,68,0.15)',   text: '#fca5a5',              border: 'rgba(239,68,68,0.3)'    },
+  training: { label: 'Training', bg: 'rgba(16,185,129,0.15)',  text: '#6ee7b7',              border: 'rgba(16,185,129,0.3)'   },
+  unpaid:   { label: 'Unpaid',   bg: 'rgba(153,197,255,0.08)', text: 'rgba(153,197,255,0.5)', border: 'rgba(153,197,255,0.15)' },
+  other:    { label: 'Other',    bg: 'rgba(168,85,247,0.15)',  text: '#d8b4fe',              border: 'rgba(168,85,247,0.3)'   },
 };
 
 // ─── Payroll details modal ────────────────────────────────────────────────────
@@ -1345,8 +1346,8 @@ function PayrollDetailsModal({ staff, onSave, onClose }) {
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState('');
-  const inp = 'w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10';
-  const lbl = 'block text-xs font-semibold text-gray-500 mb-1';
+  const inp = 'w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.35)] focus:outline-none focus:border-[#99c5ff] transition-colors';
+  const lbl = 'block text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-1';
 
   async function handleSave(e) {
     e.preventDefault();
@@ -1366,14 +1367,14 @@ function PayrollDetailsModal({ staff, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-[#010a4f]">Payroll details</h3>
-            <p className="text-xs text-gray-400 mt-0.5">{[staff.first_name, staff.last_name].filter(Boolean).join(' ')}</p>
+            <h3 className="font-bold text-white">Payroll details</h3>
+            <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">{[staff.first_name, staff.last_name].filter(Boolean).join(' ')}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+          <button onClick={onClose} className="text-[rgba(153,197,255,0.5)] hover:text-white"><X size={16} /></button>
         </div>
         <form onSubmit={handleSave} className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -1420,12 +1421,12 @@ function PayrollDetailsModal({ staff, onSave, onClose }) {
             <input value={form.address_postcode} onChange={e => setForm(f => ({ ...f, address_postcode: e.target.value }))}
               className={`${inp} uppercase`} placeholder="SW1A 1AA" />
           </div>
-          <div className="bg-blue-50 rounded-xl p-3 text-[11px] text-blue-700 leading-relaxed">
+          <div className="bg-[rgba(31,72,255,0.12)] border border-[rgba(31,72,255,0.25)] rounded-xl p-3 text-[11px] text-[#99c5ff] leading-relaxed">
             NI number and address are required for HMRC RTI payroll submission. Tax code defaults to 1257L (standard personal allowance).
           </div>
-          {err && <p className="text-xs text-red-500">{err}</p>}
+          {err && <p className="text-xs text-red-400">{err}</p>}
           <button type="submit" disabled={saving}
-            className="w-full py-2.5 bg-[#010a4f] text-white text-sm font-semibold rounded-xl hover:bg-[#010a4f]/90 transition-colors disabled:opacity-50">
+            className="w-full py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50">
             {saving ? 'Saving…' : 'Save payroll details'}
           </button>
         </form>
@@ -1466,52 +1467,52 @@ function WorkPatternModal({ staff, onSave, onClose }) {
     catch (e) { setErr(e.message); setSaving(false); }
   }
 
-  const tinp = 'px-2 py-1 rounded-lg border border-gray-200 text-xs focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10 w-[78px]';
+  const tinp = 'px-2 py-1 bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-lg text-xs text-white focus:outline-none focus:border-[#99c5ff] transition-colors w-[78px]';
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <div className="bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(153,197,255,0.08)]">
           <div>
-            <div className="font-bold text-[#010a4f] text-sm">Work pattern</div>
-            <div className="text-xs text-gray-400 mt-0.5">{staff.first_name} {staff.last_name || ''}</div>
+            <div className="font-bold text-white text-sm">Work pattern</div>
+            <div className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">{staff.first_name} {staff.last_name || ''}</div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors"><X size={18} /></button>
+          <button onClick={onClose} className="text-[rgba(153,197,255,0.5)] hover:text-white transition-colors"><X size={18} /></button>
         </div>
         <div className="px-5 pt-4 pb-2 space-y-1.5">
           {DAY_ORDER.map(key => {
             const day   = pattern[key];
             const works = !!day;
             return (
-              <div key={key} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${works ? 'bg-gray-50' : 'opacity-50'}`}>
+              <div key={key} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${works ? 'bg-[rgba(153,197,255,0.06)]' : 'opacity-40'}`}>
                 <button
                   onClick={() => toggleDay(key)}
-                  className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${works ? 'bg-[#1f48ff]' : 'bg-gray-300'}`}>
+                  className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${works ? 'bg-[#1f48ff]' : 'bg-[rgba(153,197,255,0.2)]'}`}>
                   <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${works ? 'right-0.5' : 'left-0.5'}`} />
                 </button>
-                <span className="text-xs font-semibold text-[#010a4f] w-[76px] flex-shrink-0">{DAY_FULL[key]}</span>
+                <span className="text-xs font-semibold text-white w-[76px] flex-shrink-0">{DAY_FULL[key]}</span>
                 {works ? (
                   <div className="flex items-center gap-1.5 flex-1">
                     <input type="time" value={day.start} onChange={e => setTime(key, 'start', e.target.value)} className={tinp} />
-                    <span className="text-[10px] text-gray-400">–</span>
+                    <span className="text-[10px] text-[rgba(153,197,255,0.5)]">–</span>
                     <input type="time" value={day.end}   onChange={e => setTime(key, 'end',   e.target.value)} className={tinp} />
                   </div>
                 ) : (
-                  <span className="text-xs text-gray-400 flex-1">Day off</span>
+                  <span className="text-xs text-[rgba(153,197,255,0.4)] flex-1">Day off</span>
                 )}
               </div>
             );
           })}
-          {err && <p className="text-xs text-red-500 px-1 pt-1">{err}</p>}
+          {err && <p className="text-xs text-red-400 px-1 pt-1">{err}</p>}
         </div>
         <div className="px-5 py-4 flex gap-2">
           <button onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+            className="flex-1 py-2.5 rounded-xl border border-[rgba(153,197,255,0.15)] text-sm font-semibold text-[rgba(153,197,255,0.6)] hover:bg-[rgba(153,197,255,0.06)] transition-colors">
             Cancel
           </button>
           <button onClick={handleSave} disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-[#1f48ff] text-white text-sm font-semibold hover:bg-[#1535cc] transition-colors disabled:opacity-50">
+            className="flex-1 py-2.5 rounded-xl bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-semibold transition-colors disabled:opacity-50">
             {saving ? 'Saving…' : 'Save pattern'}
           </button>
         </div>
@@ -1848,9 +1849,9 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
     onAbsenceChange?.();
   }
 
-  const cellBase = 'min-h-[52px] p-1 border-r border-gray-100 last:border-r-0 align-top';
-  const inp = 'w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10';
-  const lbl = 'block text-xs font-semibold text-gray-500 mb-1';
+  const cellBase = 'min-h-[52px] p-1 border-r border-[rgba(153,197,255,0.08)] last:border-r-0 align-top';
+  const inp = 'w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.35)] focus:outline-none focus:border-[#99c5ff] transition-colors';
+  const lbl = 'block text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-1';
 
   return (
     <div className="space-y-3">
@@ -1859,32 +1860,32 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <button onClick={() => setWeekStart(d => addDays(d, -7))}
-            className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors">
+            className="w-8 h-8 rounded-lg border border-[rgba(153,197,255,0.15)] bg-[rgba(153,197,255,0.06)] flex items-center justify-center hover:bg-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.6)] transition-colors">
             <ChevronLeft size={14} />
           </button>
-          <span className="text-sm font-semibold text-[#010a4f] min-w-[160px] text-center">
+          <span className="text-sm font-semibold text-white min-w-[160px] text-center">
             {fmtDateShort(weekStart)} – {fmtDateShort(addDays(weekStart, 6))}
           </span>
           <button onClick={() => setWeekStart(d => addDays(d, 7))}
-            className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors">
+            className="w-8 h-8 rounded-lg border border-[rgba(153,197,255,0.15)] bg-[rgba(153,197,255,0.06)] flex items-center justify-center hover:bg-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.6)] transition-colors">
             <ChevronRight size={14} />
           </button>
           {!isThisWeek && (
             <button onClick={() => setWeekStart(getMondayOf(new Date()))}
-              className="text-xs text-[#1f48ff] font-semibold hover:underline flex items-center gap-1 ml-1">
+              className="text-xs text-[#99c5ff] font-semibold hover:underline flex items-center gap-1 ml-1">
               <RefreshCw size={11} /> This week
             </button>
           )}
         </div>
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 text-xs">
+        <div className="flex items-center gap-1 bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] rounded-lg p-0.5 text-xs">
           {[
             { id: 'schedule', label: 'Schedule' },
             { id: 'leave',    label: `Leave & Entitlement${pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ''}` },
           ].map(v => (
             <button key={v.id} onClick={() => setView(v.id)}
               className={`px-3 py-1.5 rounded-md font-semibold transition-all whitespace-nowrap ${
-                view === v.id ? 'bg-white text-[#010a4f] shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              } ${v.id === 'leave' && pendingRequests.length > 0 && view !== v.id ? 'text-amber-600' : ''}`}>
+                view === v.id ? 'bg-[#1f48ff] text-white shadow-sm' : 'text-[rgba(153,197,255,0.5)] hover:text-white'
+              } ${v.id === 'leave' && pendingRequests.length > 0 && view !== v.id ? 'text-amber-400' : ''}`}>
               {v.label}
             </button>
           ))}
@@ -1915,8 +1916,8 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
 
       {/* ── WTR warning ── */}
       {weekStats.wtrViolations > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-100 rounded-xl text-xs text-red-700">
-          <AlertTriangle size={13} className="text-red-500 flex-shrink-0" />
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 border border-red-500/25 rounded-xl text-xs text-red-300">
+          <AlertTriangle size={13} className="text-red-400 flex-shrink-0" />
           <span>
             <strong>{weekStats.wtrViolations} staff member{weekStats.wtrViolations > 1 ? 's are' : ' is'}</strong> scheduled over 48 hours this week — Working Time Regulations limit exceeded
           </span>
@@ -1928,32 +1929,32 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
         <>
           <Card>
             {loading ? (
-              <div className="p-8 text-center text-sm text-gray-400">Loading rota…</div>
+              <div className="p-8 text-center text-sm text-[rgba(153,197,255,0.5)]">Loading rota…</div>
             ) : activeStaff.length === 0 ? (
               <div className="p-8 text-center">
-                <p className="text-sm text-gray-400 mb-3">Add staff in the People tab to build your rota</p>
-                <button onClick={() => onTabChange('people')} className="text-sm text-[#1f48ff] font-semibold">Go to People →</button>
+                <p className="text-sm text-[rgba(153,197,255,0.5)] mb-3">Add staff in the People tab to build your rota</p>
+                <button onClick={() => onTabChange('people')} className="text-sm text-[#99c5ff] font-semibold">Go to People →</button>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-xs" style={{ minWidth: 720 }}>
                   <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide w-36 border-r border-gray-100">
+                    <tr className="border-b border-[rgba(153,197,255,0.08)] bg-[rgba(153,197,255,0.04)]">
+                      <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[rgba(153,197,255,0.4)] uppercase tracking-wide w-36 border-r border-[rgba(153,197,255,0.08)]">
                         Staff
                       </th>
                       {days.map((d, i) => {
                         const isToday = toISO(d) === todayStr;
                         return (
-                          <th key={i} className={`text-center px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide border-r border-gray-100 last:border-r-0 ${isToday ? 'text-[#1f48ff]' : 'text-gray-400'}`}>
+                          <th key={i} className={`text-center px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide border-r border-[rgba(153,197,255,0.08)] last:border-r-0 ${isToday ? 'text-[#99c5ff]' : 'text-[rgba(153,197,255,0.4)]'}`}>
                             <div>{DAY_LABELS[i]}</div>
-                            <div className={`text-[9px] font-normal mt-0.5 ${isToday ? 'text-[#1f48ff]' : 'text-gray-300'}`}>
+                            <div className={`text-[9px] font-normal mt-0.5 ${isToday ? 'text-[#99c5ff]' : 'text-[rgba(153,197,255,0.25)]'}`}>
                               {d.getDate()}/{d.getMonth() + 1}
                             </div>
                           </th>
                         );
                       })}
-                      <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide w-16 border-l border-gray-100">
+                      <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-[rgba(153,197,255,0.4)] uppercase tracking-wide w-16 border-l border-[rgba(153,197,255,0.08)]">
                         Hrs
                       </th>
                     </tr>
@@ -1965,7 +1966,7 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                       const isWTR   = weekHrs > 48;
                       const isOver  = contracted > 0 && weekHrs > contracted * 1.1;
                       const isLight = contracted > 0 && weekHrs > 0 && weekHrs < contracted * 0.7;
-                      const hrsColor = isWTR ? 'text-red-600' : isOver ? 'text-amber-600' : isLight ? 'text-gray-400' : weekHrs > 0 ? 'text-[#010a4f]' : 'text-gray-200';
+                      const hrsColor = isWTR ? 'text-red-400' : isOver ? 'text-amber-400' : isLight ? 'text-[rgba(153,197,255,0.4)]' : weekHrs > 0 ? 'text-white' : 'text-[rgba(153,197,255,0.2)]';
                       const todayTs   = isThisWeek ? todayTimesheets.find(t => t.staff_id === s.id) : null;
                       const tsOnSite  = todayTs?.status === 'clocked_in' || todayTs?.status === 'flagged';
                       const tsDone    = todayTs?.status === 'clocked_out';
@@ -1975,35 +1976,35 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                         : null;
 
                       return (
-                        <tr key={s.id} className="border-b border-gray-50 last:border-b-0 hover:bg-gray-50/40 transition-colors group">
-                          <td className="px-3 py-2 border-r border-gray-100">
+                        <tr key={s.id} className="border-b border-[rgba(153,197,255,0.06)] last:border-b-0 hover:bg-[rgba(153,197,255,0.04)] transition-colors group">
+                          <td className="px-3 py-2 border-r border-[rgba(153,197,255,0.08)]">
                             <div className="flex items-center gap-2">
                               <div className="relative w-6 h-6 flex-shrink-0">
-                                <div className="w-6 h-6 rounded-full bg-[#010a4f] flex items-center justify-center text-white text-[10px] font-bold">
+                                <div className="w-6 h-6 rounded-full bg-[rgba(31,72,255,0.35)] flex items-center justify-center text-white text-[10px] font-bold">
                                   {(s.first_name?.[0] || '') + (s.last_name?.[0] || '')}
                                 </div>
                                 {tsDotCls && (
-                                  <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${tsDotCls}`} />
+                                  <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#05124a] ${tsDotCls}`} />
                                 )}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1">
-                                  <span className="font-semibold text-[#010a4f] text-[11px] truncate">{s.first_name} {s.last_name || ''}</span>
-                                  {isWTR && <span className="flex-shrink-0 text-[9px] bg-red-100 text-red-600 rounded px-1 py-px font-bold leading-none">WTR</span>}
-                                  {todayTs?.status === 'flagged' && <span className="flex-shrink-0 text-[9px] bg-amber-100 text-amber-600 rounded px-1 py-px font-bold leading-none">Away</span>}
+                                  <span className="font-semibold text-white text-[11px] truncate">{s.first_name} {s.last_name || ''}</span>
+                                  {isWTR && <span className="flex-shrink-0 text-[9px] bg-red-500/15 text-red-300 border border-red-500/25 rounded px-1 py-px font-bold leading-none">WTR</span>}
+                                  {todayTs?.status === 'flagged' && <span className="flex-shrink-0 text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25 rounded px-1 py-px font-bold leading-none">Away</span>}
                                 </div>
                                 {tsLabel ? (
-                                  <div className="text-[9px] text-gray-400 leading-none">{tsLabel}</div>
+                                  <div className="text-[9px] text-[rgba(153,197,255,0.5)] leading-none">{tsLabel}</div>
                                 ) : (
-                                  <div className="text-[10px] text-gray-400 capitalize">{ROLE_LABELS[s.role] || s.role}</div>
+                                  <div className="text-[10px] text-[rgba(153,197,255,0.5)] capitalize">{ROLE_LABELS[s.role] || s.role}</div>
                                 )}
                               </div>
                               <button onClick={() => openAbsModal(s)} title="Log absence"
-                                className="w-5 h-5 rounded-md bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-[#010a4f] hover:text-white transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100">
+                                className="w-5 h-5 rounded-md bg-[rgba(153,197,255,0.08)] flex items-center justify-center text-[rgba(153,197,255,0.4)] hover:bg-[#1f48ff] hover:text-white transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100">
                                 <Plus size={10} />
                               </button>
                               <button onClick={() => { setWpTarget(s); setShowWorkPattern(true); }} title="Edit work pattern"
-                                className="w-5 h-5 rounded-md bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-[#010a4f] hover:text-white transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100">
+                                className="w-5 h-5 rounded-md bg-[rgba(153,197,255,0.08)] flex items-center justify-center text-[rgba(153,197,255,0.4)] hover:bg-[#1f48ff] hover:text-white transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100">
                                 <Clock size={10} />
                               </button>
                             </div>
@@ -2025,8 +2026,8 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                                 className={`${cellBase} group/cell`}
                                 style={{
                                   ...(absence ? { background: absType.bg, opacity: absence.status === 'pending' ? 0.65 : 1 } : {}),
-                                  ...(!absence && isOff ? { background: 'repeating-linear-gradient(45deg,#f9fafb,#f9fafb 3px,#fff 3px,#fff 10px)' } : {}),
-                                  ...(!absence && !isOff && isToday ? { background: 'rgba(219,234,254,0.18)' } : {}),
+                                  ...(!absence && isOff ? { background: 'repeating-linear-gradient(45deg,rgba(153,197,255,0.04),rgba(153,197,255,0.04) 3px,transparent 3px,transparent 10px)' } : {}),
+                                  ...(!absence && !isOff && isToday ? { background: 'rgba(31,72,255,0.08)' } : {}),
                                 }}>
                                 {absence ? (
                                   <div className="h-full flex flex-col gap-0.5 p-0.5">
@@ -2035,20 +2036,20 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                                         {absType.label}{absence.status === 'pending' ? ' *' : ''}
                                       </span>
                                       <button onClick={() => handleRemoveAbsence(absence)} title="Remove"
-                                        className="flex-shrink-0 text-gray-400 hover:text-red-500 transition-colors">
+                                        className="flex-shrink-0 text-[rgba(153,197,255,0.3)] hover:text-red-400 transition-colors">
                                         <X size={10} />
                                       </button>
                                     </div>
                                     {cellJobs.map(j => (
                                       <button key={j.id} onClick={() => setAssignJob(j)}
-                                        className="w-full rounded px-1 py-0.5 bg-red-50 border border-red-200 text-[9px] text-red-600 font-medium truncate text-left hover:bg-red-100 transition-colors">
+                                        className="w-full rounded px-1 py-0.5 bg-red-500/15 border border-red-500/25 text-[9px] text-red-300 font-medium truncate text-left hover:bg-red-500/25 transition-colors">
                                         ⚠ {j.customer}
                                       </button>
                                     ))}
                                   </div>
                                 ) : isOff ? (
                                   <div className="h-full min-h-[44px] flex items-center justify-center">
-                                    <span className="text-[10px] text-gray-300 font-semibold select-none tracking-wide">Off</span>
+                                    <span className="text-[10px] text-[rgba(153,197,255,0.2)] font-semibold select-none tracking-wide">Off</span>
                                   </div>
                                 ) : cellJobs.length > 0 ? (
                                   <div className="space-y-0.5 p-0.5">
@@ -2068,14 +2069,14 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                                   <div className="relative w-full min-h-[44px]">
                                     {avail && (
                                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                        <span className="text-[9px] text-gray-200 font-medium select-none">
+                                        <span className="text-[9px] text-[rgba(153,197,255,0.2)] font-medium select-none">
                                           {avail.start.slice(0,5)}–{avail.end.slice(0,5)}
                                         </span>
                                       </div>
                                     )}
                                     <button
                                       onClick={() => openCellClick(s, ds)}
-                                      className="absolute inset-0 w-full h-full flex items-center justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity text-gray-300 hover:text-[#1f48ff]"
+                                      className="absolute inset-0 w-full h-full flex items-center justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity text-[rgba(153,197,255,0.3)] hover:text-[#99c5ff]"
                                       title="Assign a job">
                                       <Plus size={12} />
                                     </button>
@@ -2085,10 +2086,10 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                             );
                           })}
 
-                          <td className="px-2 py-2 text-center align-middle border-l border-gray-100">
+                          <td className="px-2 py-2 text-center align-middle border-l border-[rgba(153,197,255,0.08)]">
                             <div className={`text-[11px] font-bold ${hrsColor}`}>{weekHrs > 0 ? `${weekHrs}h` : '—'}</div>
                             {contracted > 0 && weekHrs > 0 && (
-                              <div className="text-[9px] text-gray-300">/{contracted}h</div>
+                              <div className="text-[9px] text-[rgba(153,197,255,0.25)]">/{contracted}h</div>
                             )}
                           </td>
                         </tr>
@@ -2096,15 +2097,15 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                     })}
 
                     {unassignedJobs.length > 0 && (
-                      <tr className="border-t-2 border-dashed border-red-100">
-                        <td className="px-3 py-2 border-r border-gray-100">
+                      <tr className="border-t-2 border-dashed border-red-500/20">
+                        <td className="px-3 py-2 border-r border-[rgba(153,197,255,0.08)]">
                           <div className="flex items-center gap-1.5">
-                            <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                            <div className="w-6 h-6 rounded-full bg-red-500/15 flex items-center justify-center flex-shrink-0">
                               <AlertTriangle size={10} className="text-red-400" />
                             </div>
                             <div>
-                              <div className="font-semibold text-red-500 text-[11px]">Unassigned</div>
-                              <div className="text-[10px] text-red-300">{unassignedJobs.length} gap{unassignedJobs.length > 1 ? 's' : ''}</div>
+                              <div className="font-semibold text-red-400 text-[11px]">Unassigned</div>
+                              <div className="text-[10px] text-red-400/60">{unassignedJobs.length} gap{unassignedJobs.length > 1 ? 's' : ''}</div>
                             </div>
                           </div>
                         </td>
@@ -2112,15 +2113,15 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                           const ds = toISO(d);
                           const dayGaps = unassignedJobs.filter(j => j.date === ds);
                           return (
-                            <td key={i} className={`${cellBase} bg-red-50/30 ${ds === todayStr ? 'bg-red-50/50' : ''}`}>
+                            <td key={i} className={`${cellBase} bg-red-500/5 ${ds === todayStr ? 'bg-red-500/10' : ''}`}>
                               {dayGaps.map(j => (
-                                <div key={j.id} className="rounded-md px-1.5 py-1 bg-red-50 border border-red-100 text-[10px] leading-tight mb-0.5">
+                                <div key={j.id} className="rounded-md px-1.5 py-1 bg-red-500/15 border border-red-500/25 text-[10px] leading-tight mb-0.5">
                                   <button onClick={() => setAssignJob(j)}
-                                    className="font-semibold text-red-600 truncate max-w-[80px] text-left hover:text-red-800 transition-colors block w-full">
+                                    className="font-semibold text-red-300 truncate max-w-[80px] text-left hover:text-red-200 transition-colors block w-full">
                                     {j.customer}
                                   </button>
                                   <button onClick={() => onTabChange('connect')}
-                                    className="text-red-400 hover:text-red-600 flex items-center gap-0.5 mt-0.5">
+                                    className="text-red-400/70 hover:text-red-300 flex items-center gap-0.5 mt-0.5">
                                     <Zap size={9} /> Cover via Connect
                                   </button>
                                 </div>
@@ -2128,7 +2129,7 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                             </td>
                           );
                         })}
-                        <td className="border-l border-gray-100" />
+                        <td className="border-l border-[rgba(153,197,255,0.08)]" />
                       </tr>
                     )}
                   </tbody>
@@ -2137,7 +2138,7 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
             )}
           </Card>
 
-          <div className="flex items-center gap-3 flex-wrap text-[11px] text-gray-400 px-1">
+          <div className="flex items-center gap-3 flex-wrap text-[11px] text-[rgba(153,197,255,0.5)] px-1">
             {Object.entries({ scheduled: 'Scheduled', in_progress: 'In progress', completed: 'Completed' }).map(([k, v]) => (
               <div key={k} className="flex items-center gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS_COLOR[k].bg, border: `1px solid ${STATUS_COLOR[k].dot}` }} />
@@ -2151,7 +2152,7 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
               </div>
             ))}
             <div className="flex items-center gap-1.5">
-              <span className="text-[9px] bg-red-100 text-red-600 rounded px-1 font-bold">WTR</span>
+              <span className="text-[9px] bg-red-500/15 text-red-300 border border-red-500/25 rounded px-1 font-bold">WTR</span>
               Over 48h · * pending absence
             </div>
           </div>
@@ -2183,22 +2184,22 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                 {/* Weeks */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Entitlement (weeks/year) *</label>
+                    <label className="block text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-1">Entitlement (weeks/year) *</label>
                     <input
                       type="number" step="0.1" min="1" max="52"
                       value={policyForm.holiday_policy_weeks}
                       onChange={e => setPolicyForm(f => ({ ...f, holiday_policy_weeks: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10"
+                      className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#99c5ff] transition-colors"
                       required
                     />
-                    <p className="text-[11px] text-gray-400 mt-1">Statutory minimum = 5.6 weeks</p>
+                    <p className="text-[11px] text-[rgba(153,197,255,0.5)] mt-1">Statutory minimum = 5.6 weeks</p>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Holiday year starts</label>
+                    <label className="block text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-1">Holiday year starts</label>
                     <select
                       value={policyForm.holiday_year_start}
                       onChange={e => setPolicyForm(f => ({ ...f, holiday_year_start: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10"
+                      className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#99c5ff] transition-colors"
                     >
                       <option value="jan">1 January</option>
                       <option value="apr">6 April (tax year)</option>
@@ -2208,7 +2209,7 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
 
                 {/* Bank holidays */}
                 <div className="space-y-3">
-                  <label className="block text-xs font-semibold text-gray-500">Bank holidays</label>
+                  <label className="block text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">Bank holidays</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       { value: false, label: 'Within entitlement', desc: 'Staff use their holiday hours for bank holidays' },
@@ -2218,32 +2219,32 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                         key={String(opt.value)}
                         type="button"
                         onClick={() => setPolicyForm(f => ({ ...f, bank_holidays_on_top: opt.value }))}
-                        className={`text-left p-3 rounded-xl border-2 transition-all ${policyForm.bank_holidays_on_top === opt.value ? 'border-[#1f48ff] bg-[#1f48ff]/5' : 'border-gray-200 hover:border-gray-300'}`}
+                        className={`text-left p-3 rounded-xl border-2 transition-all ${policyForm.bank_holidays_on_top === opt.value ? 'border-[#1f48ff] bg-[rgba(31,72,255,0.12)]' : 'border-[rgba(153,197,255,0.12)] hover:border-[rgba(153,197,255,0.25)]'}`}
                       >
-                        <p className={`text-xs font-semibold ${policyForm.bank_holidays_on_top === opt.value ? 'text-[#1f48ff]' : 'text-[#010a4f]'}`}>{opt.label}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">{opt.desc}</p>
+                        <p className={`text-xs font-semibold ${policyForm.bank_holidays_on_top === opt.value ? 'text-[#99c5ff]' : 'text-white'}`}>{opt.label}</p>
+                        <p className="text-[11px] text-[rgba(153,197,255,0.5)] mt-0.5">{opt.desc}</p>
                       </button>
                     ))}
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Bank holidays per year</label>
+                    <label className="block text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-1">Bank holidays per year</label>
                     <input
                       type="number" min="0" max="15"
                       value={policyForm.bank_holidays_per_year}
                       onChange={e => setPolicyForm(f => ({ ...f, bank_holidays_per_year: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10"
+                      className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#99c5ff] transition-colors"
                     />
-                    <p className="text-[11px] text-gray-400 mt-1">England & Wales = 8 · Scotland = 9</p>
+                    <p className="text-[11px] text-[rgba(153,197,255,0.5)] mt-1">England &amp; Wales = 8 · Scotland = 9</p>
                   </div>
                 </div>
 
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setEditingPolicy(false)}
-                    className="flex-1 py-2.5 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-colors">
+                    className="flex-1 py-2.5 border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.6)] text-sm font-semibold rounded-xl hover:bg-[rgba(153,197,255,0.06)] transition-colors">
                     Cancel
                   </button>
                   <button type="submit" disabled={savingPolicy}
-                    className="flex-1 py-2.5 bg-[#010a4f] text-white text-sm font-semibold rounded-xl hover:bg-[#010a4f]/90 disabled:opacity-50 transition-colors">
+                    className="flex-1 py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-semibold rounded-xl disabled:opacity-50 transition-colors">
                     {savingPolicy ? 'Saving…' : 'Save policy'}
                   </button>
                 </div>
@@ -2257,8 +2258,8 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                   ['Example',       `20 hrs/wk → ${Math.round(20 * hrPolicy.holiday_policy_weeks * 10) / 10} hrs/yr${hrPolicy.bank_holidays_on_top ? ` + ${Math.round(hrPolicy.bank_holidays_per_year * 4 * 10) / 10} hrs BH` : ''}`],
                 ].map(([label, value]) => (
                   <div key={label}>
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
-                    <p className="text-sm text-[#010a4f] font-medium mt-0.5">{value}</p>
+                    <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">{label}</p>
+                    <p className="text-sm text-white font-medium mt-0.5">{value}</p>
                   </div>
                 ))}
               </div>
@@ -2271,9 +2272,9 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
               <CardHeader
                 title="Pending leave requests"
                 subtitle={`${pendingRequests.length} request${pendingRequests.length > 1 ? 's' : ''} awaiting approval`}
-                action={<span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold flex items-center justify-center">{pendingRequests.length}</span>}
+                action={<span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold flex items-center justify-center border border-amber-500/25">{pendingRequests.length}</span>}
               />
-              <div className="divide-y divide-gray-50">
+              <div className="divide-y divide-[rgba(153,197,255,0.08)]">
                 {pendingRequests.map(req => {
                   const s       = staff.find(m => m.id === req.staff_id);
                   const at      = ABSENCE_TYPES[req.type] || ABSENCE_TYPES.other;
@@ -2281,31 +2282,31 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                   const busy    = processingId === req.id;
                   return (
                     <div key={req.id} className="px-5 py-3 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#010a4f] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-[rgba(31,72,255,0.3)] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
                         {s ? (s.first_name?.[0] || '') + (s.last_name?.[0] || '') : '?'}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-[#010a4f] text-sm truncate">
+                        <div className="font-semibold text-white text-sm truncate">
                           {s ? `${s.first_name} ${s.last_name || ''}` : 'Unknown staff'}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <span className="text-[11px] px-1.5 py-0.5 rounded font-semibold" style={{ background: at.bg, color: at.text }}>{at.label}</span>
-                          <span className="text-[11px] text-gray-500">
+                          <span className="text-[11px] px-1.5 py-0.5 rounded font-semibold border" style={{ background: at.bg, color: at.text, borderColor: at.border }}>{at.label}</span>
+                          <span className="text-[11px] text-[rgba(153,197,255,0.5)]">
                             {fmtDateGB(req.start_date)}{req.end_date !== req.start_date ? ` – ${fmtDateGB(req.end_date)}` : ''} · {wkDays} working day{wkDays !== 1 ? 's' : ''}
                           </span>
                         </div>
-                        {req.notes && <div className="text-[11px] text-gray-400 mt-0.5 truncate">{req.notes}</div>}
+                        {req.notes && <div className="text-[11px] text-[rgba(153,197,255,0.4)] mt-0.5 truncate">{req.notes}</div>}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <button
                           onClick={() => handleLeaveDecision(req, 'declined')} disabled={busy}
-                          className="w-8 h-8 rounded-lg border border-red-200 bg-red-50 flex items-center justify-center text-red-500 hover:bg-red-100 transition-colors disabled:opacity-40"
+                          className="w-8 h-8 rounded-lg border border-red-500/25 bg-red-500/10 flex items-center justify-center text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-40"
                           title="Decline">
                           <XCircle size={15} />
                         </button>
                         <button
                           onClick={() => handleLeaveDecision(req, 'approved')} disabled={busy}
-                          className="w-8 h-8 rounded-lg border border-green-200 bg-green-50 flex items-center justify-center text-green-600 hover:bg-green-100 transition-colors disabled:opacity-40"
+                          className="w-8 h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/10 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-40"
                           title="Approve">
                           <CheckCircle size={15} />
                         </button>
@@ -2316,9 +2317,9 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
               </div>
             </Card>
           ) : (
-            <div className="flex items-center gap-3 px-5 py-4 bg-green-50 border border-green-100 rounded-2xl">
-              <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
-              <span className="text-sm text-green-700 font-medium">No pending leave requests</span>
+            <div className="flex items-center gap-3 px-5 py-4 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl">
+              <CheckCircle size={16} className="text-emerald-400 flex-shrink-0" />
+              <span className="text-sm text-emerald-300 font-medium">No pending leave requests</span>
             </div>
           )}
 
@@ -2326,20 +2327,20 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
           {upcomingLeave.length > 0 && (
             <Card>
               <CardHeader title="Upcoming leave" subtitle="Next 30 days" />
-              <div className="divide-y divide-gray-50">
+              <div className="divide-y divide-[rgba(153,197,255,0.08)]">
                 {upcomingLeave.slice(0, 8).map(abs => {
                   const s  = staff.find(m => m.id === abs.staff_id);
                   const at = ABSENCE_TYPES[abs.type] || ABSENCE_TYPES.other;
                   return (
                     <div key={abs.id} className="px-5 py-2.5 flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-full bg-[#010a4f] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                      <div className="w-7 h-7 rounded-full bg-[rgba(31,72,255,0.3)] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
                         {s ? (s.first_name?.[0] || '') + (s.last_name?.[0] || '') : '?'}
                       </div>
-                      <div className="flex-1 text-sm text-[#010a4f] font-medium truncate">
+                      <div className="flex-1 text-sm text-white font-medium truncate">
                         {s ? `${s.first_name} ${s.last_name || ''}` : '—'}
                       </div>
-                      <span className="text-[11px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: at.bg, color: at.text }}>{at.label}</span>
-                      <div className="text-[11px] text-gray-500 text-right flex-shrink-0">
+                      <span className="text-[11px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 border" style={{ background: at.bg, color: at.text, borderColor: at.border }}>{at.label}</span>
+                      <div className="text-[11px] text-[rgba(153,197,255,0.5)] text-right flex-shrink-0">
                         {fmtDateGB(abs.start_date)}{abs.end_date !== abs.start_date ? ` – ${fmtDateGB(abs.end_date)}` : ''}
                       </div>
                     </div>
@@ -2357,7 +2358,7 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                 subtitle={`Holiday year: ${hrPolicy?.holiday_year_start === 'apr' ? '6 Apr' : '1 Jan'} – ${hrPolicy?.holiday_year_start === 'apr' ? '5 Apr' : '31 Dec'} ${new Date().getFullYear()}`}
                 action={
                   <button onClick={() => activeStaff[0] && openAbsModal(activeStaff[0])}
-                    className="text-xs text-[#1f48ff] font-semibold hover:underline flex items-center gap-1">
+                    className="text-xs text-[#99c5ff] font-semibold hover:underline flex items-center gap-1">
                     <Plus size={12} /> Log absence
                   </button>
                 }
@@ -2365,12 +2366,12 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
               <div className="overflow-x-auto">
                 <table className="w-full text-xs" style={{ minWidth: 520 }}>
                   <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left px-5 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Staff</th>
-                      <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Entitlement</th>
-                      <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Taken</th>
-                      <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Pending</th>
-                      <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Remaining</th>
+                    <tr className="border-b border-[rgba(153,197,255,0.08)] bg-[rgba(153,197,255,0.04)]">
+                      <th className="text-left px-5 py-2.5 text-[10px] font-semibold text-[rgba(153,197,255,0.4)] uppercase tracking-wide">Staff</th>
+                      <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[rgba(153,197,255,0.4)] uppercase tracking-wide">Entitlement</th>
+                      <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[rgba(153,197,255,0.4)] uppercase tracking-wide">Taken</th>
+                      <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[rgba(153,197,255,0.4)] uppercase tracking-wide">Pending</th>
+                      <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[rgba(153,197,255,0.4)] uppercase tracking-wide">Remaining</th>
                       <th className="px-5 py-2.5 w-36"></th>
                     </tr>
                   </thead>
@@ -2383,36 +2384,36 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                       const warnFlag = !noHours && !lowFlag && remainingHrs < (contracted * 4);
                       const fmt = h => h > 0 ? `${h}h` : '—';
                       return (
-                        <tr key={s.id} className="border-b border-gray-50 last:border-b-0 hover:bg-gray-50/30 transition-colors">
+                        <tr key={s.id} className="border-b border-[rgba(153,197,255,0.06)] last:border-b-0 hover:bg-[rgba(153,197,255,0.04)] transition-colors">
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-[#010a4f] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                              <div className="w-6 h-6 rounded-full bg-[rgba(31,72,255,0.35)] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
                                 {(s.first_name?.[0] || '') + (s.last_name?.[0] || '')}
                               </div>
                               <div>
-                                <div className="font-semibold text-[#010a4f]">{s.first_name} {s.last_name || ''}</div>
-                                <div className="text-[10px] text-gray-400">
-                                  {contracted > 0 ? `${contracted}h/wk` : <span className="text-amber-500">No contracted hrs set</span>}
+                                <div className="font-semibold text-white">{s.first_name} {s.last_name || ''}</div>
+                                <div className="text-[10px] text-[rgba(153,197,255,0.5)]">
+                                  {contracted > 0 ? `${contracted}h/wk` : <span className="text-amber-400">No contracted hrs set</span>}
                                 </div>
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold text-[#010a4f]">
-                            {noHours ? <span className="text-gray-300">—</span> : `${entitlementHrs}h`}
+                          <td className="px-4 py-3 text-right font-semibold text-white">
+                            {noHours ? <span className="text-[rgba(153,197,255,0.25)]">—</span> : `${entitlementHrs}h`}
                           </td>
-                          <td className="px-4 py-3 text-right text-gray-600">{noHours ? '—' : fmt(takenHrs)}</td>
-                          <td className="px-4 py-3 text-right text-amber-600">{noHours ? '—' : (pendingHrs > 0 ? `${pendingHrs}h` : '—')}</td>
-                          <td className={`px-4 py-3 text-right font-bold ${noHours ? 'text-gray-300' : lowFlag ? 'text-red-600' : warnFlag ? 'text-amber-600' : 'text-green-600'}`}>
+                          <td className="px-4 py-3 text-right text-[rgba(153,197,255,0.7)]">{noHours ? '—' : fmt(takenHrs)}</td>
+                          <td className="px-4 py-3 text-right text-amber-400">{noHours ? '—' : (pendingHrs > 0 ? `${pendingHrs}h` : '—')}</td>
+                          <td className={`px-4 py-3 text-right font-bold ${noHours ? 'text-[rgba(153,197,255,0.25)]' : lowFlag ? 'text-red-400' : warnFlag ? 'text-amber-400' : 'text-emerald-400'}`}>
                             {noHours ? '—' : `${remainingHrs}h`}
                           </td>
                           <td className="px-5 py-3">
                             {!noHours && (
                               <>
-                                <div className="h-2 rounded-full bg-gray-100 overflow-hidden flex">
-                                  <div className="h-full bg-[#010a4f] rounded-l-full" style={{ width: `${usedPct}%` }} />
-                                  {pendPct > 0 && <div className="h-full bg-amber-300" style={{ width: `${pendPct}%` }} />}
+                                <div className="h-2 rounded-full bg-[rgba(153,197,255,0.1)] overflow-hidden flex">
+                                  <div className="h-full bg-[#1f48ff] rounded-l-full" style={{ width: `${usedPct}%` }} />
+                                  {pendPct > 0 && <div className="h-full bg-amber-400" style={{ width: `${pendPct}%` }} />}
                                 </div>
-                                <div className="text-[9px] text-gray-400 mt-0.5">{usedPct}% used</div>
+                                <div className="text-[9px] text-[rgba(153,197,255,0.4)] mt-0.5">{usedPct}% used</div>
                               </>
                             )}
                           </td>
@@ -2422,17 +2423,17 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                   </tbody>
                 </table>
               </div>
-              <div className="px-5 py-3 border-t border-gray-50 flex items-center gap-4 flex-wrap text-[11px] text-gray-400">
-                <div className="flex items-center gap-1.5"><div className="w-3 h-2 rounded-sm bg-[#010a4f]" /> Taken</div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-2 rounded-sm bg-amber-300" /> Pending</div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-2 rounded-sm bg-gray-100 border border-gray-200" /> Remaining</div>
+              <div className="px-5 py-3 border-t border-[rgba(153,197,255,0.08)] flex items-center gap-4 flex-wrap text-[11px] text-[rgba(153,197,255,0.5)]">
+                <div className="flex items-center gap-1.5"><div className="w-3 h-2 rounded-sm bg-[#1f48ff]" /> Taken</div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-2 rounded-sm bg-amber-400" /> Pending</div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-2 rounded-sm bg-[rgba(153,197,255,0.1)] border border-[rgba(153,197,255,0.15)]" /> Remaining</div>
                 {entitlements.filter(e => e.contracted === 0).length > 0 && (
-                  <span className="ml-2 text-amber-500 font-medium">
+                  <span className="ml-2 text-amber-400 font-medium">
                     {entitlements.filter(e => e.contracted === 0).length} staff need contracted hours set
                   </span>
                 )}
                 {entitlements.filter(e => e.contracted > 0 && e.remainingHrs < e.contracted * 2).length > 0 && (
-                  <span className="ml-auto text-red-500 font-medium">
+                  <span className="ml-auto text-red-400 font-medium">
                     {entitlements.filter(e => e.contracted > 0 && e.remainingHrs < e.contracted * 2).length} staff running low on leave
                   </span>
                 )}
@@ -2444,15 +2445,15 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
 
       {/* ── Day picker modal (click empty cell with multiple jobs) ── */}
       {dayPicker && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setDayPicker(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
               <div>
-                <div className="font-bold text-[#010a4f]">Jobs on {fmtDateGB(dayPicker.dateStr)}</div>
-                <div className="text-xs text-gray-400 mt-0.5">Tap a job to edit who's assigned</div>
+                <div className="font-bold text-white">Jobs on {fmtDateGB(dayPicker.dateStr)}</div>
+                <div className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">Tap a job to edit who's assigned</div>
               </div>
-              <button onClick={() => setDayPicker(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+              <button onClick={() => setDayPicker(null)} className="text-[rgba(153,197,255,0.5)] hover:text-white"><X size={16} /></button>
             </div>
             <div className="p-3 space-y-1.5 max-h-72 overflow-y-auto">
               {dayPicker.dayJobs.map(j => {
@@ -2463,16 +2464,16 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                 return (
                   <button key={j.id}
                     onClick={() => { setDayPicker(null); setAssignJob(j); }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-left">
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[rgba(153,197,255,0.06)] transition-colors text-left">
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: sc.dot }} />
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-[#010a4f] text-sm truncate">{j.customer}</div>
-                      <div className="text-[11px] text-gray-400">
+                      <div className="font-semibold text-white text-sm truncate">{j.customer}</div>
+                      <div className="text-[11px] text-[rgba(153,197,255,0.5)]">
                         {fmtHour(j.start_hour)}{j.duration_hrs ? ` · ${j.duration_hrs}h` : ''}
                         {assignedNames ? ` · ${assignedNames}` : ' · Unassigned'}
                       </div>
                     </div>
-                    <ArrowRight size={13} className="text-gray-300 flex-shrink-0" />
+                    <ArrowRight size={13} className="text-[rgba(153,197,255,0.3)] flex-shrink-0" />
                   </button>
                 );
               })}
@@ -2483,24 +2484,24 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
 
       {/* ── Assign staff modal ── */}
       {assignJob && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && setAssignJob(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
               <div>
-                <div className="font-bold text-[#010a4f]">{assignJob.customer}</div>
-                <div className="text-xs text-gray-400 mt-0.5">
+                <div className="font-bold text-white">{assignJob.customer}</div>
+                <div className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">
                   {fmtDateGB(assignJob.date)}{assignJob.start_hour != null ? ` · ${fmtHour(assignJob.start_hour)}` : ''}{assignJob.duration_hrs ? ` · ${assignJob.duration_hrs}h` : ''}
                 </div>
               </div>
-              <button onClick={() => setAssignJob(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+              <button onClick={() => setAssignJob(null)} className="text-[rgba(153,197,255,0.5)] hover:text-white"><X size={16} /></button>
             </div>
             <div className="p-5">
-              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3">
+              <div className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-3">
                 Tap to assign or remove
               </div>
               {activeStaff.length === 0 ? (
-                <p className="text-sm text-gray-400">Add staff in the People tab first.</p>
+                <p className="text-sm text-[rgba(153,197,255,0.5)]">Add staff in the People tab first.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {activeStaff.map(s => {
@@ -2514,23 +2515,23 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                         disabled={savingAssign}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all disabled:opacity-50 ${
                           isOn
-                            ? 'bg-[#010a4f] text-white border-[#010a4f]'
+                            ? 'bg-[#1f48ff] text-white border-[#1f48ff]'
                             : isOffDay
-                              ? 'bg-gray-50 text-gray-400 border-gray-200 hover:border-amber-400 hover:text-amber-600'
-                              : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-[#010a4f] hover:text-[#010a4f]'
+                              ? 'bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.4)] border-[rgba(153,197,255,0.12)] hover:border-amber-500/40 hover:text-amber-400'
+                              : 'bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.7)] border-[rgba(153,197,255,0.15)] hover:border-[#99c5ff] hover:text-white'
                         }`}>
-                        <div className={`w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center flex-shrink-0 ${isOn ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                        <div className={`w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center flex-shrink-0 ${isOn ? 'bg-white/20 text-white' : 'bg-[rgba(153,197,255,0.1)] text-[rgba(153,197,255,0.5)]'}`}>
                           {(s.first_name?.[0] || '') + (s.last_name?.[0] || '')}
                         </div>
                         {s.first_name} {s.last_name || ''}
-                        {isOffDay && !isOn && <span className="ml-0.5 text-[9px] text-amber-500 font-bold">Off</span>}
+                        {isOffDay && !isOn && <span className="ml-0.5 text-[9px] text-amber-400 font-bold">Off</span>}
                         {isOn && <CheckCircle size={11} className="ml-0.5 opacity-80" />}
                       </button>
                     );
                   })}
                 </div>
               )}
-              <p className="text-[11px] text-gray-400 mt-4">Changes save instantly and sync to the Scheduler.</p>
+              <p className="text-[11px] text-[rgba(153,197,255,0.4)] mt-4">Changes save instantly and sync to the Scheduler.</p>
             </div>
           </div>
         </div>
@@ -2547,14 +2548,14 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
 
       {/* ── Absence modal ── */}
       {showAbsModal && absTarget && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowAbsModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowAbsModal(false)}>
+          <div className="bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-[#010a4f]">Log absence</h3>
-                <p className="text-xs text-gray-400 mt-0.5">{absTarget.first_name} {absTarget.last_name || ''}</p>
+                <h3 className="font-bold text-white">Log absence</h3>
+                <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">{absTarget.first_name} {absTarget.last_name || ''}</p>
               </div>
-              <button onClick={() => setShowAbsModal(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+              <button onClick={() => setShowAbsModal(false)} className="text-[rgba(153,197,255,0.5)] hover:text-white"><X size={16} /></button>
             </div>
             <form onSubmit={handleSaveAbsence} className="p-6 space-y-4">
               <div>
@@ -2562,7 +2563,7 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                 <div className="grid grid-cols-3 gap-2">
                   {Object.entries(ABSENCE_TYPES).map(([k, v]) => (
                     <button key={k} type="button" onClick={() => setAbsForm(f => ({ ...f, type: k }))}
-                      className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-all ${absForm.type === k ? 'shadow-sm' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-all ${absForm.type === k ? 'shadow-sm' : 'border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.5)] hover:border-[rgba(153,197,255,0.3)]'}`}
                       style={absForm.type === k ? { background: v.bg, color: v.text, borderColor: v.border } : {}}>
                       {v.label}
                     </button>
@@ -2585,10 +2586,10 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                 const daily  = parseFloat(absTarget?.contracted_hours ?? 0) / 5;
                 const hrs    = daily > 0 ? Math.round(wkDays * daily * 10) / 10 : null;
                 return (
-                  <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 flex items-center justify-between text-xs">
-                    <span className="text-blue-700">{wkDays} working day{wkDays !== 1 ? 's' : ''}</span>
-                    <span className="font-semibold text-blue-800">
-                      {hrs != null ? `${hrs} hrs deducted` : <span className="text-amber-600">Set contracted hrs for hour tracking</span>}
+                  <div className="bg-[rgba(31,72,255,0.12)] border border-[rgba(31,72,255,0.25)] rounded-xl px-3 py-2.5 flex items-center justify-between text-xs">
+                    <span className="text-[#99c5ff]">{wkDays} working day{wkDays !== 1 ? 's' : ''}</span>
+                    <span className="font-semibold text-white">
+                      {hrs != null ? `${hrs} hrs deducted` : <span className="text-amber-400">Set contracted hrs for hour tracking</span>}
                     </span>
                   </div>
                 );
@@ -2604,8 +2605,8 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                     <button key={opt.v} type="button" onClick={() => setAbsForm(f => ({ ...f, status: opt.v }))}
                       className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                         absForm.status === opt.v
-                          ? opt.v === 'approved' ? 'bg-green-50 border-green-300 text-green-700' : 'bg-amber-50 border-amber-300 text-amber-700'
-                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                          ? opt.v === 'approved' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                          : 'border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.5)] hover:border-[rgba(153,197,255,0.3)]'
                       }`}>
                       {opt.label}
                     </button>
@@ -2613,7 +2614,7 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
                 </div>
               </div>
               <button type="submit" disabled={savingAbs}
-                className="w-full py-2.5 bg-[#010a4f] text-white text-sm font-semibold rounded-xl hover:bg-[#010a4f]/90 transition-colors disabled:opacity-50">
+                className="w-full py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50">
                 {savingAbs ? 'Saving…' : absForm.status === 'approved' ? 'Log absence' : 'Submit request'}
               </button>
             </form>
@@ -2628,8 +2629,8 @@ function StaffRota({ staff, jobs, absences, loading, onTabChange, onAbsenceChang
 
 // ─── CreatePayRunModal ─────────────────────────────────────────────────────────
 function CreatePayRunModal({ onSave, onClose }) {
-  const inp = 'w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10';
-  const lbl = 'block text-xs font-semibold text-gray-500 mb-1';
+  const inp = 'w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.35)] focus:outline-none focus:border-[#99c5ff] transition-colors';
+  const lbl = 'block text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-1';
 
   const today = new Date();
   const isAfterApril6 = today.getMonth() > 3 || (today.getMonth() === 3 && today.getDate() >= 6);
@@ -2658,12 +2659,12 @@ function CreatePayRunModal({ onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <h3 className="font-bold text-[#010a4f]">New Pay Run</h3>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-            <X size={16} className="text-gray-500" />
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl shadow-xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-5 border-b border-[rgba(153,197,255,0.08)]">
+          <h3 className="font-bold text-white">New Pay Run</h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-[rgba(153,197,255,0.08)] rounded-lg transition-colors">
+            <X size={16} className="text-[rgba(153,197,255,0.5)]" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
@@ -2703,11 +2704,11 @@ function CreatePayRunModal({ onSave, onClose }) {
           </div>
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-colors">
+              className="flex-1 py-2.5 border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.6)] text-sm font-semibold rounded-xl hover:bg-[rgba(153,197,255,0.06)] transition-colors">
               Cancel
             </button>
             <button type="submit" disabled={saving}
-              className="flex-1 py-2.5 bg-[#010a4f] text-white text-sm font-semibold rounded-xl hover:bg-[#010a4f]/90 disabled:opacity-50 transition-colors">
+              className="flex-1 py-2.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-semibold rounded-xl disabled:opacity-50 transition-colors">
               {saving ? 'Creating…' : 'Create pay run'}
             </button>
           </div>
@@ -2851,8 +2852,8 @@ function StaffPay() {
     finally { setSaving(false); }
   }
 
-  const inp = 'w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10';
-  const lbl = 'block text-xs font-semibold text-gray-500 mb-1';
+  const inp = 'w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.35)] focus:outline-none focus:border-[#99c5ff] transition-colors';
+  const lbl = 'block text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)] mb-1';
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
@@ -2871,7 +2872,7 @@ function StaffPay() {
           action={
             !editing && (
               <button onClick={() => setEditing(true)}
-                className="flex items-center gap-1.5 text-xs font-semibold text-[#1f48ff] hover:opacity-80 transition-opacity">
+                className="flex items-center gap-1.5 text-xs font-semibold text-[#99c5ff] hover:opacity-80 transition-opacity">
                 <Edit2 size={12} />
                 {settings ? 'Edit' : 'Set up'}
               </button>
@@ -2881,15 +2882,15 @@ function StaffPay() {
 
         {!editing && !settings && (
           <div className="p-8 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-[#010a4f]/5 flex items-center justify-center mx-auto mb-3">
-              <CreditCard size={20} className="text-[#010a4f]/40" />
+            <div className="w-12 h-12 rounded-2xl bg-[rgba(153,197,255,0.06)] flex items-center justify-center mx-auto mb-3">
+              <CreditCard size={20} className="text-[rgba(153,197,255,0.3)]" />
             </div>
-            <p className="text-sm font-semibold text-[#010a4f] mb-1">Configure your PAYE scheme</p>
-            <p className="text-xs text-gray-400 max-w-xs mx-auto mb-4">
+            <p className="text-sm font-semibold text-white mb-1">Configure your PAYE scheme</p>
+            <p className="text-xs text-[rgba(153,197,255,0.5)] max-w-xs mx-auto mb-4">
               Enter your PAYE reference and Government Gateway credentials to enable RTI payroll submissions.
             </p>
             <button onClick={() => setEditing(true)}
-              className="px-4 py-2 bg-[#010a4f] text-white text-xs font-semibold rounded-xl hover:bg-[#010a4f]/90 transition-colors">
+              className="px-4 py-2 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-semibold rounded-xl transition-colors">
               Set up payroll
             </button>
           </div>
@@ -2909,8 +2910,8 @@ function StaffPay() {
               ['Emp. allowance',   settings.employment_allowance ? 'Yes' : 'No'],
             ].map(([label, value]) => (
               <div key={label}>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
-                <p className="text-sm text-[#010a4f] font-medium mt-0.5">{value}</p>
+                <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.5)]">{label}</p>
+                <p className="text-sm text-white font-medium mt-0.5">{value}</p>
               </div>
             ))}
           </div>
@@ -2980,30 +2981,30 @@ function StaffPay() {
               <div className="flex flex-col gap-2 pt-5">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.employment_allowance} onChange={e => setForm(f => ({ ...f, employment_allowance: e.target.checked }))}
-                    className="rounded border-gray-300 text-[#1f48ff]" />
-                  <span className="text-xs font-medium text-gray-700">Employment allowance</span>
+                    className="rounded border-[rgba(153,197,255,0.3)] text-[#1f48ff]" />
+                  <span className="text-xs font-medium text-[rgba(153,197,255,0.8)]">Employment allowance</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.sandbox_mode} onChange={e => setForm(f => ({ ...f, sandbox_mode: e.target.checked }))}
-                    className="rounded border-gray-300 text-[#1f48ff]" />
-                  <span className="text-xs font-medium text-gray-700">Sandbox mode (test submissions)</span>
+                    className="rounded border-[rgba(153,197,255,0.3)] text-[#1f48ff]" />
+                  <span className="text-xs font-medium text-[rgba(153,197,255,0.8)]">Sandbox mode (test submissions)</span>
                 </label>
               </div>
             </div>
 
             {form.sandbox_mode && (
-              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-[11px] text-amber-700">
+              <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-3 text-[11px] text-amber-300">
                 Sandbox mode is on — submissions go to HMRC's test engine and won't affect real payroll. Turn off only after HMRC recognition is confirmed.
               </div>
             )}
 
             <div className="flex gap-2">
               <button type="button" onClick={() => setEditing(false)}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-colors">
+                className="flex-1 py-2.5 border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.6)] text-sm font-semibold rounded-xl hover:bg-[rgba(153,197,255,0.06)] transition-colors">
                 Cancel
               </button>
               <button type="submit" disabled={saving}
-                className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${saved ? 'bg-green-500 text-white' : 'bg-[#010a4f] text-white hover:bg-[#010a4f]/90 disabled:opacity-50'}`}>
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${saved ? 'bg-emerald-600 text-white' : 'bg-[#1f48ff] hover:bg-[#3a5eff] text-white disabled:opacity-50'}`}>
                 {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save settings'}
               </button>
             </div>
@@ -3029,11 +3030,11 @@ function StaffPay() {
 
         {!settings ? (
           <div className="p-8 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-[#010a4f]/5 flex items-center justify-center mx-auto mb-3">
-              <TrendingUp size={20} className="text-[#010a4f]/40" />
+            <div className="w-12 h-12 rounded-2xl bg-[rgba(153,197,255,0.06)] flex items-center justify-center mx-auto mb-3">
+              <TrendingUp size={20} className="text-[rgba(153,197,255,0.3)]" />
             </div>
-            <p className="text-sm font-semibold text-[#010a4f] mb-1">Set up PAYE settings first</p>
-            <p className="text-xs text-gray-400 max-w-xs mx-auto">Configure your PAYE scheme above to unlock pay runs.</p>
+            <p className="text-sm font-semibold text-white mb-1">Set up PAYE settings first</p>
+            <p className="text-xs text-[rgba(153,197,255,0.5)] max-w-xs mx-auto">Configure your PAYE scheme above to unlock pay runs.</p>
           </div>
         ) : runsLoading ? (
           <div className="flex items-center justify-center py-10">
@@ -3041,20 +3042,20 @@ function StaffPay() {
           </div>
         ) : payRuns.length === 0 ? (
           <div className="p-8 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-[#010a4f]/5 flex items-center justify-center mx-auto mb-3">
-              <TrendingUp size={20} className="text-[#010a4f]/40" />
+            <div className="w-12 h-12 rounded-2xl bg-[rgba(153,197,255,0.06)] flex items-center justify-center mx-auto mb-3">
+              <TrendingUp size={20} className="text-[rgba(153,197,255,0.3)]" />
             </div>
-            <p className="text-sm font-semibold text-[#010a4f] mb-1">No pay runs yet</p>
-            <p className="text-xs text-gray-400 max-w-xs mx-auto mb-4">
+            <p className="text-sm font-semibold text-white mb-1">No pay runs yet</p>
+            <p className="text-xs text-[rgba(153,197,255,0.5)] max-w-xs mx-auto mb-4">
               Create a pay run, calculate PAYE + NI from timesheets, review payslips, then submit your FPS to HMRC.
             </p>
             <button onClick={() => setCreatingRun(true)}
-              className="px-4 py-2 bg-[#010a4f] text-white text-xs font-semibold rounded-xl hover:bg-[#010a4f]/90 transition-colors">
+              className="px-4 py-2 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-semibold rounded-xl transition-colors">
               Create first pay run
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-gray-50 px-2 pb-2">
+          <div className="divide-y divide-[rgba(153,197,255,0.08)] px-2 pb-2">
             {payRuns.map(run => {
               const isExpanded   = expandedRun === run.id;
               const isCalc       = calculating === run.id;
@@ -3063,40 +3064,40 @@ function StaffPay() {
               const slips        = run.payslips ?? [];
 
               const STATUS_STYLE = {
-                draft:       'bg-gray-100 text-gray-500',
-                calculating: 'bg-blue-50 text-blue-600',
-                calculated:  'bg-blue-100 text-blue-700',
-                submitting:  'bg-amber-50 text-amber-600',
-                submitted:   'bg-amber-100 text-amber-700',
-                accepted:    'bg-green-100 text-green-700',
-                rejected:    'bg-red-100 text-red-600',
+                draft:       'bg-[rgba(153,197,255,0.08)] text-[rgba(153,197,255,0.5)] border border-[rgba(153,197,255,0.12)]',
+                calculating: 'bg-[rgba(31,72,255,0.15)] text-[#99c5ff] border border-[rgba(31,72,255,0.25)]',
+                calculated:  'bg-[rgba(31,72,255,0.2)] text-[#99c5ff] border border-[rgba(31,72,255,0.3)]',
+                submitting:  'bg-amber-500/15 text-amber-300 border border-amber-500/25',
+                submitted:   'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+                accepted:    'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25',
+                rejected:    'bg-red-500/15 text-red-300 border border-red-500/25',
               };
 
               return (
                 <div key={run.id} className="rounded-xl overflow-hidden">
                   <button
                     onClick={() => setExpandedRun(isExpanded ? null : run.id)}
-                    className="w-full flex items-center justify-between px-3 py-3.5 hover:bg-gray-50 transition-colors text-left"
+                    className="w-full flex items-center justify-between px-3 py-3.5 hover:bg-[rgba(153,197,255,0.05)] transition-colors text-left"
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-[#010a4f]">
+                        <span className="text-sm font-semibold text-white">
                           {run.tax_year} · Period {run.period_no}
                         </span>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${STATUS_STYLE[run.status] ?? STATUS_STYLE.draft}`}>
                           {run.status}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5">
+                      <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">
                         {run.period_start} – {run.period_end} · Pay {run.payment_date}
                         {slips.length > 0 && ` · ${slips.length} payslip${slips.length !== 1 ? 's' : ''}`}
                       </p>
                     </div>
-                    <ChevronDown size={15} className={`text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={15} className={`text-[rgba(153,197,255,0.4)] flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
 
                   {isExpanded && (
-                    <div className="border-t border-gray-100 px-3 py-4 space-y-4 bg-gray-50/40">
+                    <div className="border-t border-[rgba(153,197,255,0.08)] px-3 py-4 space-y-4 bg-[rgba(153,197,255,0.03)]">
 
                       {/* Action row */}
                       <div className="flex flex-wrap gap-2 items-center">
@@ -3104,7 +3105,7 @@ function StaffPay() {
                           <button
                             onClick={() => handleCalculate(run.id)}
                             disabled={isCalc}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#010a4f] text-white text-xs font-semibold rounded-lg hover:bg-[#010a4f]/90 disabled:opacity-50 transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors"
                           >
                             {isCalc
                               ? <RefreshCw size={11} className="animate-spin" />
@@ -3117,7 +3118,7 @@ function StaffPay() {
                           <button
                             onClick={() => setConfirmSubmit(run.id)}
                             disabled={isSub}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors"
                           >
                             <Send size={11} />
                             Submit FPS{settings.sandbox_mode ? ' (test)' : ''}
@@ -3126,34 +3127,34 @@ function StaffPay() {
 
                         {isConfirming && (
                           <div className="flex items-center gap-2 text-xs">
-                            <span className="text-gray-600 font-medium">
+                            <span className="text-[rgba(153,197,255,0.8)] font-medium">
                               {settings.sandbox_mode ? 'Send to HMRC test engine?' : 'Send LIVE FPS to HMRC?'}
                             </span>
                             <button
                               onClick={() => handleSubmitFPS(run.id)}
-                              className={`px-2.5 py-1 font-semibold rounded-lg text-white transition-colors ${settings.sandbox_mode ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
+                              className={`px-2.5 py-1 font-semibold rounded-lg text-white transition-colors ${settings.sandbox_mode ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}
                             >
                               {isSub ? <RefreshCw size={11} className="animate-spin" /> : 'Confirm'}
                             </button>
                             <button onClick={() => setConfirmSubmit(null)}
-                              className="px-2.5 py-1 border border-gray-200 text-gray-500 font-semibold rounded-lg hover:bg-gray-100 transition-colors">
+                              className="px-2.5 py-1 border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.5)] font-semibold rounded-lg hover:bg-[rgba(153,197,255,0.06)] transition-colors">
                               Cancel
                             </button>
                           </div>
                         )}
 
                         {run.status === 'accepted' && (
-                          <span className="flex items-center gap-1.5 text-xs font-semibold text-green-700">
+                          <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
                             <CheckCircle size={13} /> Accepted by HMRC
                           </span>
                         )}
                         {run.status === 'rejected' && (
-                          <span className="flex items-center gap-1.5 text-xs font-semibold text-red-600">
+                          <span className="flex items-center gap-1.5 text-xs font-semibold text-red-400">
                             <XCircle size={13} /> Rejected — check fps_response in database
                           </span>
                         )}
                         {['submitting','submitted'].includes(run.status) && (
-                          <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-600">
+                          <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-400">
                             <RefreshCw size={11} className="animate-spin" /> Waiting for HMRC…
                           </span>
                         )}
@@ -3161,43 +3162,43 @@ function StaffPay() {
 
                       {/* Payslip table */}
                       {slips.length > 0 ? (
-                        <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
+                        <div className="overflow-x-auto rounded-xl border border-[rgba(153,197,255,0.08)] bg-[rgba(153,197,255,0.03)]">
                           <table className="w-full text-xs">
                             <thead>
-                              <tr className="bg-gray-50 border-b border-gray-100">
+                              <tr className="bg-[rgba(153,197,255,0.06)] border-b border-[rgba(153,197,255,0.08)]">
                                 {['Staff','Hrs','Gross','Tax','NI emp','NI empr','Net'].map(h => (
-                                  <th key={h} className="text-left px-3 py-2 font-semibold text-gray-400 whitespace-nowrap first:rounded-tl-xl">{h}</th>
+                                  <th key={h} className="text-left px-3 py-2 font-semibold text-[rgba(153,197,255,0.4)] whitespace-nowrap">{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
                               {slips.map(p => (
-                                <tr key={p.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-                                  <td className="px-3 py-2.5 font-medium text-[#010a4f] whitespace-nowrap">
+                                <tr key={p.id} className="border-b border-[rgba(153,197,255,0.06)] last:border-0 hover:bg-[rgba(153,197,255,0.04)] transition-colors">
+                                  <td className="px-3 py-2.5 font-medium text-white whitespace-nowrap">
                                     {p.team_members?.first_name} {p.team_members?.last_name}
                                   </td>
-                                  <td className="px-3 py-2.5 text-gray-500">{Number(p.hours_worked).toFixed(1)}</td>
-                                  <td className="px-3 py-2.5 text-gray-700">£{Number(p.gross_pay).toFixed(2)}</td>
-                                  <td className="px-3 py-2.5 text-red-500">£{Number(p.tax_period).toFixed(2)}</td>
-                                  <td className="px-3 py-2.5 text-amber-600">£{Number(p.ni_employee_period).toFixed(2)}</td>
-                                  <td className="px-3 py-2.5 text-amber-700">£{Number(p.ni_employer_period).toFixed(2)}</td>
-                                  <td className="px-3 py-2.5 font-semibold text-green-700">£{Number(p.net_pay).toFixed(2)}</td>
+                                  <td className="px-3 py-2.5 text-[rgba(153,197,255,0.6)]">{Number(p.hours_worked).toFixed(1)}</td>
+                                  <td className="px-3 py-2.5 text-[rgba(153,197,255,0.8)]">£{Number(p.gross_pay).toFixed(2)}</td>
+                                  <td className="px-3 py-2.5 text-red-400">£{Number(p.tax_period).toFixed(2)}</td>
+                                  <td className="px-3 py-2.5 text-amber-400">£{Number(p.ni_employee_period).toFixed(2)}</td>
+                                  <td className="px-3 py-2.5 text-amber-400">£{Number(p.ni_employer_period).toFixed(2)}</td>
+                                  <td className="px-3 py-2.5 font-semibold text-emerald-400">£{Number(p.net_pay).toFixed(2)}</td>
                                 </tr>
                               ))}
-                              <tr className="bg-gray-50 border-t border-gray-200 font-semibold">
-                                <td className="px-3 py-2.5 text-[#010a4f] font-bold">Total</td>
-                                <td className="px-3 py-2.5">{slips.reduce((s,p) => s + Number(p.hours_worked||0), 0).toFixed(1)}</td>
-                                <td className="px-3 py-2.5">£{slips.reduce((s,p) => s + Number(p.gross_pay||0), 0).toFixed(2)}</td>
-                                <td className="px-3 py-2.5 text-red-500">£{slips.reduce((s,p) => s + Number(p.tax_period||0), 0).toFixed(2)}</td>
-                                <td className="px-3 py-2.5 text-amber-600">£{slips.reduce((s,p) => s + Number(p.ni_employee_period||0), 0).toFixed(2)}</td>
-                                <td className="px-3 py-2.5 text-amber-700">£{slips.reduce((s,p) => s + Number(p.ni_employer_period||0), 0).toFixed(2)}</td>
-                                <td className="px-3 py-2.5 text-green-700 font-bold">£{slips.reduce((s,p) => s + Number(p.net_pay||0), 0).toFixed(2)}</td>
+                              <tr className="bg-[rgba(153,197,255,0.08)] border-t border-[rgba(153,197,255,0.15)] font-semibold">
+                                <td className="px-3 py-2.5 text-white font-bold">Total</td>
+                                <td className="px-3 py-2.5 text-[rgba(153,197,255,0.6)]">{slips.reduce((s,p) => s + Number(p.hours_worked||0), 0).toFixed(1)}</td>
+                                <td className="px-3 py-2.5 text-white">£{slips.reduce((s,p) => s + Number(p.gross_pay||0), 0).toFixed(2)}</td>
+                                <td className="px-3 py-2.5 text-red-400">£{slips.reduce((s,p) => s + Number(p.tax_period||0), 0).toFixed(2)}</td>
+                                <td className="px-3 py-2.5 text-amber-400">£{slips.reduce((s,p) => s + Number(p.ni_employee_period||0), 0).toFixed(2)}</td>
+                                <td className="px-3 py-2.5 text-amber-400">£{slips.reduce((s,p) => s + Number(p.ni_employer_period||0), 0).toFixed(2)}</td>
+                                <td className="px-3 py-2.5 text-emerald-400 font-bold">£{slips.reduce((s,p) => s + Number(p.net_pay||0), 0).toFixed(2)}</td>
                               </tr>
                             </tbody>
                           </table>
                         </div>
                       ) : run.status === 'draft' && (
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-[rgba(153,197,255,0.5)]">
                           No payslips yet — click Calculate to generate from timesheets.
                         </p>
                       )}
@@ -3223,11 +3224,11 @@ function StaffConnect() {
   return (
     <Card>
       <div className="p-10 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
+        <div className="w-14 h-14 rounded-2xl bg-[rgba(249,115,22,0.12)] border border-orange-500/20 flex items-center justify-center mx-auto mb-4">
           <Network size={24} className="text-orange-400" />
         </div>
-        <h3 className="font-bold text-[#010a4f] mb-2">Local Connect — coming in Sprint 3</h3>
-        <p className="text-sm text-gray-400 max-w-sm mx-auto">
+        <h3 className="font-bold text-white mb-2">Local Connect — coming in Sprint 3</h3>
+        <p className="text-sm text-[rgba(153,197,255,0.5)] max-w-sm mx-auto">
           Post cover gaps to nearby Cadi businesses. They accept, invoice through Cadi, and your shift is filled — without the WhatsApp chaos.
         </p>
         <div className="mt-6 grid grid-cols-2 gap-3 max-w-sm mx-auto text-left">
@@ -3239,8 +3240,8 @@ function StaffConnect() {
             'Compliance auto-checked',
             'Earn by covering others',
           ].map(f => (
-            <div key={f} className="flex items-center gap-2 text-xs text-gray-500">
-              <div className="w-1.5 h-1.5 rounded-full bg-orange-300 flex-shrink-0" />
+            <div key={f} className="flex items-center gap-2 text-xs text-[rgba(153,197,255,0.5)]">
+              <div className="w-1.5 h-1.5 rounded-full bg-orange-400/50 flex-shrink-0" />
               {f}
             </div>
           ))}
@@ -3301,7 +3302,7 @@ export default function Staff() {
   return (
     <div className="p-4 sm:p-6 space-y-4">
       {/* Sub-tab nav */}
-      <div className="flex items-center gap-1 bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-1.5 overflow-x-auto">
+      <div className="flex items-center gap-1 bg-[rgba(255,255,255,0.04)] border border-[rgba(153,197,255,0.10)] rounded-2xl p-1.5 overflow-x-auto">
         {TABS.map(t => {
           const active = t.id === activeTab;
           return (
@@ -3310,8 +3311,8 @@ export default function Staff() {
               onClick={() => setActiveTab(t.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${
                 active
-                  ? 'bg-[#010a4f] text-white shadow-sm'
-                  : 'text-gray-500 hover:text-[#010a4f] hover:bg-gray-50'
+                  ? 'bg-[#1f48ff] text-white shadow-sm'
+                  : 'text-[rgba(153,197,255,0.5)] hover:text-white hover:bg-[rgba(153,197,255,0.06)]'
               }`}
             >
               <t.icon size={13} />
