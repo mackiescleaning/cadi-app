@@ -3300,9 +3300,9 @@ export default function Staff() {
   const tab = TABS.find(t => t.id === activeTab) ?? TABS[0];
 
   return (
-    <div className="p-4 sm:p-6 space-y-4">
+    <div className="min-h-full bg-[#010a4f] p-4 sm:p-6 space-y-4">
       {/* Sub-tab nav */}
-      <div className="flex items-center gap-1 bg-[rgba(255,255,255,0.04)] border border-[rgba(153,197,255,0.10)] rounded-2xl p-1.5 overflow-x-auto">
+      <div className="flex items-center gap-1 bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl p-1.5 overflow-x-auto">
         {TABS.map(t => {
           const active = t.id === activeTab;
           return (
@@ -3312,7 +3312,7 @@ export default function Staff() {
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${
                 active
                   ? 'bg-[#1f48ff] text-white shadow-sm'
-                  : 'text-[rgba(153,197,255,0.5)] hover:text-white hover:bg-[rgba(153,197,255,0.06)]'
+                  : 'text-[rgba(153,197,255,0.7)] hover:text-white hover:bg-[rgba(153,197,255,0.08)]'
               }`}
             >
               <t.icon size={13} />
