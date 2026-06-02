@@ -44,6 +44,14 @@ function calcSelfEmployedTax(profit) {
   return Math.round(incomeTax + ni);
 }
 
+// UK corporation tax (FY2023+ rates with marginal relief £50k–£250k)
+function calcCorpTax(profit) {
+  if (profit <= 0)      return 0;
+  if (profit <= 50000)  return Math.round(profit * 0.19);
+  if (profit >= 250000) return Math.round(profit * 0.25);
+  return Math.round(profit * 0.265 - 3750); // marginal relief band
+}
+
 function startOfTaxYear() {
   const now = new Date();
   const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
@@ -105,12 +113,17 @@ function mapAccountsData({ profile, settings, moneyEntries }) {
     .filter(entry => entry.kind === 'expense')
     .reduce((sum, entry) => sum + parseAmount(entry.amount), 0);
 
-  const annualTarget = parseAmount(settings?.annual_target) || 65000;
-  const monthlyTarget = annualTarget / 12;
-  const taxRate = settings?.tax_rate ?? (settings?.vat_registered ? 0.2 : 0.25);
-  const taxReserve = parseAmount(settings?.setup_data?.tax_reserve_saved);
-  const ytdProfit = Math.max(ytdIncome - ytdExpenses, 0);
-  const taxReserveTarget = calcSelfEmployedTax(ytdProfit);
+  const annualTarget   = parseAmount(settings?.annual_target) || 65000;
+  const monthlyTarget  = annualTarget / 12;
+  const taxRate        = settings?.tax_rate ?? (settings?.vat_registered ? 0.2 : 0.25);
+  const taxReserve     = parseAmount(settings?.setup_data?.tax_reserve_saved);
+  const ytdProfit      = Math.max(ytdIncome - ytdExpenses, 0);
+  const entityType     = settings?.entity_type ?? 'sole_trader';
+  const dirSalary      = parseAmount(settings?.director_salary_annual ?? 9100);
+  // Tax reserve target branches on entity type
+  const taxReserveTarget = entityType === 'limited_company'
+    ? calcCorpTax(Math.max(0, ytdProfit - dirSalary))
+    : calcSelfEmployedTax(ytdProfit);
 
   return {
     vatRegistered: Boolean(settings?.vat_registered),
@@ -122,6 +135,9 @@ function mapAccountsData({ profile, settings, moneyEntries }) {
     ytdExpenses,
     taxReserve,
     taxReserveTarget,
+    entityType,
+    accountingYearEndMonth: settings?.accounting_year_end_month ?? 3,
+    directorSalaryAnnual:   dirSalary,
     ytdMileageLogged: parseAmount(settings?.setup_data?.ytd_mileage_logged),
     ytdMileageClaimed: parseAmount(settings?.setup_data?.ytd_mileage_claimed),
     mtdStatus: settings?.setup_data?.mtd_status || 'filed',

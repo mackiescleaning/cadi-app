@@ -1,3 +1,8 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Disallow: /login
+Disallow: /signup
+Disallow: /onboarding
+Disallow: /dashboard
+
+Sitemap: https://cadi.cleaning/sitemap.xml

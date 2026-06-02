@@ -11,7 +11,7 @@ const STATUS_CFG = {
 
 const FMS = [
   {
-    id: 'fm1', name: 'Britannia FM', region: 'Bedfordshire + Bucks',
+    id: 'fm1', name: 'Britannia Group', region: 'Bedfordshire + Bucks',
     status: 'active', since: 'Jan 2026', jobsDone: 47, avgRating: 4.8,
     pendingPay: 420, totalEarned: 3995,
     contract: 'Standard subcontractor · Net 14 payment',

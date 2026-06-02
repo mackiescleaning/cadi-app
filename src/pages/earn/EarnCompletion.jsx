@@ -7,7 +7,7 @@ const NAVY   = '#010a4f';
 const JOB = {
   site: 'Next – Luton The Mall',
   address: 'Bute Street, Luton LU1 2TL',
-  fm: 'Britannia FM',
+  fm: 'Britannia Group',
   service: 'Retail morning clean',
   date: '9 May 2026',
   slaWindow: '06:00–08:00',
@@ -168,7 +168,7 @@ export default function EarnCompletion() {
             <CheckCircle2 size={36} className="text-emerald-500" />
           </div>
           <div>
-            <h2 className="font-black text-xl text-[#010a4f]">Submitted to Britannia FM</h2>
+            <h2 className="font-black text-xl text-[#010a4f]">Submitted to Britannia Group</h2>
             <p className="text-sm text-gray-500 mt-1">Next – Luton The Mall · 9 May 2026</p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-left">
@@ -189,7 +189,7 @@ export default function EarnCompletion() {
           <div className="rounded-xl p-3 text-xs text-emerald-700 text-left"
             style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.2)' }}>
             <div className="font-bold mb-1 flex items-center gap-1.5"><Shield size={12} /> Geo-verification complete</div>
-            All 7 photos verified on-site. Coordinates, timestamps, and a tamper-evident hash have been logged to the audit trail and shared with Britannia FM.
+            All 7 photos verified on-site. Coordinates, timestamps, and a tamper-evident hash have been logged to the audit trail and shared with Britannia Group.
           </div>
           <button onClick={() => setSubmitted(false)}
             className="text-xs text-[#4f78ff] font-bold hover:underline">
@@ -369,16 +369,16 @@ export default function EarnCompletion() {
         </div>
         <div className="h-1.5 rounded-full bg-emerald-400" />
         <div className="text-xs text-gray-400">
-          ✓ All evidence complete and geo-verified. Ready to submit to Britannia FM.
+          ✓ All evidence complete and geo-verified. Ready to submit to Britannia Group.
         </div>
         <button
           onClick={() => setSubmitted(true)}
           className="w-full py-4 rounded-xl text-sm font-black text-white transition-all hover:brightness-110 shadow-lg"
           style={{ background: `linear-gradient(135deg, ${ORANGE} 0%, #9a3412 100%)` }}>
-          Submit to Britannia FM for review →
+          Submit to Britannia Group for review →
         </button>
         <div className="text-[10px] text-gray-400 text-center">
-          By submitting you confirm all work was completed to the required standard. Geo-verification data will be shared with Britannia FM.
+          By submitting you confirm all work was completed to the required standard. Geo-verification data will be shared with Britannia Group.
         </div>
       </div>
     </div>

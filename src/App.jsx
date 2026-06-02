@@ -34,6 +34,7 @@ const ProUpgradePage      = lazy(() => import('./components/ui/ProUpgrade'));
 const BankingSettings     = lazy(() => import('./pages/BankingSettings'));
 const FinancialWalkthrough = lazy(() => import('./pages/FinancialWalkthrough'));
 const WeeklyReport        = lazy(() => import('./pages/WeeklyReport'));
+const SiteSurvey          = lazy(() => import('./pages/SiteSurvey'));
 
 // Front Desk
 const SalesManagerPage      = lazy(() => import('./pages/front-desk/SalesManagerPage'));
@@ -180,6 +181,8 @@ function App() {
           <Route path="banking/connect" element={<BankingSettings />} />
           <Route path="walkthrough"     element={<FinancialWalkthrough />} />
           <Route path="reports/:id"     element={<WeeklyReport />} />
+          {/* Commercial site survey */}
+          <Route path="survey/:surveyId" element={<SiteSurvey />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

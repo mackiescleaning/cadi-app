@@ -23,6 +23,7 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { usePlan, FREE_CUSTOMER_LIMIT } from "../hooks/usePlan";
 import { UpgradeModal } from "../components/UpgradePrompt";
+import { createSurvey, listSurveysForCustomer, listOpenSurveys } from "../lib/db/surveyDb";
 import CustomerImport from "../components/CustomerImport";
 
 // ─── Job type taxonomy ────────────────────────────────────────────────────────
@@ -1316,12 +1317,67 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
   const lastJobAccent = hasLastJob && daysSince > 60 ? "text-amber-400" : "text-white";
   const uniqueTypes  = [...new Set(customer.services.map(s => s.type))];
 
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [rounds, setRounds] = useState([]);
+  const [openSurveys, setOpenSurveys] = useState([]);
+  const [surveyLoading, setSurveyLoading] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+
+  const isCommercial = customer.segment === 'commercial' ||
+    (customer.tags ?? []).some(t => t === 'commercial' || t === 'contract');
+
+  useEffect(() => {
+    if (!isCommercial || !customer.id) return;
+    listSurveysForCustomer(customer.id)
+      .then(rows => setOpenSurveys(rows.filter(r => r.status !== 'archived')))
+      .catch(() => {});
+  }, [customer.id, isCommercial]);
+
+  const handleStartSurvey = async () => {
+    setSurveyLoading(true);
+    try {
+      const survey = await createSurvey({ customerId: customer.id });
+      navigate(`/survey/${survey.id}`);
+    } catch (err) { alert(`Could not start survey: ${err.message}`); setSurveyLoading(false); }
+  };
 
   useEffect(() => {
     let cancelled = false;
     listRoundsForCustomer(customer.id).then(r => { if (!cancelled) setRounds(r); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [customer.id]);
+
+  // Full job history — direct query, no date window
+  const [allJobs, setAllJobs]       = useState(null); // null = loading, [] = loaded but empty
+  const [allInvoices, setAllInvoices] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAllJobs(null);
+    setAllInvoices([]);
+
+    Promise.all([
+      supabase
+        .from('jobs')
+        .select('id, date, service, type, price, status, start_hour, duration_hrs, notes')
+        .eq('customer_id', customer.id)
+        .order('date', { ascending: false })
+        .limit(200),
+      supabase
+        .from('invoices')
+        .select('id, invoice_num, date, status, lines, paid_at, payment_method')
+        .eq('customer_id', customer.id)
+        .order('date', { ascending: false })
+        .limit(100),
+    ]).then(([jobsRes, invoicesRes]) => {
+      if (cancelled) return;
+      setAllJobs(jobsRes.data ?? []);
+      setAllInvoices(invoicesRes.data ?? []);
+    }).catch(() => {
+      if (!cancelled) setAllJobs([]);
+    });
+
     return () => { cancelled = true; };
   }, [customer.id]);
 
@@ -1390,6 +1446,17 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#010a4f]">
+      {showEdit && (
+        <AddCustomerModal
+          customer={customer}
+          onClose={() => setShowEdit(false)}
+          onSave={(updated) => {
+            onUpdateCustomer?.(customer.id, updated);
+            setShowEdit(false);
+          }}
+        />
+      )}
+
       {/* Header */}
       <div
         className="relative overflow-hidden shrink-0"
@@ -1419,6 +1486,12 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
             </div>
             <div className="flex items-center gap-2">
               <StatusBadge status={customer.status} />
+              <button
+                onClick={() => setShowEdit(true)}
+                className="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-[rgba(153,197,255,0.7)] hover:text-white transition-all text-xs font-bold"
+              >
+                Edit
+              </button>
               <button
                 onClick={onClose}
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-all text-sm"
@@ -1492,6 +1565,79 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
               <StatusBadge status={customer.status} />
               {customer.tags.map(tag => <Chip key={tag} color="sky">{tag}</Chip>)}
             </div>
+
+            {/* Segment picker */}
+            <div>
+              <p className="text-[10px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1.5">Customer type</p>
+              <div className="flex gap-1.5">
+                {[
+                  { value: "residential", label: "Residential", icon: "🏠" },
+                  { value: "commercial",  label: "Commercial",  icon: "🏢" },
+                  { value: "exterior",    label: "Exterior",    icon: "🏗" },
+                ].map(({ value, label, icon }) => {
+                  const active = customer.segment === value;
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => onUpdateCustomer?.(customer.id, { segment: value, segmentSource: 'owner_set' })}
+                      className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl border text-[10px] font-bold transition-all ${
+                        active
+                          ? "bg-[#1f48ff]/20 border-[#1f48ff]/50 text-white"
+                          : "bg-[rgba(153,197,255,0.04)] border-[rgba(153,197,255,0.10)] text-[rgba(153,197,255,0.4)] hover:border-[rgba(153,197,255,0.25)] hover:text-[rgba(153,197,255,0.7)]"
+                      }`}
+                    >
+                      <span className="text-sm">{icon}</span>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Commercial survey CTA */}
+            {isCommercial && (
+              <div className="rounded-xl border border-[rgba(31,72,255,0.25)] bg-[rgba(31,72,255,0.06)] overflow-hidden">
+                <div className="px-4 py-3 border-b border-[rgba(31,72,255,0.15)]">
+                  <p className="text-xs font-bold text-[#99c5ff]">Commercial — Quote & Survey</p>
+                </div>
+                <div className="px-4 py-3">
+                  {openSurveys.length > 0 ? (
+                    <div className="space-y-2">
+                      {openSurveys.map(sv => (
+                        <button
+                          key={sv.id}
+                          onClick={() => navigate(`/survey/${sv.id}`)}
+                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[rgba(31,72,255,0.1)] hover:bg-[rgba(31,72,255,0.18)] border border-[rgba(31,72,255,0.2)] transition-all"
+                        >
+                          <div className="text-left">
+                            <p className="text-xs font-bold text-[#99c5ff] capitalize">{sv.status.replace('_', ' ')}</p>
+                            <p className="text-[10px] text-[rgba(153,197,255,0.5)]">
+                              {new Date(sv.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                          </div>
+                          <span className="text-[#99c5ff] text-sm">→</span>
+                        </button>
+                      ))}
+                      <button
+                        onClick={handleStartSurvey}
+                        disabled={surveyLoading}
+                        className="w-full h-9 rounded-lg bg-[rgba(31,72,255,0.15)] hover:bg-[rgba(31,72,255,0.25)] border border-[rgba(31,72,255,0.25)] text-xs font-bold text-[#99c5ff] transition-colors disabled:opacity-40"
+                      >
+                        {surveyLoading ? "Starting…" : "+ New survey"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleStartSurvey}
+                      disabled={surveyLoading}
+                      className="w-full h-10 rounded-lg bg-[#1f48ff] hover:bg-[#2a55ff] disabled:opacity-40 text-white text-sm font-bold transition-colors"
+                    >
+                      {surveyLoading ? "Starting…" : "Quote / Site survey →"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Contact */}
             <GlassCard>
@@ -1626,41 +1772,101 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
         {/* HISTORY */}
         {activeTab === "history" && (
           <>
+            {/* Jobs */}
             <div className="flex items-center justify-between">
-              <SL>Job history</SL>
+              <SL>Jobs</SL>
               <span className="text-xs text-emerald-400 font-semibold">£{customer.lifetimeValue.toLocaleString()} lifetime</span>
             </div>
-            <div className="space-y-2">
-              {customer.services.map((job, i) => {
-                const jt = JOB_TYPES.find(j => j.id === job.type);
-                return (
-                  <GlassCard key={i} className="p-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-[#99c5ff] shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-white">{job.label}</p>
-                        <p className="text-xs text-[rgba(153,197,255,0.4)]">
-                          {new Date(job.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-emerald-400">£{job.price}</p>
-                        <span className="text-xs px-1.5 py-0.5 bg-emerald-500/15 text-emerald-300 rounded-lg border border-emerald-500/25 font-bold">
-                          ✓ {job.status}
-                        </span>
-                      </div>
-                    </div>
-                  </GlassCard>
-                );
-              })}
-            </div>
 
-            {/* Frequency insight */}
-            <Alert type="blue">
-              {customer.frequency === "one-off"
-                ? "One-off customer — no recurring booking. Consider a follow-up message to convert."
-                : `${customer.frequency.charAt(0).toUpperCase() + customer.frequency.slice(1)} customer since first job. Average job value: £${Math.round(customer.lifetimeValue / customer.services.length)}.`}
-            </Alert>
+            {allJobs === null ? (
+              <div className="flex items-center gap-2 py-4 text-xs text-[rgba(153,197,255,0.4)]">
+                <span className="w-3 h-3 border border-[rgba(153,197,255,0.3)] border-t-transparent rounded-full animate-spin" />
+                Loading…
+              </div>
+            ) : allJobs.length === 0 ? (
+              <p className="text-xs text-[rgba(153,197,255,0.4)] py-2">No jobs recorded yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {allJobs.map(job => {
+                  const today = new Date().toISOString().slice(0, 10);
+                  const isPast = job.date < today;
+                  const statusColour = job.status === 'completed' || job.status === 'invoiced'
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
+                    : job.status === 'cancelled'
+                    ? 'bg-red-500/15 text-red-300 border-red-500/25'
+                    : isPast
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/25'
+                    : 'bg-blue-500/15 text-blue-300 border-blue-500/25';
+                  return (
+                    <GlassCard key={job.id} className="p-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${job.status === 'completed' ? 'bg-emerald-400' : isPast ? 'bg-amber-400' : 'bg-[#99c5ff]'}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{job.service || 'Clean'}</p>
+                          <p className="text-xs text-[rgba(153,197,255,0.4)]">
+                            {job.date ? new Date(job.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : '—'}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {job.price > 0 && <p className="text-sm font-bold text-emerald-400">£{Number(job.price).toFixed(2)}</p>}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-lg border font-bold capitalize ${statusColour}`}>
+                            {job.status}
+                          </span>
+                        </div>
+                      </div>
+                    </GlassCard>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Payments / Invoices */}
+            {allInvoices.length > 0 && (
+              <>
+                <div className="flex items-center justify-between mt-2">
+                  <SL>Invoices & payments</SL>
+                  <span className="text-xs text-emerald-400 font-semibold">
+                    £{allInvoices.filter(i => i.status === 'paid').reduce((s, i) => {
+                      const total = Array.isArray(i.lines) ? i.lines.reduce((t, l) => t + (Number(l.amount ?? l.total ?? 0)), 0) : 0;
+                      return s + total;
+                    }, 0).toLocaleString()} paid
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {allInvoices.map(inv => {
+                    const total = Array.isArray(inv.lines)
+                      ? inv.lines.reduce((t, l) => t + Number(l.amount ?? l.total ?? l.unit_price ?? 0), 0)
+                      : 0;
+                    const statusColour = inv.status === 'paid'
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
+                      : inv.status === 'overdue'
+                      ? 'bg-red-500/15 text-red-300 border-red-500/25'
+                      : inv.status === 'sent'
+                      ? 'bg-blue-500/15 text-blue-300 border-blue-500/25'
+                      : 'bg-white/10 text-[rgba(153,197,255,0.5)] border-white/10';
+                    return (
+                      <GlassCard key={inv.id} className="p-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white">{inv.invoice_num || 'Invoice'}</p>
+                            <p className="text-xs text-[rgba(153,197,255,0.4)]">
+                              {inv.date ? new Date(inv.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : '—'}
+                              {inv.paid_at ? ` · Paid ${new Date(inv.paid_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ''}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            {total > 0 && <p className="text-sm font-bold text-emerald-400">£{total.toFixed(2)}</p>}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-lg border font-bold capitalize ${statusColour}`}>
+                              {inv.status}
+                            </span>
+                          </div>
+                        </div>
+                      </GlassCard>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -1838,22 +2044,25 @@ function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCusto
   );
 }
 
-// ─── Add Customer Modal ────────────────────────────────────────────────────────
-function AddCustomerModal({ onClose, onSave }) {
+// ─── Add / Edit Customer Modal ────────────────────────────────────────────────
+function AddCustomerModal({ onClose, onSave, customer: editCustomer }) {
+  const isEdit = Boolean(editCustomer);
   const [form, setForm] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    addressLine1: "",
-    addressLine2: "",
-    town: "",
-    county: "",
-    postcode: "",
-    frequency: "one-off",
-    status: "active",
-    notes: "",
-    source: "",
-    rating: 0,
+    name:        editCustomer?.name        ?? "",
+    email:       editCustomer?.email       ?? "",
+    phone:       editCustomer?.phone       ?? "",
+    addressLine1:editCustomer?.addressLine1 ?? "",
+    addressLine2:editCustomer?.addressLine2 ?? "",
+    town:        editCustomer?.town        ?? "",
+    county:      editCustomer?.county      ?? "",
+    postcode:    editCustomer?.postcode    ?? "",
+    frequency:   editCustomer?.frequency   ?? "one-off",
+    status:      editCustomer?.status      ?? "active",
+    notes:       editCustomer?.notes       ?? "",
+    source:      editCustomer?.source      ?? "",
+    rating:      editCustomer?.rating      ?? 0,
+    segment:     editCustomer?.segment && editCustomer.segment !== 'unsegmented'
+                   ? editCustomer.segment : "unsegmented",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -1866,29 +2075,34 @@ function AddCustomerModal({ onClose, onSave }) {
     setSaving(true);
     setError(null);
     try {
-      const newCustomer = {
-        id: crypto.randomUUID(),
-        name: form.name.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim(),
+      const customer = {
+        ...(isEdit ? editCustomer : {}),
+        id: isEdit ? editCustomer.id : crypto.randomUUID(),
+        name:         form.name.trim(),
+        email:        form.email.trim(),
+        phone:        form.phone.trim(),
         addressLine1: form.addressLine1.trim(),
         addressLine2: form.addressLine2.trim(),
-        town: form.town.trim(),
-        county: form.county.trim(),
-        postcode: form.postcode.trim().toUpperCase(),
-        frequency: form.frequency,
-        status: form.status,
-        rating: form.rating || 0,
-        serviceTypes: [],
-        tags: [],
-        notes: form.notes.trim(),
-        source: form.source.trim(),
-        lastJobDate: new Date().toISOString().slice(0, 10),
-        nextJobDate: null,
-        lifetimeValue: 0,
-        services: [],
+        town:         form.town.trim(),
+        county:       form.county.trim(),
+        postcode:     form.postcode.trim().toUpperCase(),
+        frequency:    form.frequency,
+        status:       form.status,
+        rating:       form.rating || 0,
+        segment:      form.segment,
+        segmentSource:'owner_set',
+        notes:        form.notes.trim(),
+        source:       form.source.trim(),
+        ...(!isEdit ? {
+          serviceTypes: [],
+          tags: [],
+          lastJobDate: new Date().toISOString().slice(0, 10),
+          nextJobDate: null,
+          lifetimeValue: 0,
+          services: [],
+        } : {}),
       };
-      onSave(newCustomer);
+      onSave(customer);
     } catch (err) {
       setError(err.message || "Couldn't save customer.");
       setSaving(false);
@@ -1920,7 +2134,7 @@ function AddCustomerModal({ onClose, onSave }) {
         <div className="relative flex items-center justify-between px-5 py-4 border-b border-[rgba(153,197,255,0.08)]">
           <div>
             <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-0.5">Customers</p>
-            <h3 className="text-lg font-black text-white">Add new customer</h3>
+            <h3 className="text-lg font-black text-white">{isEdit ? "Edit customer" : "Add new customer"}</h3>
           </div>
           <button
             onClick={onClose}
@@ -1937,6 +2151,32 @@ function AddCustomerModal({ onClose, onSave }) {
               <span>⚠</span> {error}
             </div>
           )}
+
+          {/* Segment — first thing to set */}
+          <div>
+            <label className={labelCls}>Customer type</label>
+            <div className="flex gap-1.5">
+              {[
+                { value: "residential", label: "Residential", icon: "🏠" },
+                { value: "commercial",  label: "Commercial",  icon: "🏢" },
+                { value: "exterior",    label: "Exterior",    icon: "🏗" },
+              ].map(({ value, label, icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => set("segment", value)}
+                  className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border text-xs font-bold transition-all ${
+                    form.segment === value
+                      ? "bg-[#1f48ff]/20 border-[#1f48ff]/50 text-white"
+                      : "bg-[rgba(153,197,255,0.04)] border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.5)] hover:border-[rgba(153,197,255,0.25)]"
+                  }`}
+                >
+                  <span className="text-base">{icon}</span>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Name */}
           <div>
@@ -2047,7 +2287,7 @@ function AddCustomerModal({ onClose, onSave }) {
             </button>
             <button type="submit" disabled={saving}
               className="flex-1 py-2.5 rounded-xl bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-black transition-all shadow-lg shadow-[#1f48ff]/25 disabled:opacity-50">
-              {saving ? "Saving…" : "Save customer →"}
+              {saving ? "Saving…" : isEdit ? "Save changes →" : "Save customer →"}
             </button>
           </div>
         </form>
@@ -2073,6 +2313,9 @@ export default function CustomerTab() {
   const [showAddModal,  setShowAddModal] = useState(false);
   const [showImport,    setShowImport]   = useState(false);
   const [showUpgrade,   setShowUpgrade]  = useState(false);
+  const [segmentFilter, setSegmentFilter] = useState("all"); // all | commercial | residential | exterior
+  const [openSurveys,   setOpenSurveys]   = useState([]);
+  const [surveysLoaded, setSurveysLoaded] = useState(false);
 
   const activeCustomers = useMemo(() => customers.filter(c => c.status !== 'archived'), [customers]);
   const atLimit = !isPro && activeCustomers.length >= customerLimit;
@@ -2085,11 +2328,30 @@ export default function CustomerTab() {
     return map;
   }, [customers]);
 
+  useEffect(() => {
+    if (segmentFilter !== 'commercial' || surveysLoaded) return;
+    listOpenSurveys().then(rows => { setOpenSurveys(rows); setSurveysLoaded(true); }).catch(() => {});
+  }, [segmentFilter, surveysLoaded]);
+
   const filtered = useMemo(() => {
     // Always hide archived unless explicitly viewing them
     let list = statusFilter === 'archived'
       ? customers.filter(c => c.status === 'archived')
       : customers.filter(c => c.status !== 'archived');
+
+    // Segment filter
+    if (segmentFilter !== "all") {
+      list = list.filter(c => {
+        if (c.segment && c.segment !== 'unsegmented') return c.segment === segmentFilter;
+        // Fallback: infer from tags and service types
+        const tags = c.tags ?? [];
+        const serviceTypes = c.services.map(s => s.type);
+        if (segmentFilter === 'commercial') return tags.includes('commercial') || tags.includes('contract') || serviceTypes.includes('commercial');
+        if (segmentFilter === 'exterior')   return tags.includes('exterior')   || serviceTypes.some(t => ['exterior','windows','gutter','roof'].includes(t));
+        if (segmentFilter === 'residential') return serviceTypes.some(t => ['regular','deep','end-of-tenancy','carpet','oven'].includes(t));
+        return true;
+      });
+    }
 
     // Job type filter
     if (jobTypeFilter !== "all") {
@@ -2198,8 +2460,31 @@ export default function CustomerTab() {
               </button>
             </div>
           </div>
-          {/* Status filter chips — below header on all screens */}
-          <div className="flex gap-1.5 mt-3 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+          {/* Segment tabs — Commercial / Residential / Exterior */}
+          <div className="flex gap-1 mt-3 p-1 rounded-xl bg-[rgba(255,255,255,0.04)] border border-[rgba(153,197,255,0.10)]">
+            {[
+              { label: "All",         value: "all",         icon: null },
+              { label: "Commercial",  value: "commercial",  icon: "🏢" },
+              { label: "Residential", value: "residential", icon: "🏠" },
+              { label: "Exterior",    value: "exterior",    icon: "🏗" },
+            ].map(({ label, value, icon }) => (
+              <button
+                key={value}
+                onClick={() => setSegmentFilter(value)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  segmentFilter === value
+                    ? "bg-[#1f48ff] text-white shadow-sm"
+                    : "text-[rgba(153,197,255,0.5)] hover:text-[rgba(153,197,255,0.8)]"
+                }`}
+              >
+                {icon && <span className="text-sm leading-none">{icon}</span>}
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Status filter chips */}
+          <div className="flex gap-1.5 mt-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
             {[
               { label: "All", value: "all" },
               { label: "Active", value: "active" },
@@ -2326,6 +2611,45 @@ export default function CustomerTab() {
           </select>
           <span className="text-xs text-[rgba(153,197,255,0.4)] ml-auto">{filtered.length} customers</span>
         </div>
+
+        {/* Commercial survey strip */}
+        {segmentFilter === 'commercial' && (
+          <div className="mx-4 mb-3 rounded-xl border border-[rgba(31,72,255,0.25)] bg-[rgba(31,72,255,0.06)] overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-[rgba(31,72,255,0.15)]">
+              <p className="text-xs font-bold text-[#99c5ff]">Open surveys</p>
+              <p className="text-[10px] text-[rgba(153,197,255,0.4)]">Select a customer below to start one</p>
+            </div>
+            {openSurveys.length === 0 ? (
+              <div className="px-4 py-3">
+                <p className="text-xs text-[rgba(153,197,255,0.4)]">No surveys in progress — open a commercial customer to start one.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[rgba(31,72,255,0.12)]">
+                {openSurveys.map(sv => (
+                  <button
+                    key={sv.id}
+                    onClick={() => navigate(`/survey/${sv.id}`)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[rgba(31,72,255,0.1)] transition-colors text-left"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-white">{sv.customers?.name ?? '—'}</p>
+                      <p className="text-[10px] text-[rgba(153,197,255,0.45)] mt-0.5 capitalize">{sv.status.replace('_', ' ')}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
+                        sv.status === 'capturing'   ? 'bg-blue-500/15 text-blue-300 border-blue-500/25' :
+                        sv.status === 'structured'  ? 'bg-amber-500/15 text-amber-300 border-amber-500/25' :
+                        sv.status === 'quoted'      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25' :
+                                                      'bg-white/10 text-[rgba(153,197,255,0.5)] border-white/10'
+                      }`}>{sv.status}</span>
+                      <span className="text-[#99c5ff] text-sm">→</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Customer list */}
         <div className="bg-transparent overflow-y-auto flex-1">

@@ -197,23 +197,42 @@ serve(async (req) => {
 
   let ownerEmail: string | null = null;
   let bizName: string = "Cleaning Services";
+  let isPro = false;
 
   if (biz?.owner_user_id) {
     const { data: profile } = await sb
       .from("profiles")
-      .select("business_name, display_name, brand_voice, email")
+      .select("business_name, brand_voice, subscription_tier, plan")
       .eq("id", biz.owner_user_id)
       .maybeSingle();
 
     const brandVoice = profile?.brand_voice as Record<string, string> | null;
-    bizName = brandVoice?.business_name ?? profile?.business_name ?? profile?.display_name ?? "Cleaning Services";
+    bizName = brandVoice?.business_name ?? profile?.business_name ?? "Cleaning Services";
 
-    // Try profile email first, then auth admin API
-    if (profile?.email) {
-      ownerEmail = profile.email;
-    } else {
-      const { data: { user } } = await sb.auth.admin.getUserById(biz.owner_user_id);
-      ownerEmail = user?.email ?? null;
+    const tier = (profile?.subscription_tier === "pro" || profile?.subscription_tier === "max")
+      ? profile.subscription_tier
+      : (profile?.plan === "pro" || profile?.plan === "max")
+        ? profile.plan
+        : "lite";
+    isPro = tier === "pro" || tier === "max";
+
+    const { data: { user } } = await sb.auth.admin.getUserById(biz.owner_user_id);
+    ownerEmail = user?.email ?? null;
+  }
+
+  // ── Monthly limit check (lite plan only) ──────────────────────────────────
+  if (!isPro) {
+    const thisMonth = new Date().toISOString().slice(0, 7) + "-01";
+    const { data: allowed, error: rpcErr } = await sb.rpc("check_and_consume_fd_limit", {
+      p_business_id: business_id,
+      p_month:       thisMonth,
+      p_limit:       10,
+    });
+    if (rpcErr) {
+      console.error("fd limit check error:", rpcErr);
+      // Fail open — don't block a real lead because of a DB hiccup
+    } else if (!allowed) {
+      return json({ error: "Monthly site visit request limit reached", limit_reached: true }, 429);
     }
   }
 

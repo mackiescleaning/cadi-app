@@ -486,10 +486,13 @@ function KitsSection({ products, setProducts, accounts, kits, setKits }) {
   const [kitStaffOptions, setKitStaffOptions] = useState(DEFAULT_KIT_STAFF_OPTIONS);
   useEffect(() => {
     import('../lib/supabase').then(({ supabase }) => {
-      supabase.from('staff_members').select('name').eq('active', true).limit(50)
+      supabase.from('team_members').select('first_name, last_name').eq('is_active', true).limit(50)
         .then(({ data }) => {
           if (data && data.length > 0) {
-            setKitStaffOptions(["You", ...data.map(s => s.name), "Unassigned"]);
+            const names = data
+              .map(s => [s.first_name, s.last_name].filter(Boolean).join(' ').trim())
+              .filter(Boolean);
+            setKitStaffOptions(["You", ...names, "Unassigned"]);
           }
         });
     });

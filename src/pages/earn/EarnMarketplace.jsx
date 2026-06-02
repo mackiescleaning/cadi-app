@@ -14,7 +14,7 @@ const SERVICE_COLOUR = {
 
 const JOBS = [
   {
-    id: 'j1', site: 'Premier Inn Luton Airport',    postcode: 'MK42', fm: 'Britannia FM',
+    id: 'j1', site: 'Premier Inn Luton Airport',    postcode: 'MK42', fm: 'Britannia Group',
     service: 'Daily clean',    freq: 'Recurring',  schedule: 'Mon–Fri',  window: '06:00–08:00',
     value: 85, valueFreq: '/visit', monthlyEst: 1700, matchScore: 94,
     matchReasons: ['Location match', 'Service match', 'Score threshold met'],
@@ -22,7 +22,7 @@ const JOBS = [
     action: 'accept',
   },
   {
-    id: 'j2', site: 'Luton Central Library',         postcode: 'LU1',  fm: 'Britannia FM',
+    id: 'j2', site: 'Luton Central Library',         postcode: 'LU1',  fm: 'Britannia Group',
     service: 'Evening clean',  freq: 'Recurring',  schedule: 'Mon–Fri',  window: '18:00–20:00',
     value: 68, valueFreq: '/visit', monthlyEst: 1360, matchScore: 88,
     matchReasons: ['Service match', 'Score threshold met'],
@@ -54,7 +54,7 @@ const JOBS = [
     action: 'apply',
   },
   {
-    id: 'j6', site: 'L&D Hospital – Main Tower',     postcode: 'LU2',  fm: 'Britannia FM',
+    id: 'j6', site: 'L&D Hospital – Main Tower',     postcode: 'LU2',  fm: 'Britannia Group',
     service: 'Hospital clean', freq: 'Recurring',  schedule: 'Mon–Sat',  window: '06:00–09:00',
     value: 110, valueFreq: '/visit', monthlyEst: 2420, matchScore: 65,
     matchReasons: ['Service match'],

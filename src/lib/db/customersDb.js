@@ -10,7 +10,7 @@ export async function listCustomers(optionsOrLimit = {}) {
     ? { pageSize: optionsOrLimit, page: 0 }
     : optionsOrLimit;
 
-  const { page = 0, pageSize = 200 } = opts;
+  const { page = 0, pageSize = 500 } = opts;
 
   const { data, error } = await supabase
     .from('customers')
@@ -46,6 +46,17 @@ export async function upsertCustomer(customer) {
     last_job_date: customer.lastJobDate || null,
     next_job_date: customer.nextJobDate || null,
     lifetime_value: Number(customer.lifetimeValue) || 0,
+    // CleanerPlanner / Squeegee import fields
+    due_date:           customer.dueDate || null,
+    job_reference:      customer.jobReference || null,
+    customer_reference: customer.customerReference || null,
+    schedule:           customer.schedule || null,
+    customer_balance:   customer.customerBalance != null ? Number(customer.customerBalance) : null,
+    price_per_visit:    customer.pricePerVisit != null ? Number(customer.pricePerVisit) : null,
+    round_name:         customer.roundName || null,
+    account_status:     customer.accountStatus || 'active',
+    segment:            customer.segment || 'unsegmented',
+    segment_source:     customer.segmentSource || 'owner_set',
   };
 
   const { data, error } = await supabase

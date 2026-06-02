@@ -5,7 +5,7 @@ const ORANGE = '#C2410C';
 const NAVY   = '#010a4f';
 
 const STATS = [
-  { label: 'Connected FMs',      value: '1',      sub: 'Britannia FM active',       color: '#059669' },
+  { label: 'Connected FMs',      value: '1',      sub: 'Britannia Group active',       color: '#059669' },
   { label: 'Available to you',   value: '6 jobs', sub: 'matched to your score',     color: '#4f78ff' },
   { label: 'Pending payment',    value: '£460',   sub: 'awaiting FM sign-off',      color: '#f59e0b' },
   { label: 'Earned this month',  value: '£595',   sub: 'confirmed & paid',          color: '#059669' },
@@ -20,13 +20,13 @@ const PIPELINE_SNAPSHOT = [
 
 const FEATURED_JOBS = [
   {
-    site: 'Premier Inn Luton Airport', postcode: 'MK42', fm: 'Britannia FM',
+    site: 'Premier Inn Luton Airport', postcode: 'MK42', fm: 'Britannia Group',
     service: 'Daily clean', schedule: 'Mon–Fri', window: '06:00–08:00',
     value: 85, valueFreq: '/visit', monthlyEst: 1700, matchScore: 94,
     freq: 'Recurring', action: 'accept',
   },
   {
-    site: 'Luton Central Library', postcode: 'LU1', fm: 'Britannia FM',
+    site: 'Luton Central Library', postcode: 'LU1', fm: 'Britannia Group',
     service: 'Evening clean', schedule: 'Mon–Fri', window: '18:00–20:00',
     value: 68, valueFreq: '/visit', monthlyEst: 1360, matchScore: 88,
     freq: 'Recurring', action: 'accept',
@@ -71,7 +71,7 @@ export default function EarnLanding() {
           </div>
           <h1 className="text-2xl font-black leading-tight mb-1">Your FM command centre</h1>
           <p className="text-sm text-white/50 leading-relaxed">
-            Connected to Britannia FM · 6 jobs available now · £460 pending payment
+            Connected to Britannia Group · 6 jobs available now · £460 pending payment
           </p>
         </div>
       </div>
@@ -87,7 +87,7 @@ export default function EarnLanding() {
         ))}
       </div>
 
-      {/* Active connection — Britannia FM */}
+      {/* Active connection — Britannia Group */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-[10px] font-black text-[#010a4f] uppercase tracking-widest">Active Connection</h2>
@@ -104,7 +104,7 @@ export default function EarnLanding() {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <div className="font-black text-[#010a4f]">Britannia FM</div>
+                <div className="font-black text-[#010a4f]">Britannia Group</div>
                 <span className="text-[10px] font-black px-2 py-0.5 rounded-full text-emerald-700"
                   style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)' }}>
                   Active
@@ -175,7 +175,7 @@ export default function EarnLanding() {
         </div>
         <div className="flex-1">
           <div className="text-sm font-black text-[#010a4f]">Evidence required — Premier Inn Luton Airport</div>
-          <div className="text-xs text-gray-500 mt-0.5">Upload geo-stamped photos for 8 May job · Britannia FM awaiting</div>
+          <div className="text-xs text-gray-500 mt-0.5">Upload geo-stamped photos for 8 May job · Britannia Group awaiting</div>
         </div>
         <ChevronRight size={16} className="text-gray-400 shrink-0 mt-1" />
       </div>

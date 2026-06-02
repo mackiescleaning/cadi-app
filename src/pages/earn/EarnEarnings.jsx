@@ -9,7 +9,7 @@ const card = {
 const INVOICES_TRACKER = [
   {
     id: 'INV-0042',
-    client: 'Britannia FM',
+    client: 'Britannia Group',
     amount: 173,
     sent: '19 May',
     stages: [
@@ -40,14 +40,14 @@ const PERIOD_DATA = {
     jobs: 12,
     vat: 268,
     breakdown: [
-      { client: 'Britannia FM', amount: 780 },
+      { client: 'Britannia Group', amount: 780 },
       { client: 'Metro Clean', amount: 360 },
       { client: 'Central Beds Council', amount: 200 },
     ],
     ledger: [
-      { date: '19 May', ref: '#INV-0042', client: 'Britannia FM', amount: 173, status: 'Processing' },
+      { date: '19 May', ref: '#INV-0042', client: 'Britannia Group', amount: 173, status: 'Processing' },
       { date: '10 May', ref: '#INV-0041', client: 'Metro Clean', amount: 120, status: 'Paid' },
-      { date: '06 May', ref: '#INV-0040', client: 'Britannia FM', amount: 156, status: 'Paid' },
+      { date: '06 May', ref: '#INV-0040', client: 'Britannia Group', amount: 156, status: 'Paid' },
       { date: '02 May', ref: '#INV-0039', client: 'Central Beds Council', amount: 200, status: 'Paid' },
     ],
   },
@@ -57,14 +57,14 @@ const PERIOD_DATA = {
     jobs: 19,
     vat: 436,
     breakdown: [
-      { client: 'Britannia FM', amount: 1200 },
+      { client: 'Britannia Group', amount: 1200 },
       { client: 'Metro Clean', amount: 580 },
       { client: 'Central Beds Council', amount: 400 },
     ],
     ledger: [
-      { date: '30 Apr', ref: '#INV-0038', client: 'Britannia FM', amount: 312, status: 'Paid' },
+      { date: '30 Apr', ref: '#INV-0038', client: 'Britannia Group', amount: 312, status: 'Paid' },
       { date: '22 Apr', ref: '#INV-0037', client: 'Metro Clean', amount: 240, status: 'Paid' },
-      { date: '15 Apr', ref: '#INV-0036', client: 'Britannia FM', amount: 288, status: 'Paid' },
+      { date: '15 Apr', ref: '#INV-0036', client: 'Britannia Group', amount: 288, status: 'Paid' },
       { date: '05 Apr', ref: '#INV-0035', client: 'Central Beds Council', amount: 400, status: 'Paid' },
     ],
   },
@@ -74,7 +74,7 @@ const PERIOD_DATA = {
     jobs: 51,
     vat: 1164,
     breakdown: [
-      { client: 'Britannia FM', amount: 3200 },
+      { client: 'Britannia Group', amount: 3200 },
       { client: 'Metro Clean', amount: 1420 },
       { client: 'Central Beds Council', amount: 1200 },
     ],

@@ -662,7 +662,7 @@ export default function ThirtyDayPlan({ onRefresh }) {
           onClick={() => setCollapsed(false)}
           className="flex items-center gap-2 text-xs font-bold text-[#4f78ff] hover:text-[#99c5ff] transition-colors"
         >
-          <Sparkles size={12} /> 30 Day Plan — Phase {Math.min(currentPhase, 3)} of 3
+          <Sparkles size={12} /> Get started with Cadi — Phase {Math.min(currentPhase, 3)} of 3
         </button>
       </div>
     );
@@ -707,7 +707,7 @@ export default function ThirtyDayPlan({ onRefresh }) {
         {/* Panel header */}
         <div className="px-5 sm:px-6 pt-5 pb-3 flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#4f78ff] mb-1">Your Cadi 30 Day Plan</p>
+            <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#4f78ff] mb-1">Get started with Cadi</p>
             <h3 className="text-base font-black text-white leading-tight">
               {showPhase3
                 ? 'Phase 3 of 3 — Staff your Front Desk'

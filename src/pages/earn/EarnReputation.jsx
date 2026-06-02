@@ -5,22 +5,22 @@ const EARN_ORANGE = '#C2410C';
 
 const REVIEWS = [
   {
-    id: 'r1', fm: 'Britannia FM', site: 'Next – Luton The Mall', date: '8 May 2026',
+    id: 'r1', fm: 'Britannia Group', site: 'Next – Luton The Mall', date: '8 May 2026',
     rating: 5, comment: 'Excellent as always — arrived on time, thorough clean, all photos uploaded. Store was ready well before opening. Site supervisor was very happy.',
     job: 'Retail morning clean',
   },
   {
-    id: 'r2', fm: 'Britannia FM', site: 'Premier Inn Luton Airport', date: '6 May 2026',
+    id: 'r2', fm: 'Britannia Group', site: 'Premier Inn Luton Airport', date: '6 May 2026',
     rating: 5, comment: 'Great job. Before and after photos excellent quality. Lobby and breakfast areas spotless. SLA met comfortably.',
     job: 'Morning clean',
   },
   {
-    id: 'r3', fm: 'Britannia FM', site: 'Next – Luton The Mall', date: '30 Apr 2026',
+    id: 'r3', fm: 'Britannia Group', site: 'Next – Luton The Mall', date: '30 Apr 2026',
     rating: 3, comment: 'Arrived 12 minutes late — slightly outside SLA window. Clean itself was good quality. Please flag any delays in advance.',
     job: 'Retail morning clean',
   },
   {
-    id: 'r4', fm: 'Britannia FM', site: 'Next – Luton The Mall', date: '25 Apr 2026',
+    id: 'r4', fm: 'Britannia Group', site: 'Next – Luton The Mall', date: '25 Apr 2026',
     rating: 5, comment: 'Outstanding deep clean. Every area completed, 31 photos uploaded with full sign-off. Fitting rooms and stockroom immaculate. Highly recommended.',
     job: 'Deep clean',
   },

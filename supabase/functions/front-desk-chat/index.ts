@@ -64,10 +64,12 @@ function buildSystemPrompt(ctx: BusinessContext): string {
 - No hollow affirmations — never say "Great!", "Perfect!", "Absolutely!", "Sure thing!" or similar.
 - Sound like a real person, not a chatbot. Don't repeat back what the customer just said.
 - Never quote prices. If asked about price, say: "The team will confirm pricing once they've had a look — they'll be in touch within ${responseWindow}."
-- Never commit to dates or availability.${neverSay}
+- Never commit to dates or availability.
+- If the visitor seems to be asking about a different type of service (e.g. residential in a commercial chat), gently clarify and continue collecting what you need.${neverSay}
 
 ## Suggestions
-At the end of EVERY response, append:
+ALWAYS write your conversational message first. Then append suggestions on a new line.
+NEVER output suggestions with no message text — there must always be at least one sentence above the suggestions block.
 
 SUGGESTIONS_START
 ["Option A", "Option B", "Option C"]
@@ -623,24 +625,42 @@ serve(async (req: Request) => {
   const siteVisitData  = extractBlock(rawReply, "SITE_VISIT_START", "SITE_VISIT_END") as Record<string, unknown> | null;
   const suggestionsRaw = extractBlock(rawReply, "SUGGESTIONS_START", "SUGGESTIONS_END");
   const suggestions    = Array.isArray(suggestionsRaw) ? suggestionsRaw as string[] : [];
-  const cleanReply     = cleanText(rawReply);
+  let cleanReply = cleanText(rawReply);
+  // If the AI output only structured blocks with no visible text, synthesise a closing message
+  if (!cleanReply) {
+    cleanReply = siteVisitData
+      ? "We have everything we need. The team will be in touch within a couple of hours."
+      : contactData
+        ? "Got it — we have your details. The team will be in touch soon."
+        : "Got it. Is there anything else I can help with?";
+  }
 
-  // If site visit data was captured, call receive-site-visit (fire and forget)
+  // If site visit data was captured, call receive-site-visit and await it.
+  // Must be awaited — fire-and-forget is killed by the Deno runtime before the
+  // secondary fetch completes, so the inbox item and email never arrive.
   let siteVisitRequested = false;
   if (siteVisitData) {
     siteVisitRequested = true;
-    fetch(`${SUPABASE_URL}/functions/v1/receive-site-visit`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
-      },
-      body: JSON.stringify({
-        business_id,
-        enquiry_source: "widget_chat",
-        ...siteVisitData,
-      }),
-    }).catch((err) => console.error("receive-site-visit call failed:", err));
+    try {
+      const svRes = await fetch(`${SUPABASE_URL}/functions/v1/receive-site-visit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
+        },
+        body: JSON.stringify({
+          business_id,
+          enquiry_source: "widget_chat",
+          ...siteVisitData,
+        }),
+      });
+      if (!svRes.ok) {
+        const errText = await svRes.text();
+        console.error(`receive-site-visit returned ${svRes.status}:`, errText);
+      }
+    } catch (err) {
+      console.error("receive-site-visit call failed:", err);
+    }
   }
 
   // Calculate quote if requested

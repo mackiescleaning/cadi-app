@@ -5,6 +5,7 @@
       "name": "cadi-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
+      "cwd": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints",
       "port": 3000
     },
     {
