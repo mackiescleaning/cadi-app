@@ -16,6 +16,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useSearchParams } from "react-router-dom";
+import { useCountUp } from "../hooks/useCountUp";
 import { ChevronLeft, ChevronRight, Plus, Filter, Search, X, Trash2, Pencil, Check, GripVertical } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor,
@@ -759,6 +760,18 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
   const earned = filteredJobs.filter(j => j.status === 'complete').reduce((s, j) => s + (j.price || 0), 0);
   const toGo   = filteredJobs.filter(j => j.status !== 'complete').reduce((s, j) => s + (j.price || 0), 0);
   const pct    = total > 0 ? Math.round((done / total) * 100) : 0;
+  const earnedAnim = useCountUp(earned, 600);
+
+  const routePostcodes = sorted
+    .filter(j => j.status !== 'complete' && j.postcode)
+    .map(j => j.postcode.trim())
+    .filter(Boolean);
+
+  function handleRoute() {
+    if (routePostcodes.length === 0) return;
+    const url = `https://www.google.com/maps/dir/${routePostcodes.map(p => encodeURIComponent(p)).join('/')}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 
   const custById = useMemo(() => {
     const m = new Map();
@@ -781,19 +794,23 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
       const oldIdx = prev.indexOf(active.id);
       const newIdx = prev.indexOf(over.id);
       if (oldIdx === -1 || newIdx === -1) return prev;
-      return arrayMove(prev, oldIdx, newIdx);
-    });
-    // Persist order via start_hour: assign fractional hours so relative order is saved
-    // (done lazily — no await needed, fire and forget)
-    setOrder(prev => {
+      const next = arrayMove(prev, oldIdx, newIdx);
+      // Persist display order by spreading start_hours so the relative sequence
+      // is saved without overwriting real times. Space by 0.01h gaps (< 1 min)
+      // so jobs stay sorted but times stay meaningful.
       const byId = new Map(filteredJobs.map(j => [j.id, j]));
-      prev.forEach((id, i) => {
+      const sorted = [...filteredJobs].sort((a, b) => a.startHour - b.startHour);
+      const baseHour = sorted[0]?.startHour ?? 8;
+      next.forEach((id, i) => {
         const job = byId.get(id);
-        if (job && job.status !== 'complete' && job.startHour !== i) {
-          updateJob(id, { start_hour: i });
+        if (job && job.status !== 'complete') {
+          const newHour = baseHour + i * 0.01;
+          if (Math.abs(job.startHour - newHour) > 0.001) {
+            updateJob(id, { start_hour: newHour });
+          }
         }
       });
-      return prev;
+      return next;
     });
   }, [filteredJobs, updateJob]);
 
@@ -822,14 +839,29 @@ function DayView({ jobs, onJobClick, typeFilter, crewFilter, updateJob }) {
                 {done === total && total > 0 ? "🎉 All done!" : `${done} of ${total} complete`}
               </p>
               <p className="text-xs text-slate-500 mt-0.5">
-                {done > 0 && `£${fmtMoney(earned)} earned`}
+                {done > 0 && (
+                  <span className="font-semibold text-emerald-600 tabular-nums">
+                    £{fmtMoney(earnedAnim)} earned
+                  </span>
+                )}
                 {done > 0 && toGo > 0 && " · "}
                 {toGo > 0 && `£${fmtMoney(toGo)} to go`}
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-2xl font-black text-slate-900 tabular-nums">{total}</p>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">jobs</p>
+            <div className="flex items-center gap-2">
+              {routePostcodes.length > 0 && (
+                <button
+                  onClick={handleRoute}
+                  title="Open today's remaining jobs in Google Maps"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 bg-white/70 text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
+                >
+                  🗺️ Route
+                </button>
+              )}
+              <div className="text-right">
+                <p className="text-2xl font-black text-slate-900 tabular-nums">{total}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">jobs</p>
+              </div>
             </div>
           </div>
           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">

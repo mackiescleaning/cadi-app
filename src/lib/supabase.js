@@ -33,4 +33,3 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 _client = supabase;
-window._supabase = supabase;

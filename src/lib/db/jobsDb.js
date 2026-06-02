@@ -91,10 +91,12 @@ export async function listJobs(optionsOrLimit = {}) {
 }
 
 export async function updateJob(id, updates) {
+  const ownerId = await getCurrentUserId();
   const { data, error } = await supabase
     .from('jobs')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('owner_id', ownerId)
     .select('*')
     .single();
 
@@ -103,10 +105,12 @@ export async function updateJob(id, updates) {
 }
 
 export async function deleteJob(id) {
+  const ownerId = await getCurrentUserId();
   const { error } = await supabase
     .from('jobs')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('owner_id', ownerId);
 
   if (error) throw error;
 }

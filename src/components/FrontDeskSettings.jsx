@@ -327,6 +327,62 @@ export default function FrontDeskSettings() {
         </button>
       </div>
 
+      {/* What it looks like on your site */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h3 className="font-bold text-[#010a4f]">What it looks like on your site</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Floats in the bottom-right corner — always visible, never in the way</p>
+        </div>
+        <div className="relative bg-gray-50 m-4 rounded-xl overflow-hidden border border-gray-100" style={{ height: 210 }}>
+          {/* Fake page skeleton */}
+          <div className="p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-4 w-4 rounded-full bg-gray-200" />
+              <div className="h-3 bg-gray-200 rounded-full w-24" />
+              <div className="h-3 bg-gray-100 rounded-full w-16 ml-auto" />
+              <div className="h-3 bg-gray-100 rounded-full w-14" />
+            </div>
+            <div className="h-3 bg-gray-200 rounded-full w-2/3 mb-2" />
+            <div className="h-2.5 bg-gray-100 rounded-full w-full mb-1.5" />
+            <div className="h-2.5 bg-gray-100 rounded-full w-4/5 mb-1.5" />
+            <div className="h-2.5 bg-gray-100 rounded-full w-3/5 mb-4" />
+            <div className="flex gap-2">
+              <div className="h-7 bg-[#1f48ff]/20 rounded-lg w-20" />
+              <div className="h-7 bg-gray-100 rounded-lg w-16" />
+            </div>
+          </div>
+          {/* Widget — bottom right */}
+          <div className="absolute bottom-4 right-4 flex flex-col items-end gap-2 pointer-events-none">
+            {/* Greeting bubble */}
+            <div className="relative bg-white rounded-xl shadow-md border border-gray-100 px-3 py-2">
+              <p className="text-[11px] text-gray-700 leading-snug max-w-[150px]">
+                👋 Hi! Get an instant quote — what can I help with?
+              </p>
+              <div className="absolute -bottom-[6px] right-4 w-0 h-0" style={{ borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '6px solid white' }} />
+            </div>
+            {/* Widget button */}
+            <div
+              className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg"
+              style={{ background: 'linear-gradient(135deg, #010a4f 0%, #1f48ff 100%)', boxShadow: '0 4px 20px rgba(31,72,255,0.4)' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="rgba(255,255,255,0.95)" />
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div className="px-6 pb-5">
+          <button
+            onClick={() => setShowPreview(true)}
+            disabled={!businessId}
+            className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-bold text-[#1f48ff] border border-[#1f48ff]/30 rounded-xl hover:bg-[#1f48ff]/5 transition-colors disabled:opacity-40"
+          >
+            <Play size={13} />
+            Open full preview — chat with it live
+          </button>
+        </div>
+      </div>
+
       {/* Try Front Desk */}
       <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6 flex items-center justify-between gap-4">
         <div>

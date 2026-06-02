@@ -813,6 +813,22 @@ function TodaysJobs({ jobs, onNavigate }) {
         </div>
       </div>
 
+      {/* All-done celebration */}
+      {jobs.length > 0 && doneCount === jobs.length && (
+        <div
+          className="px-5 py-4 border-b border-[rgba(52,211,153,0.2)]"
+          style={{ background: 'linear-gradient(135deg, rgba(52,211,153,0.12) 0%, rgba(79,120,255,0.06) 100%)' }}
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl shrink-0" style={{ filter: 'drop-shadow(0 0 10px rgba(52,211,153,0.7))' }}>🎉</span>
+            <div>
+              <p className="text-sm font-black text-emerald-300">Day wrapped!</p>
+              <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">All {jobs.length} job{jobs.length !== 1 ? 's' : ''} complete · great work today</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {jobs.length === 0 && (
         <div className="px-5 py-8 text-center">
           <p className="text-sm text-[rgba(153,197,255,0.4)]">No jobs yet for today.</p>
@@ -1459,6 +1475,42 @@ function BadgesShelf({ badges, onShare }) {
   );
 }
 
+// ─── Elite celebration overlay ─────────────────────────────────────────────────
+function EliteCelebration({ onClose }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 7000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[500] flex items-center justify-center"
+      style={{ background: 'rgba(1,10,79,0.88)', backdropFilter: 'blur(10px)' }}
+      onClick={onClose}
+    >
+      <div className="text-center px-8 py-12 max-w-sm" onClick={e => e.stopPropagation()}>
+        <div className="relative inline-block mb-6">
+          <div className="text-8xl" style={{ filter: 'drop-shadow(0 0 48px rgba(167,139,250,0.9))' }}>🏆</div>
+          <div className="absolute inset-0 rounded-full pointer-events-none" style={{ border: '2px solid rgba(167,139,250,0.5)', animation: 'scoreLand 1.2s ease-out forwards' }} />
+        </div>
+        <p className="text-xs font-black uppercase tracking-[0.35em] text-violet-400 mb-3">Cadi Score · 90+</p>
+        <h2 className="text-4xl font-black text-white mb-3 leading-tight">Elite.</h2>
+        <p className="text-sm text-white/50 leading-relaxed mb-8">
+          You've hit the highest tier on Cadi. Your business is firing on all cylinders — keep it there.
+        </p>
+        <button
+          onClick={onClose}
+          className="px-8 py-3 rounded-2xl text-sm font-black text-white shadow-2xl transition-all hover:scale-105"
+          style={{ background: 'linear-gradient(135deg, #7c3aed, #4f78ff)', boxShadow: '0 0 32px rgba(124,58,237,0.5)' }}
+        >
+          ✨ Keep it there
+        </button>
+        <p className="text-xs text-white/20 mt-4">Tap anywhere to close</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function DashboardTab({ accountsData, schedulerData, invoiceData, teamData: incomingTeamData, feedData: incomingFeedData, onNavigate: onNavigateProp }) {
   const routerNavigate = useNavigate();
@@ -1577,6 +1629,7 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const [demoMode,         setDemoMode]         = useState(false);
   const [showTour,         setShowTour]         = useState(false);
   const [showShareCard,    setShowShareCard]    = useState(false);
+  const [showEliteModal,   setShowEliteModal]   = useState(false);
   const [milestone,        setMilestone]        = useState(null); // { emoji, title, body }
   const [readyBanner,      setReadyBanner]      = useState(null); // null | { services, hourlyRate, targetRevenue, sectors, structure }
   const [readyBannerDismissed, setReadyBannerDismissed] = useState(false);
@@ -1739,16 +1792,19 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const prevTierRef = useRef(null);
   useEffect(() => {
     if (prevTierRef.current && prevTierRef.current !== score.tier && score.tier !== "Getting Started") {
-      const msgs = {
-        "Building": { emoji: "📈", title: "You're gaining momentum!", body: `Cadi Score reached ${score.total} — keep pushing!` },
-        "Solid":    { emoji: "💪", title: "Solid! Business is on track.", body: `Cadi Score hit ${score.total} — your business is getting stronger.` },
-        "Firing":   { emoji: "⭐", title: "Firing! You're flying!", body: `Cadi Score hit ${score.total} — you're in the top 25% of Cadi businesses.` },
-        "Elite":    { emoji: "🏆", title: "Elite status unlocked!", body: `Cadi Score hit ${score.total} — screenshot this and share it!` },
-      };
-      const msg = msgs[score.tier];
-      if (msg) {
-        setMilestone(msg);
-        setTimeout(() => setMilestone(null), 4000);
+      if (score.tier === "Elite") {
+        setShowEliteModal(true);
+      } else {
+        const msgs = {
+          "Building": { emoji: "📈", title: "You're gaining momentum!", body: `Cadi Score reached ${score.total} — keep pushing!` },
+          "Solid":    { emoji: "💪", title: "Solid! Business is on track.", body: `Cadi Score hit ${score.total} — your business is getting stronger.` },
+          "Firing":   { emoji: "⭐", title: "Firing! You're flying!", body: `Cadi Score hit ${score.total} — you're in the top 25% of Cadi businesses.` },
+        };
+        const msg = msgs[score.tier];
+        if (msg) {
+          setMilestone(msg);
+          setTimeout(() => setMilestone(null), 4000);
+        }
       }
     }
     prevTierRef.current = score.tier;
@@ -1886,6 +1942,9 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
       {profile && !profile?.onboarding_complete && (
         <Onboarding isModal onComplete={() => updateProfile({ onboarding_complete: true })} />
       )}
+      {showEliteModal && (
+        <EliteCelebration onClose={() => setShowEliteModal(false)} />
+      )}
       {showShareCard && (
         <ShareCardModal
           onClose={() => setShowShareCard(false)}
@@ -1954,6 +2013,20 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
             {recentPts && (
               <div className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 rounded-sm animate-pulse">
                 <span className="text-white text-xs font-bold">+{recentPts} pts</span>
+              </div>
+            )}
+            {/* Streak badge */}
+            {streak > 0 && (
+              <div
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm cursor-default select-none ${streak >= 7 ? 'bg-orange-500/25' : 'bg-white/10'}`}
+                title={`${streak}-day login streak${streak >= 30 ? ' 🌟' : streak >= 7 ? ' 🔥' : ''}`}
+              >
+                <span className={`text-sm leading-none ${streak >= 7 ? 'animate-pulse' : ''}`}>
+                  {streak >= 30 ? '🌟' : streak >= 7 ? '🔥' : '📅'}
+                </span>
+                <span className={`text-xs font-bold tabular-nums ${streak >= 7 ? 'text-orange-300' : 'text-white/70'}`}>
+                  {streak}d
+                </span>
               </div>
             )}
             {/* Mode toggle — only shown when user has a team */}

@@ -545,6 +545,7 @@ export default function InboxPage() {
   const [pending,     setPending]     = useState([]);
   const [history,     setHistory]     = useState([]);
   const [loading,     setLoading]     = useState(true);
+  const [waitingChats, setWaitingChats] = useState(0);
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -557,7 +558,8 @@ export default function InboxPage() {
     `;
 
     try {
-      const [{ data: pendingData }, { data: historyData }] = await Promise.all([
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const [{ data: pendingData }, { data: historyData }, { count: chatCount }] = await Promise.all([
         supabase.from('agent_actions').select(SELECT)
           .eq('business_id', businessId)
           .eq('status', 'pending_approval')
@@ -568,10 +570,16 @@ export default function InboxPage() {
           .neq('status', 'pending_approval')
           .order('created_at', { ascending: false })
           .limit(50),
+        supabase.from('conversations')
+          .select('*', { count: 'exact', head: true })
+          .eq('business_id', businessId)
+          .eq('channel', 'web_chat')
+          .gte('last_message_at', cutoff),
       ]);
 
       setPending(pendingData ?? []);
       setHistory(historyData ?? []);
+      setWaitingChats(chatCount ?? 0);
     } catch (e) {
       console.error('Inbox load error:', e);
     } finally {
@@ -614,6 +622,28 @@ export default function InboxPage() {
             <RefreshCw size={16} />
           </button>
         </div>
+
+        {/* Waiting chats banner */}
+        {waitingChats > 0 && (
+          <div className="mb-5 rounded-xl border border-[#1f48ff]/30 px-4 py-3 flex items-center justify-between gap-3"
+            style={{ background: 'linear-gradient(135deg, #010a4f 0%, #0d1e78 100%)' }}>
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#99c5ff] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#4f78ff]" />
+              </span>
+              <div>
+                <p className="text-sm font-bold text-white">
+                  {waitingChats} visitor{waitingChats !== 1 ? 's' : ''} chatted in the last 24 hours
+                </p>
+                <p className="text-xs text-[rgba(153,197,255,0.6)] mt-0.5">
+                  Their details are captured — check your Sales Manager inbox below
+                </p>
+              </div>
+            </div>
+            <MessageSquare size={18} className="text-[#4f78ff] shrink-0" />
+          </div>
+        )}
 
         {/* Front Desk usage bar — free users only */}
         {!fdUsage.isPro && !fdUsage.loading && (

@@ -401,7 +401,7 @@ export default function OperationsManagerPage() {
             onClick={() => navigate('/upgrade')}
             className="px-6 py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black text-sm rounded-xl transition-all shadow-lg"
           >
-            Upgrade to Pro — £39/month
+            Upgrade to Pro — £{priceMonthly}/month
           </button>
           <p className="text-[10px] text-white/25 mt-3">Cancel anytime · Powered by Stripe</p>
         </div>
