@@ -86,13 +86,63 @@ function parseCurrency(str) {
   return isNaN(n) ? null : n;
 }
 
-function parseCleanerDate(str) {
-  if (!str) return null;
-  const parts = str.trim().split('/');
-  if (parts.length !== 3) return null;
-  const [d, m, y] = parts;
-  const year = y.length === 2 ? `20${y}` : y;
-  return `${year}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+const MONTH_MAP = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+
+function parseCleanerDate(val) {
+  if (!val) return null;
+
+  // Already a JS Date object (XLSX parses Excel date cells as Date objects)
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    return val.toISOString().slice(0, 10);
+  }
+
+  const s = String(val).trim();
+  if (!s || s === '-' || s.toLowerCase() === 'n/a' || s.toLowerCase() === 'overdue') return null;
+
+  // ISO: YYYY-MM-DD (already normalised)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+
+  // Excel serial number (e.g. 46983 — days since 1900-01-01)
+  if (/^\d{5}$/.test(s)) {
+    const serial = Number(s);
+    // Excel epoch: Dec 31 1899 (with Lotus leap-year bug offset 1)
+    const d = new Date(Date.UTC(1899, 11, 31) + serial * 86400000);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+
+  // DD/MM/YYYY or DD/MM/YY
+  const slash = s.split('/');
+  if (slash.length === 3) {
+    const [d, m, y] = slash;
+    const year = y.length === 2 ? `20${y}` : y;
+    const result = `${year}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(result)) return result;
+  }
+
+  // DD-MM-YYYY or DD-MM-YY (dash separated, day first)
+  const dash = s.split('-');
+  if (dash.length === 3 && dash[0].length <= 2 && isNaN(Number(dash[1])) === false) {
+    const [d, m, y] = dash;
+    const year = y.length === 2 ? `20${y}` : y;
+    const result = `${year}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(result)) return result;
+  }
+
+  // D MMM YYYY or DD MMM YY  (e.g. "1 Jun 2026", "01 Jun 26", "1st Jun 2026")
+  const named = s.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3})[a-z]*[\s,]+(\d{2,4})$/i);
+  if (named) {
+    const d  = named[1];
+    const m  = MONTH_MAP[named[2].toLowerCase()];
+    const yr = named[3].length === 2 ? `20${named[3]}` : named[3];
+    if (m) return `${yr}-${String(m).padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+
+  // Fallback: let JS Date try to parse it (handles "Thu Jun 05 2026 00:00:00 GMT+…")
+  const js = new Date(s);
+  if (!isNaN(js.getTime())) return js.toISOString().slice(0, 10);
+
+  return null;
 }
 
 // Returns { entries: [{customer, rounds, isDupe}], skipped }
@@ -256,12 +306,23 @@ function parseFile(file) {
         const workbook = XLSX.read(data, { type: 'array' });
         if (!workbook.SheetNames.length) throw new Error('No sheets found in file.');
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const raw = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        const raw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
         if (!raw.length) throw new Error('The sheet appears empty — make sure row 1 is the header row and rows 2+ are your customers.');
         const headers = Object.keys(raw[0]);
         const rows = raw.map(r => {
           const obj = {};
-          headers.forEach(h => { obj[h] = String(r[h] ?? '').trim(); });
+          headers.forEach(h => {
+            const v = r[h] ?? '';
+            // Excel date cells come through as JS Date objects — normalise to DD/MM/YYYY
+            // so downstream parsers (parseCleanerDate etc.) always see a consistent format
+            if (v instanceof Date && !isNaN(v.getTime())) {
+              const dd = String(v.getDate()).padStart(2, '0');
+              const mm = String(v.getMonth() + 1).padStart(2, '0');
+              obj[h] = `${dd}/${mm}/${v.getFullYear()}`;
+            } else {
+              obj[h] = String(v).trim();
+            }
+          });
           return obj;
         }).filter(row => Object.values(row).some(v => v !== ''));
         resolve({ headers, rows });
