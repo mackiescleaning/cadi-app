@@ -4,7 +4,7 @@
 //
 // Steps: source → upload → map columns → preview → done
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { X, Upload, ArrowRight, ArrowLeft, Check, AlertCircle, ChevronDown, Crown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { upsertCustomer } from '../lib/db/customersDb';
@@ -927,88 +927,191 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
   );
 }
 
-// ─── Step 5: Done ─────────────────────────────────────────────────────────────
+// ─── Step 5: Done — celebration screen ────────────────────────────────────────
 function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewScheduler }) {
   const hasSchedule = jobs > 0;
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Count-up animation for the headline number
+  const [displayCount, setDisplayCount] = useState(0);
+  useEffect(() => {
+    if (!imported) return;
+    const duration = 900;
+    const steps = 35;
+    const inc = imported / steps;
+    let cur = 0;
+    const t = setInterval(() => {
+      cur = Math.min(cur + inc, imported);
+      setDisplayCount(Math.round(cur));
+      if (cur >= imported) clearInterval(t);
+    }, duration / steps);
+    return () => clearInterval(t);
+  }, [imported]);
+
+  // Confetti squares — CSS-only, fired once on mount
+  const confetti = Array.from({ length: 22 }, (_, i) => ({
+    id: i,
+    left:     `${(i * 4.7 + 3) % 96}%`,
+    delay:    `${(i * 0.09) % 0.8}s`,
+    dur:      `${1.1 + (i % 5) * 0.18}s`,
+    color:    ['#1f48ff','#10b981','#f59e0b','#a78bfa','#f472b6','#34d399'][i % 6],
+    size:     `${5 + (i % 4)}px`,
+    rotate:   `${i * 37}deg`,
+  }));
 
   return (
-    <div className="p-6 flex flex-col items-center gap-4 overflow-y-auto">
-      {/* Success icon */}
-      <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center mt-2">
-        <Check size={26} className="text-emerald-400" />
+    <div className="relative flex flex-col overflow-hidden">
+      {/* ── keyframes ── */}
+      <style>{`
+        @keyframes _confetti {
+          0%   { transform: translateY(-8px) rotate(var(--r)) scale(1); opacity:1; }
+          80%  { opacity: 1; }
+          100% { transform: translateY(340px) rotate(calc(var(--r) + 540deg)) scale(0.6); opacity:0; }
+        }
+        @keyframes _pop {
+          0%  { transform: scale(0.3); opacity:0; }
+          60% { transform: scale(1.15); }
+          100%{ transform: scale(1);   opacity:1; }
+        }
+        @keyframes _ring {
+          0%   { transform: scale(1);   opacity: 0.7; }
+          100% { transform: scale(2.2); opacity: 0; }
+        }
+        @keyframes _up {
+          from { transform: translateY(18px); opacity:0; }
+          to   { transform: translateY(0);    opacity:1; }
+        }
+        ._pop  { animation: _pop  0.55s cubic-bezier(0.34,1.56,0.64,1) both; }
+        ._ring { animation: _ring 0.9s ease-out both; }
+        ._up1  { animation: _up   0.4s ease-out 0.3s both; }
+        ._up2  { animation: _up   0.4s ease-out 0.45s both; }
+        ._up3  { animation: _up   0.4s ease-out 0.6s both; }
+        ._conf { animation: _confetti linear forwards; }
+      `}</style>
+
+      {/* Confetti burst */}
+      <div className="absolute inset-x-0 top-0 h-56 pointer-events-none overflow-hidden">
+        {confetti.map(c => (
+          <div
+            key={c.id}
+            className="_conf absolute rounded-sm"
+            style={{
+              left: c.left, top: '-6px',
+              width: c.size, height: c.size,
+              background: c.color,
+              '--r': c.rotate,
+              animationDuration: c.dur,
+              animationDelay: c.delay,
+            }}
+          />
+        ))}
       </div>
 
-      {/* Headline */}
-      <div className="text-center">
-        <h2 className="text-2xl font-black text-white">
-          {hasSchedule ? 'Your schedule is live in Cadi!' : 'Customers imported!'}
-        </h2>
-        <p className="text-[rgba(153,197,255,0.6)] text-sm mt-1.5">
-          {imported} customer{imported !== 1 ? 's' : ''}
-          {rounds > 0 ? ` · ${rounds} recurring service${rounds !== 1 ? 's' : ''}` : ''}
-          {hasSchedule ? ` · ${jobs} jobs scheduled` : ''}.
-        </p>
-      </div>
+      {/* Soft emerald glow behind icon */}
+      <div
+        className="absolute top-0 left-1/2 -translate-x-1/2 w-72 h-48 pointer-events-none"
+        style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(16,185,129,0.18) 0%, transparent 70%)' }}
+      />
 
-      {/* Mini schedule preview — the wow moment */}
-      {upcomingJobs.length > 0 && (
-        <div className="w-full">
-          <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.45)] mb-2">Coming up in your schedule</p>
-          <div className="rounded-xl border border-[rgba(153,197,255,0.12)] overflow-hidden">
-            {upcomingJobs.map((job, i) => (
-              <div
-                key={i}
-                className={`flex items-center gap-3 px-4 py-2.5 ${i < upcomingJobs.length - 1 ? 'border-b border-[rgba(153,197,255,0.08)]' : ''}`}
-                style={{ background: i % 2 === 0 ? 'rgba(153,197,255,0.03)' : 'transparent' }}
-              >
-                <span className={`text-[11px] font-bold w-16 shrink-0 ${job.date < new Date().toISOString().slice(0, 10) ? 'text-amber-400' : 'text-[#99c5ff]'}`}>
-                  {fmtJobDate(job.date)}
-                </span>
-                <span className="text-sm text-white font-semibold truncate flex-1">{job.customer}</span>
-                {job.price > 0 && (
-                  <span className="text-[11px] text-[rgba(153,197,255,0.45)] shrink-0">£{job.price}</span>
-                )}
-              </div>
-            ))}
+      <div className="relative p-6 flex flex-col items-center gap-5 overflow-y-auto">
+
+        {/* Animated icon + ring */}
+        <div className="relative mt-4 flex items-center justify-center">
+          <div className="_ring absolute w-16 h-16 rounded-full bg-emerald-400/30" />
+          <div className="_pop w-20 h-20 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <Check size={38} className="text-emerald-400" strokeWidth={2.5} />
           </div>
-          {jobs > upcomingJobs.length && (
-            <p className="text-[11px] text-center text-[rgba(153,197,255,0.35)] mt-2">
-              + {jobs - upcomingJobs.length} more jobs over the next 4 months
+        </div>
+
+        {/* Count-up headline */}
+        <div className="_up1 text-center">
+          <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-emerald-400/70 mb-1">Import complete</p>
+          <h2 className="text-4xl font-black text-white leading-none">
+            {displayCount.toLocaleString()}
+          </h2>
+          <p className="text-lg font-black mt-1" style={{ color: '#99c5ff' }}>
+            {hasSchedule ? 'customers on your schedule' : 'customers added to Cadi'}
+          </p>
+          {hasSchedule && (
+            <p className="text-sm text-[rgba(153,197,255,0.5)] mt-1.5">
+              {jobs.toLocaleString()} jobs plotted across the next 4 months
+              {rounds > 0 ? ` · ${rounds} services` : ''}
             </p>
           )}
         </div>
-      )}
 
-      {/* No-schedule fallback info */}
-      {!hasSchedule && (
-        <div className="w-full px-4 py-3.5 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.15)] text-sm text-[rgba(153,197,255,0.7)] text-left space-y-1.5">
-          <p className="font-bold text-white text-sm">What's next?</p>
-          <p>• View and edit each customer from the Customers page</p>
-          <p>• Add service schedules to customers to populate the Scheduler</p>
-          <p>• Cadi will suggest upsell and win-back opportunities automatically</p>
-        </div>
-      )}
-
-      {/* CTAs */}
-      <div className="w-full space-y-2">
-        {hasSchedule && onViewScheduler && (
-          <button
-            onClick={onViewScheduler}
-            className="w-full py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-bold rounded-xl transition-colors shadow-lg shadow-[#1f48ff]/30"
-          >
-            Open Scheduler →
-          </button>
+        {/* Schedule preview — shows they're really on the schedule */}
+        {upcomingJobs.length > 0 && (
+          <div className="_up2 w-full">
+            <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.4)] mb-2 text-center">
+              Your schedule starts here ↓
+            </p>
+            <div className="rounded-2xl border border-[rgba(153,197,255,0.12)] overflow-hidden"
+                 style={{ background: 'rgba(153,197,255,0.03)' }}>
+              {upcomingJobs.map((job, i) => {
+                const isPast  = job.date < todayStr;
+                const isToday = job.date === todayStr;
+                return (
+                  <div
+                    key={i}
+                    className={`flex items-center gap-3 px-4 py-3 ${i < upcomingJobs.length - 1 ? 'border-b border-[rgba(153,197,255,0.07)]' : ''}`}
+                  >
+                    {/* Date pill */}
+                    <span className={`text-[11px] font-black shrink-0 px-2.5 py-1 rounded-full ${
+                      isPast  ? 'bg-amber-500/20 text-amber-300' :
+                      isToday ? 'bg-emerald-500/20 text-emerald-300' :
+                                'bg-[rgba(31,72,255,0.25)] text-[#99c5ff]'
+                    }`}>
+                      {fmtJobDate(job.date)}
+                    </span>
+                    <span className="text-sm font-semibold text-white truncate flex-1">{job.customer}</span>
+                    {job.price > 0 && (
+                      <span className="text-sm font-black text-emerald-400 shrink-0">£{job.price}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {jobs > upcomingJobs.length && (
+              <p className="text-[11px] text-center text-[rgba(153,197,255,0.3)] mt-2">
+                + {(jobs - upcomingJobs.length).toLocaleString()} more jobs over the next 4 months
+              </p>
+            )}
+          </div>
         )}
-        <button
-          onClick={onClose}
-          className={`w-full py-3 text-sm font-bold rounded-xl transition-colors ${
-            hasSchedule && onViewScheduler
-              ? 'text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff]'
-              : 'bg-[#1f48ff] hover:bg-[#3a5eff] text-white shadow-lg shadow-[#1f48ff]/30'
-          }`}
-        >
-          {hasSchedule ? 'Back to dashboard' : 'View my customers'}
-        </button>
+
+        {/* No-schedule state */}
+        {!hasSchedule && (
+          <div className="_up2 w-full px-4 py-3.5 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.12)] text-sm text-[rgba(153,197,255,0.6)] space-y-1.5">
+            <p className="font-bold text-white">What's next?</p>
+            <p>• View and edit customers from the Customers page</p>
+            <p>• Add a schedule to each customer to populate the Scheduler</p>
+          </div>
+        )}
+
+        {/* CTAs */}
+        <div className="_up3 w-full space-y-2.5 pb-2">
+          {hasSchedule && onViewScheduler && (
+            <button
+              onClick={onViewScheduler}
+              className="w-full py-3.5 rounded-xl text-white text-sm font-black transition-all shadow-lg shadow-[#1f48ff]/40 hover:shadow-[#1f48ff]/60 active:scale-[0.98]"
+              style={{ background: 'linear-gradient(135deg, #1f48ff 0%, #3a6bff 100%)' }}
+            >
+              See my schedule →
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className={`w-full py-3 text-sm font-semibold rounded-xl transition-colors ${
+              hasSchedule && onViewScheduler
+                ? 'text-[rgba(153,197,255,0.4)] hover:text-[rgba(153,197,255,0.7)]'
+                : 'bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black shadow-lg shadow-[#1f48ff]/30'
+            }`}
+          >
+            {hasSchedule && onViewScheduler ? 'Back to dashboard' : 'View my customers'}
+          </button>
+        </div>
+
       </div>
     </div>
   );
