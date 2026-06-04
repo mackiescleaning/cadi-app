@@ -1440,7 +1440,8 @@ function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEditJob }) {
           <div className="rounded-xl border border-slate-200 divide-y divide-slate-100">
             {[
               ["Date",      job.date ? new Date(job.date + 'T00:00:00').toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : "—"],
-              ["Address",   [job.address_line1, job.address_line2, job.town, job.postcode].filter(Boolean).join(', ') || job.postcode || "—"],
+              ["Address",   [job.addressLine1, job.addressLine2, job.postcode].filter(Boolean).join(', ') || job.postcode || "—"],
+              ["Frequency", job.recurrence && job.recurrence !== 'one-off' ? job.recurrence.charAt(0).toUpperCase() + job.recurrence.slice(1) : "One-off"],
               ["Time",      `${fmtTime(job.startHour)} — ${fmtTime(job.startHour + job.durationHrs)}`],
               ["Duration",  durLabel(job.durationHrs)],
               ["Price",     `£${job.price}`],
@@ -1939,7 +1940,6 @@ function NewJobModal({ onClose, onSave, onUpdate, editJob, preCustomer = "", cus
             </div>
           </div>
 
-          {!editJob && (
           <div>
             <FL>Schedule / recurrence</FL>
             <div className="flex flex-wrap gap-1.5">
@@ -1951,14 +1951,15 @@ function NewJobModal({ onClose, onSave, onUpdate, editJob, preCustomer = "", cus
             </div>
             {recurrence !== "none" && (
               <div className="mt-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
-                <p className="text-xs font-semibold text-slate-900">{selectedRec?.label} · next job auto-scheduled</p>
-                {nextDateStr() && (
+                <p className="text-xs font-semibold text-slate-900">
+                  {selectedRec?.label} · {editJob ? 'frequency updated on save' : 'next job auto-scheduled'}
+                </p>
+                {!editJob && nextDateStr() && (
                   <p className="text-xs text-slate-500 mt-0.5">Next occurrence: {nextDateStr()}</p>
                 )}
               </div>
             )}
           </div>
-          )}
 
           <div>
             <FL>Notes / access details</FL>

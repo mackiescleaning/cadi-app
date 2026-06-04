@@ -121,12 +121,12 @@ function buildCleanerPlannerData(rows, existingCustRefs = new Set()) {
       : status.includes('suspend') ? 'suspended'
       : 'active';
 
-    const pricePerVisit  = parseCurrency(get('Price'));
-    const balance        = parseCurrency(get('Balance')) ?? 0;
-    const dueDate        = parseCleanerDate(get('Due'));
-    const schedule       = get('Schedule') || null;
-    const roundName      = get('Round')    || null;
-    const jobRef         = get('Job Ref')  || null;
+    const pricePerVisit  = parseCurrency(get('Price') || get('Job Price') || get('Price Per Visit') || get('Visit Price'));
+    const balance        = parseCurrency(get('Balance') || get('Account Balance') || get('Outstanding')) ?? 0;
+    const dueDate        = parseCleanerDate(get('Due') || get('Next Due') || get('Due Date') || get('Next Clean') || get('Next Visit'));
+    const schedule       = get('Schedule') || get('Frequency') || get('Recurring') || get('Recurrence') || null;
+    const roundName      = get('Round')    || get('Round Name') || get('Route') || null;
+    const jobRef         = get('Job Ref')  || get('Job Reference') || get('Job No') || null;
 
     const round = { jobReference: jobRef, roundName, schedule, pricePerVisit, dueDate, accountStatus };
 
@@ -137,8 +137,13 @@ function buildCleanerPlannerData(rows, existingCustRefs = new Set()) {
         customer: {
           name,
           addressLine1:      address || null,
+          addressLine2:      get('Address Line 2') || get('Address 2') || null,
+          town:              get('Town') || get('City') || null,
+          county:            get('County') || get('Region') || null,
+          postcode:          get('Postcode') || get('Post Code') || null,
           phone:             phone || null,
           email:             email || null,
+          notes:             get('Account Notes') || get('Notes') || get('Comments') || null,
           customerReference: custRef || null,
           accountStatus,
           customerBalance:   balance,
@@ -203,25 +208,41 @@ function generateJobDatesFromRound(round, windowMonths = 4) {
   }
   if (!freqDays) return [];
 
-  // Advance from due date (or today if none) to first occurrence on or after today
+  // Advance from due date (or today if none) to first occurrence on or after today.
+  // Use Math.floor so customers who are slightly overdue (< 14 days) stay visible as
+  // overdue rather than being bumped a full cycle into the future.
   const start = round.dueDate
     ? new Date(round.dueDate + 'T00:00:00')
     : new Date(today);
   if (start < today) {
     const diff = today - start;
-    const skips = Math.ceil(diff / (freqDays * 86400000));
+    const skips = Math.floor(diff / (freqDays * 86400000));
     start.setDate(start.getDate() + skips * freqDays);
+    // If still more than 14 days in the past, advance one more cycle
+    if ((today - start) > 14 * 86400000) {
+      start.setDate(start.getDate() + freqDays);
+    }
   }
 
   const dates = [];
   const cur = new Date(start);
   while (cur <= windowEnd) {
-    // Shift Sunday → Monday (window cleaners don't typically work Sundays)
+    // Shift Sunday → Monday
     if (cur.getDay() === 0) cur.setDate(cur.getDate() + 1);
     if (cur <= windowEnd) dates.push(cur.toISOString().slice(0, 10));
     cur.setDate(cur.getDate() + freqDays);
   }
   return dates;
+}
+
+function fmtJobDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const tom = new Date(t); tom.setDate(tom.getDate() + 1);
+  if (d < t) return 'Overdue';
+  if (d.getTime() === t.getTime()) return 'Today';
+  if (d.getTime() === tom.getTime()) return 'Tomorrow';
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 // ─── Parse file (CSV or Excel) → { headers, rows } ───────────────────────────
@@ -259,36 +280,56 @@ const SOURCES = [
     name: 'QuickBooks',
     icon: '📒',
     hint: 'In QuickBooks go to Sales → Customers. Click the export icon (a small spreadsheet icon) in the top-right corner of the customer list. It will download an Excel file — upload that file here.',
+    sampleFile: '/test-imports/quickbooks-sample.csv',
   },
   {
     id: 'cleanerplanner',
     name: 'CleanerPlanner',
     icon: '🧹',
-    hint: 'In CleanerPlanner go to Customers → Export → Download CSV. The export includes rounds, job references, schedules, balances, and pricing — Cadi will auto-map all of these.',
+    hint: 'In CleanerPlanner go to Jobs → click the Export button (top right) → Download CSV. This gives Cadi your rounds, due dates, schedules, and pricing. Do NOT use the Customers export — use Jobs.',
+    sampleFile: '/test-imports/cleanerplanner-sample.csv',
+  },
+  {
+    id: 'squeegee',
+    name: 'Squeegee',
+    icon: '🪣',
+    hint: 'In Squeegee go to Customers → Export → All Jobs CSV. Upload the "All jobs.csv" file here — Cadi will map your rounds, schedules, and pricing automatically.',
+    sampleFile: '/test-imports/squeegee-sample.csv',
+  },
+  {
+    id: 'aworka',
+    name: 'Aworka',
+    icon: '🔄',
+    hint: 'In Aworka go to Settings → Export Data and download your customer CSV. Upload it here — Cadi will map your rounds and schedule details.',
+    sampleFile: '/test-imports/aworka-sample.csv',
   },
   {
     id: 'jobber',
     name: 'Jobber',
     icon: '🔧',
     hint: 'In Jobber go to Clients → click the export icon in the top-right → Export as CSV.',
+    sampleFile: '/test-imports/jobber-sample.csv',
   },
   {
     id: 'servicem8',
     name: 'ServiceM8',
     icon: '📋',
     hint: 'Go to Clients → More → Export → CSV. Upload that file here.',
+    sampleFile: '/test-imports/generic-spreadsheet-sample.csv',
   },
   {
     id: 'sheets',
     name: 'Google Sheets',
     icon: '📊',
     hint: 'In your spreadsheet go to File → Download → Comma-separated values (.csv). Then upload here.',
+    sampleFile: '/test-imports/generic-spreadsheet-sample.csv',
   },
   {
     id: 'excel',
     name: 'Excel',
     icon: '📗',
     hint: 'Upload your Excel file (.xlsx) directly — no need to convert it first.',
+    sampleFile: '/test-imports/generic-spreadsheet-sample.csv',
   },
   {
     id: 'other',
@@ -400,6 +441,16 @@ function StepUpload({ source, onBack, onParsed }) {
         <div className="px-4 py-3 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.15)] text-sm text-[rgba(153,197,255,0.75)]">
           {source.hint}
         </div>
+        {source.sampleFile && (
+          <a
+            href={source.sampleFile}
+            download
+            className="mt-2 flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] transition-colors w-fit"
+            onClick={e => e.stopPropagation()}
+          >
+            <span className="text-[10px]">↓</span> Download sample file to test with
+          </a>
+        )}
       </div>
 
       <div
@@ -572,6 +623,18 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
     const fresh = entries.filter(e => !e.isDupe);
     const dupes = entries.filter(e => e.isDupe);
     const totalRounds = entries.reduce((sum, e) => sum + e.rounds.length, 0);
+    const withDueDates = entries.filter(e => e.customer.dueDate).length;
+    const withSchedule = entries.filter(e => e.rounds.some(r => r.schedule)).length;
+
+    // Round name breakdown (top 4 rounds by customer count)
+    const roundCounts = {};
+    entries.forEach(e => e.rounds.forEach(r => {
+      const key = r.roundName || 'No round';
+      roundCounts[key] = (roundCounts[key] || 0) + 1;
+    }));
+    const topRounds = Object.entries(roundCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
 
     return (
       <div className="flex flex-col overflow-hidden">
@@ -581,17 +644,21 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
           </button>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-lg">🧹</span>
-            <h2 className="text-xl font-black text-white">CleanerPlanner import</h2>
+            <h2 className="text-xl font-black text-white">Ready to import</h2>
           </div>
-          <p className="text-xs text-[rgba(153,197,255,0.5)] mb-3">Jobs format detected — columns mapped automatically.</p>
+          <p className="text-xs text-[rgba(153,197,255,0.5)] mb-3">CleanerPlanner format detected — rounds, due dates and pricing mapped automatically.</p>
           <div className="flex gap-2">
             <div className="flex-1 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
               <p className="text-lg font-black text-emerald-400">{fresh.length}</p>
               <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wide mt-0.5">Customers</p>
             </div>
             <div className="flex-1 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.12)] text-center">
-              <p className="text-lg font-black text-[#99c5ff]">{totalRounds}</p>
-              <p className="text-[10px] text-[rgba(153,197,255,0.5)] font-bold uppercase tracking-wide mt-0.5">Services</p>
+              <p className="text-lg font-black text-[#99c5ff]">{topRounds.length > 0 ? topRounds.length : totalRounds}</p>
+              <p className="text-[10px] text-[rgba(153,197,255,0.5)] font-bold uppercase tracking-wide mt-0.5">Rounds</p>
+            </div>
+            <div className={`flex-1 px-3 py-2.5 rounded-xl text-center ${withDueDates === entries.length ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-amber-500/10 border border-amber-500/20'}`}>
+              <p className={`text-lg font-black ${withDueDates === entries.length ? 'text-emerald-400' : 'text-amber-400'}`}>{withDueDates}</p>
+              <p className={`text-[10px] font-bold uppercase tracking-wide mt-0.5 ${withDueDates === entries.length ? 'text-emerald-400/70' : 'text-amber-400/70'}`}>Due dates</p>
             </div>
             {dupes.length > 0 && (
               <div className="flex-1 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
@@ -599,13 +666,29 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
                 <p className="text-[10px] text-amber-400/70 font-bold uppercase tracking-wide mt-0.5">Update</p>
               </div>
             )}
-            {skipped.length > 0 && (
-              <div className="flex-1 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
-                <p className="text-lg font-black text-red-400">{skipped.length}</p>
-                <p className="text-[10px] text-red-400/70 font-bold uppercase tracking-wide mt-0.5">Skipped</p>
-              </div>
-            )}
           </div>
+          {/* Round breakdown */}
+          {topRounds.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {topRounds.map(([name, count]) => (
+                <span key={name} className="text-[10px] px-2 py-1 rounded-full bg-[rgba(153,197,255,0.08)] border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.6)]">
+                  {name} · {count}
+                </span>
+              ))}
+              {Object.keys(roundCounts).length > 4 && (
+                <span className="text-[10px] px-2 py-1 rounded-full bg-[rgba(153,197,255,0.05)] text-[rgba(153,197,255,0.4)]">
+                  +{Object.keys(roundCounts).length - 4} more
+                </span>
+              )}
+            </div>
+          )}
+          {/* Schedule quality warning */}
+          {withDueDates < entries.length && (
+            <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/15 text-xs text-amber-300/80">
+              <AlertCircle size={13} className="shrink-0 mt-0.5 text-amber-400" />
+              {entries.length - withDueDates} customer{entries.length - withDueDates !== 1 ? 's' : ''} have no due date in this file — they'll be added to your customer list but won't appear on the schedule until you set a date.
+            </div>
+          )}
         </div>
 
         <div className="overflow-y-auto flex-1 px-6 py-4 space-y-2">
@@ -784,63 +867,88 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
 }
 
 // ─── Step 5: Done ─────────────────────────────────────────────────────────────
-function StepDone({ imported, rounds, jobs, onClose, onViewScheduler }) {
+function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewScheduler }) {
+  const hasSchedule = jobs > 0;
+
   return (
-    <div className="p-8 flex flex-col items-center text-center gap-5">
-      <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
-        <Check size={28} className="text-emerald-400" />
+    <div className="p-6 flex flex-col items-center gap-4 overflow-y-auto">
+      {/* Success icon */}
+      <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center mt-2">
+        <Check size={26} className="text-emerald-400" />
       </div>
-      <div>
+
+      {/* Headline */}
+      <div className="text-center">
         <h2 className="text-2xl font-black text-white">
-          {jobs > 0 ? 'Customers imported & schedule built! 🎉' : 'All done!'}
+          {hasSchedule ? 'Your schedule is live in Cadi!' : 'Customers imported!'}
         </h2>
-        <p className="text-[rgba(153,197,255,0.6)] text-sm mt-2">
-          {imported} customer{imported !== 1 ? 's' : ''} added to Cadi
-          {rounds > 0 ? `, ${rounds} recurring service${rounds !== 1 ? 's' : ''}` : ''}.
+        <p className="text-[rgba(153,197,255,0.6)] text-sm mt-1.5">
+          {imported} customer{imported !== 1 ? 's' : ''}
+          {rounds > 0 ? ` · ${rounds} recurring service${rounds !== 1 ? 's' : ''}` : ''}
+          {hasSchedule ? ` · ${jobs} jobs scheduled` : ''}.
         </p>
       </div>
 
-      {/* Job schedule stats */}
-      {jobs > 0 && (
-        <div className="w-full space-y-2">
-          <div className="flex gap-2">
-            <div className="flex-1 px-3 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
-              <p className="text-xl font-black text-emerald-400">{imported}</p>
-              <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wide mt-0.5">Customers</p>
-            </div>
-            <div className="flex-1 px-3 py-3 rounded-xl bg-[rgba(31,72,255,0.15)] border border-[#1f48ff]/25 text-center">
-              <p className="text-xl font-black text-[#99c5ff]">{jobs}</p>
-              <p className="text-[10px] text-[rgba(153,197,255,0.6)] font-bold uppercase tracking-wide mt-0.5">Jobs scheduled</p>
-            </div>
+      {/* Mini schedule preview — the wow moment */}
+      {upcomingJobs.length > 0 && (
+        <div className="w-full">
+          <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.45)] mb-2">Coming up in your schedule</p>
+          <div className="rounded-xl border border-[rgba(153,197,255,0.12)] overflow-hidden">
+            {upcomingJobs.map((job, i) => (
+              <div
+                key={i}
+                className={`flex items-center gap-3 px-4 py-2.5 ${i < upcomingJobs.length - 1 ? 'border-b border-[rgba(153,197,255,0.08)]' : ''}`}
+                style={{ background: i % 2 === 0 ? 'rgba(153,197,255,0.03)' : 'transparent' }}
+              >
+                <span className={`text-[11px] font-bold w-16 shrink-0 ${job.date < new Date().toISOString().slice(0, 10) ? 'text-amber-400' : 'text-[#99c5ff]'}`}>
+                  {fmtJobDate(job.date)}
+                </span>
+                <span className="text-sm text-white font-semibold truncate flex-1">{job.customer}</span>
+                {job.price > 0 && (
+                  <span className="text-[11px] text-[rgba(153,197,255,0.45)] shrink-0">£{job.price}</span>
+                )}
+              </div>
+            ))}
           </div>
-          <div className="px-4 py-3 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.12)] text-xs text-[rgba(153,197,255,0.7)] text-left">
-            Your Scheduler is now populated with the next 4 months of work based on each customer's round and schedule.
-          </div>
+          {jobs > upcomingJobs.length && (
+            <p className="text-[11px] text-center text-[rgba(153,197,255,0.35)] mt-2">
+              + {jobs - upcomingJobs.length} more jobs over the next 4 months
+            </p>
+          )}
         </div>
       )}
 
-      <div className="w-full px-4 py-3.5 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.15)] text-sm text-[rgba(153,197,255,0.7)] text-left space-y-1.5">
-        <p className="font-bold text-white text-sm">What's next?</p>
-        {jobs > 0 ? (
-          <>
-            <p>• Open Scheduler to see your full work schedule</p>
-            <p>• Assign crew to jobs in the Day view</p>
-            <p>• Check Rounds view to see customers grouped by area</p>
-          </>
-        ) : (
-          <>
-            <p>• View and edit each customer from the Customers page</p>
-            <p>• Cadi will automatically suggest upsell and win-back opportunities</p>
-            <p>• Add job history to customers to get the most out of AI insights</p>
-          </>
+      {/* No-schedule fallback info */}
+      {!hasSchedule && (
+        <div className="w-full px-4 py-3.5 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.15)] text-sm text-[rgba(153,197,255,0.7)] text-left space-y-1.5">
+          <p className="font-bold text-white text-sm">What's next?</p>
+          <p>• View and edit each customer from the Customers page</p>
+          <p>• Add service schedules to customers to populate the Scheduler</p>
+          <p>• Cadi will suggest upsell and win-back opportunities automatically</p>
+        </div>
+      )}
+
+      {/* CTAs */}
+      <div className="w-full space-y-2">
+        {hasSchedule && onViewScheduler && (
+          <button
+            onClick={onViewScheduler}
+            className="w-full py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-bold rounded-xl transition-colors shadow-lg shadow-[#1f48ff]/30"
+          >
+            Open Scheduler →
+          </button>
         )}
+        <button
+          onClick={onClose}
+          className={`w-full py-3 text-sm font-bold rounded-xl transition-colors ${
+            hasSchedule && onViewScheduler
+              ? 'text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff]'
+              : 'bg-[#1f48ff] hover:bg-[#3a5eff] text-white shadow-lg shadow-[#1f48ff]/30'
+          }`}
+        >
+          {hasSchedule ? 'Back to dashboard' : 'View my customers'}
+        </button>
       </div>
-      <button
-        onClick={jobs > 0 && onViewScheduler ? onViewScheduler : onClose}
-        className="w-full py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-bold rounded-xl transition-colors shadow-lg shadow-[#1f48ff]/30"
-      >
-        {jobs > 0 ? 'Open Scheduler →' : 'View my customers'}
-      </button>
     </div>
   );
 }
@@ -1018,6 +1126,7 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
   const [importedCount, setImportedCount] = useState(0);
   const [importedRoundCount, setImportedRoundCount] = useState(0);
   const [importedJobCount, setImportedJobCount] = useState(0);
+  const [importedUpcomingJobs, setImportedUpcomingJobs] = useState([]);
   const [importError, setImportError] = useState(null);
   const [pendingCustomers, setPendingCustomers] = useState([]);
   const [showCap, setShowCap] = useState(false);
@@ -1055,16 +1164,20 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
             const dates = generateJobDatesFromRound(round, 4);
             for (const date of dates) {
               jobsToCreate.push({
-                customerId:  saved.id,
-                customer:    customer.name,
-                postcode:    customer.postcode || '',
+                customerId:   saved.id,
+                customer:     customer.name,
+                addressLine1: customer.addressLine1 || null,
+                addressLine2: customer.addressLine2 || null,
+                town:         customer.town || null,
+                county:       customer.county || null,
+                postcode:     customer.postcode || '',
                 date,
-                type:        jobType,
-                service:     round.roundName || 'Window clean',
-                price:       round.pricePerVisit || 0,
-                recurrence:  round.schedule || 'one-off',
-                isRecurring: (parseFrequencyDays(round.schedule) ?? 0) > 0,
-                notes:       round.jobReference ? `Job ref: ${round.jobReference}` : '',
+                type:         jobType,
+                service:      round.roundName || 'Window clean',
+                price:        round.pricePerVisit || 0,
+                recurrence:   round.schedule || 'one-off',
+                isRecurring:  (parseFrequencyDays(round.schedule) ?? 0) > 0,
+                notes:        round.jobReference ? `Job ref: ${round.jobReference}` : '',
               });
             }
           }
@@ -1086,11 +1199,19 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
       }
     }
 
+    // Build the mini-schedule preview (next 5 upcoming jobs by date)
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const upcoming = jobsToCreate
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .filter(j => j.date >= todayStr)
+      .slice(0, 5);
+
     setImporting(false);
     if (count > 0) {
       setImportedCount(count);
       setImportedRoundCount(roundCount);
       setImportedJobCount(jobCount);
+      setImportedUpcomingJobs(upcoming);
       setStep('done');
       onImported?.();
     } else {
@@ -1231,7 +1352,14 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
           />
         )}
         {step === 'done' && (
-          <StepDone imported={importedCount} rounds={importedRoundCount} jobs={importedJobCount} onClose={onClose} onViewScheduler={onViewScheduler} />
+          <StepDone
+            imported={importedCount}
+            rounds={importedRoundCount}
+            jobs={importedJobCount}
+            upcomingJobs={importedUpcomingJobs}
+            onClose={onClose}
+            onViewScheduler={onViewScheduler}
+          />
         )}
       </ModalShell>
 

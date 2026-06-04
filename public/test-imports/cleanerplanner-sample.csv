@@ -1,0 +1,20 @@
+Cust Ref,Name,Address Line 1,Address Line 2,Town,County,Postcode,Mobile,Email,Job Ref,Round,Schedule,Price,Balance,Status,Cancelled,Due,Account Notes
+C0001,Mrs A Thompson,14 Kensington Road,,Kensington,Greater London,W8 4AA,07712 345678,ann.thompson@email.co.uk,J0001,Round A - Kensington,4 Weekly,28.00,0.00,Active,,01/06/26,Key safe - code 4521. Do not ring bell before 9am.
+C0002,Mr R Patel,22 Pemberton Gardens,,Kensington,Greater London,W8 4BB,07823 456789,rpatel@gmail.com,J0002,Round A - Kensington,4 Weekly,25.00,25.00,Active,,08/06/26,Ring bell twice - wife works nights. Owes £25 from last clean.
+C0003,The Williams Family,8 St Albans Grove,Flat 3,Kensington,Greater London,W8 4CC,07934 567890,,J0003,Round A - Kensington,4 Weekly,32.00,0.00,Active,,15/06/26,
+C0004,Dr S Foster,31 Pemberton Road,,Kensington,Greater London,W8 4DD,07645 678901,sfoster@nhs.net,J0004,Round A - Kensington,Fortnightly,20.00,0.00,Active,,03/06/26,Back gate only - front gate is stiff. Leave invoice under mat.
+C0005,Ms L Johnson,47 Allen Street,Ground Floor Flat,Kensington,Greater London,W8 4EE,07756 789012,ljohnson@hotmail.com,J0005,Round A - Kensington,8 Weekly,45.00,0.00,Active,,22/06/26,
+C0006,Mr & Mrs Brown,3 Munster Road,,Fulham,Greater London,SW6 4AA,07867 890123,,J0006,Round B - Fulham,4 Weekly,30.00,60.00,Active,,30/05/26,Owes for 2 cleans - follow up before next visit
+C0007,Harrison Lettings Ltd,14-16 Fulham High Street,,Fulham,Greater London,SW6 4BB,07978 901234,accounts@harrisonlet.co.uk,J0007,Round B - Fulham,Monthly,85.00,0.00,Active,,10/06/26,Commercial - send invoice to accounts@ email. VAT registered.
+C0008,Mrs D O'Brien,91 Normand Road,,Fulham,Greater London,SW6 4CC,07689 012345,dobrien@yahoo.co.uk,J0008,Round B - Fulham,4 Weekly,28.00,0.00,Active,,12/06/26,
+C0009,The Petersons,6 Mund Street,,Fulham,Greater London,SW6 4DD,07590 123456,,J0009,Round B - Fulham,Weekly,15.00,0.00,Active,,06/06/26,
+C0010,Oak Tree Pub & Kitchen,42 Dawes Road,,Fulham,Greater London,SW6 4EE,07401 234567,manager@oaktreepub.co.uk,J0010,Round B - Fulham,6 Weekly,60.00,0.00,Active,,20/06/26,Commercial - clean fascias + signage as well. Access via rear car park.
+C0011,Mr T Davies,17 Keswick Road,,Putney,Greater London,SW15 2AA,07512 345678,tom.davies@email.com,J0011,Round C - Putney,4 Weekly,35.00,35.00,Active,,02/06/26,Large dog in rear garden - keep gate shut at all times. Cash payer.
+C0012,Mrs Y Chen,52 Lower Richmond Road,Flat B,Putney,Greater London,SW15 2BB,07623 456789,ychen@outlook.com,J0012,Round C - Putney,Fortnightly,22.00,0.00,Active,,09/06/26,
+C0013,The Robinsons,4 Chartfield Avenue,,Putney,Greater London,SW15 2CC,07734 567890,m.robinson@gmail.com,J0013,Round C - Putney,4 Weekly,28.00,0.00,Active,,16/06/26,
+C0013,The Robinsons,4 Chartfield Avenue,,Putney,Greater London,SW15 2CC,07734 567890,m.robinson@gmail.com,J0013G,Round C - Putney,6 Monthly,95.00,0.00,Active,,14/12/26,Gutter clean - booked twice yearly. Needs ladder.
+C0014,Mrs F Khan,23 Putney Hill,Flat 4,Putney,Greater London,SW15 2DD,07845 678901,,J0014,Round C - Putney,8 Weekly,40.00,0.00,Suspended,,14/06/26,Account suspended - awaiting response to letter sent 12/05/26
+C0015,Mr P Carter,89 Upper Richmond Road,,Putney,Greater London,SW15 2EE,07956 789012,p.carter@icloud.com,J0015,Round C - Putney,One Off,150.00,0.00,Active,,07/06/26,Post-renovation full clean. One-off job agreed at £150.
+C0016,Cancelled Customer,10 Test Street,,Putney,Greater London,SW15 2FF,07867 890123,,J0016,Round C - Putney,4 Weekly,25.00,0.00,Cancelled,yes,01/01/26,Cancelled January 26 - moved away
+C0017,Quote Only Customer,5 Quote Road,,Putney,Greater London,SW15 2GG,07678 901234,,J0017,Round C - Putney,4 Weekly,30.00,0.00,Quote,,15/06/26,Quote sent 01/06/26 - awaiting response
+C0018,Mrs S Blackwood,33 Disraeli Road,,Putney,Greater London,SW15 2HH,07589 012345,s.blackwood@gmail.com,J0018,Round C - Putney,Monthly,18.00,0.00,Active,,25/06/26,Conservatory only - no exterior windows
