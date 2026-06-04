@@ -948,45 +948,58 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
     return () => clearInterval(t);
   }, [imported]);
 
-  // Confetti squares — CSS-only, fired once on mount
-  const confetti = Array.from({ length: 22 }, (_, i) => ({
+  // Confetti squares — fired once on mount
+  const confetti = Array.from({ length: 24 }, (_, i) => ({
     id: i,
-    left:     `${(i * 4.7 + 3) % 96}%`,
-    delay:    `${(i * 0.09) % 0.8}s`,
-    dur:      `${1.1 + (i % 5) * 0.18}s`,
-    color:    ['#1f48ff','#10b981','#f59e0b','#a78bfa','#f472b6','#34d399'][i % 6],
-    size:     `${5 + (i % 4)}px`,
-    rotate:   `${i * 37}deg`,
+    left:  `${(i * 4.2 + 2) % 94}%`,
+    delay: `${(i * 0.07) % 0.75}s`,
+    dur:   `${0.95 + (i % 6) * 0.15}s`,
+    color: ['#1f48ff','#10b981','#f59e0b','#a78bfa','#f472b6','#34d399'][i % 6],
+    size:  `${5 + (i % 4)}px`,
   }));
 
   return (
     <div className="relative flex flex-col overflow-hidden">
-      {/* ── keyframes ── */}
+      {/* ── keyframes — use longhands so inline duration/delay always win ── */}
       <style>{`
         @keyframes _confetti {
-          0%   { transform: translateY(-8px) rotate(var(--r)) scale(1); opacity:1; }
-          80%  { opacity: 1; }
-          100% { transform: translateY(340px) rotate(calc(var(--r) + 540deg)) scale(0.6); opacity:0; }
+          0%   { transform: translateY(-10px) rotate(0deg) scale(1);   opacity: 1; }
+          85%  { opacity: 1; }
+          100% { transform: translateY(330px) rotate(680deg) scale(0.5); opacity: 0; }
         }
         @keyframes _pop {
-          0%  { transform: scale(0.3); opacity:0; }
-          60% { transform: scale(1.15); }
-          100%{ transform: scale(1);   opacity:1; }
+          0%   { transform: scale(0.3); opacity: 0; }
+          65%  { transform: scale(1.18); }
+          100% { transform: scale(1);   opacity: 1; }
         }
         @keyframes _ring {
-          0%   { transform: scale(1);   opacity: 0.7; }
-          100% { transform: scale(2.2); opacity: 0; }
+          0%   { transform: scale(1);   opacity: 0.6; }
+          100% { transform: scale(2.4); opacity: 0; }
         }
         @keyframes _up {
-          from { transform: translateY(18px); opacity:0; }
-          to   { transform: translateY(0);    opacity:1; }
+          from { transform: translateY(20px); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
         }
-        ._pop  { animation: _pop  0.55s cubic-bezier(0.34,1.56,0.64,1) both; }
-        ._ring { animation: _ring 0.9s ease-out both; }
-        ._up1  { animation: _up   0.4s ease-out 0.3s both; }
-        ._up2  { animation: _up   0.4s ease-out 0.45s both; }
-        ._up3  { animation: _up   0.4s ease-out 0.6s both; }
-        ._conf { animation: _confetti linear forwards; }
+        ._pop  {
+          animation-name: _pop;
+          animation-duration: 0.55s;
+          animation-timing-function: cubic-bezier(0.34,1.56,0.64,1);
+          animation-fill-mode: both;
+        }
+        ._ring {
+          animation-name: _ring;
+          animation-duration: 1s;
+          animation-timing-function: ease-out;
+          animation-fill-mode: both;
+        }
+        ._up1 { animation-name:_up; animation-duration:0.4s; animation-timing-function:ease-out; animation-delay:0.3s;  animation-fill-mode:both; }
+        ._up2 { animation-name:_up; animation-duration:0.4s; animation-timing-function:ease-out; animation-delay:0.45s; animation-fill-mode:both; }
+        ._up3 { animation-name:_up; animation-duration:0.4s; animation-timing-function:ease-out; animation-delay:0.6s;  animation-fill-mode:both; }
+        ._conf {
+          animation-name: _confetti;
+          animation-timing-function: ease-in;
+          animation-fill-mode: forwards;
+        }
       `}</style>
 
       {/* Confetti burst */}
@@ -996,10 +1009,11 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
             key={c.id}
             className="_conf absolute rounded-sm"
             style={{
-              left: c.left, top: '-6px',
-              width: c.size, height: c.size,
+              left: c.left,
+              top: '-8px',
+              width: c.size,
+              height: c.size,
               background: c.color,
-              '--r': c.rotate,
               animationDuration: c.dur,
               animationDelay: c.delay,
             }}
