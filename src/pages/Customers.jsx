@@ -2764,9 +2764,10 @@ export default function CustomerTab() {
           onClose={() => setShowImport(false)}
           existingCustomers={customers}
           onImported={() => {
+            // Refresh data in the background — don't close the modal here,
+            // let the user dismiss the celebration screen themselves
             refreshCustomers();
             refreshJobs();
-            setShowImport(false);
           }}
           onViewScheduler={() => {
             refreshCustomers();
