@@ -269,14 +269,20 @@ export function DataProvider({ children }) {
   }, [isDemo]);
 
   const updateJob = useCallback(async (id, updates) => {
-    // Update in Supabase
     try {
       await updateJobDb(id, updates);
     } catch (err) {
       console.error('Failed to update job:', err);
     }
-    // Update locally
-    setJobs(prev => prev.map(j => j.id === id ? { ...j, ...updates } : j));
+    // Normalise DB column names (snake_case) → local state names (camelCase)
+    const local = { ...updates };
+    if ('start_hour'   in local) { local.startHour   = local.start_hour;   delete local.start_hour; }
+    if ('duration_hrs' in local) { local.durationHrs = local.duration_hrs; delete local.duration_hrs; }
+    if ('customer_id'  in local) { local.customerId  = local.customer_id;  delete local.customer_id; }
+    if ('assignee_ids' in local) { local.assigneeIds = local.assignee_ids; delete local.assignee_ids; }
+    if ('address_line1' in local) { local.addressLine1 = local.address_line1; delete local.address_line1; }
+    if ('address_line2' in local) { local.addressLine2 = local.address_line2; delete local.address_line2; }
+    setJobs(prev => prev.map(j => j.id === id ? { ...j, ...local } : j));
   }, []);
 
   const deleteJob = useCallback(async (id) => {

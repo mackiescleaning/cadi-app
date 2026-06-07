@@ -206,7 +206,9 @@ function getMonday(date) {
   return d;
 }
 
-function isoDate(d) { return d.toISOString().split('T')[0]; }
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function getViewDate(dayOffset, view) {
   const today = getToday();
@@ -316,14 +318,39 @@ function Stat({ label, value, color = "text-slate-900", emphasis }) {
 }
 
 // ─── View switcher ───────────────────────────────────────────────────────────
-function ViewTabs({ view, setView, setDayOffset }) {
+// Converts the current dayOffset to the equivalent offset for the target view,
+// so switching views keeps you on the same date rather than jumping back to today.
+function computeOffsetForView(fromView, toView, currentOffset) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const viewedDate = getViewDate(currentOffset, fromView);
+
+  if (toView === 'Day') {
+    return Math.round((viewedDate.getTime() - today.getTime()) / 86400000);
+  }
+  if (toView === 'Week') {
+    const curMon  = getMonday(today);
+    const viewMon = getMonday(viewedDate);
+    return Math.round((viewMon.getTime() - curMon.getTime()) / (7 * 86400000));
+  }
+  if (toView === 'Month') {
+    return (viewedDate.getFullYear() - today.getFullYear()) * 12
+         + (viewedDate.getMonth()    - today.getMonth());
+  }
+  return 0; // Quarter / Rounds always reset
+}
+
+function ViewTabs({ view, setView, dayOffset, setDayOffset }) {
   const views = ["Day", "Week", "Month", "Quarter", "Rounds"];
   return (
     <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold bg-white/60">
       {views.map(v => (
         <button
           key={v}
-          onClick={() => { setView(v); setDayOffset(0); }}
+          onClick={() => {
+            if (v === view) return;
+            setView(v);
+            setDayOffset(computeOffsetForView(view, v, dayOffset));
+          }}
           className={`px-3 py-1.5 transition-all ${view === v ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-white"}`}
         >
           {v}
@@ -1055,7 +1082,7 @@ function WeekView({ jobs, onJobClick, weekDates = [], typeFilter = "all", crewFi
               return (
                 <div
                   key={dayIdx}
-                  className={`flex-1 border-l border-white/60 relative min-w-[100px] ${dayIdx === 0 ? "bg-blue-50/30" : ""}`}
+                  className={`flex-1 border-l border-white/60 relative min-w-[100px] ${weekDates[dayIdx] && isoDate(weekDates[dayIdx]) === isoDate(getToday()) ? "bg-blue-50/30" : ""}`}
                   style={{ minHeight: GRID_HOURS.length * WEEK_PX_PER_HR }}
                 >
                   {GRID_HOURS.map(h => (
@@ -1605,7 +1632,7 @@ function buildProfileServiceOptions(profile) {
   return opts;
 }
 
-function NewJobModal({ onClose, onSave, onUpdate, editJob, preCustomer = "", customers = [] }) {
+function NewJobModal({ onClose, onSave, onUpdate, editJob, preCustomer = "", customers = [], defaultDate }) {
   const { profile } = useAuth();
   const profileServices = buildProfileServiceOptions(profile);
 
@@ -1646,7 +1673,7 @@ function NewJobModal({ onClose, onSave, onUpdate, editJob, preCustomer = "", cus
   const [addressLine2, setAddressLine2] = useState(editJob?.addressLine2 ?? "");
   const [town,         setTown]         = useState(editJob?.town         ?? "");
   const [postcode,     setPostcode]     = useState(editJob?.postcode     ?? "");
-  const [date,         setDate]         = useState(editJob?.date         ?? new Date().toISOString().split('T')[0]);
+  const [date,         setDate]         = useState(editJob?.date         ?? defaultDate ?? isoDate(new Date()));
   const [startTime,    setStartTime]    = useState(editJob ? hourToTime(editJob.startHour) : "09:00");
   const [jobType,      setJobType]      = useState(editJob?.type         ?? "residential");
   const [service,      setService]      = useState(editJob?.service      ?? "");
@@ -1750,11 +1777,12 @@ function NewJobModal({ onClose, onSave, onUpdate, editJob, preCustomer = "", cus
       const dayMap = { daily: 1, weekly: 7, fortnightly: 14, monthly: 30, quarterly: 91, "6weekly": 42, "8weekly": 56, "12weekly": 84 };
       const interval = dayMap[recurrence];
       if (interval) {
-        let nextDate = new Date(date);
+        // Parse date parts arithmetically to avoid UTC/local timezone shifts
+        let [ry, rm, rd] = date.split('-').map(Number);
         for (let i = 0; i < 11; i++) {
-          nextDate = new Date(nextDate);
-          nextDate.setDate(nextDate.getDate() + interval);
-          onSave?.({ ...baseJob, id: Date.now() + i + 1, date: nextDate.toISOString().split('T')[0] });
+          rd += interval;
+          const next = new Date(ry, rm - 1, rd); // local date, handles month overflow
+          onSave?.({ ...baseJob, id: Date.now() + i + 1, date: isoDate(next) });
         }
       }
     }
@@ -2203,7 +2231,17 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleJobClick      = (job) => { setActiveJob(job); externalJobClick?.(job); };
-  const handleSaveJob       = (newJob) => { addJobAndSyncCustomer(newJob); };
+  const handleSaveJob = (newJob) => {
+    addJobAndSyncCustomer(newJob);
+    // If in Week view and the saved job is outside the displayed week, jump to its week
+    if (view === "Week" && newJob.date) {
+      if (newJob.date < weekStartStr || newJob.date > weekEndStr) {
+        const jobMon = getMonday(new Date(newJob.date + 'T00:00:00'));
+        const curMon = getMonday(getToday());
+        setDayOffset(Math.round((jobMon.getTime() - curMon.getTime()) / (7 * 86400000)));
+      }
+    }
+  };
   const handleScheduleRound = (round) => {
     // Pre-fill the new job modal with the round name as a reference
     setPreCustomer(round.roundName);
@@ -2318,7 +2356,7 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
                   className="pl-7 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-48"
                 />
               </div>
-              <ViewTabs view={view} setView={setView} setDayOffset={setDayOffset} />
+              <ViewTabs view={view} setView={setView} dayOffset={dayOffset} setDayOffset={setDayOffset} />
               <button
                 onClick={() => setShowNewJob(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm"
@@ -2393,6 +2431,7 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
           onSave={handleSaveJob}
           preCustomer={preCustomer}
           customers={customers}
+          defaultDate={todayStr}
         />
       )}
 
