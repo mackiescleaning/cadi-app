@@ -24,16 +24,17 @@ const APP_SECRET     = Deno.env.get("YAPILY_SECRET")      ?? "";
 const ENC_KEY_HEX    = Deno.env.get("BANK_TOKEN_ENC_KEY") ?? "";
 const API_BASE       = "https://api.yapily.com";
 
-// Fail-fast at boot
-function assertEnv() {
+// Capture config problems at module load but DON'T throw — surface them on
+// first request so OPTIONS preflight succeeds and the client gets a clear error.
+const ENV_PROBLEMS: string[] = (() => {
   const problems: string[] = [];
   if (!APP_ID)                                       problems.push("YAPILY_APP_ID is unset");
   if (!APP_SECRET)                                   problems.push("YAPILY_SECRET is unset");
-  if (!ENC_KEY_HEX || ENC_KEY_HEX.length !== 64)     problems.push("BANK_TOKEN_ENC_KEY missing or wrong length");
+  if (!ENC_KEY_HEX)                                  problems.push("BANK_TOKEN_ENC_KEY is unset");
+  else if (ENC_KEY_HEX.length !== 64)                problems.push(`BANK_TOKEN_ENC_KEY must be 64 hex chars (got ${ENC_KEY_HEX.length})`);
   else if (!/^[0-9a-fA-F]{64}$/.test(ENC_KEY_HEX))   problems.push("BANK_TOKEN_ENC_KEY must be hex");
-  if (problems.length) throw new Error(`yapily-api config invalid: ${problems.join("; ")}`);
-}
-assertEnv();
+  return problems;
+})();
 
 const BASIC_AUTH = "Basic " + btoa(`${APP_ID}:${APP_SECRET}`);
 
@@ -227,6 +228,14 @@ function isConsentExpiredError(err: unknown): boolean {
 serve(async (req: Request) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
+
+  if (ENV_PROBLEMS.length) {
+    return json({
+      error:    `yapily-api config invalid: ${ENV_PROBLEMS.join("; ")}`,
+      code:     "CONFIG_INVALID",
+      problems: ENV_PROBLEMS,
+    }, 500, origin);
+  }
 
   try {
     const body       = await req.json() as Record<string, unknown>;

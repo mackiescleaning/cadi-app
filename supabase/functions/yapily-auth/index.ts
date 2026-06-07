@@ -25,20 +25,18 @@ const ENC_KEY_HEX    = Deno.env.get("BANK_TOKEN_ENC_KEY") ?? "";
 const REDIRECT_URI   = Deno.env.get("YAPILY_REDIRECT_URI") ?? "https://app.cadi.cleaning/yapily/callback";
 const API_BASE       = "https://api.yapily.com";
 
-// Fail fast at boot — every prod-critical secret must be present and well-formed.
-// This throws before serve() is set up so the function never accepts requests with a broken config.
-function assertEnv() {
+// Capture config problems at module load but DON'T throw — surface them on first
+// request so the function loads, OPTIONS preflight succeeds, and the user gets a
+// clear error message instead of an opaque WORKER_ERROR.
+const ENV_PROBLEMS: string[] = (() => {
   const problems: string[] = [];
   if (!APP_ID)                      problems.push("YAPILY_APP_ID is unset");
   if (!APP_SECRET)                  problems.push("YAPILY_SECRET is unset");
   if (!ENC_KEY_HEX)                 problems.push("BANK_TOKEN_ENC_KEY is unset");
   else if (ENC_KEY_HEX.length !== 64) problems.push(`BANK_TOKEN_ENC_KEY must be 64 hex chars (got ${ENC_KEY_HEX.length})`);
   else if (!/^[0-9a-fA-F]{64}$/.test(ENC_KEY_HEX)) problems.push("BANK_TOKEN_ENC_KEY must be hex");
-  if (problems.length) {
-    throw new Error(`yapily-auth config invalid: ${problems.join("; ")}`);
-  }
-}
-assertEnv();
+  return problems;
+})();
 
 const BASIC_AUTH = "Basic " + btoa(`${APP_ID}:${APP_SECRET}`);
 
@@ -177,6 +175,15 @@ async function ensureYapilyUser(userId: string): Promise<void> {
 serve(async (req: Request) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
+
+  // Surface config problems clearly on the first request, instead of crashing at boot
+  if (ENV_PROBLEMS.length) {
+    return json({
+      error:    `yapily-auth config invalid: ${ENV_PROBLEMS.join("; ")}`,
+      code:     "CONFIG_INVALID",
+      problems: ENV_PROBLEMS,
+    }, 500, origin);
+  }
 
   try {
     const body   = await req.json() as Record<string, unknown>;
