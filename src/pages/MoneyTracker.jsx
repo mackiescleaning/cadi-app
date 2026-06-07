@@ -2,7 +2,7 @@
 // Cadi — Money Tab v2
 // AI money coach · bulk expense sorter · P&L by period · open banking ready
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import AskCadi from "../components/AskCadi";
 import { createMoneyEntry, listMoneyEntries, updateMoneyEntry, deleteMoneyEntry } from "../lib/db/moneyDb";
@@ -153,6 +153,7 @@ function SectionLabel({ children, className = "" }) {
 function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpenseFromBank }) {
   const { user } = useAuth();
   const [connected,         setConnected]         = useState(false);
+  const [status,            setStatus]            = useState(null); // full status object from yapily-auth
   const [loading,           setLoading]           = useState(false);
   const [syncing,           setSyncing]           = useState(false);
   const [error,             setError]             = useState(null);
@@ -173,32 +174,42 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
     return data;
   };
 
-  useEffect(() => {
+  const refreshStatus = useCallback(() => {
     if (!user || user.id === 'demo-user') return;
     tlInvoke('yapily-auth', { action: 'status' })
-      .then(d => setConnected(d.connected))
+      .then(d => { setConnected(!!d.connected); setStatus(d); })
       .catch(() => {});
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleConnect = async () => {
-    setLoading(true); setError(null);
-    try {
-      const { url } = await tlInvoke('yapily-auth', { action: 'url' });
-      window.location.href = url;
-    } catch (e) { setError(e.message); setLoading(false); }
+  useEffect(() => { refreshStatus(); }, [refreshStatus]);
+
+  // Bank picker lives at /banking/connect — has the trust-gate UI + institution
+  // selection. Going there guarantees a valid institutionId is passed downstream.
+  const handleConnect = () => {
+    window.location.href = '/banking/connect';
   };
 
   const handleSync = async () => {
     setSyncing(true); setError(null); setSuccess(null);
     try {
-      const res = await tlInvoke('yapily-api', { action: 'sync' });
-      setSuccess(`Imported ${res.imported} transactions from ${res.accounts} account${res.accounts !== 1 ? 's' : ''}.`);
+      const res = await tlInvoke('yapily-api', { action: 'sync', force: true });
+      if (res?.needsReauth) {
+        setError('Bank consent has expired — please reconnect.');
+        refreshStatus();
+        return;
+      }
+      if (res?.skipped) {
+        setSuccess(res.reason === 'throttled' ? 'Already synced recently. Try again in a few minutes.' : 'Sync skipped.');
+      } else {
+        setSuccess(`Imported ${res.imported} transactions from ${res.accounts} account${res.accounts !== 1 ? 's' : ''}.`);
+      }
       const txRes = await tlInvoke('yapily-api', { action: 'transactions', days: 90 });
       const txs = txRes.transactions ?? [];
       setBankTxs(txs);
       setShowTxs(true);
       onSyncComplete?.(txs);
-    } catch (e) { setError(e.message); } finally { setSyncing(false); }
+      refreshStatus();
+    } catch (e) { setError(e.message); refreshStatus(); } finally { setSyncing(false); }
   };
 
   const handleDisconnect = async () => {
@@ -301,6 +312,55 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
             )
           )}
         </div>
+
+        {/* Connection health — tells the truth when something's wrong */}
+        {connected && status && (
+          (() => {
+            const rel = (iso) => {
+              if (!iso) return null;
+              const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+              if (mins < 1)   return 'just now';
+              if (mins < 60)  return `${mins} min${mins === 1 ? '' : 's'} ago`;
+              const hrs = Math.floor(mins / 60);
+              if (hrs < 24)   return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+              const days = Math.floor(hrs / 24);
+              return `${days} day${days === 1 ? '' : 's'} ago`;
+            };
+            if (status.needsReauth) {
+              return (
+                <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/8 px-3 py-2 flex items-center justify-between gap-3">
+                  <p className="text-xs text-amber-300"><strong>Bank consent expired.</strong> Reconnect to keep your data flowing.</p>
+                  <button onClick={handleConnect} className="text-[10px] font-bold px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 transition-colors shrink-0">Reconnect →</button>
+                </div>
+              );
+            }
+            if (status.reconsentDaysLeft !== null && status.reconsentDaysLeft !== undefined && status.reconsentDaysLeft <= 14) {
+              return (
+                <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/4 px-3 py-2 flex items-center justify-between gap-3">
+                  <p className="text-xs text-amber-300/80">Bank consent expires in {status.reconsentDaysLeft} day{status.reconsentDaysLeft === 1 ? '' : 's'} — reconnect to avoid interruption.</p>
+                  <button onClick={handleConnect} className="text-[10px] font-bold px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 transition-colors shrink-0">Reconnect →</button>
+                </div>
+              );
+            }
+            if (status.syncError) {
+              return (
+                <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/8 px-3 py-2">
+                  <p className="text-xs text-red-300"><strong>Last sync failed:</strong> {status.syncError}</p>
+                  <p className="text-[10px] text-red-300/60 mt-0.5">Tried {rel(status.lastSyncErrorAt)}. Click "Sync transactions" to retry.</p>
+                </div>
+              );
+            }
+            if (status.lastSyncAt) {
+              return (
+                <p className="mt-2 text-[10px] text-[rgba(153,197,255,0.5)]">
+                  Last synced {rel(status.lastSyncAt)}
+                  {status.accountCount > 1 ? ` · ${status.accountCount} accounts` : ''}
+                </p>
+              );
+            }
+            return null;
+          })()
+        )}
 
         <div className="mt-3 flex gap-2 flex-wrap">
           {!connected ? (
@@ -1689,8 +1749,8 @@ function LogPaymentModal({ invoices, onConfirm, onClose }) {
             <div className="rounded-xl border border-[rgba(153,197,255,0.1)] overflow-hidden divide-y divide-[rgba(153,197,255,0.06)] text-sm">
               {[
                 { l: "Payment received",    v: fmt2(parseFloat(amount)),             c: "text-emerald-400" },
-                { l: "Set aside for tax",   v: `−${fmt2(parseFloat(amount)*0.25)}`,  c: "text-amber-400"  },
-                { l: "Available to spend",  v: fmt2(parseFloat(amount)*0.75),        c: "text-white font-black" },
+                { l: "Suggested tax reserve", v: `−${fmt2(parseFloat(amount)*0.26)}`, c: "text-amber-400"  },
+                { l: "Available to spend",    v: fmt2(parseFloat(amount)*0.74),       c: "text-white font-black" },
               ].map(({ l, v, c }) => (
                 <div key={l} className="flex justify-between px-4 py-2.5">
                   <span className="text-[rgba(153,197,255,0.5)] text-xs">{l}</span>
@@ -2718,11 +2778,33 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
     if (failed > 0) setSaveError(`${failed} item${failed !== 1 ? 's' : ''} couldn't be updated. Refresh and try again.`);
   };
 
+  const [pendingDelete, setPendingDelete] = useState(null); // { ids, snapshot, timer }
   const handleBulkDelete = async (ids) => {
+    if (!ids?.length) return;
+    // Soft confirm for irreversible bulk actions touching 3+ rows of money data
+    if (ids.length >= 3 && !window.confirm(`Delete ${ids.length} expenses? You'll have 8 seconds to undo.`)) return;
+
+    // Snapshot the rows we're about to drop so undo can restore them locally
+    const snapshot = expenses.filter(e => ids.includes(e.id));
     setExpenses(prev => prev.filter(e => !ids.includes(e.id)));
-    const results = await Promise.allSettled(ids.map(id => deleteMoneyEntry(id)));
-    const failed = results.filter(r => r.status === 'rejected').length;
-    if (failed > 0) setSaveError(`${failed} item${failed !== 1 ? 's' : ''} couldn't be deleted. Refresh and try again.`);
+
+    // Hold the DB delete for 8s — gives the user an undo window
+    const timer = setTimeout(async () => {
+      const results = await Promise.allSettled(ids.map(id => deleteMoneyEntry(id)));
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed > 0) setSaveError(`${failed} item${failed !== 1 ? 's' : ''} couldn't be deleted. Refresh and try again.`);
+      setPendingDelete(null);
+    }, 8000);
+
+    setPendingDelete({ ids, snapshot, timer });
+  };
+
+  const undoBulkDelete = () => {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timer);
+    setExpenses(prev => [...pendingDelete.snapshot, ...prev]
+      .sort((a, b) => new Date(b.date) - new Date(a.date)));
+    setPendingDelete(null);
   };
 
   // Mileage setup completed — update accounts state without page reload
@@ -2918,6 +3000,21 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
       {/* Modals */}
       {showPayment  && <LogPaymentModal invoices={unpaidInvoices} onConfirm={handlePaymentConfirm} onClose={() => setShowPayment(false)} />}
       {showReminder && <ReminderModal   invoice={reminderInv}    onClose={() => setShowReminder(false)} />}
+
+      {/* Bulk delete undo snackbar — 8-second window before the DB delete fires */}
+      {pendingDelete && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl bg-slate-900 border border-white/10 shadow-2xl flex items-center gap-4">
+          <p className="text-sm text-white">
+            Deleted {pendingDelete.ids.length} expense{pendingDelete.ids.length === 1 ? '' : 's'}.
+          </p>
+          <button
+            onClick={undoBulkDelete}
+            className="text-xs font-bold text-amber-300 hover:text-amber-200 transition-colors uppercase tracking-wider"
+          >
+            Undo
+          </button>
+        </div>
+      )}
     </div>
   );
 }
