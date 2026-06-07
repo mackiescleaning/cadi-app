@@ -70,7 +70,7 @@ const HmrcCallback              = lazy(() => import('./pages/HmrcCallback'));
 const GocardlessCallback        = lazy(() => import('./pages/GocardlessCallback'));
 const GoCardlessPaymentCallback = lazy(() => import('./pages/GoCardlessPaymentCallback'));
 const StripeCallback            = lazy(() => import('./pages/StripeCallback'));
-const TruelayerCallback         = lazy(() => import('./pages/TruelayerCallback'));
+const YapilyCallback            = lazy(() => import('./pages/TruelayerCallback'));
 
 // Demo portals — large, very infrequently visited
 const DemoLanding         = lazy(() => import('./pages/DemoLanding'));
@@ -122,7 +122,7 @@ function App() {
         <Route path="/gocardless/callback"         element={<GocardlessCallback />} />
         <Route path="/gocardless/payment-callback" element={<GoCardlessPaymentCallback />} />
         <Route path="/stripe/callback"             element={<StripeCallback />} />
-        <Route path="/truelayer/callback"          element={<TruelayerCallback />} />
+        <Route path="/yapily/callback"              element={<YapilyCallback />} />
 
         {/* Invite accept — public, handles own auth */}
         <Route path="/invite/:token" element={<InviteAccept />} />

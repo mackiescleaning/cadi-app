@@ -3,16 +3,19 @@
  * Cadi — Phase 2 Step 1: Connect Open Banking
  *
  * Route: /banking/connect
- * Shows the "Why we're asking" screen with trust-building copy,
- * then initiates TrueLayer OAuth redirect.
+ * Step 1 — trust-building intro
+ * Step 2 — bank picker (institutionId required by yapily-auth)
+ * Step 3 — redirect into Yapily OAuth
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 const BG   = 'min-h-screen bg-gradient-to-br from-[#0a0f1e] via-[#0d1530] to-[#0a1628]';
 const CARD = 'mx-auto max-w-lg w-full';
+
+const IS_SANDBOX = (import.meta.env?.VITE_YAPILY_ENV ?? 'production') === 'sandbox';
 
 function HelpDrawer({ open, onClose }) {
   if (!open) return null;
@@ -33,8 +36,8 @@ function HelpDrawer({ open, onClose }) {
         <p className="text-white/50 text-xs font-semibold uppercase tracking-widest mb-3">Here's the journey</p>
         <ol className="space-y-2.5 mb-5">
           {[
-            'Cadi sends you to TrueLayer\'s secure bank picker',
             'You pick your bank from the list',
+            'Cadi sends you to your bank\'s secure login page',
             'Your bank logs you in (same way you\'d log into your banking app)',
             'Your bank shows you exactly what Cadi is asking permission to see',
             'You approve — and we\'re back in Cadi',
@@ -60,10 +63,107 @@ function HelpDrawer({ open, onClose }) {
   );
 }
 
+function BankPicker({ onPick, loading, onCancel }) {
+  const [institutions, setInstitutions] = useState([]);
+  const [error, setError]               = useState('');
+  const [search, setSearch]             = useState('');
+  const [fetching, setFetching]         = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not signed in');
+        const { data, error: fnErr } = await supabase.functions.invoke('yapily-auth', {
+          body:    { action: 'institutions' },
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (fnErr)        throw new Error(fnErr.message);
+        if (data?.error)  throw new Error(data.error);
+        const list = (data?.institutions ?? []).filter(inst => {
+          const isSandboxBank = /sandbox|mock|modelo/i.test(inst.id);
+          return IS_SANDBOX ? true : !isSandboxBank;
+        });
+        setInstitutions(list);
+      } catch (err) {
+        setError(err.message ?? 'Could not load bank list.');
+      } finally {
+        setFetching(false);
+      }
+    })();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return institutions;
+    return institutions.filter(i => i.name?.toLowerCase().includes(q) || i.id?.toLowerCase().includes(q));
+  }, [institutions, search]);
+
+  return (
+    <div>
+      <div className="mb-4">
+        <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#4f78ff] mb-2">Pick your bank</p>
+        <h2 className="text-xl font-black text-white leading-tight mb-1">Which bank do you want to connect?</h2>
+        <p className="text-white/50 text-sm">{IS_SANDBOX ? 'Sandbox environment — test banks shown.' : 'UK banks supported by Yapily Open Banking.'}</p>
+      </div>
+
+      <input
+        type="search"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search Monzo, Starling, Lloyds…"
+        className="w-full mb-4 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-[#4f78ff]/60"
+      />
+
+      {error && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
+          <p className="text-sm text-red-400">{error}</p>
+        </div>
+      )}
+
+      <div className="max-h-[420px] overflow-y-auto rounded-xl border border-white/8">
+        {fetching ? (
+          <div className="py-8 text-center text-sm text-white/40">Loading banks…</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-8 text-center text-sm text-white/40">No banks match "{search}"</div>
+        ) : (
+          <ul className="divide-y divide-white/5">
+            {filtered.map(inst => (
+              <li key={inst.id}>
+                <button
+                  disabled={loading}
+                  onClick={() => onPick(inst.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/4 transition-colors disabled:opacity-50"
+                >
+                  {inst.logoUrl
+                    ? <img src={inst.logoUrl} alt="" className="w-8 h-8 rounded-md shrink-0 bg-white/10 object-contain" />
+                    : <div className="w-8 h-8 rounded-md bg-white/10 shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white truncate">{inst.name}</p>
+                  </div>
+                  <span className="text-white/30 text-lg">→</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <button
+        onClick={onCancel}
+        className="mt-4 w-full py-2.5 text-sm text-white/40 hover:text-white/60 font-semibold transition-colors"
+      >
+        ← Back
+      </button>
+    </div>
+  );
+}
+
 export default function BankingSettings() {
   const navigate      = useNavigate();
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+  const [step,    setStep]    = useState('intro'); // 'intro' | 'picker'
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
   const [showHelp, setShowHelp] = useState(false);
   const [alreadyConnected, setAlreadyConnected] = useState(null);
 
@@ -71,7 +171,7 @@ export default function BankingSettings() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const { data } = await supabase.functions.invoke('truelayer-auth', {
+      const { data } = await supabase.functions.invoke('yapily-auth', {
         body:    { action: 'status' },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
@@ -79,19 +179,19 @@ export default function BankingSettings() {
     })();
   }, []);
 
-  async function handleConnect() {
+  async function handleBankPicked(institutionId) {
     setLoading(true);
     setError('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not signed in');
-      const { data, error: fnErr } = await supabase.functions.invoke('truelayer-auth', {
-        body:    { action: 'url' },
+      const { data, error: fnErr } = await supabase.functions.invoke('yapily-auth', {
+        body:    { action: 'url', institutionId },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (fnErr) throw new Error(fnErr.message);
-      if (data?.error) throw new Error(data.error);
-      if (!data?.url) throw new Error('Could not get authorisation URL');
+      if (fnErr)        throw new Error(fnErr.message);
+      if (data?.error)  throw new Error(data.error);
+      if (!data?.url)   throw new Error('Could not get authorisation URL');
       window.location.href = data.url;
     } catch (err) {
       setError(err.message ?? 'Something went wrong — please try again.');
@@ -116,100 +216,113 @@ export default function BankingSettings() {
             Back to dashboard
           </button>
 
-          {/* Header */}
-          <div className="mb-8">
-            <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#4f78ff] mb-2">Phase 2 · Step 1</p>
-            <h1 className="text-2xl font-black text-white leading-tight mb-2">
-              Connect your business bank account.
-            </h1>
-            <p className="text-white/50 text-sm">Three quick things to know:</p>
-          </div>
-
-          {/* Trust bullets */}
-          <div className="space-y-3 mb-8">
-            {[
-              {
-                icon: '🔒',
-                title: 'Read-only access.',
-                body: 'Cadi can see your transactions but can never move your money. We can\'t make payments. We can\'t take money out.',
-              },
-              {
-                icon: '🇬🇧',
-                title: 'FCA-regulated through TrueLayer.',
-                body: 'The same tech used by major UK fintech apps. Your bank credentials never touch Cadi.',
-              },
-              {
-                icon: '⏱',
-                title: '60 seconds.',
-                body: "You'll log into your bank, give permission, and you're done.",
-              },
-            ].map(({ icon, title, body }) => (
-              <div key={title} className="flex items-start gap-3 p-4 rounded-xl bg-white/4 border border-white/8">
-                <span className="text-lg mt-0.5 shrink-0">{icon}</span>
-                <div>
-                  <p className="text-sm font-bold text-white">{title}</p>
-                  <p className="text-sm text-white/50 mt-0.5 leading-relaxed">{body}</p>
-                </div>
+          {step === 'picker' ? (
+            <BankPicker
+              loading={loading}
+              onPick={handleBankPicked}
+              onCancel={() => { setStep('intro'); setError(''); }}
+            />
+          ) : (
+            <>
+              {/* Header */}
+              <div className="mb-8">
+                <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#4f78ff] mb-2">Phase 2 · Step 1</p>
+                <h1 className="text-2xl font-black text-white leading-tight mb-2">
+                  Connect your business bank account.
+                </h1>
+                <p className="text-white/50 text-sm">Three quick things to know:</p>
               </div>
-            ))}
-          </div>
 
-          {/* What it unlocks */}
-          <div className="mb-8 px-4 py-4 rounded-xl bg-[#4f78ff]/8 border border-[#4f78ff]/20">
-            <p className="text-xs font-bold text-[#99c5ff] mb-2.5">Once connected, Cadi can:</p>
-            <ul className="space-y-1.5">
-              {[
-                'Sit down with you and walk through where your money\'s going',
-                'Automatically match customer payments to invoices',
-                'Send you weekly reports on how your business is doing',
-              ].map(item => (
-                <li key={item} className="flex items-start gap-2 text-sm text-white/55">
-                  <span className="text-[#4f78ff] mt-0.5 shrink-0">→</span>
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-white/30 mt-3">You can disconnect any time from settings.</p>
-          </div>
+              {/* Trust bullets */}
+              <div className="space-y-3 mb-8">
+                {[
+                  {
+                    icon: '🔒',
+                    title: 'Read-only access.',
+                    body: 'Cadi can see your transactions but can never move your money. We can\'t make payments. We can\'t take money out.',
+                  },
+                  {
+                    icon: '🇬🇧',
+                    title: 'FCA-regulated through Yapily.',
+                    body: 'The same open banking infrastructure used by major UK fintech apps. Your bank credentials never touch Cadi.',
+                  },
+                  {
+                    icon: '⏱',
+                    title: '60 seconds.',
+                    body: "You'll log into your bank, give permission, and you're done.",
+                  },
+                ].map(({ icon, title, body }) => (
+                  <div key={title} className="flex items-start gap-3 p-4 rounded-xl bg-white/4 border border-white/8">
+                    <span className="text-lg mt-0.5 shrink-0">{icon}</span>
+                    <div>
+                      <p className="text-sm font-bold text-white">{title}</p>
+                      <p className="text-sm text-white/50 mt-0.5 leading-relaxed">{body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-          {/* Already connected state */}
-          {alreadyConnected && (
-            <div className="mb-4 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <p className="text-sm font-bold text-emerald-400 mb-0.5">Already connected</p>
-              <p className="text-xs text-emerald-400/70">
-                {alreadyConnected.bankName
-                  ? `${alreadyConnected.bankName}${alreadyConnected.accountLast4 ? ` ···${alreadyConnected.accountLast4}` : ''}`
-                  : 'Your bank account is linked.'
-                }
-              </p>
-            </div>
+              {/* What it unlocks */}
+              <div className="mb-8 px-4 py-4 rounded-xl bg-[#4f78ff]/8 border border-[#4f78ff]/20">
+                <p className="text-xs font-bold text-[#99c5ff] mb-2.5">Once connected, Cadi can:</p>
+                <ul className="space-y-1.5">
+                  {[
+                    'Sit down with you and walk through where your money\'s going',
+                    'Automatically match customer payments to invoices',
+                    'Send you weekly reports on how your business is doing',
+                  ].map(item => (
+                    <li key={item} className="flex items-start gap-2 text-sm text-white/55">
+                      <span className="text-[#4f78ff] mt-0.5 shrink-0">→</span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-white/30 mt-3">You can disconnect any time from settings.</p>
+              </div>
+
+              {/* Already connected state */}
+              {alreadyConnected && (
+                <div className="fs-exclude mb-4 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                  <p className="text-sm font-bold text-emerald-400 mb-0.5">Already connected</p>
+                  <p className="text-xs text-emerald-400/70">
+                    {alreadyConnected.bankName
+                      ? `${alreadyConnected.bankName}${alreadyConnected.accountLast4 ? ` ···${alreadyConnected.accountLast4}` : ''}`
+                      : 'Your bank account is linked.'
+                    }
+                  </p>
+                  {alreadyConnected.needsReauth && (
+                    <p className="text-xs text-amber-300 mt-2">Your bank consent has expired. Click below to reconnect.</p>
+                  )}
+                  {alreadyConnected.reconsentDaysLeft !== null && alreadyConnected.reconsentDaysLeft <= 14 && !alreadyConnected.needsReauth && (
+                    <p className="text-xs text-amber-300 mt-2">Bank consent expires in {alreadyConnected.reconsentDaysLeft} days — reconnect to avoid an interruption.</p>
+                  )}
+                </div>
+              )}
+
+              {error && (
+                <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                  <p className="text-sm text-red-400">{error}</p>
+                </div>
+              )}
+
+              {/* CTAs */}
+              <div className="space-y-2">
+                <button
+                  onClick={() => setStep('picker')}
+                  disabled={loading}
+                  className="w-full py-4 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] disabled:opacity-50 text-white font-black text-base transition-colors"
+                >
+                  {alreadyConnected ? 'Reconnect my bank' : 'Connect my bank'}
+                </button>
+                <button
+                  onClick={() => setShowHelp(true)}
+                  className="w-full py-2.5 text-sm text-white/40 hover:text-white/60 font-semibold transition-colors"
+                >
+                  How does this work? →
+                </button>
+              </div>
+            </>
           )}
-
-          {error && (
-            <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
-              <p className="text-sm text-red-400">{error}</p>
-            </div>
-          )}
-
-          {/* CTAs */}
-          <div className="space-y-2">
-            <button
-              onClick={handleConnect}
-              disabled={loading}
-              className="w-full py-4 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] disabled:opacity-50 text-white font-black text-base transition-colors"
-            >
-              {loading
-                ? 'Handing you over to TrueLayer…'
-                : alreadyConnected ? 'Reconnect my bank' : 'Connect my bank'
-              }
-            </button>
-            <button
-              onClick={() => setShowHelp(true)}
-              className="w-full py-2.5 text-sm text-white/40 hover:text-white/60 font-semibold transition-colors"
-            >
-              How does this work? →
-            </button>
-          </div>
         </div>
       </div>
     </div>

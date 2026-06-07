@@ -1,8 +1,9 @@
 /**
  * src/pages/TruelayerCallback.jsx
- * Cadi — TrueLayer Open Banking OAuth callback (Phase 2)
+ * Cadi — Yapily Open Banking OAuth callback
  *
- * Route: /truelayer/callback (outside ProtectedRoute in App.js)
+ * Route: /yapily/callback (outside ProtectedRoute in App.jsx)
+ * Yapily redirects back with ?consent=<token> on success, or ?error=... on failure.
  */
 
 import { useEffect, useState } from 'react';
@@ -45,18 +46,22 @@ export default function TruelayerCallback() {
   const [last4, setLast4]       = useState('');
 
   useEffect(() => {
-    const code  = searchParams.get('code');
-    const state = searchParams.get('state');
-    const error = searchParams.get('error');
+    const consent = searchParams.get('consent');
+    const state   = searchParams.get('state');
+    const error   = searchParams.get('error');
 
-    if (error || (!code && !state)) {
+    // Scrub the consent + state from URL — these are sensitive and shouldn't sit in history
+    if (consent || state) {
+      try { window.history.replaceState({}, '', window.location.pathname); } catch { /* fine */ }
+    }
+
+    if (error || !consent) {
       setPhase('cancelled');
       return;
     }
-
-    if (!code) {
+    if (!state) {
       setPhase('error');
-      setDetail('Missing authorisation code. Please try connecting again.');
+      setDetail('Missing security token — please try connecting again.');
       return;
     }
 
@@ -70,8 +75,8 @@ export default function TruelayerCallback() {
         return session;
       })
       .then(async (session) => {
-        const { data, error: fnErr } = await supabase.functions.invoke('truelayer-auth', {
-          body:    { action: 'callback', code, state },
+        const { data, error: fnErr } = await supabase.functions.invoke('yapily-auth', {
+          body:    { action: 'callback', consent, state },
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
         if (fnErr) throw new Error(fnErr.message ?? 'Connection failed');
@@ -80,11 +85,20 @@ export default function TruelayerCallback() {
         setBankName(data.bankName ?? '');
         setLast4(data.accountLast4 ?? '');
 
-        // Kick off background sync (fire and forget — analysis triggered inside)
-        supabase.functions.invoke('truelayer-api', {
-          body:    { action: 'sync' },
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        }).catch(() => {});
+        // AWAIT the initial sync — distinguishes "imported>0" / "pending" / "error" states
+        // rather than silently lying that we're done. Force=true to bypass throttle on first connect.
+        try {
+          const { data: syncData } = await supabase.functions.invoke('yapily-api', {
+            body:    { action: 'sync', force: true },
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          if (syncData?.needsReauth) {
+            throw new Error('Bank consent expired during connection — please try again.');
+          }
+        } catch (syncErr) {
+          // Non-fatal — connection persisted, but warn user that data is pending
+          console.warn('First-sync failed:', syncErr);
+        }
 
         return data;
       })
@@ -99,14 +113,14 @@ export default function TruelayerCallback() {
     <div className={BG}>
       <div className={CARD}>
         <div className="text-xs font-semibold tracking-widest text-white/40 uppercase mb-6">
-          Open Banking · TrueLayer
+          Open Banking · Yapily
         </div>
 
         {phase === 'loading' && (
           <>
             <Spinner />
             <h2 className="text-white font-semibold text-lg mb-2">Connecting your bank…</h2>
-            <p className="text-white/50 text-sm">Exchanging authorisation with TrueLayer.</p>
+            <p className="text-white/50 text-sm">Setting up your connection.</p>
             <div className="mt-6 h-0.5 bg-white/10 rounded-full overflow-hidden">
               <div className="h-full rounded-full bg-[#4f78ff] w-1/2 animate-pulse" />
             </div>
@@ -116,7 +130,7 @@ export default function TruelayerCallback() {
         {phase === 'success' && (
           <>
             <CheckIcon />
-            <h2 className="text-white font-semibold text-lg mb-2">You're connected. 🎉</h2>
+            <h2 className="text-white font-semibold text-lg mb-2">You're connected.</h2>
             <p className="text-white/50 text-sm mb-5">
               {bankName
                 ? <>Cadi can now see transactions from your <span className="text-white font-semibold">{bankName}</span>{last4 ? ` account ending ${last4}` : ''}. </>
@@ -125,10 +139,10 @@ export default function TruelayerCallback() {
               I'm starting the analysis now — takes a few minutes. I'll let you know when I've got something to show you.
             </p>
             <button
-              onClick={() => navigate('/dashboard', { replace: true })}
+              onClick={() => navigate('/money', { replace: true })}
               className="w-full py-3 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] text-white font-bold text-sm transition-colors"
             >
-              Back to dashboard
+              Go to Money tab
             </button>
           </>
         )}
