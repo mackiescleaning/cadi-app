@@ -8,6 +8,18 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { currentTaxYear } from '../lib/taxYear';
 
+// Resolve current user's business_id once per hook invocation.
+// Explicit client-side filter belts the RLS suspenders — if RLS ever
+// regresses, queries still scope to this business and never leak others.
+async function resolveBusinessId() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from('businesses').select('id')
+    .eq('owner_user_id', user.id).maybeSingle();
+  return data?.id ?? null;
+}
+
 // UK tax year quarter bounds for a given starting tax year
 // e.g. taxYear=2026 → 2026/27 quarters Apr 2026 → Apr 2027
 function getQuarterBounds(taxYear) {
@@ -54,12 +66,16 @@ export function useYtdExpenses(taxYear = currentTaxYear()) {
         const quarters = getQuarterBounds(taxYear);
         const ytdStart = quarters.Q1.start;
         const ytdEnd   = quarters.Q4.end;
+        const businessId = await resolveBusinessId();
+        if (!mounted) return;
+        if (!businessId) { setData(d => ({ ...d, loading: false })); return; }
 
         const [bankRes, manualRes] = await Promise.all([
           // Bank-imported business expenses (negative amounts only)
           supabase
             .from('transactions')
             .select('transaction_date,amount,category')
+            .eq('business_id', businessId)         // explicit — belts the RLS suspenders
             .gte('transaction_date', ytdStart)
             .lte('transaction_date', ytdEnd)
             .eq('is_business', true)

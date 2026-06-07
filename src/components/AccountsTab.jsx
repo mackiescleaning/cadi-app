@@ -12,6 +12,7 @@ import { getBusinessSettings } from "../lib/db/settingsDb";
 import { useYtdExpenses, CATEGORY_TO_SA103 } from "../hooks/useYtdExpenses";
 import { useYtdIncome, SOURCE_DISPLAY } from "../hooks/useYtdIncome";
 import { currentTaxYear, taxYearStart, taxYearLabel, parseTaxYearLabel, recentTaxYears, today } from "../lib/taxYear";
+import { calculateCT, calcSelfEmployedTax } from "../lib/taxCalc";
 
 // ─── Calculator logic (unchanged) ────────────────────────────────────────────
 const FRS_RATES = {
@@ -35,12 +36,9 @@ function calculateVAT({ turnover, businessType, goods, otherInput, firstYear }) 
   const saving      = standardPay - frsPay;
   return { gross, vatCharged, totalInput, standardPay, frsRate, frsPay, saving, isLimited, goodsPct, annualSaving: saving * 4 };
 }
-function calculateCT(profit) {
-  if (profit <= 0) return 0;
-  if (profit <= 50000) return profit * 0.19;
-  if (profit >= 250000) return profit * 0.25;
-  return profit * 0.265 - 3750; // marginal relief band
-}
+// Tax functions live in src/lib/taxCalc.js — shared with MoneyTracker so the
+// two tabs always agree on the user's tax bill.
+// (imported below; this stub kept for git-history continuity)
 
 function calculatePension(monthly, profit) {
   const annual        = monthly * 12;
@@ -203,15 +201,22 @@ function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {
   const ytdPct       = annualTarget > 0 ? Math.round((ytdAll / annualTarget) * 100) : 0;
 
   // ── Tax estimate — branches on entity type ───────────────────────────────
+  // Sole traders: use the banded income tax + Class 4 NI calculator from taxCalc.js
+  //   so the YTD estimate matches the Money tab's TaxEstimate card exactly.
+  // Limited co: corporation tax with marginal-relief band.
   const directorSalary     = isLtd ? (bizSettings.director_salary_annual ?? 12570) : 0;
-  const annualisedProfit   = isLtd ? Math.max(0, (ytdAll * (12 / 1.5)) - directorSalary) : netProfit; // rough annualised
+  const annualisedProfit   = isLtd ? Math.max(0, (ytdAll * (12 / 1.5)) - directorSalary) : netProfit;
   const ctEst              = isLtd ? calculateCT(annualisedProfit) : 0;
-  const itRate             = 0.20;
-  const itEst              = isLtd ? 0 : netProfit * itRate;
-  const taxEst             = isLtd ? ctEst / (12 / 1.5) : itEst; // scaled back to YTD period
+  const seTax              = !isLtd ? calcSelfEmployedTax(netProfit) : null;
+  const itEst              = isLtd ? 0 : seTax.total;
+  const taxEst             = isLtd ? ctEst / (12 / 1.5) : itEst;
   const taxReserve         = isDemo ? 4260 : (Number(bizSettings.tax_reserve) || 0);
   const taxLabel           = isLtd ? "CT estimate (YTD)" : "Tax estimate";
-  const taxSub             = isLtd ? `19% / 25% CT · £${Math.round(directorSalary / 1000)}k director salary` : `${(itRate*100).toFixed(0)}% of net profit`;
+  const taxSub             = isLtd
+    ? `19% / 25% CT · £${Math.round(directorSalary / 1000)}k director salary`
+    : seTax && seTax.total > 0
+      ? `Income tax £${Math.round(seTax.incomeTax).toLocaleString()} + Class 4 NI £${Math.round(seTax.ni).toLocaleString()}`
+      : 'No tax due — profit under personal allowance';
 
   const INSIGHTS = isLtd ? [
     { emoji: "💰", title: "Director salary vs dividends",          body: "Pay yourself up to £9,100 as salary (no NI), then extract remaining profits as dividends at 8.75%.", action: "tax-tools" },

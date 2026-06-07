@@ -9,6 +9,7 @@ import { createMoneyEntry, listMoneyEntries, updateMoneyEntry, deleteMoneyEntry 
 import { listQuotes, updateQuoteStatus } from "../lib/db/quotesDb";
 import { getBusinessSettings, upsertBusinessSettings } from "../lib/db/settingsDb";
 import { logMileage, listMileageLogs, calcMileageAllowance, MILEAGE_RATE_HIGH, MILEAGE_RATE_LOW, MILEAGE_THRESHOLD } from "../lib/db/mileageDb";
+import { calcSelfEmployedTax as sharedCalcSelfEmployedTax, calculateCT as sharedCalculateCT } from "../lib/taxCalc";
 import { useAuth } from "../context/AuthContext";
 import { useInvoices } from "../context/InvoiceContext";
 import { supabase } from "../lib/supabase";
@@ -1479,27 +1480,8 @@ function MoneyGoals({ accounts, weekRevenue, monthlyData, transactions = [], onN
 }
 
 // ─── Tax Estimate ─────────────────────────────────────────────────────────────
-// UK self-employed tax calculator (2025/26 rates)
-function calcSelfEmployedTax(profit) {
-  const PA = 12570;   // personal allowance
-  const BRT = 50270;  // basic rate threshold
-  const BR  = 0.20;   // basic rate
-  const HR  = 0.40;   // higher rate
-  const NI_LOW  = 0.06; // Class 4 NI below upper profits limit
-  const NI_HIGH = 0.02; // Class 4 NI above upper profits limit
-
-  const taxable = Math.max(profit - PA, 0);
-  const incomeTax = taxable <= (BRT - PA)
-    ? taxable * BR
-    : (BRT - PA) * BR + (taxable - (BRT - PA)) * HR;
-
-  const niBase    = Math.max(profit - PA, 0);
-  const ni = niBase <= (BRT - PA)
-    ? niBase * NI_LOW
-    : (BRT - PA) * NI_LOW + (niBase - (BRT - PA)) * NI_HIGH;
-
-  return { incomeTax: Math.round(incomeTax), ni: Math.round(ni), total: Math.round(incomeTax + ni) };
-}
+// Delegates to shared lib (src/lib/taxCalc.js) so Money + Accounts always agree.
+const calcSelfEmployedTax = sharedCalcSelfEmployedTax;
 
 // Months remaining in current UK tax year (ends 5 April)
 function taxYearMonthsLeft() {
@@ -1791,13 +1773,8 @@ function ReminderModal({ invoice, onClose }) {
   );
 }
 
-// ─── Corp tax helper (mirrors AccountsTab.jsx calculateCT) ───────────────────
-function calcCorpTax(profit) {
-  if (profit <= 0)      return 0;
-  if (profit <= 50000)  return Math.round(profit * 0.19);
-  if (profit >= 250000) return Math.round(profit * 0.25);
-  return Math.round(profit * 0.265 - 3750);
-}
+// ─── Corp tax helper — delegates to shared lib so Money + Accounts agree ─────
+const calcCorpTax = sharedCalculateCT;
 
 // Return the next upcoming company year-end date given the year-end month (1-12)
 function nextYearEnd(yearEndMonth) {
@@ -2639,9 +2616,13 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
         const sevenThirtyDaysAgo = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         const tyStart            = taxYearStart();
         const bankLowerBound     = sevenThirtyDaysAgo < tyStart ? sevenThirtyDaysAgo : tyStart;
+        // Resolve own business_id and scope every query to it — defence-in-depth
+        const { data: bizRow } = await supabase.from('businesses').select('id').eq('owner_user_id', user.id).maybeSingle();
+        const businessId = bizRow?.id;
         const { data: bankRows, error: bankErr } = await supabase
           .from("transactions")
           .select("id,transaction_date,description,merchant_name,amount,category,categorised_by,categorisation_confidence,is_business,matched_invoice_id")
+          .eq("business_id", businessId)
           .gte("transaction_date", bankLowerBound)
           .eq("is_hidden", false)
           .order("transaction_date", { ascending: false });
@@ -2661,6 +2642,7 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
             const { data: freshRows } = await supabase
               .from("transactions")
               .select("id,transaction_date,description,merchant_name,amount,category,categorised_by,categorisation_confidence,is_business,matched_invoice_id")
+              .eq("business_id", businessId)
               .gte("transaction_date", bankLowerBound)
               .eq("is_hidden", false)
               .order("transaction_date", { ascending: false });

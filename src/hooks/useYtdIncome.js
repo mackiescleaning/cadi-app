@@ -12,6 +12,15 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { currentTaxYear } from '../lib/taxYear';
 
+async function resolveBusinessId() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from('businesses').select('id')
+    .eq('owner_user_id', user.id).maybeSingle();
+  return data?.id ?? null;
+}
+
 function getQuarterBounds(taxYear) {
   return {
     Q1: { start: `${taxYear}-04-06`,     end: `${taxYear}-07-05` },
@@ -73,12 +82,16 @@ export function useYtdIncome(taxYear = currentTaxYear(), paidInvoiceRows = []) {
         const quarters = getQuarterBounds(taxYear);
         const ytdStart = quarters.Q1.start;
         const ytdEnd   = quarters.Q4.end;
+        const businessId = await resolveBusinessId();
+        if (!mounted) return;
+        if (!businessId) { setData(d => ({ ...d, loading: false })); return; }
 
         const [bankRes, manualRes] = await Promise.all([
           // Bank credits — positive amounts, business-flagged
           supabase
             .from('transactions')
             .select('id,transaction_date,amount,description,merchant_name,matched_invoice_id,matched_customer_id')
+            .eq('business_id', businessId)         // explicit — belts the RLS suspenders
             .gte('transaction_date', ytdStart)
             .lte('transaction_date', ytdEnd)
             .eq('is_business', true)
