@@ -1695,25 +1695,55 @@ function VATTab({ bizSettings = {}, saveSettings }) {
 }
 
 // ─── TAB: Tax Tools (Efficiency + Pension + Mileage) ─────────────────────────
-function TaxToolsTab({ setActiveTab }) {
-  const [tool, setTool]   = useState("efficiency");
+function TaxToolsTab({ setActiveTab, isDemo = false }) {
+  const { user } = useAuth();
+  const showDemoData = isDemo || user?.id === 'demo-user';
+
+  const [tool, setTool]       = useState("efficiency");
   const [monthly, setMonthly] = useState(250);
-  const [profit,  setProfit]  = useState(33480);
+  // Pension simulator default — net profit estimate for an example user.
+  // Live users can change it; we don't show this as their actual profit.
+  const [profit,  setProfit]  = useState(showDemoData ? 33480 : 0);
+
+  // Real YTD data for live users — used to compute tax score and mileage stats
+  const ytdExpData = useYtdExpenses(currentTaxYear());
+  const { invoices } = useInvoices();
+  const ytdIncome = invoices
+    .filter(i => i.status === 'paid' && i.paidAt)
+    .reduce((s, i) => s + invTotal(i), 0);
+
+  // Live tax score: simple heuristic based on whether key deductions are claimed.
+  // Pre-launch this stays modest; once we can see mileage_logs + AIA + pension
+  // contributions in DB we extend the formula.
+  const liveScore = (() => {
+    if (showDemoData) return 74;
+    let score = 0;
+    const expCats = Object.keys(ytdExpData.byCategory ?? {});
+    if (expCats.includes('fuel') || expCats.includes('vehicle')) score += 25;
+    if (expCats.includes('insurance'))                          score += 15;
+    if (expCats.includes('supplies') || expCats.includes('equipment')) score += 15;
+    if (expCats.includes('phone_internet'))                     score += 10;
+    if (expCats.includes('marketing'))                          score += 10;
+    if (expCats.includes('premises'))                           score += 10;
+    if (ytdIncome > 0)                                          score += 15;
+    return Math.min(100, score);
+  })();
+  const score  = liveScore;
+  const circ   = 213.6;
+  const offset = circ * (1 - score / 100);
 
   const r    = calculatePension(monthly, profit);
   const fmtP = (n) => `£${Math.round(n).toLocaleString()}`;
   const pct  = (r.rate * 100).toFixed(0);
 
-  const score  = 74;
-  const circ   = 213.6;
-  const offset = circ * (1 - score / 100);
-
-  const mileageRows = [
+  // Mileage rows: demo gets the seeded journey log, live users see their actual
+  // mileage_logs (resolved below in the Mileage tab branch).
+  const mileageRows = showDemoData ? [
     { date: "6 Apr", journey: "Home → Johnson, SW4",     purpose: "Client visit",    miles: "8.4",  claim: "3.78" },
     { date: "6 Apr", journey: "Johnson → Greenfield",    purpose: "Client to client", miles: "4.1",  claim: "1.85" },
     { date: "7 Apr", journey: "Home → Supply depot",     purpose: "Supply run",       miles: "12.2", claim: "5.49" },
     { date: "8 Apr", journey: "Full route — 4 stops",    purpose: "Client visits",    miles: "31.6", claim: "14.22" },
-  ];
+  ] : [];
 
   const TOOLS = [
     { id: "efficiency", label: "⚡ Tax Score" },
@@ -1756,27 +1786,59 @@ function TaxToolsTab({ setActiveTab }) {
               </div>
             </div>
             <div className="flex-1">
-              <p className="text-sm font-black text-white mb-1">Good — but £1,847 of relief still unclaimed</p>
-              <p className="text-[11px] text-[rgba(153,197,255,0.45)] leading-relaxed mb-3">Fix all 5 actions below and you'll pay roughly £1,847 less tax this year.</p>
-              <div className="flex flex-wrap gap-1.5">
-                <GChip color="green">✓ Mileage logged</GChip>
-                <GChip color="green">✓ Insurance claimed</GChip>
-                <GChip color="amber">⚠ Mileage incomplete</GChip>
-                <GChip color="amber">⚠ No pension</GChip>
-                <GChip color="red">✗ AIA not claimed</GChip>
-              </div>
+              {showDemoData ? (
+                <>
+                  <p className="text-sm font-black text-white mb-1">Good — but £1,847 of relief still unclaimed</p>
+                  <p className="text-[11px] text-[rgba(153,197,255,0.45)] leading-relaxed mb-3">Fix all 5 actions below and you'll pay roughly £1,847 less tax this year.</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <GChip color="green">✓ Mileage logged</GChip>
+                    <GChip color="green">✓ Insurance claimed</GChip>
+                    <GChip color="amber">⚠ Mileage incomplete</GChip>
+                    <GChip color="amber">⚠ No pension</GChip>
+                    <GChip color="red">✗ AIA not claimed</GChip>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-black text-white mb-1">
+                    {score >= 80 ? "Excellent — most allowances claimed."
+                     : score >= 50 ? "Good start — keep going."
+                     : score > 0 ? "Just getting started — log expenses to grow your score."
+                     : "Connect your bank and log expenses to build your tax efficiency score."}
+                  </p>
+                  <p className="text-[11px] text-[rgba(153,197,255,0.45)] leading-relaxed mb-3">
+                    Your score rises as Cadi sees the deductions you're claiming. Common categories: vehicle, insurance, supplies, phone & internet, marketing, premises.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.keys(ytdExpData.byCategory ?? {}).slice(0, 5).map(c => (
+                      <GChip key={c} color="green">✓ {CAT_DISPLAY[c]?.name ?? c}</GChip>
+                    ))}
+                    {Object.keys(ytdExpData.byCategory ?? {}).length === 0 && (
+                      <GChip color="amber">⚠ No expenses logged yet</GChip>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </GCard>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[
+            {(showDemoData ? [
               { emoji: "🚐", title: "Log 1,620 unlogged miles — save £729",         body: "At 45p/mile, 1,620 unlogged miles = £729 tax relief you're not claiming.",                        action: () => setTool("mileage"),  color: "border-emerald-500/30" },
               { emoji: "🎯", title: "Pension — save up to £820",                    body: "£4,100 into a SIPP = £820 tax relief PLUS the money is in your pension.",                          action: () => setTool("pension"),  color: "border-[#1f48ff]/30"    },
               { emoji: "⚙️", title: "AIA on equipment — up to £1,000 tax off",     body: "WFP brush, carpet cleaner, wet vac — Annual Investment Allowance = 100% first-year relief.",        action: undefined,                 color: "border-[#1f48ff]/30"    },
               { emoji: "🏠", title: "Claim use of home as office — £312/yr",        body: "25+ hrs admin at home? £26/mo HMRC flat rate, no receipts needed.",                                action: undefined,                 color: "border-amber-500/30"    },
               { emoji: "📚", title: "Training & CPD — ~£300 unclaimed",            body: "NCCA membership, cleaning courses, H&S training are all allowable.",                               action: undefined,                 color: "border-amber-500/30"    },
               { emoji: "🏦", title: "Your accountant fees are deductible",          body: "If Cadi replaces part of your accountant, that saving goes straight to profit.",                    action: undefined,                 color: "border-emerald-500/30"  },
-            ].map(({ emoji, title, body, action, color }) => (
+            ] : [
+              // Generic, evergreen advice — no fabricated personal numbers
+              { emoji: "🚐", title: "Log every business mile",                       body: "HMRC's 45p/mile rate applies to the first 10,000 business miles. Log them in Routes — Cadi does the maths.", action: () => setTool("mileage"),  color: "border-emerald-500/30" },
+              { emoji: "🎯", title: "Pension contributions = tax relief",           body: "Personal pension contributions attract 20% basic-rate top-up at source. Use the simulator to size it.",                action: () => setTool("pension"),  color: "border-[#1f48ff]/30"    },
+              { emoji: "⚙️", title: "AIA on capital equipment",                     body: "WFP brush head, carpet cleaner, wet vac — Annual Investment Allowance = 100% first-year relief on up to £1m/yr.",       action: undefined,                 color: "border-[#1f48ff]/30"    },
+              { emoji: "🏠", title: "Use of home as office",                        body: "If you spend 25+ hours/month on admin from home, you can claim HMRC's flat-rate of £26/mo with no receipts.",          action: undefined,                 color: "border-amber-500/30"    },
+              { emoji: "📚", title: "Training & professional fees",                  body: "NCCA / CSSA membership, cleaning courses, H&S training, accountant fees — all allowable expenses.",                  action: undefined,                 color: "border-amber-500/30"    },
+              { emoji: "🏦", title: "Insurance & business banking",                  body: "Public liability, employer's, vehicle, premises insurance — all deductible. Same for your business account fees.",   action: undefined,                 color: "border-emerald-500/30"  },
+            ]).map(({ emoji, title, body, action, color }) => (
               <GCard key={title} className={`p-4 border-t-2 ${color} cursor-pointer hover:bg-[rgba(153,197,255,0.03)] transition-colors`} onClick={action}>
                 <span className="text-xl mb-2 block">{emoji}</span>
                 <p className="text-xs font-black text-white mb-1">{title}</p>
@@ -1864,33 +1926,41 @@ function TaxToolsTab({ setActiveTab }) {
       {/* Mileage */}
       {tool === "mileage" && (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <GStatCard label="Miles logged"         value="4,820"  sub="of 10,000 at 45p/mile"   />
-            <GStatCard label="Mileage claim value"  value="£2,169" valueColor="text-emerald-400" sub="Tax saving: ~£867" />
-            <GStatCard label="Unlogged (est.)"      value="1,620"  valueColor="text-amber-400"   sub="~£729 unclaimed · Log now" />
-            <GStatCard label="Remaining at 45p"     value="5,180"  sub="Before 25p rate kicks in" />
-          </div>
+          {showDemoData ? (
+            <div className="grid grid-cols-2 gap-3">
+              <GStatCard label="Miles logged"         value="4,820"  sub="of 10,000 at 45p/mile"   />
+              <GStatCard label="Mileage claim value"  value="£2,169" valueColor="text-emerald-400" sub="Tax saving: ~£867" />
+              <GStatCard label="Unlogged (est.)"      value="1,620"  valueColor="text-amber-400"   sub="~£729 unclaimed · Log now" />
+              <GStatCard label="Remaining at 45p"     value="5,180"  sub="Before 25p rate kicks in" />
+            </div>
+          ) : (
+            <GAlert type="blue">
+              Log every business mile in the Money tab's Mileage card. Each entry is mapped to the HMRC 45p/25p rates automatically and appears in your SA103 export.
+            </GAlert>
+          )}
 
-          <GCard className="overflow-hidden">
-            <div className="grid grid-cols-5 px-4 py-2.5 border-b border-[rgba(153,197,255,0.08)]">
-              {["Date", "Journey", "Purpose", "Miles", "Claim"].map(h => (
-                <SL key={h}>{h}</SL>
-              ))}
-            </div>
-            <div className="divide-y divide-[rgba(153,197,255,0.05)]">
-              {mileageRows.map(row => (
-                <div key={row.journey} className="grid grid-cols-5 px-4 py-3 text-xs hover:bg-[rgba(153,197,255,0.02)] transition-colors">
-                  <span className="text-[rgba(153,197,255,0.35)] font-mono">{row.date}</span>
-                  <span className="text-white font-black truncate">{row.journey}</span>
-                  <span>
-                    <GChip color="blue">{row.purpose}</GChip>
-                  </span>
-                  <span className="font-mono text-[rgba(153,197,255,0.6)]">{row.miles}mi</span>
-                  <span className="font-mono font-black text-emerald-400">£{row.claim}</span>
-                </div>
-              ))}
-            </div>
-          </GCard>
+          {(showDemoData || mileageRows.length > 0) && (
+            <GCard className="overflow-hidden">
+              <div className="grid grid-cols-5 px-4 py-2.5 border-b border-[rgba(153,197,255,0.08)]">
+                {["Date", "Journey", "Purpose", "Miles", "Claim"].map(h => (
+                  <SL key={h}>{h}</SL>
+                ))}
+              </div>
+              <div className="divide-y divide-[rgba(153,197,255,0.05)]">
+                {mileageRows.map(row => (
+                  <div key={row.journey} className="grid grid-cols-5 px-4 py-3 text-xs hover:bg-[rgba(153,197,255,0.02)] transition-colors">
+                    <span className="text-[rgba(153,197,255,0.35)] font-mono">{row.date}</span>
+                    <span className="text-white font-black truncate">{row.journey}</span>
+                    <span>
+                      <GChip color="blue">{row.purpose}</GChip>
+                    </span>
+                    <span className="font-mono text-[rgba(153,197,255,0.6)]">{row.miles}mi</span>
+                    <span className="font-mono font-black text-emerald-400">£{row.claim}</span>
+                  </div>
+                ))}
+              </div>
+            </GCard>
+          )}
 
           <GAlert type="amber">
             <strong>Important:</strong> You cannot claim mileage rate AND actual vehicle costs for the same vehicle.
@@ -2256,7 +2326,7 @@ export default function AccountsTab() {
     income:      <IncomeTab />,
     expenses:    <ExpensesTab />,
     vat:         <VATTab bizSettings={bizSettings} saveSettings={saveSettings} />,
-    "tax-tools": <TaxToolsTab setActiveTab={setActiveTab} />,
+    "tax-tools": <TaxToolsTab setActiveTab={setActiveTab} isDemo={isDemo} />,
     "year-end":  <YearEndTab entityType={entityType} bizSettings={bizSettings} isDemo={isDemo} />,
   };
 
