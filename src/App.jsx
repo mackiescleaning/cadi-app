@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 import { DataProvider }    from './context/DataContext';
@@ -7,6 +7,8 @@ import { ClientProvider }  from './context/ClientContext';
 import ErrorBoundary       from './components/ErrorBoundary';
 import AppLayout           from './components/layout/AppLayout';
 import ProtectedRoute      from './components/layout/ProtectedRoute';
+import CookieConsent       from './components/CookieConsent';
+import { getConsent, initFullStory } from './lib/fullstory';
 
 // ─── Core bundle — loaded on every session ────────────────────────────────────
 import Login      from './pages/auth/Login';
@@ -91,12 +93,17 @@ function PageLoader() {
 }
 
 function App() {
+  useEffect(() => {
+    if (getConsent() === 'accepted') initFullStory();
+  }, []);
+
   return (
     <ErrorBoundary>
     <DataProvider>
     <InvoiceProvider>
     <ClientProvider>
     <Router>
+      <CookieConsent />
       <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* Auth */}

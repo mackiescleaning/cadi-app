@@ -55,7 +55,7 @@ function QuoteCard({ quote }) {
   const confClass = conf === 'high' ? 'cw-confidence--high' : conf === 'medium' ? 'cw-confidence--medium' : 'cw-confidence--low';
   const confLabel = conf === 'high' ? 'Exact price' : conf === 'medium' ? 'Estimated' : 'Approximate';
   return (
-    <div className="cw-quote-card">
+    <div className="cw-quote-card fs-exclude">
       <div className="cw-quote-price">£{(quote.price ?? 0).toFixed(2)}</div>
       {quote.breakdown?.length > 0 && (
         <div>
@@ -82,7 +82,7 @@ function QuoteCard({ quote }) {
 function BubbleMessage({ msg }) {
   const isOut = msg.role === 'user';
   return (
-    <div className={`cw-msg cw-msg--${isOut ? 'out' : 'in'}`}>
+    <div className={`cw-msg cw-msg--${isOut ? 'out' : 'in'} fs-exclude`}>
       <div className={`cw-bubble cw-bubble--${isOut ? 'out' : 'in'}`}>{msg.text}</div>
       {msg.quote && <QuoteCard quote={msg.quote} />}
     </div>
