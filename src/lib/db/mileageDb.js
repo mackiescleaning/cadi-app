@@ -1,14 +1,18 @@
 import { supabase } from '../supabase';
 import { getCurrentUserId } from './authDb';
 
-// HMRC mileage allowance: 55p/mile up to 10,000; 25p after
+// HMRC AMAP rates for cars & vans: 45p/mile up to 10,000; 25p after
+// https://www.gov.uk/expenses-if-youre-self-employed/travel
+export const MILEAGE_RATE_HIGH = 0.45;
+export const MILEAGE_RATE_LOW  = 0.25;
+export const MILEAGE_THRESHOLD = 10000;
+
 export function calcMileageAllowance(newMiles, ytdMilesBefore) {
-  const threshold = 10000;
-  const before = Math.min(ytdMilesBefore, threshold);
-  const remaining = Math.max(threshold - before, 0);
+  const before = Math.min(ytdMilesBefore, MILEAGE_THRESHOLD);
+  const remaining = Math.max(MILEAGE_THRESHOLD - before, 0);
   const atHighRate = Math.min(newMiles, remaining);
   const atLowRate  = Math.max(newMiles - remaining, 0);
-  return Math.round((atHighRate * 0.55 + atLowRate * 0.25) * 100) / 100;
+  return Math.round((atHighRate * MILEAGE_RATE_HIGH + atLowRate * MILEAGE_RATE_LOW) * 100) / 100;
 }
 
 export async function logMileage({ periodStart, periodEnd, miles, allowancePence, notes }) {

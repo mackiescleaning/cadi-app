@@ -9,6 +9,9 @@ import { useHmrc } from "../hooks/useHmrc";
 import { supabase } from "../lib/supabase";
 import { useBusinessId } from "../hooks/useBusinessId";
 import { getBusinessSettings } from "../lib/db/settingsDb";
+import { useYtdExpenses, CATEGORY_TO_SA103 } from "../hooks/useYtdExpenses";
+import { useYtdIncome, SOURCE_DISPLAY } from "../hooks/useYtdIncome";
+import { currentTaxYear, taxYearStart, taxYearLabel, parseTaxYearLabel, recentTaxYears, today } from "../lib/taxYear";
 
 // ─── Calculator logic (unchanged) ────────────────────────────────────────────
 const FRS_RATES = {
@@ -184,7 +187,7 @@ function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {
   const isDemo  = user?.id === 'demo-user';
   const isLtd   = entityType === 'limited_company';
 
-  const YTD_START   = "2026-04-06";
+  const YTD_START   = taxYearStart();
   const ytdPaid     = invoices.filter(i => i.status === "paid" && (i.paidAt ?? "").slice(0, 10) >= YTD_START);
   const ytdIncome   = ytdPaid.reduce((s, i) => s + invTotal(i), 0);
   const outstanding = invoices.filter(i => i.status !== "paid" && i.status !== "draft")
@@ -192,9 +195,10 @@ function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {
   const overdue     = invoices.filter(i => i.status === "overdue")
                                .reduce((s, i) => s + invTotal(i), 0);
 
-  const ytdExpenses  = isDemo ? 557 : 0;
+  const ytdExpData   = useYtdExpenses(currentTaxYear());
+  const ytdExpenses  = isDemo ? 557 : ytdExpData.ytdTotal;
   const netProfit    = Math.max(0, ytdIncome - ytdExpenses);
-  const annualTarget = 65000;
+  const annualTarget = isDemo ? 65000 : (Number(bizSettings.annual_target) || 0);
   const ytdAll       = isDemo ? 41820 : ytdIncome;
   const ytdPct       = annualTarget > 0 ? Math.round((ytdAll / annualTarget) * 100) : 0;
 
@@ -205,7 +209,7 @@ function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {
   const itRate             = 0.20;
   const itEst              = isLtd ? 0 : netProfit * itRate;
   const taxEst             = isLtd ? ctEst / (12 / 1.5) : itEst; // scaled back to YTD period
-  const taxReserve         = isDemo ? 4260 : 0;
+  const taxReserve         = isDemo ? 4260 : (Number(bizSettings.tax_reserve) || 0);
   const taxLabel           = isLtd ? "CT estimate (YTD)" : "Tax estimate";
   const taxSub             = isLtd ? `19% / 25% CT · £${Math.round(directorSalary / 1000)}k director salary` : `${(itRate*100).toFixed(0)}% of net profit`;
 
@@ -227,7 +231,13 @@ function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {
   ];
 
   const asOfLabel  = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  const expensesSub = isDemo ? "Demo · connect Money tab" : "Log expenses in the Money tab";
+  const expensesSub = isDemo
+    ? "Demo · connect Money tab"
+    : ytdExpData.loading
+      ? "Loading…"
+      : ytdExpenses > 0
+        ? `From ${ytdExpData.rows.filter(r => r.source === 'bank').length} bank · ${ytdExpData.rows.filter(r => r.source === 'manual').length} manual`
+        : "Connect bank or log expenses in Money tab";
   const headerSub  = isLtd
     ? "Corporation tax · director salary & dividends"
     : isDemo ? "Live from your invoices · demo expenses" : "Live from your invoices · connect Money tab for expenses";
@@ -290,15 +300,23 @@ function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {
       <GCard className="p-4">
         <div className="flex items-center justify-between mb-2">
           <SL>Annual target progress</SL>
-          <span className="text-xs font-black text-white tabular-nums">{fmt(ytdAll)} / {fmt(annualTarget)}</span>
+          {annualTarget > 0
+            ? <span className="text-xs font-black text-white tabular-nums">{fmt(ytdAll)} / {fmt(annualTarget)}</span>
+            : <span className="text-xs text-[rgba(153,197,255,0.4)]">Not set</span>}
         </div>
-        <div className="h-2 rounded-full bg-[rgba(153,197,255,0.08)] overflow-hidden">
-          <div className="h-full rounded-full bg-[#1f48ff] transition-all" style={{ width: `${Math.min(ytdPct, 100)}%` }} />
-        </div>
-        <div className="flex justify-between mt-1.5 text-[10px] text-[rgba(153,197,255,0.35)]">
-          <span>{ytdPct}% of {fmt(annualTarget)} target</span>
-          <span>{fmt(annualTarget - ytdAll)} to go</span>
-        </div>
+        {annualTarget > 0 ? (
+          <>
+            <div className="h-2 rounded-full bg-[rgba(153,197,255,0.08)] overflow-hidden">
+              <div className="h-full rounded-full bg-[#1f48ff] transition-all" style={{ width: `${Math.min(ytdPct, 100)}%` }} />
+            </div>
+            <div className="flex justify-between mt-1.5 text-[10px] text-[rgba(153,197,255,0.35)]">
+              <span>{ytdPct}% of {fmt(annualTarget)} target</span>
+              <span>{fmt(annualTarget - ytdAll)} to go</span>
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-[rgba(153,197,255,0.55)]">Set a revenue target in Settings to track yearly progress.</p>
+        )}
       </GCard>
 
       {/* Tax reserve */}
@@ -511,21 +529,36 @@ function HmrcTab({ entityType = 'sole_trader' }) {
   const [eoyResult,    setEoyResult]    = useState(null);   // { success, message }
   const [declared,     setDeclared]     = useState(false);  // final declaration done
 
-  const TAX_YEAR = 2026; // 2026/27
+  const TAX_YEAR = currentTaxYear();
+  const ytdExpData = useYtdExpenses(TAX_YEAR);
 
-  // Real quarterly income from InvoiceContext (cash basis)
+  // Real quarterly income from InvoiceContext + expenses from bank + manual entries
   const qData = useMemo(() => {
     return TAX_QUARTERS.map(q => {
       const { start, end } = getQuarterBounds(TAX_YEAR, q);
       const income = getQuarterIncome(invoices, start, end);
-      // Demo expenses per quarter (will come from shared expense context)
       const demoExp = { Q1: 557, Q2: 980, Q3: 1040, Q4: 960 };
-      const expenses = isDemo ? (demoExp[q.id] ?? 0) : 0;
+      const expenses = isDemo
+        ? (demoExp[q.id] ?? 0)
+        : (ytdExpData.byQuarter?.[q.id] ?? 0);
+
+      // Group expenses by HMRC SA103 field for this quarter (real users only)
+      const byHmrcField = {};
+      if (!isDemo && Array.isArray(ytdExpData.rows)) {
+        for (const r of ytdExpData.rows) {
+          if (r.date < start || r.date > end) continue;
+          const field = (CATEGORY_TO_SA103[r.category] || CATEGORY_TO_SA103.other).hmrcField;
+          byHmrcField[field] = (byHmrcField[field] || 0) + r.amount;
+        }
+      } else if (isDemo) {
+        byHmrcField.other = expenses;
+      }
+
       const net = income - expenses;
-      const tax = Math.max(0, (net - (12570 / 4)) * 0.20); // rough estimate
-      return { ...q, start, end, income, expenses, net, tax };
+      const tax = Math.max(0, (net - (12570 / 4)) * 0.20);
+      return { ...q, start, end, income, expenses, net, tax, byHmrcField };
     });
-  }, [invoices]);
+  }, [invoices, isDemo, ytdExpData.byQuarter, ytdExpData.rows]);
 
   // MTD ITSA SA103 expense field mapping
   const SA103_FIELDS = [
@@ -822,12 +855,15 @@ function HmrcTab({ entityType = 'sole_trader' }) {
                   if (field === "turnover") {
                     val = q.income > 0 ? fmt(q.income) : "—";
                     cls = q.income > 0 ? "text-emerald-400" : "text-[rgba(153,197,255,0.2)]";
-                  } else if (field === "other" && q.expenses > 0) {
-                    val = `−${fmt(q.expenses)}`;
-                    cls = "text-red-400";
                   } else {
-                    val = "—";
-                    cls = "text-[rgba(153,197,255,0.2)]";
+                    const amt = q.byHmrcField?.[field] || 0;
+                    if (amt > 0) {
+                      val = `−${fmt(amt)}`;
+                      cls = "text-red-400";
+                    } else {
+                      val = "—";
+                      cls = "text-[rgba(153,197,255,0.2)]";
+                    }
                   }
                   return (
                     <div key={box} className="flex items-center gap-3 text-xs">
@@ -880,11 +916,18 @@ function HmrcTab({ entityType = 'sole_trader' }) {
           onConfirm={async () => {
             setSubmitBusy(true);
             try {
+              // Build expenses payload from per-category SA103 mapping
+              // (falls back to { other } only when no breakdown is available, e.g. demo)
+              const expensesPayload = submitModal.byHmrcField && Object.keys(submitModal.byHmrcField).length > 0
+                ? Object.fromEntries(
+                    Object.entries(submitModal.byHmrcField).map(([k, v]) => [k, Math.round(v * 100) / 100])
+                  )
+                : { other: submitModal.expenses };
               await submitAndCalculate({
                 periodStart: submitModal.start,
                 periodEnd:   submitModal.end,
                 income:      { turnover: submitModal.income },
-                expenses:    { other: submitModal.expenses },
+                expenses:    expensesPayload,
                 taxYear:     "2026-27",
               });
               setSubmitResult({ success: true, message: `${submitModal.label} submitted to HMRC successfully.` });
@@ -1054,14 +1097,26 @@ function HmrcTab({ entityType = 'sole_trader' }) {
 }
 
 // ─── TAB: Invoice Records ─────────────────────────────────────────────────────
-function InvoiceRecordsTab() {
+function IncomeTab() {
   const { invoices } = useInvoices();
-  const [taxYear, setTaxYear] = useState("2026/27");
+  const { user }     = useAuth();
+  const isDemo       = user?.id === 'demo-user';
+  const [taxYear, setTaxYear] = useState(taxYearLabel());
 
-  const TAX_YEARS   = ["2024/25", "2025/26", "2026/27"];
-  const TODAY       = "2026-04-12";
-  const yearStart   = (y) => `${y.split("/")[0]}-04-01`;
-  const yearEnd     = (y) => `20${y.split("/")[1]}-03-31`;
+  const TAX_YEARS   = recentTaxYears(3);
+  const TODAY       = today();
+  const yearStart   = (y) => `${y.split("/")[0]}-04-06`;
+  const yearEnd     = (y) => `20${y.split("/")[1]}-04-05`;
+
+  // Hand paid invoices into the YTD income hook so it can dedupe matched bank credits
+  const paidInvoiceRows = useMemo(() =>
+    invoices
+      .filter(i => i.status === 'paid' && i.paidAt)
+      .map(i => ({ id: i.id, customer: i.customer, num: i.num, paidAt: i.paidAt, _total: invTotal(i) })),
+    [invoices]
+  );
+  const yearNum    = parseTaxYearLabel(taxYear) ?? currentTaxYear();
+  const ytdIncome  = useYtdIncome(yearNum, paidInvoiceRows);
 
   const yearInvs = invoices.filter(inv => {
     const d = inv.date ?? "";
@@ -1102,11 +1157,31 @@ function InvoiceRecordsTab() {
 
   const TYPE_STRIPE = { residential: "bg-emerald-500", commercial: "bg-[#1f48ff]", exterior: "bg-amber-500" };
 
+  // Group income rows by month for display
+  const incomeByMonth = useMemo(() => {
+    const grouped = {};
+    for (const row of ytdIncome.rows) {
+      const m = new Date(row.date).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+      if (!grouped[m]) grouped[m] = [];
+      grouped[m].push(row);
+    }
+    return grouped;
+  }, [ytdIncome.rows]);
+
+  const liveYtdIncome = isDemo ? totalReceived : ytdIncome.ytdTotal;
+  const sourceTotals  = ytdIncome.bySource ?? {};
+  const sourceList    = Object.entries(sourceTotals)
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, total]) => ({ key, total, ...SOURCE_DISPLAY[key] }));
+
   return (
     <div className="space-y-5">
       <div>
-        <SL className="mb-0.5">Tax year · All invoices · Aged debtors</SL>
-        <h2 className="text-2xl font-black text-white">Invoice Records</h2>
+        <SL className="mb-0.5">All money landing in your business · Tax year</SL>
+        <h2 className="text-2xl font-black text-white">Income</h2>
+        <p className="text-[11px] text-[rgba(153,197,255,0.45)] mt-0.5">
+          Invoices · GoCardless · Stripe · Bank deposits · Cash — all in one place
+        </p>
       </div>
 
       {/* Tax year selector */}
@@ -1121,21 +1196,50 @@ function InvoiceRecordsTab() {
             </button>
           ))}
         </div>
-        <span className="text-[10px] text-[rgba(153,197,255,0.35)]">{yearInvs.length} invoices</span>
+        <span className="text-[10px] text-[rgba(153,197,255,0.35)]">{ytdIncome.rows.length} entries</span>
       </div>
 
-      {/* Stats */}
+      {/* Top-line stats */}
       <div className="grid grid-cols-2 gap-3">
-        <GStatCard label="Total invoiced"  value={fmt(totalInvoiced)}    sub={`${yearInvs.length} invoices`} />
-        <GStatCard label="Received"        value={fmt(totalReceived)}    valueColor="text-emerald-400" sub={`${yearInvs.filter(i=>i.status==="paid").length} paid`} />
-        <GStatCard label="Outstanding"     value={fmt(totalOutstanding)} valueColor={totalOutstanding > 0 ? "text-amber-400" : "text-emerald-400"} sub={`${unpaid.length} unpaid`} />
-        <GStatCard label="Overdue"         value={fmt(totalOverdue)}     valueColor={totalOverdue > 0 ? "text-red-400" : "text-emerald-400"} sub={totalOverdue > 0 ? "Action needed" : "Clear ✓"} />
+        <GStatCard label="YTD income"      value={fmt(liveYtdIncome)}    valueColor="text-emerald-400" sub={`${ytdIncome.rows.length} payments received`} />
+        <GStatCard label="Outstanding"     value={fmt(totalOutstanding)} valueColor={totalOutstanding > 0 ? "text-amber-400" : "text-emerald-400"} sub={`${unpaid.length} invoices awaiting`} />
+        <GStatCard label="Overdue"         value={fmt(totalOverdue)}     valueColor={totalOverdue > 0 ? "text-red-400" : "text-emerald-400"} sub={totalOverdue > 0 ? "Chase up" : "Clear ✓"} />
+        <GStatCard label="Sources"         value={String(sourceList.length || 0)} sub={sourceList.slice(0, 2).map(s => s.label).join(' · ') || 'None yet'} />
       </div>
+
+      {/* Income by source breakdown */}
+      {sourceList.length > 0 && (
+        <>
+          <SectionDivider label="Where your income comes from" right={<GChip color="green">{fmt(liveYtdIncome)} YTD</GChip>} />
+          <GCard className="overflow-hidden divide-y divide-[rgba(153,197,255,0.05)]">
+            {sourceList.map(({ key, total, label, icon, color }) => {
+              const pct = liveYtdIncome > 0 ? (total / liveYtdIncome) * 100 : 0;
+              const count = ytdIncome.rows.filter(r => r.source === key).length;
+              return (
+                <div key={key} className="px-4 py-3">
+                  <div className="flex items-center gap-3 mb-1.5">
+                    <span className="text-base shrink-0">{icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-black text-white">{label}</p>
+                      <p className="text-[10px] text-[rgba(153,197,255,0.4)]">{count} payment{count !== 1 ? 's' : ''}</p>
+                    </div>
+                    <p className="text-sm font-black tabular-nums text-white shrink-0">{fmt(total)}</p>
+                    <span className="text-[10px] font-black tabular-nums text-[rgba(153,197,255,0.5)] w-10 text-right shrink-0">{Math.round(pct)}%</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-[rgba(153,197,255,0.06)] overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
+                  </div>
+                </div>
+              );
+            })}
+          </GCard>
+        </>
+      )}
 
       {/* Aged debtors */}
       {unpaid.length > 0 && (
         <>
-          <SectionDivider label="Aged debtors" right={<GChip color="amber">{fmt(agedSum(unpaid))} owed</GChip>} />
+          <SectionDivider label="Awaiting payment" right={<GChip color="amber">{fmt(agedSum(unpaid))} owed</GChip>} />
           <GCard className="overflow-hidden divide-y divide-[rgba(153,197,255,0.05)]">
             {[
               { label: "Current — not yet due",     arr: agedCurrent, dot: "bg-[rgba(153,197,255,0.3)]", val: "text-[rgba(153,197,255,0.6)]" },
@@ -1161,22 +1265,31 @@ function InvoiceRecordsTab() {
         </>
       )}
 
-      {/* By month */}
-      {Object.entries(byMonth).map(([month, invs]) => (
+      {/* Income stream by month */}
+      {Object.entries(incomeByMonth).map(([month, rows]) => (
         <div key={month}>
-          <SectionDivider label={month} right={<GChip color="ghost">{fmt(invs.reduce((s,i)=>s+invTotal(i),0))}</GChip>} />
+          <SectionDivider label={month} right={<GChip color="ghost">{fmt(rows.reduce((s,r)=>s+r.amount,0))}</GChip>} />
           <GCard className="overflow-hidden divide-y divide-[rgba(153,197,255,0.05)]">
-            {invs.map(inv => {
-              const sm = invStatusMeta(inv);
+            {rows.map(row => {
+              const src = SOURCE_DISPLAY[row.source] || SOURCE_DISPLAY.bank;
               return (
-                <div key={inv.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[rgba(153,197,255,0.02)] transition-colors">
-                  <div className={`w-0.5 self-stretch rounded-full shrink-0 ${TYPE_STRIPE[inv.type] ?? "bg-[rgba(153,197,255,0.2)]"}`} />
+                <div key={row.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[rgba(153,197,255,0.02)] transition-colors">
+                  <div className="w-0.5 self-stretch rounded-full shrink-0" style={{ backgroundColor: src.color }} />
+                  <span className="text-base shrink-0">{src.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-black text-white">{invCustomerName(inv)}</p>
-                    <p className="text-[10px] text-[rgba(153,197,255,0.35)]">{inv.num} · {new Date(inv.date).toLocaleDateString("en-GB",{day:"numeric",month:"short"})} · {inv.type}</p>
+                    <p className="text-xs font-black text-white truncate">{row.label}</p>
+                    <p className="text-[10px] text-[rgba(153,197,255,0.35)]">
+                      {new Date(row.date).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}
+                      {row.sublabel ? ` · ${row.sublabel}` : ''}
+                      {' · '}{src.label}
+                    </p>
                   </div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border shrink-0 ${sm.cls}`}>{sm.label}</span>
-                  <p className="text-xs font-black tabular-nums text-white shrink-0">{fmt2(invTotal(inv))}</p>
+                  {row.confirmed && (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full border bg-emerald-500/10 border-emerald-500/20 text-emerald-400 shrink-0">
+                      Bank ✓
+                    </span>
+                  )}
+                  <p className="text-xs font-black tabular-nums text-emerald-400 shrink-0">+{fmt2(row.amount)}</p>
                 </div>
               );
             })}
@@ -1184,18 +1297,26 @@ function InvoiceRecordsTab() {
         </div>
       ))}
 
-      {yearInvs.length === 0 && (
-        <GCard className="p-10 text-center">
-          <p className="text-2xl mb-2">🧾</p>
-          <p className="text-sm font-black text-white">No invoices in {taxYear}</p>
-          <p className="text-[11px] text-[rgba(153,197,255,0.4)] mt-1">Switch year above or create invoices in the Invoices tab.</p>
+      {ytdIncome.loading && ytdIncome.rows.length === 0 && (
+        <GCard className="p-8 text-center">
+          <p className="text-sm text-[rgba(153,197,255,0.5)]">Loading income…</p>
         </GCard>
       )}
 
-      {totalReceived > 0 && (
+      {!ytdIncome.loading && ytdIncome.rows.length === 0 && (
+        <GCard className="p-10 text-center">
+          <p className="text-2xl mb-2">💰</p>
+          <p className="text-sm font-black text-white">No income recorded yet</p>
+          <p className="text-[11px] text-[rgba(153,197,255,0.4)] mt-1 leading-relaxed">
+            Send your first invoice, connect your bank in the Money tab,<br/>or log a cash payment manually.
+          </p>
+        </GCard>
+      )}
+
+      {liveYtdIncome > 0 && (
         <GAlert type="blue">
-          <strong>SA103 Box 15:</strong> Total received <strong>{fmt(totalReceived)}</strong> is your declared
-          turnover for {taxYear}. Outstanding <strong>{fmt(totalOutstanding)}</strong> counts as income once paid.
+          <strong>SA103 Box 15:</strong> Total received <strong>{fmt(liveYtdIncome)}</strong> is your declared
+          turnover for {taxYear}. Outstanding <strong>{fmt(totalOutstanding)}</strong> counts once paid.
         </GAlert>
       )}
     </div>
@@ -1203,54 +1324,114 @@ function InvoiceRecordsTab() {
 }
 
 // ─── TAB: Expenses ────────────────────────────────────────────────────────────
+const CAT_DISPLAY = {
+  fuel:                  { icon: '⛽', name: 'Fuel & Vehicle Costs' },
+  vehicle:               { icon: '🚐', name: 'Vehicle (lease, servicing)' },
+  supplies:              { icon: '🧴', name: 'Cleaning Supplies & Materials' },
+  equipment:             { icon: '🔧', name: 'Equipment & Tools' },
+  insurance:             { icon: '🛡️', name: 'Business Insurance' },
+  premises:              { icon: '🏠', name: 'Premises (rent, utilities)' },
+  phone_internet:        { icon: '📱', name: 'Phone & Internet' },
+  marketing:             { icon: '📢', name: 'Marketing & Advertising' },
+  bank_charges:          { icon: '🏦', name: 'Bank Charges & Interest' },
+  professional:          { icon: '⚖️', name: 'Professional Fees' },
+  professional_services: { icon: '⚖️', name: 'Professional Services' },
+  staff:                 { icon: '👥', name: 'Staff & Subcontractors' },
+  tax_payment:           { icon: '🏛️', name: 'Tax Payments' },
+  other:                 { icon: '📦', name: 'Other Allowable' },
+  uncategorised:         { icon: '❓', name: 'Uncategorised — review' },
+};
+
 function ExpensesTab() {
-  const categories = [
-    { icon: "🚐", name: "Van & Vehicle Costs",            sub: "Fuel · Insurance · MOT · Repairs · Tax · Finance (business %)", amount: "−£2,890", save: "~£1,156", box: "Box 17" },
-    { icon: "🚗", name: "Mileage (45p/mile HMRC rate)",   sub: "4,820 miles logged · Cannot combine with actual vehicle costs",   amount: "−£2,169", save: "~£867",  box: "Box 17" },
-    { icon: "🧴", name: "Cleaning Supplies & Materials",  sub: "Products · chemicals · equipment · consumables used on jobs",     amount: "−£1,640", save: "~£656",  box: "Box 16" },
-    { icon: "🛡️", name: "Business Insurance",             sub: "Public liability · employer's liability · van business use",      amount: "−£1,200", save: "~£480",  box: "Box 20" },
-    { icon: "👕", name: "Uniform, PPE & Workwear",        sub: "Logo'd clothing · gloves · masks · boots · NOT everyday wear",    amount: "−£380",   save: "~£152",  box: "Box 27" },
-    { icon: "📱", name: "Phone & Software (business %)",  sub: "Mobile plan · Cadi subscription · scheduling tools",              amount: "−£720",   save: "~£288",  box: "Box 21" },
-    { icon: "🏠", name: "Use of Home as Office",          sub: "HMRC flat rate £26/mo (26+ hrs) or actual proportion",            amount: "−£312",   save: "~£125",  box: "Box 20" },
-    { icon: "📢", name: "Marketing & Advertising",        sub: "Leaflets · Google Ads · website · business cards",                amount: "−£540",   save: "~£216",  box: "Box 22" },
-    { icon: "🏦", name: "Bank Charges & Professional Fees", sub: "Business account fees · accountant fees · bank interest",      amount: "−£358",   save: "~£143",  box: "Box 24" },
-    { icon: "🎓", name: "Training & Development",         sub: "Course fees · NCCA · CSSA memberships · trade bodies",            amount: "−£300",   save: "~£120",  box: "Box 27" },
+  const { user } = useAuth();
+  const isDemo   = user?.id === 'demo-user';
+  const ytdExpData = useYtdExpenses(currentTaxYear());
+
+  // Demo rows (kept for demo mode only)
+  const demoCategories = [
+    { icon: "🚐", name: "Van & Vehicle Costs",            sub: "Fuel · Insurance · MOT · Repairs",     amount: 2890, box: "Box 17" },
+    { icon: "🚗", name: "Mileage (45p/mile HMRC rate)",   sub: "4,820 miles logged",                    amount: 2169, box: "Box 17" },
+    { icon: "🧴", name: "Cleaning Supplies & Materials",  sub: "Products · chemicals · consumables",    amount: 1640, box: "Box 16" },
+    { icon: "🛡️", name: "Business Insurance",             sub: "Public liability · employer's",         amount: 1200, box: "Box 20" },
+    { icon: "👕", name: "Uniform, PPE & Workwear",        sub: "Logo'd clothing · gloves · masks",      amount:  380, box: "Box 27" },
+    { icon: "📱", name: "Phone & Software (business %)",  sub: "Mobile plan · Cadi subscription",       amount:  720, box: "Box 21" },
+    { icon: "🏠", name: "Use of Home as Office",          sub: "HMRC flat rate £26/mo",                 amount:  312, box: "Box 20" },
+    { icon: "📢", name: "Marketing & Advertising",        sub: "Leaflets · Google Ads · website",       amount:  540, box: "Box 22" },
+    { icon: "🏦", name: "Bank Charges & Professional",    sub: "Business account · accountant",         amount:  358, box: "Box 24" },
+    { icon: "🎓", name: "Training & Development",         sub: "NCCA · CSSA · trade bodies",            amount:  300, box: "Box 27" },
   ];
+
+  const fmtNum = n => `£${Math.round(n).toLocaleString()}`;
+  const fmtSave = n => `~£${Math.round(n * 0.4).toLocaleString()}`;
+
+  // Build live category rows from useYtdExpenses
+  const liveCategories = Object.entries(ytdExpData.byCategory)
+    .map(([catKey, total]) => {
+      const display = CAT_DISPLAY[catKey] || { icon: '📦', name: catKey };
+      const sa103   = CATEGORY_TO_SA103[catKey] || CATEGORY_TO_SA103.other;
+      const count   = ytdExpData.rows.filter(r => r.category === catKey).length;
+      const bank    = ytdExpData.rows.filter(r => r.category === catKey && r.source === 'bank').length;
+      return {
+        icon:   display.icon,
+        name:   display.name,
+        sub:    `${count} transaction${count !== 1 ? 's' : ''}${bank > 0 ? ` · ${bank} from bank` : ''}`,
+        amount: total,
+        box:    sa103.box,
+      };
+    })
+    .sort((a, b) => b.amount - a.amount);
+
+  const ytdTotal  = isDemo ? 8340 : ytdExpData.ytdTotal;
+  const taxSaved  = ytdTotal * 0.4;
+  const showRows  = isDemo ? demoCategories : liveCategories;
 
   return (
     <div className="space-y-5">
       <div>
-        <SL className="mb-0.5">HMRC-categorised · Every receipt tracked</SL>
+        <SL className="mb-0.5">HMRC-categorised · Live from Money tab</SL>
         <h2 className="text-2xl font-black text-white">Expense Tracker</h2>
         <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">Auto-mapped to SA103 boxes on your MTD return</p>
       </div>
 
-      <GAlert type="green">
-        <strong>Total allowable expenses YTD: £8,340</strong> · saving approx. <strong>£3,336 in tax</strong>.
-        Each row maps to the exact SA103 box HMRC uses.
-      </GAlert>
+      {ytdExpData.loading && !isDemo ? (
+        <GCard className="p-8 text-center">
+          <p className="text-sm text-[rgba(153,197,255,0.5)]">Loading expenses…</p>
+        </GCard>
+      ) : ytdTotal === 0 && !isDemo ? (
+        <GAlert type="amber">
+          <strong>No expenses logged yet.</strong> Connect your bank in the Money tab to auto-import business spending, or add expenses manually. They'll appear here mapped to the right HMRC boxes.
+        </GAlert>
+      ) : (
+        <>
+          <GAlert type="green">
+            <strong>Total allowable expenses YTD: {fmtNum(ytdTotal)}</strong> · saving approx. <strong>{fmtSave(ytdTotal).replace('~', '')} in tax</strong>.
+            Each row maps to the exact SA103 box HMRC uses.
+          </GAlert>
 
-      <GCard className="overflow-hidden divide-y divide-[rgba(153,197,255,0.05)]">
-        {categories.map(({ icon, name, sub, amount, save, box }) => (
-          <div key={name} className="flex items-center gap-3 px-4 py-3 hover:bg-[rgba(153,197,255,0.02)] transition-colors">
-            <div className="w-8 h-8 rounded-xl bg-[rgba(153,197,255,0.06)] flex items-center justify-center text-base shrink-0">{icon}</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-black text-white">{name}</p>
-              <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-0.5 truncate">{sub}</p>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-xs font-black tabular-nums text-red-400">{amount}</p>
-              <p className="text-[10px] text-emerald-400">saves {save}</p>
-            </div>
-            <span className="text-[10px] font-black font-mono text-[rgba(153,197,255,0.3)] w-12 text-right shrink-0">{box}</span>
-          </div>
-        ))}
-      </GCard>
+          <GCard className="overflow-hidden divide-y divide-[rgba(153,197,255,0.05)]">
+            {showRows.map(({ icon, name, sub, amount, box }) => (
+              <div key={name} className="flex items-center gap-3 px-4 py-3 hover:bg-[rgba(153,197,255,0.02)] transition-colors">
+                <div className="w-8 h-8 rounded-xl bg-[rgba(153,197,255,0.06)] flex items-center justify-center text-base shrink-0">{icon}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-black text-white">{name}</p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-0.5 truncate">{sub}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-black tabular-nums text-red-400">−{fmtNum(amount)}</p>
+                  <p className="text-[10px] text-emerald-400">saves {fmtSave(amount)}</p>
+                </div>
+                <span className="text-[10px] font-black font-mono text-[rgba(153,197,255,0.3)] w-12 text-right shrink-0">{box}</span>
+              </div>
+            ))}
+          </GCard>
+        </>
+      )}
 
-      <GAlert type="amber">
-        <strong>Missing expenses check:</strong> Based on your business type you may also be able to claim:{" "}
-        <strong>water-fed pole equipment (AIA)</strong> · <strong>carpet cleaner depreciation</strong> · <strong>storage unit rent</strong>.
-      </GAlert>
+      {!isDemo && ytdTotal > 0 && (
+        <GAlert type="amber">
+          <strong>Tip:</strong> Anything uncategorised? Head to the Money tab and tap the transaction — Cadi will remember the rule for next time.
+        </GAlert>
+      )}
     </div>
   );
 }
@@ -1315,10 +1496,18 @@ function VATTab({ bizSettings = {}, saveSettings }) {
     if (bizSettings.vat_scheme != null) setVatScheme(bizSettings.vat_scheme);
   }, [bizSettings.vat_number, bizSettings.vat_scheme]);
 
+  const [saveError, setSaveError] = useState(null);
   async function persistVatFields(patch) {
     if (!saveSettings) return;
     setVrnSaving(true);
-    await saveSettings(patch).finally(() => setVrnSaving(false));
+    setSaveError(null);
+    try {
+      await saveSettings(patch);
+    } catch (err) {
+      setSaveError(err?.message || 'Could not save — please try again.');
+    } finally {
+      setVrnSaving(false);
+    }
   }
 
   const r      = calculateVAT({ turnover, businessType, goods, otherInput, firstYear });
@@ -1363,10 +1552,13 @@ function VATTab({ bizSettings = {}, saveSettings }) {
             </GSelect>
           </div>
         </div>
-        {vatScheme === 'none' && (
+        {saveError && (
+          <GAlert type="red"><strong>Couldn't save:</strong> {saveError}</GAlert>
+        )}
+        {!saveError && vatScheme === 'none' && (
           <GAlert type="blue">VAT API support coming — when you register, Cadi will be able to prepare and submit your VAT returns directly to HMRC.</GAlert>
         )}
-        {vatScheme !== 'none' && (
+        {!saveError && vatScheme !== 'none' && (
           <GAlert type="green">VAT scheme saved. Direct VAT return submission to HMRC is coming soon — Cadi will connect via the <strong>read:vat write:vat</strong> MTD scope.</GAlert>
         )}
       </GCard>
@@ -1706,10 +1898,14 @@ function TaxToolsTab({ setActiveTab }) {
 }
 
 // ─── TAB: Year End ────────────────────────────────────────────────────────────
-function YearEndTab({ entityType = 'sole_trader', bizSettings = {} }) {
+function YearEndTab({ entityType = 'sole_trader', bizSettings = {}, isDemo = false }) {
+  const { user } = useAuth();
+  const { connected: hmrcConnected, obligations } = useHmrc();
   const [checked, setChecked] = useState({});
   const toggle = (k) => setChecked(p => ({ ...p, [k]: !p[k] }));
   const isLtd = entityType === 'limited_company';
+  // Real users only see fake-data screens when explicitly in demo mode
+  const showDemoData = isDemo || user?.id === 'demo-user';
 
   // For ltd: derive key dates from accounting_year_end_month (default March = 3)
   const yearEndMonth = bizSettings.accounting_year_end_month ?? 3;
@@ -1721,20 +1917,46 @@ function YearEndTab({ entityType = 'sole_trader', bizSettings = {} }) {
   const chFilingMonth = MONTHS[((yearEndMonth - 1 + 9) % 12)];
   const ct600Month    = MONTHS[((yearEndMonth - 1 + 11) % 12)]; // 12 months but filed earlier usually
 
-  const timeline = [
+  // Demo timeline (only shown to demo user) — provides a populated example
+  const demoTimeline = [
     { date: "7 Aug 2025",           title: "Q1 MTD Update — Submitted ✓",                      desc: "6 Apr – 5 Jul 2025. £14,210 income · £2,840 expenses.",                    status: "done"     },
     { date: "7 Nov 2025",           title: "Q2 MTD Update — Submitted ✓",                      desc: "6 Jul – 5 Oct 2025. £13,940 income · £2,780 expenses.",                    status: "done"     },
     { date: "5 Feb 2026",           title: "Q3 MTD Update — Submitted ✓",                      desc: "6 Oct – 5 Jan 2026. £13,670 income · £2,720 expenses.",                    status: "done"     },
     { date: "31 Jan 2026",          title: "2024/25 Final Paper SA — Submitted ✓",              desc: "Last traditional Self Assessment. Tax payment + Payment on Account paid.",   status: "done"     },
     { date: "6 Apr 2026",           title: "Tax Year 2026/27 Begins",                           desc: "MTD ITSA mandatory from April 2027 (income > £30k). Voluntary from now.",   status: "done"     },
-    { date: "5 Aug 2026 · 115 days","title": "Q1 2026/27 MTD Update",                          desc: "6 Apr – 5 Jul 2026. In progress — 6 days of data logged.",                  status: "upcoming" },
+    { date: "5 Aug 2026 · 115 days", title: "Q1 2026/27 MTD Update",                            desc: "6 Apr – 5 Jul 2026. In progress — 6 days of data logged.",                  status: "upcoming" },
     { date: "5 May 2027",           title: "Q4 2026/27 MTD Update",                            desc: "Final quarterly update for the 2026/27 tax year.",                          status: "future"   },
     { date: "31 Jan 2028",          title: "Final Declaration 2026/27",                        desc: "Replaces Self Assessment. Tax payment + 1st Payment on Account due.",        status: "future"   },
   ];
 
-  const checklist = [
+  // Real timeline — derived from useHmrc obligations + the standard MTD calendar
+  const realTimeline = (() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const fmtDate = (s) => {
+      try { return new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return s; }
+    };
+    const obs = (obligations || []).map(o => ({
+      date: fmtDate(o.due),
+      title: `${o.periodKey || 'MTD'} Update${o.status === 'F' ? ' — Submitted ✓' : ''}`,
+      desc: `${o.start || ''} – ${o.end || ''}`,
+      status: o.status === 'F' ? 'done' : new Date(o.due) < today ? 'upcoming' : 'future',
+    }));
+    return obs;
+  })();
+
+  const timeline = showDemoData ? demoTimeline : realTimeline;
+
+  // Checklist — only pre-tick items for demo. Live users start with everything unchecked.
+  const checklist = showDemoData ? [
     { key: "income",    label: "All income logged for the quarter",         done: true  },
     { key: "receipts",  label: "All receipts scanned & categorised",        done: true  },
+    { key: "mileage",   label: "Mileage log updated",                       done: false },
+    { key: "van",       label: "Business use % confirmed for van",          done: false },
+    { key: "aia",       label: "Capital equipment checked for AIA",         done: false },
+    { key: "review",    label: "Figures reviewed before submitting",        done: false },
+  ] : [
+    { key: "income",    label: "All income logged for the quarter",         done: false },
+    { key: "receipts",  label: "All receipts scanned & categorised",        done: false },
     { key: "mileage",   label: "Mileage log updated",                       done: false },
     { key: "van",       label: "Business use % confirmed for van",          done: false },
     { key: "aia",       label: "Capital equipment checked for AIA",         done: false },
@@ -1860,21 +2082,36 @@ function YearEndTab({ entityType = 'sole_trader', bizSettings = {} }) {
         {/* Timeline */}
         <GCard className="p-4">
           <SL className="mb-4">HMRC deadline timeline</SL>
-          <div className="relative pl-4">
-            <div className="absolute left-[7px] top-2 bottom-2 w-px bg-[rgba(153,197,255,0.1)]" />
-            {timeline.map(({ date, title, desc, status }) => (
-              <div key={date} className="relative mb-4 ml-4">
-                <div className={`absolute -left-[1.4rem] top-1 w-3 h-3 rounded-full border-2 ${
-                  status === "done"     ? "bg-emerald-500 border-emerald-500" :
-                  status === "upcoming" ? "bg-amber-400 border-amber-400 animate-pulse" :
-                                          "bg-transparent border-[rgba(153,197,255,0.2)]"
-                }`} />
-                <p className={`text-[10px] font-mono mb-0.5 ${status === "upcoming" ? "text-amber-400 font-bold" : "text-[rgba(153,197,255,0.35)]"}`}>{date}</p>
-                <p className={`text-xs font-black mb-0.5 ${status === "done" ? "text-emerald-400" : status === "upcoming" ? "text-amber-300" : "text-[rgba(153,197,255,0.6)]"}`}>{title}</p>
-                <p className="text-[10px] text-[rgba(153,197,255,0.3)] leading-relaxed">{desc}</p>
-              </div>
-            ))}
-          </div>
+          {timeline.length === 0 ? (
+            <div className="py-6 text-center">
+              <p className="text-xs text-[rgba(153,197,255,0.55)] mb-3">
+                {hmrcConnected
+                  ? "No quarterly obligations yet — they'll appear here as soon as HMRC publishes them."
+                  : "Connect HMRC to see your real quarterly deadlines and submission status."}
+              </p>
+              {!hmrcConnected && (
+                <a href="#hmrc" className="inline-block px-4 py-2 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors">
+                  Connect HMRC →
+                </a>
+              )}
+            </div>
+          ) : (
+            <div className="relative pl-4">
+              <div className="absolute left-[7px] top-2 bottom-2 w-px bg-[rgba(153,197,255,0.1)]" />
+              {timeline.map(({ date, title, desc, status }) => (
+                <div key={date + title} className="relative mb-4 ml-4">
+                  <div className={`absolute -left-[1.4rem] top-1 w-3 h-3 rounded-full border-2 ${
+                    status === "done"     ? "bg-emerald-500 border-emerald-500" :
+                    status === "upcoming" ? "bg-amber-400 border-amber-400 animate-pulse" :
+                                            "bg-transparent border-[rgba(153,197,255,0.2)]"
+                  }`} />
+                  <p className={`text-[10px] font-mono mb-0.5 ${status === "upcoming" ? "text-amber-400 font-bold" : "text-[rgba(153,197,255,0.35)]"}`}>{date}</p>
+                  <p className={`text-xs font-black mb-0.5 ${status === "done" ? "text-emerald-400" : status === "upcoming" ? "text-amber-300" : "text-[rgba(153,197,255,0.6)]"}`}>{title}</p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.3)] leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </GCard>
 
         <div className="space-y-4">
@@ -1896,22 +2133,28 @@ function YearEndTab({ entityType = 'sole_trader', bizSettings = {} }) {
 
           {/* Payments on account */}
           <GCard className="p-4">
-            <SL className="mb-3">Payments on account — 31 Jan 2028</SL>
+            <SL className="mb-3">Payments on account</SL>
             <p className="text-[11px] text-[rgba(153,197,255,0.45)] leading-relaxed mb-3">
               If your tax bill exceeds £1,000, HMRC requires advance payments. Many first-time filers are caught off-guard — you pay 150% in January.
             </p>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <div className="p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
-                <SL className="mb-1">31 Jan 2028</SL>
-                <p className="text-lg font-black text-amber-400 tabular-nums">£7,677</p>
-                <p className="text-[10px] text-[rgba(153,197,255,0.35)]">Tax + 1st POA</p>
+            {showDemoData ? (
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
+                  <SL className="mb-1">31 Jan 2028</SL>
+                  <p className="text-lg font-black text-amber-400 tabular-nums">£7,677</p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.35)]">Tax + 1st POA</p>
+                </div>
+                <div className="p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
+                  <SL className="mb-1">31 Jul 2028</SL>
+                  <p className="text-lg font-black text-[#99c5ff] tabular-nums">£2,559</p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.35)]">2nd POA</p>
+                </div>
               </div>
-              <div className="p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
-                <SL className="mb-1">31 Jul 2028</SL>
-                <p className="text-lg font-black text-[#99c5ff] tabular-nums">£2,559</p>
-                <p className="text-[10px] text-[rgba(153,197,255,0.35)]">2nd POA</p>
-              </div>
-            </div>
+            ) : (
+              <p className="text-xs text-[rgba(153,197,255,0.55)] mb-3">
+                Your payments-on-account will appear here after you file your first Final Declaration via HMRC.
+              </p>
+            )}
             <GAlert type="gold">Set aside <strong>25% of every invoice</strong> from day one.</GAlert>
           </GCard>
 
@@ -1962,6 +2205,9 @@ export default function AccountsTab() {
     corporation_tax_utr: null,
     director_salary_annual: 12570,
     accounting_year_end_month: 3,
+    annual_target: 0,
+    tax_reserve: 0,
+    tax_reserve_target: 0,
   });
 
   const loadSettings = useCallback(async () => {
@@ -1974,10 +2220,13 @@ export default function AccountsTab() {
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
   const saveSettings = useCallback(async (patch) => {
-    try {
-      await supabase.from('business_settings').update(patch).eq('owner_id', (await supabase.auth.getUser()).data.user?.id);
-      setBizSettings(prev => ({ ...prev, ...patch }));
-    } catch { /* ignore */ }
+    const { data: { user: u } } = await supabase.auth.getUser();
+    if (!u?.id) throw new Error('Not signed in — settings cannot be saved.');
+    const { error } = await supabase
+      .from('business_settings')
+      .upsert({ ...patch, owner_id: u.id }, { onConflict: 'owner_id' });
+    if (error) throw error;
+    setBizSettings(prev => ({ ...prev, ...patch }));
   }, []);
 
   const isDemo = user?.id === 'demo-user';
@@ -1989,7 +2238,7 @@ export default function AccountsTab() {
   const TABS = [
     { id: "overview",  label: "📊 Overview"      },
     { id: "hmrc",      label: "🏛️ HMRC Connect",  badge: "MTD" },
-    { id: "invoices",  label: "🧾 Invoices",       badge: unpaidCount > 0 ? String(unpaidCount) : undefined },
+    { id: "income",    label: "💰 Income",         badge: unpaidCount > 0 ? String(unpaidCount) : undefined },
     { id: "expenses",  label: "💸 Expenses"       },
     { id: "vat",       label: "🔢 VAT"             },
     { id: "tax-tools", label: "⚡ Tax Tools"       },
@@ -1999,11 +2248,11 @@ export default function AccountsTab() {
   const panels = {
     overview:    <OverviewTab  setActiveTab={setActiveTab} entityType={entityType} bizSettings={bizSettings} />,
     hmrc:        <HmrcTab entityType={entityType} />,
-    invoices:    <InvoiceRecordsTab />,
+    income:      <IncomeTab />,
     expenses:    <ExpensesTab />,
     vat:         <VATTab bizSettings={bizSettings} saveSettings={saveSettings} />,
     "tax-tools": <TaxToolsTab setActiveTab={setActiveTab} />,
-    "year-end":  <YearEndTab entityType={entityType} bizSettings={bizSettings} />,
+    "year-end":  <YearEndTab entityType={entityType} bizSettings={bizSettings} isDemo={isDemo} />,
   };
 
   return (

@@ -8,7 +8,7 @@ import AskCadi from "../components/AskCadi";
 import { createMoneyEntry, listMoneyEntries, updateMoneyEntry, deleteMoneyEntry } from "../lib/db/moneyDb";
 import { listQuotes, updateQuoteStatus } from "../lib/db/quotesDb";
 import { getBusinessSettings, upsertBusinessSettings } from "../lib/db/settingsDb";
-import { logMileage, listMileageLogs, calcMileageAllowance } from "../lib/db/mileageDb";
+import { logMileage, listMileageLogs, calcMileageAllowance, MILEAGE_RATE_HIGH, MILEAGE_RATE_LOW, MILEAGE_THRESHOLD } from "../lib/db/mileageDb";
 import { useAuth } from "../context/AuthContext";
 import { useInvoices } from "../context/InvoiceContext";
 import { supabase } from "../lib/supabase";
@@ -174,7 +174,7 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
 
   useEffect(() => {
     if (!user || user.id === 'demo-user') return;
-    tlInvoke('truelayer-auth', { action: 'status' })
+    tlInvoke('yapily-auth', { action: 'status' })
       .then(d => setConnected(d.connected))
       .catch(() => {});
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -182,7 +182,7 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
   const handleConnect = async () => {
     setLoading(true); setError(null);
     try {
-      const { url } = await tlInvoke('truelayer-auth', { action: 'url' });
+      const { url } = await tlInvoke('yapily-auth', { action: 'url' });
       window.location.href = url;
     } catch (e) { setError(e.message); setLoading(false); }
   };
@@ -190,9 +190,9 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
   const handleSync = async () => {
     setSyncing(true); setError(null); setSuccess(null);
     try {
-      const res = await tlInvoke('truelayer-api', { action: 'sync' });
+      const res = await tlInvoke('yapily-api', { action: 'sync' });
       setSuccess(`Imported ${res.imported} transactions from ${res.accounts} account${res.accounts !== 1 ? 's' : ''}.`);
-      const txRes = await tlInvoke('truelayer-api', { action: 'transactions', days: 90 });
+      const txRes = await tlInvoke('yapily-api', { action: 'transactions', days: 90 });
       const txs = txRes.transactions ?? [];
       setBankTxs(txs);
       setShowTxs(true);
@@ -201,43 +201,80 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
   };
 
   const handleDisconnect = async () => {
-    try { await tlInvoke('truelayer-auth', { action: 'disconnect' }); setConnected(false); setBankTxs([]); setShowTxs(false); setConfirmDisconnect(false); onSyncComplete?.([]); }
+    try { await tlInvoke('yapily-auth', { action: 'disconnect' }); setConnected(false); setBankTxs([]); setShowTxs(false); setConfirmDisconnect(false); onSyncComplete?.([]); }
     catch (e) { setError(e.message); setConfirmDisconnect(false); }
   };
+
+  // Merchant key matching the backend's logic — lets us locally propagate rules
+  // to all matching transactions so the user sees the count drop immediately.
+  const mKey = (s) => (s || '').toLowerCase().replace(/\s+\d[\d\s*]+$/, '').replace(/[^a-z0-9\s]/g, '').trim().split(/\s+/).slice(0, 3).join(' ');
 
   const handleCategorise = async (txId, isBusiness, category) => {
     try {
       const tx = bankTxs.find(t => t.id === txId);
-      await tlInvoke('truelayer-api', { action: 'categorise', transactionId: txId, isBusiness, category });
+      const tKey = mKey(tx?.merchant_name || tx?.description);
+      await tlInvoke('yapily-api', { action: 'categorise', transactionId: txId, isBusiness, category });
+      // Backend propagates the rule to all matching merchants — mirror it locally
       setBankTxs(prev => {
-        const updated = prev.map(t => t.id === txId ? { ...t, is_business: isBusiness, is_personal: !isBusiness, needs_review: false, category } : t);
-        const remaining = updated.filter(t => t.needs_review).length;
+        const updated = prev.map(t => {
+          if (t.id === txId) return { ...t, is_business: isBusiness, categorised_by: 'user', category };
+          if (tKey && mKey(t.merchant_name || t.description) === tKey && t.categorised_by !== 'user') {
+            return { ...t, is_business: isBusiness, categorised_by: 'user', category };
+          }
+          return t;
+        });
+        const remaining = updated.filter(t => t.is_business === null || (t.category === 'uncategorised' && t.categorised_by !== 'user')).length;
         if (remaining === 0) { setShowAllClear(true); setTimeout(() => setShowAllClear(false), 4000); }
         setReviewIdx(0);
         return updated;
       });
-      // Live-push confirmed business debits straight into the expense sorter
-      if (isBusiness && tx && tx.transaction_type === 'debit') {
+      if (isBusiness && tx && Number(tx.amount) < 0) {
         onExpenseFromBank?.({
           id: `bk-${txId}`,
-          date: tx.date,
+          date: tx.transaction_date || tx.date,
           label: tx.merchant_name || tx.description || 'Expense',
-          amount: Number(tx.amount) || 0,
+          amount: Math.abs(Number(tx.amount)) || 0,
           category: category || 'other',
         });
       }
     } catch (e) { setError(e.message); }
   };
 
-  const needsReview = bankTxs.filter(t => t.needs_review);
-  const business    = bankTxs.filter(t => t.is_business);
-  const personal    = bankTxs.filter(t => t.is_personal);
-  const personalTotal = personal.filter(t => t.transaction_type === 'debit').reduce((s, t) => s + Number(t.amount), 0);
+  // Bulk action: mark ALL remaining uncategorised as personal (clears the queue fast for
+  // sandbox / one-off accounts). Fires one categorise call per tx — they all dedupe by merchant rule.
+  const handleBulkMarkPersonal = async () => {
+    const remaining = bankTxs.filter(t => t.is_business === null || (t.category === 'uncategorised' && t.categorised_by !== 'user'));
+    if (!remaining.length) return;
+    if (!confirm(`Mark all ${remaining.length} remaining transactions as personal? You can change individual ones later.`)) return;
+    setSyncing(true); setError(null);
+    try {
+      // Batch in chunks of 8 to avoid overwhelming the function
+      for (let i = 0; i < remaining.length; i += 8) {
+        const batch = remaining.slice(i, i + 8);
+        await Promise.all(batch.map(t =>
+          tlInvoke('yapily-api', { action: 'categorise', transactionId: t.id, isBusiness: false, category: 'personal' })
+            .catch(() => {})
+        ));
+      }
+      setBankTxs(prev => prev.map(t =>
+        (t.is_business === null || (t.category === 'uncategorised' && t.categorised_by !== 'user'))
+          ? { ...t, is_business: false, categorised_by: 'user', category: 'personal' }
+          : t
+      ));
+      setShowAllClear(true); setTimeout(() => setShowAllClear(false), 4000);
+    } catch (e) { setError(e.message); } finally { setSyncing(false); }
+  };
+
+  // Derive review/personal flags from real schema (no needs_review column — derive from is_business + confidence)
+  const needsReview = bankTxs.filter(t => t.is_business === null || (t.category === 'uncategorised' && t.categorised_by !== 'user'));
+  const business    = bankTxs.filter(t => t.is_business === true);
+  const personal    = bankTxs.filter(t => t.is_business === false);
+  const personalTotal = personal.filter(t => Number(t.amount) < 0).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
 
   if (user?.id === 'demo-user') return null;
 
   return (
-    <div className="rounded-2xl border border-[#1f48ff]/30 bg-gradient-to-r from-[#1f48ff]/10 via-[#1f48ff]/5 to-transparent overflow-hidden">
+    <div className="fs-exclude rounded-2xl border border-[#1f48ff]/30 bg-gradient-to-r from-[#1f48ff]/10 via-[#1f48ff]/5 to-transparent overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-[#1f48ff]/60 via-[#99c5ff]/40 to-transparent" />
       <div className="p-4">
         <div className="flex items-center gap-3">
@@ -287,6 +324,26 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
         {error   && <p className="mt-2 text-xs text-red-400">{error}</p>}
         {success && <p className="mt-2 text-xs text-emerald-400">{success}</p>}
 
+        {/* Sync progress indicator */}
+        {syncing && (
+          <div className="mt-3 rounded-xl border border-[#1f48ff]/30 bg-[#1f48ff]/8 px-4 py-3">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#4f78ff] animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#4f78ff] animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#4f78ff] animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+              <p className="text-xs font-bold text-[#99c5ff]">Syncing your transactions…</p>
+            </div>
+            <p className="text-[10px] text-[rgba(153,197,255,0.5)] leading-relaxed">
+              Pulling in your transactions, categorising them, and matching payments to invoices. This usually takes 10–30 seconds — hang tight.
+            </p>
+            <div className="mt-2.5 h-0.5 rounded-full bg-[rgba(153,197,255,0.1)] overflow-hidden">
+              <div className="h-full rounded-full bg-[#4f78ff] animate-pulse" style={{ width: '60%' }} />
+            </div>
+          </div>
+        )}
+
         {/* Summary pills */}
         {bankTxs.length > 0 && (
           <div className="mt-3 grid grid-cols-3 gap-2">
@@ -315,10 +372,12 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
       {/* ── Smart review stack ── */}
       {needsReview.length > 0 && (() => {
         const tx = needsReview[reviewIdx] ?? needsReview[0];
+        const txAmount = Math.abs(Number(tx.amount));
+        const txKey = mKey(tx.merchant_name || tx.description);
+        const sameMerchantCount = needsReview.filter(t => mKey(t.merchant_name || t.description) === txKey).length;
         const suggested = suggestCategory(tx.merchant_name, tx.description);
-        const saving = quickTaxSaving(Number(tx.amount));
+        const saving = quickTaxSaving(txAmount);
         const catOptions = EXPENSE_CATS.filter(c => c.id !== 'other');
-        // Controlled selected category lives on the tx annotation (local state via bankTxs)
         const pendingCat = tx._pendingCat ?? suggested ?? 'other';
         const catObj = catById(pendingCat);
         const setPendingCat = (cat) => setBankTxs(prev => prev.map(t => t.id === tx.id ? { ...t, _pendingCat: cat } : t));
@@ -331,11 +390,38 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
                 <p className="text-xs font-black text-amber-300">{needsReview.length} transaction{needsReview.length !== 1 ? 's' : ''} to sort</p>
               </div>
               {needsReview.length > 1 && (
-                <p className="text-[10px] text-[rgba(153,197,255,0.35)]">
+                <p className="text-[10px] text-[rgba(153,197,255,0.5)]">
                   {reviewIdx + 1} of {needsReview.length}
                 </p>
               )}
             </div>
+
+            {/* ── How-it-works explainer ── */}
+            <div className="px-4 pt-3">
+              <div className="rounded-xl bg-[#1f48ff]/8 border border-[#1f48ff]/20 p-3">
+                <p className="text-xs font-bold text-[#99c5ff] mb-1">👋 Help me learn your spending</p>
+                <p className="text-[11px] text-[rgba(153,197,255,0.7)] leading-relaxed">
+                  Tap <span className="font-bold text-amber-300">Personal</span> or <span className="font-bold text-emerald-300">Business</span>. Once I see a merchant twice I'll handle the rest automatically — so this gets faster as you go.
+                </p>
+              </div>
+            </div>
+
+            {/* ── Bulk actions ── */}
+            {needsReview.length > 10 && (
+              <div className="px-4 pt-3">
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={handleBulkMarkPersonal}
+                    disabled={syncing}
+                    className="flex-1 px-3 py-2 rounded-xl border border-amber-500/30 bg-amber-500/8 text-amber-300 text-[11px] font-bold hover:bg-amber-500/15 transition-all disabled:opacity-50">
+                    {syncing ? 'Sorting…' : `🚫 Mark all ${needsReview.length} as personal`}
+                  </button>
+                </div>
+                <p className="text-[10px] text-[rgba(153,197,255,0.4)] mt-1.5 leading-relaxed">
+                  Quick clean-up — you can still flip individual ones to business later.
+                </p>
+              </div>
+            )}
 
             {/* Card */}
             <div className="px-4 py-4 space-y-3">
@@ -343,35 +429,43 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-base font-black text-white leading-tight truncate">{tx.merchant_name || tx.description}</p>
-                  <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">{tx.date}</p>
+                  <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">{tx.transaction_date || tx.date}</p>
                 </div>
-                <p className="text-2xl font-black text-white tabular-nums shrink-0">£{Number(tx.amount).toFixed(2)}</p>
+                <p className={`text-2xl font-black tabular-nums shrink-0 ${Number(tx.amount) > 0 ? 'text-emerald-400' : 'text-white'}`}>
+                  {Number(tx.amount) < 0 ? '−' : '+'}£{txAmount.toFixed(2)}
+                </p>
               </div>
 
               {/* Auto-suggested category pill */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-lg">{catObj.emoji}</span>
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${catObj.pill}`}>{catObj.label}</span>
-                {suggested && <span className="text-[10px] text-[rgba(153,197,255,0.35)]">auto-detected</span>}
+                {suggested
+                  ? <span className="text-[10px] text-emerald-400/70">✨ Cadi guessed this</span>
+                  : <span className="text-[10px] text-[rgba(153,197,255,0.5)]">Pick a category if business</span>
+                }
               </div>
 
               {/* Category grid */}
-              <div className="grid grid-cols-2 gap-1.5">
-                {catOptions.map(c => (
-                  <button key={c.id} onClick={() => setPendingCat(c.id)}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all ${
-                      pendingCat === c.id
-                        ? 'bg-[#1f48ff]/20 border-[#1f48ff]/50 text-[#99c5ff]'
-                        : 'border-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.3)] hover:border-[rgba(153,197,255,0.2)] hover:text-[rgba(153,197,255,0.6)]'
-                    }`}>
-                    <span>{c.emoji}</span>{c.label}
-                  </button>
-                ))}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[rgba(153,197,255,0.5)] mb-1.5">If business, which category?</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {catOptions.map(c => (
+                    <button key={c.id} onClick={() => setPendingCat(c.id)}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all ${
+                        pendingCat === c.id
+                          ? 'bg-[#1f48ff]/20 border-[#1f48ff]/60 text-white'
+                          : 'border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.75)] hover:border-[rgba(153,197,255,0.35)] hover:text-white hover:bg-[rgba(153,197,255,0.04)]'
+                      }`}>
+                      <span>{c.emoji}</span>{c.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Tax saving hint */}
               <div className="text-center py-0.5">
-                <p className="text-xs text-emerald-400/70">
+                <p className="text-xs text-emerald-400/80">
                   If business → <span className="font-black text-emerald-400">saves ~£{saving.toFixed(2)}</span> in tax
                 </p>
               </div>
@@ -387,6 +481,22 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
                   ✓ Business
                 </button>
               </div>
+
+              {/* Merchant propagation hint */}
+              {sameMerchantCount > 1 && (
+                <p className="text-[10px] text-center text-[#99c5ff]/70 leading-relaxed">
+                  💡 You have {sameMerchantCount} transactions from this merchant — categorising one will sort them all.
+                </p>
+              )}
+
+              {/* Skip button */}
+              {needsReview.length > 1 && (
+                <button
+                  onClick={() => setReviewIdx(i => (i + 1) % needsReview.length)}
+                  className="w-full py-2 text-[10px] text-[rgba(153,197,255,0.5)] hover:text-white font-semibold transition-colors">
+                  ↷ Skip for now
+                </button>
+              )}
             </div>
           </div>
         );
@@ -417,10 +527,10 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
                     <span className="text-base shrink-0">{catObj.emoji}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-white font-semibold truncate">{tx.merchant_name || tx.description}</p>
-                      <p className="text-[10px] text-[rgba(153,197,255,0.35)]">{tx.date} · {catObj.label}</p>
+                      <p className="text-[10px] text-[rgba(153,197,255,0.35)]">{tx.transaction_date || tx.date} · {catObj.label}</p>
                     </div>
-                    <p className={`text-xs font-bold shrink-0 ${tx.transaction_type === 'credit' ? 'text-emerald-400' : 'text-white'}`}>
-                      {tx.transaction_type === 'debit' ? '−' : '+'}£{Number(tx.amount).toFixed(2)}
+                    <p className={`text-xs font-bold shrink-0 ${Number(tx.amount) > 0 ? 'text-emerald-400' : 'text-white'}`}>
+                      {Number(tx.amount) < 0 ? '−' : '+'}£{Math.abs(Number(tx.amount)).toFixed(2)}
                     </p>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${tx.is_business ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'}`}>
                       {tx.is_business ? 'Biz' : 'Personal'}
@@ -465,7 +575,7 @@ function PeriodHero({ period, setPeriod, weekRevenue, monthIncome, monthlyData, 
   const taxAside = Math.round(hero.value * effectiveTaxRate);
 
   return (
-    <GCard className="p-5">
+    <GCard className="fs-exclude p-5">
       {/* Period tabs */}
       <div className="flex gap-1 mb-5 p-1 bg-[rgba(0,0,0,0.2)] rounded-xl w-fit">
         {PERIODS.map(p => (
@@ -580,7 +690,7 @@ function MonthlyReport({ monthlyData, expenses, accounts }) {
   }
 
   return (
-    <GCard className="p-4">
+    <GCard className="fs-exclude p-4">
       <div className="flex items-start justify-between mb-3">
         <div>
           <SectionLabel>{monthName} {now.getFullYear()}</SectionLabel>
@@ -670,7 +780,7 @@ function PnLWaterfall({ period, monthlyData, weekRevenue, weekExpenses, dayIncom
   const maxM = Math.max(...monthlyData.map(m => m.income), 1);
 
   return (
-    <GCard className="overflow-hidden">
+    <GCard className="fs-exclude overflow-hidden">
       <div className="px-4 pt-4 pb-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
         <SectionLabel>P&L breakdown — {d.label}</SectionLabel>
         <span className="text-[10px] font-black text-emerald-400">{retPct}% retained</span>
@@ -1430,7 +1540,7 @@ function TaxEstimate({ monthlyData, expenses, accounts }) {
   const maxCatVal = topCats[0]?.[1] ?? 1;
 
   return (
-    <GCard className="overflow-hidden">
+    <GCard className="fs-exclude overflow-hidden">
       <button
         onClick={() => setExpanded(v => !v)}
         className="w-full px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between text-left"
@@ -1761,7 +1871,7 @@ function LtdMoneyDashboard({ accounts, expenses, monthlyData }) {
   if (ytdIncome === 0) return null;
 
   return (
-    <GCard className="overflow-hidden">
+    <GCard className="fs-exclude overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.1)] flex items-center gap-3">
         <span className="text-xl">🏢</span>
@@ -2025,7 +2135,7 @@ function taxYearStart() {
 
 function projectedAnnualAllowance(weeklyMiles) {
   const annual = weeklyMiles * 52;
-  return Math.round((Math.min(annual, 10000) * 0.55 + Math.max(annual - 10000, 0) * 0.25) * 100) / 100;
+  return Math.round((Math.min(annual, MILEAGE_THRESHOLD) * MILEAGE_RATE_HIGH + Math.max(annual - MILEAGE_THRESHOLD, 0) * MILEAGE_RATE_LOW) * 100) / 100;
 }
 
 // ─── Mileage setup card (first-time prompt) ───────────────────────────────────
@@ -2071,7 +2181,7 @@ function MileageSetupCard({ onSetupComplete }) {
             <div className="w-10 h-10 rounded-xl bg-[#1f48ff]/20 border border-[#1f48ff]/30 flex items-center justify-center text-xl shrink-0">🚗</div>
             <div>
               <p className="text-sm font-black text-white">Track your mileage</p>
-              <p className="text-xs text-[rgba(153,197,255,0.55)] mt-0.5">HMRC lets you claim 55p per mile — Cadi does the maths</p>
+              <p className="text-xs text-[rgba(153,197,255,0.55)] mt-0.5">HMRC lets you claim 45p per mile — Cadi does the maths</p>
             </div>
           </div>
           <button onClick={handleDismiss} className="text-[rgba(153,197,255,0.3)] hover:text-white text-lg leading-none shrink-0 transition-colors">×</button>
@@ -2217,7 +2327,7 @@ function LogMileageModal({ ytdMilesBefore, onSave, onClose }) {
             <div className="rounded-xl border border-[rgba(153,197,255,0.1)] divide-y divide-[rgba(153,197,255,0.06)] text-sm">
               {[
                 { l: 'Miles logged',      v: `${mi} mi`,           c: 'text-white' },
-                { l: 'HMRC allowance',    v: `£${allowance.toFixed(2)}`, c: 'text-[#99c5ff]', note: ytdMilesBefore >= 10000 ? '25p/mi' : ytdMilesBefore + mi > 10000 ? 'mixed rate' : '55p/mi' },
+                { l: 'HMRC allowance',    v: `£${allowance.toFixed(2)}`, c: 'text-[#99c5ff]', note: ytdMilesBefore >= MILEAGE_THRESHOLD ? '25p/mi' : ytdMilesBefore + mi > MILEAGE_THRESHOLD ? 'mixed rate' : '45p/mi' },
                 { l: 'Tax saving (est.)', v: `~£${taxSave}`,        c: 'text-emerald-400 font-black' },
               ].map(({ l, v, c, note }) => (
                 <div key={l} className="flex justify-between items-center px-4 py-2.5">
@@ -2314,7 +2424,7 @@ function MileageCard({ mileageLogs, ytdMilesAtSetup, typicalWeeklyMiles, taxRate
           {/* HMRC 10,000-mile threshold bar */}
           <div>
             <div className="flex justify-between text-[10px] text-[rgba(153,197,255,0.4)] mb-1.5">
-              <span>HMRC threshold (55p → 25p/mi at 10,000)</span>
+              <span>HMRC threshold (45p → 25p/mi at 10,000)</span>
               <span className={overThreshold ? 'text-amber-400 font-bold' : ''}>{ytdMiles.toLocaleString()} / 10,000 mi</span>
             </div>
             <div className="h-2 rounded-full bg-[rgba(153,197,255,0.06)] overflow-hidden">
@@ -2502,50 +2612,59 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
       }
 
       // Separately load + merge bank transactions — own try/catch so failures
-      // here never wipe the manual data loaded above
-      const applyBankRows = (allRows, manualRows) => {
+      // here never wipe the manual data loaded above.
+      // Always reads manualRowsRef.current so expenses added between sync and apply are preserved.
+      const applyBankRows = (allRows) => {
         if (!allRows?.length) return;
         const bizRows    = allRows.filter(b => b.is_business);
-        const bankIncome = bizRows.filter(b => b.transaction_type === "credit");
-        const bankExpense= bizRows.filter(b => b.transaction_type === "debit");
-        const bankTxIncome = bankIncome.map(b => ({ id: `bk-${b.id}`, date: b.date, customer: b.merchant_name || b.description || "Bank income", amount: Number(b.amount) || 0, type: "residential", status: "paid" }));
-        const bankExp      = bankExpense.map(b => ({ id: `bk-${b.id}`, date: b.date, label: b.merchant_name || b.description || "Expense", amount: Number(b.amount) || 0, category: b.category || "other" }));
+        const bankIncome = bizRows.filter(b => Number(b.amount) > 0);
+        const bankExpense= bizRows.filter(b => Number(b.amount) < 0);
+        const d = b => b.transaction_date || b.date;
+        const bankTxIncome = bankIncome.map(b => ({ id: `bk-${b.id}`, date: d(b), customer: b.merchant_name || b.description || "Bank income", amount: Math.abs(Number(b.amount)) || 0, type: "residential", status: "paid" }));
+        const bankExp      = bankExpense.map(b => ({ id: `bk-${b.id}`, date: d(b), label: b.merchant_name || b.description || "Expense", amount: Math.abs(Number(b.amount)) || 0, category: b.category || "other" }));
         setTransactions(prev => [...prev.filter(t => !t.id?.startsWith("bk-")), ...bankTxIncome].sort((a,b) => new Date(b.date)-new Date(a.date)));
         setExpenses(prev => [...prev.filter(e => !e.id?.startsWith("bk-")), ...bankExp].sort((a,b) => new Date(b.date)-new Date(a.date)));
         setBankTxs(allRows);
         const bankMoneyRows = [
-          ...bankIncome.map(b => ({ kind: "income",  amount: b.amount, date: b.date })),
-          ...bankExpense.map(b => ({ kind: "expense", amount: b.amount, date: b.date })),
+          ...bankIncome.map(b => ({ kind: "income",  amount: Math.abs(Number(b.amount)), date: d(b) })),
+          ...bankExpense.map(b => ({ kind: "expense", amount: Math.abs(Number(b.amount)), date: d(b) })),
         ];
-        setMonthlyData(buildLastSixMonths([...(manualRows ?? []), ...bankMoneyRows]));
+        // Read live manual rows (ref) so expenses added during sync aren't lost
+        setMonthlyData(buildLastSixMonths([...(manualRowsRef.current ?? []), ...bankMoneyRows]));
       };
 
       try {
-        const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        // Pull bank rows from the broader of: tax-year start, or 730 days ago.
+        // Matches the manual-entry window so YTD totals reconcile with the Accounts tab.
+        const sevenThirtyDaysAgo = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        const tyStart            = taxYearStart();
+        const bankLowerBound     = sevenThirtyDaysAgo < tyStart ? sevenThirtyDaysAgo : tyStart;
         const { data: bankRows, error: bankErr } = await supabase
-          .from("bank_transactions")
-          .select("id,date,description,merchant_name,amount,transaction_type,category,is_business,is_personal,needs_review,matched_invoice_id")
-          .gte("date", ninetyDaysAgo)
-          .order("date", { ascending: false });
+          .from("transactions")
+          .select("id,transaction_date,description,merchant_name,amount,category,categorised_by,categorisation_confidence,is_business,matched_invoice_id")
+          .gte("transaction_date", bankLowerBound)
+          .eq("is_hidden", false)
+          .order("transaction_date", { ascending: false });
 
         if (bankErr) { console.error("Bank tx query error:", bankErr); }
-        else if (mounted) applyBankRows(bankRows, manualMoneyRows);
+        else if (mounted) applyBankRows(bankRows);
 
-        // Background auto-sync: pull fresh data from TrueLayer, then re-apply
+        // Background auto-sync: pull fresh data from Yapily, then re-apply
         // Runs silently — no spinner, no toast — so the page feels always up to date
         const { data: { session } } = await supabase.auth.getSession();
         if (session && mounted) {
-          supabase.functions.invoke('truelayer-api', {
+          supabase.functions.invoke('yapily-api', {
             body: { action: 'sync' },
             headers: { Authorization: `Bearer ${session.access_token}` },
           }).then(async ({ data: syncData }) => {
             if (!mounted || !syncData?.imported) return; // nothing new — skip re-query
             const { data: freshRows } = await supabase
-              .from("bank_transactions")
-              .select("id,date,description,merchant_name,amount,transaction_type,category,is_business,is_personal,needs_review,matched_invoice_id")
-              .gte("date", ninetyDaysAgo)
-              .order("date", { ascending: false });
-            if (mounted) applyBankRows(freshRows, manualMoneyRows);
+              .from("transactions")
+              .select("id,transaction_date,description,merchant_name,amount,category,categorised_by,categorisation_confidence,is_business,matched_invoice_id")
+              .gte("transaction_date", bankLowerBound)
+              .eq("is_hidden", false)
+              .order("transaction_date", { ascending: false });
+            if (mounted) applyBankRows(freshRows);
           }).catch(() => {}); // silent fail — not connected or token expired
         }
       } catch (e) {
@@ -2582,6 +2701,8 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
       setTransactions(prev => [{ id: `t${Date.now()}`, date: today, customer: invoice?.customer ?? "Payment received", amount, type: invoice?.type ?? "residential", status: "paid" }, ...prev]);
       const curr = monthlyData.find(m => m.isCurrent);
       if (curr) setMonthlyData(prev => prev.map(m => m.isCurrent ? { ...m, income: m.income + amount } : m));
+      // Keep manualRowsRef in sync so future bank-sync merges don't drop this entry
+      manualRowsRef.current = [...manualRowsRef.current, { kind: 'income', amount, date: today }];
     } catch (err) {
       console.error('Failed to save payment:', err);
       setSaveError('Payment could not be saved. Please try again.');
@@ -2599,6 +2720,8 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
       setExpenses(prev => [newExp, ...prev]);
       const curr = monthlyData.find(m => m.isCurrent);
       if (curr) setMonthlyData(prev => prev.map(m => m.isCurrent ? { ...m, expenses: m.expenses + exp.amount } : m));
+      // Keep manualRowsRef in sync so future bank-sync merges don't drop this entry
+      manualRowsRef.current = [...manualRowsRef.current, { kind: 'expense', amount: exp.amount, date: exp.date }];
     } catch (err) {
       console.error('Failed to save expense:', err);
       setSaveError('Expense could not be saved. Please try again.');
@@ -2658,7 +2781,7 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
     const txId = expId.replace(/^bk-/, '');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await supabase.functions.invoke('truelayer-api', {
+      await supabase.functions.invoke('yapily-api', {
         body: { action: 'categorise', transactionId: txId, isBusiness: true, category: newCat },
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });
@@ -2703,16 +2826,17 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
           onExpenseFromBank={handleExpenseFromBank}
           onSyncComplete={(txs) => {
             // Re-apply full merge after a manual sync from the banner
+            const d = b => b.transaction_date || b.date;
             const bizRows    = txs.filter(b => b.is_business);
-            const bankIncome = bizRows.filter(b => b.transaction_type === "credit");
-            const bankExpense= bizRows.filter(b => b.transaction_type === "debit");
-            const bankTxIncome = bankIncome.map(b => ({ id: `bk-${b.id}`, date: b.date, customer: b.merchant_name || b.description || "Bank income", amount: Number(b.amount) || 0, type: "residential", status: "paid" }));
-            const bankExp      = bankExpense.map(b => ({ id: `bk-${b.id}`, date: b.date, label: b.merchant_name || b.description || "Expense", amount: Number(b.amount) || 0, category: b.category || "other" }));
+            const bankIncome = bizRows.filter(b => Number(b.amount) > 0);
+            const bankExpense= bizRows.filter(b => Number(b.amount) < 0);
+            const bankTxIncome = bankIncome.map(b => ({ id: `bk-${b.id}`, date: d(b), customer: b.merchant_name || b.description || "Bank income", amount: Math.abs(Number(b.amount)) || 0, type: "residential", status: "paid" }));
+            const bankExp      = bankExpense.map(b => ({ id: `bk-${b.id}`, date: d(b), label: b.merchant_name || b.description || "Expense", amount: Math.abs(Number(b.amount)) || 0, category: b.category || "other" }));
             setTransactions(prev => [...prev.filter(t => !t.id?.startsWith("bk-")), ...bankTxIncome].sort((a,b) => new Date(b.date)-new Date(a.date)));
             setExpenses(prev => [...prev.filter(e => !e.id?.startsWith("bk-")), ...bankExp].sort((a,b) => new Date(b.date)-new Date(a.date)));
             const bankMoneyRows = [
-              ...bankIncome.map(b => ({ kind: "income",  amount: b.amount, date: b.date })),
-              ...bankExpense.map(b => ({ kind: "expense", amount: b.amount, date: b.date })),
+              ...bankIncome.map(b => ({ kind: "income",  amount: Math.abs(Number(b.amount)), date: d(b) })),
+              ...bankExpense.map(b => ({ kind: "expense", amount: Math.abs(Number(b.amount)), date: d(b) })),
             ];
             setMonthlyData(buildLastSixMonths([...manualRowsRef.current, ...bankMoneyRows]));
           }}
