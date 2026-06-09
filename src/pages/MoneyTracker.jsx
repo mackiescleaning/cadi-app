@@ -150,6 +150,103 @@ function SectionLabel({ children, className = "" }) {
 }
 
 // ─── Open Banking Banner ──────────────────────────────────────────────────────
+// ─── MerchantGroupCard ────────────────────────────────────────────────────────
+// One row per unique merchant in the needs-review queue. Tapping Business reveals
+// the category picker; tapping Personal sorts the whole group with one click.
+function MerchantGroupCard({ group, onCategorise, disabled }) {
+  const [expanded, setExpanded] = useState(false);
+  const [pendingCat, setPendingCat] = useState(group.suggested || 'other');
+  const catOptions = EXPENSE_CATS.filter(c => c.id !== 'other');
+  const catObj = catById(pendingCat);
+  const saving = quickTaxSaving(group.total);
+
+  return (
+    <div className="rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] overflow-hidden">
+      {/* Header — merchant name + count + total */}
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[rgba(153,197,255,0.04)] transition-colors text-left"
+        disabled={disabled}
+      >
+        <span className="text-lg shrink-0">{group.suggested ? catById(group.suggested).emoji : '🏪'}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white truncate">{group.displayName}</p>
+          <p className="text-[10px] text-[rgba(153,197,255,0.5)] mt-0.5">
+            {group.txs.length} transaction{group.txs.length !== 1 ? 's' : ''} · £{group.total.toFixed(2)}
+            {group.suggested && <span className="text-emerald-400/70 ml-1.5">✨ Cadi suggests {catById(group.suggested).label}</span>}
+          </p>
+        </div>
+        <span className={`text-[rgba(153,197,255,0.4)] transition-transform shrink-0 ${expanded ? 'rotate-90' : ''}`}>›</span>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-[rgba(153,197,255,0.08)] p-3 space-y-3 bg-[rgba(0,0,0,0.15)]">
+          {/* Category picker if business */}
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[rgba(153,197,255,0.5)] mb-1.5">If business, which category?</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {catOptions.map(c => (
+                <button key={c.id} onClick={() => setPendingCat(c.id)}
+                  disabled={disabled}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all ${
+                    pendingCat === c.id
+                      ? 'bg-[#1f48ff]/20 border-[#1f48ff]/60 text-white'
+                      : 'border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.75)] hover:border-[rgba(153,197,255,0.35)] hover:text-white'
+                  }`}>
+                  <span>{c.emoji}</span>{c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tax-saving hint */}
+          <div className="text-center">
+            <p className="text-xs text-emerald-400/80">
+              All {group.txs.length} as business → <span className="font-black text-emerald-400">saves ~£{saving.toFixed(2)}</span> in tax
+            </p>
+          </div>
+
+          {/* Action buttons */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => onCategorise(false, 'personal')}
+              disabled={disabled}
+              className="py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-black hover:bg-amber-500/20 active:scale-95 transition-all disabled:opacity-50"
+            >
+              ✗ All {group.txs.length} Personal
+            </button>
+            <button
+              onClick={() => onCategorise(true, pendingCat)}
+              disabled={disabled}
+              className="py-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 text-sm font-black hover:bg-emerald-500/25 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              ✓ All {group.txs.length} Business · {catObj.emoji}
+            </button>
+          </div>
+
+          {/* Preview a few transactions */}
+          {group.txs.length > 1 && (
+            <details className="text-[10px] text-[rgba(153,197,255,0.4)]">
+              <summary className="cursor-pointer hover:text-[rgba(153,197,255,0.7)]">See {Math.min(group.txs.length, 5)} of these transactions</summary>
+              <div className="mt-2 space-y-1">
+                {group.txs.slice(0, 5).map(t => (
+                  <div key={t.id} className="flex justify-between gap-2 font-mono">
+                    <span className="truncate">{(t.transaction_date || t.date)?.slice(5) ?? '—'}</span>
+                    <span className="tabular-nums">£{Math.abs(Number(t.amount)).toFixed(2)}</span>
+                  </div>
+                ))}
+                {group.txs.length > 5 && (
+                  <p className="text-[rgba(153,197,255,0.3)] italic">+ {group.txs.length - 5} more</p>
+                )}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpenseFromBank }) {
   const { user } = useAuth();
   const [connected,         setConnected]         = useState(false);
@@ -162,6 +259,7 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [showAllClear,      setShowAllClear]      = useState(false);
   const [reviewIdx,         setReviewIdx]         = useState(0); // which needs-review tx to show
+  const [sortMode,          setSortMode]          = useState(null); // 'smart' | 'one-by-one' — null = auto-pick
 
   const tlInvoke = async (fn, body) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -280,8 +378,80 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
     } catch (e) { setError(e.message); } finally { setSyncing(false); }
   };
 
+  // Bulk action: categorise every needs-review transaction matching a merchant key
+  // in one go. Fires one backend call per tx but the UI updates atomically so the
+  // group disappears together — making 32 Tesco transactions feel like one click.
+  const handleBulkByMerchant = async (merchantKey, isBusiness, category) => {
+    const matching = bankTxs.filter(t => {
+      if (!(t.is_business === null || (t.category === 'uncategorised' && t.categorised_by !== 'user'))) return false;
+      return mKey(t.merchant_name || t.description) === merchantKey;
+    });
+    if (!matching.length) return;
+    setSyncing(true); setError(null);
+    try {
+      for (let i = 0; i < matching.length; i += 8) {
+        const batch = matching.slice(i, i + 8);
+        await Promise.all(batch.map(t =>
+          tlInvoke('yapily-api', { action: 'categorise', transactionId: t.id, isBusiness, category })
+            .catch(() => {})
+        ));
+      }
+      // Optimistically update all matching locally
+      setBankTxs(prev => {
+        const updated = prev.map(t => {
+          if (mKey(t.merchant_name || t.description) === merchantKey
+              && (t.is_business === null || (t.category === 'uncategorised' && t.categorised_by !== 'user'))) {
+            return { ...t, is_business: isBusiness, categorised_by: 'user', category };
+          }
+          return t;
+        });
+        const remaining = updated.filter(t => t.is_business === null || (t.category === 'uncategorised' && t.categorised_by !== 'user')).length;
+        if (remaining === 0) { setShowAllClear(true); setTimeout(() => setShowAllClear(false), 4000); }
+        return updated;
+      });
+      // If they're business expenses, push to the Money tab expense list
+      if (isBusiness) {
+        matching.filter(t => Number(t.amount) < 0).forEach(t =>
+          onExpenseFromBank?.({
+            id: `bk-${t.id}`,
+            date: t.transaction_date || t.date,
+            label: t.merchant_name || t.description || 'Expense',
+            amount: Math.abs(Number(t.amount)) || 0,
+            category: category || 'other',
+          })
+        );
+      }
+    } catch (e) { setError(e.message); } finally { setSyncing(false); }
+  };
+
   // Derive review/personal flags from real schema (no needs_review column — derive from is_business + confidence)
   const needsReview = bankTxs.filter(t => t.is_business === null || (t.category === 'uncategorised' && t.categorised_by !== 'user'));
+
+  // Group needs-review transactions by merchant fingerprint. Each group becomes
+  // a single sort decision in Smart Sort mode — 967 transactions across 73 merchants
+  // becomes 73 clicks, not 967.
+  const merchantGroups = (() => {
+    const groups = new Map();
+    for (const t of needsReview) {
+      const key = mKey(t.merchant_name || t.description) || `__no_merchant_${t.id}`;
+      const displayName = t.merchant_name || t.description || 'Unknown';
+      if (!groups.has(key)) {
+        groups.set(key, { key, displayName, txs: [], total: 0, suggested: null });
+      }
+      const g = groups.get(key);
+      g.txs.push(t);
+      g.total += Math.abs(Number(t.amount)) || 0;
+      // First non-null Cadi guess wins — most txs in a merchant group should match the same rule anyway
+      if (!g.suggested) {
+        const s = suggestCategory(t.merchant_name, t.description);
+        if (s) g.suggested = s;
+      }
+    }
+    return Array.from(groups.values()).sort((a, b) => b.txs.length - a.txs.length);
+  })();
+
+  // Smart Sort auto-activates for big lists. User can flip to one-by-one.
+  const effectiveSortMode = sortMode ?? (needsReview.length >= 15 ? 'smart' : 'one-by-one');
   const business    = bankTxs.filter(t => t.is_business === true);
   const personal    = bankTxs.filter(t => t.is_business === false);
   const personalTotal = personal.filter(t => Number(t.amount) < 0).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
@@ -433,8 +603,62 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
         )}
       </div>
 
-      {/* ── Smart review stack ── */}
-      {needsReview.length > 0 && (() => {
+      {/* ── Smart Sort: merchant-grouped bulk review ── */}
+      {needsReview.length > 0 && effectiveSortMode === 'smart' && (
+        <div className="border-t border-amber-500/25">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-2.5 bg-amber-500/8">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              <p className="text-xs font-black text-amber-300">
+                {needsReview.length} transaction{needsReview.length !== 1 ? 's' : ''} · {merchantGroups.length} merchant{merchantGroups.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <button
+              onClick={() => setSortMode('one-by-one')}
+              className="text-[10px] text-[rgba(153,197,255,0.5)] hover:text-white font-semibold transition-colors"
+            >
+              Review one-by-one ↻
+            </button>
+          </div>
+
+          {/* Explainer */}
+          <div className="px-4 pt-3">
+            <div className="rounded-xl bg-[#1f48ff]/8 border border-[#1f48ff]/20 p-3">
+              <p className="text-xs font-bold text-[#99c5ff] mb-1">👋 Smart Sort — by merchant, not by transaction</p>
+              <p className="text-[11px] text-[rgba(153,197,255,0.7)] leading-relaxed">
+                Cadi grouped your transactions by who you paid. Sort each merchant once — every transaction from them gets the same treatment. Tap a card to choose.
+              </p>
+            </div>
+          </div>
+
+          {/* Merchant groups */}
+          <div className="px-4 py-3 space-y-2 max-h-[480px] overflow-y-auto">
+            {merchantGroups.map(group => (
+              <MerchantGroupCard
+                key={group.key}
+                group={group}
+                onCategorise={(isBus, cat) => handleBulkByMerchant(group.key, isBus, cat)}
+                disabled={syncing}
+              />
+            ))}
+          </div>
+
+          {/* Nuclear option (less prominent) */}
+          <div className="px-4 pb-3">
+            <button
+              onClick={handleBulkMarkPersonal}
+              disabled={syncing}
+              className="w-full px-3 py-2 rounded-lg border border-[rgba(153,197,255,0.12)] text-[10px] text-[rgba(153,197,255,0.45)] hover:text-amber-300 hover:border-amber-500/30 font-semibold transition-all disabled:opacity-50"
+            >
+              {syncing ? 'Sorting…' : `Or, mark all ${needsReview.length} as personal in one go`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── One-by-one review stack (original) ── */}
+      {needsReview.length > 0 && effectiveSortMode === 'one-by-one' && (() => {
         const tx = needsReview[reviewIdx] ?? needsReview[0];
         const txAmount = Math.abs(Number(tx.amount));
         const txKey = mKey(tx.merchant_name || tx.description);
@@ -453,11 +677,21 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
                 <p className="text-xs font-black text-amber-300">{needsReview.length} transaction{needsReview.length !== 1 ? 's' : ''} to sort</p>
               </div>
-              {needsReview.length > 1 && (
-                <p className="text-[10px] text-[rgba(153,197,255,0.5)]">
-                  {reviewIdx + 1} of {needsReview.length}
-                </p>
-              )}
+              <div className="flex items-center gap-3">
+                {needsReview.length > 1 && (
+                  <p className="text-[10px] text-[rgba(153,197,255,0.5)]">
+                    {reviewIdx + 1} of {needsReview.length}
+                  </p>
+                )}
+                {merchantGroups.length >= 2 && (
+                  <button
+                    onClick={() => setSortMode('smart')}
+                    className="text-[10px] text-[#99c5ff] hover:text-white font-semibold transition-colors"
+                  >
+                    ⚡ Smart Sort
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* ── How-it-works explainer ── */}
