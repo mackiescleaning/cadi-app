@@ -165,9 +165,12 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
 
   const tlInvoke = async (fn, body) => {
     const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error('Your session has expired. Please sign in again to connect your bank.');
+    }
     const { data, error: e } = await supabase.functions.invoke(fn, {
       body,
-      headers: { Authorization: `Bearer ${session?.access_token}` },
+      headers: { Authorization: `Bearer ${session.access_token}` },
     });
     if (e) { let m = e.message; try { const rb = await e.context?.json?.(); if (rb?.error) m = rb.error; } catch {} throw new Error(m); }
     if (data?.error) throw new Error(data.error);
