@@ -15,7 +15,10 @@ import { supabase } from '../lib/supabase';
 const BG   = 'min-h-screen bg-gradient-to-br from-[#0a0f1e] via-[#0d1530] to-[#0a1628]';
 const CARD = 'mx-auto max-w-lg w-full';
 
-const IS_SANDBOX = (import.meta.env?.VITE_YAPILY_ENV ?? 'production') === 'sandbox';
+// Sandbox banks (Modelo, Mock Bank) only get hidden when env explicitly says we're
+// in production. Default behaviour is to show everything so testers always have
+// something to click — much safer default than silently presenting an empty list.
+const HIDE_SANDBOX_BANKS = (import.meta.env?.VITE_YAPILY_ENV ?? '') === 'production';
 
 function HelpDrawer({ open, onClose }) {
   if (!open) return null;
@@ -82,7 +85,7 @@ function BankPicker({ onPick, loading, onCancel }) {
         if (data?.error)  throw new Error(data.error);
         const list = (data?.institutions ?? []).filter(inst => {
           const isSandboxBank = /sandbox|mock|modelo/i.test(inst.id);
-          return IS_SANDBOX ? true : !isSandboxBank;
+          return HIDE_SANDBOX_BANKS ? !isSandboxBank : true;
         });
         setInstitutions(list);
       } catch (err) {
@@ -104,7 +107,7 @@ function BankPicker({ onPick, loading, onCancel }) {
       <div className="mb-4">
         <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#4f78ff] mb-2">Pick your bank</p>
         <h2 className="text-xl font-black text-white leading-tight mb-1">Which bank do you want to connect?</h2>
-        <p className="text-white/50 text-sm">{IS_SANDBOX ? 'Sandbox environment — test banks shown.' : 'UK banks supported by Yapily Open Banking.'}</p>
+        <p className="text-white/50 text-sm">{HIDE_SANDBOX_BANKS ? 'UK banks supported by Yapily Open Banking.' : 'UK banks + sandbox test banks.'}</p>
       </div>
 
       <input
