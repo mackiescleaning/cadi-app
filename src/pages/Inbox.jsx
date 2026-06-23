@@ -47,10 +47,10 @@ const AGENT_CONFIG = {
 
 // Filter tabs — null means "all"
 const FILTER_TABS = [
-  { key: null,                label: 'All' },
-  { key: 'sales_manager',     label: 'Sales Manager',     agents: ['sales_manager', 'front_desk'] },
-  { key: 'review_agent',      label: 'Review Agent',       agents: ['review_agent', 'reviews'] },
-  { key: 'operations_manager',label: 'Operations Manager', agents: ['operations_manager'] },
+  { key: null,                label: 'All',                accent: '#1f48ff' },
+  { key: 'sales_manager',     label: 'Sales Manager',     agents: ['sales_manager', 'front_desk'], accent: '#3b5bdb' },
+  { key: 'review_agent',      label: 'Review Agent',       agents: ['review_agent', 'reviews'],     accent: '#059669' },
+  { key: 'operations_manager',label: 'Operations Manager', agents: ['operations_manager'],          accent: '#C2410C' },
 ];
 
 function timeAgo(dateStr) {
@@ -605,22 +605,58 @@ export default function InboxPage() {
     return pending.filter(a => allowed.includes(a.agent)).length;
   };
 
+  const sentTodayCount = history.filter(a => {
+    if (!a.sent_at && !a.approved_at) return false;
+    const t = new Date(a.sent_at || a.approved_at).getTime();
+    return Date.now() - t < 86_400_000;
+  }).length;
+
   return (
     <div className="min-h-screen bg-[#f5f7ff]">
       <div className="max-w-2xl mx-auto px-4 py-8">
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-black text-[#010a4f]">Front Desk</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Items from your AI staff that need your input</p>
+        {/* Front Desk hero header — mirrors agent-page styling */}
+        <div className="bg-white rounded-2xl border border-[#99c5ff]/20 overflow-hidden mb-6 shadow-sm">
+          <div className="px-6 py-5 relative" style={{ background: 'linear-gradient(135deg, #010a4f 0%, #1f48ff 100%)' }}>
+            <button
+              onClick={load}
+              aria-label="Refresh"
+              className="absolute top-4 right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+            >
+              <RefreshCw size={14} />
+            </button>
+            <div className="flex items-start gap-4 pr-10">
+              <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
+                <Inbox size={22} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#99c5ff]/70 mb-1">Front Desk · Inbox</p>
+                <h1 className="text-xl font-black text-white">Your AI staff</h1>
+                <p className="text-sm text-white/60 mt-1">
+                  Items your agents need your input on, plus a live history of what they've done.
+                </p>
+              </div>
+            </div>
           </div>
-          <button
-            onClick={load}
-            className="p-2 rounded-xl hover:bg-white border border-transparent hover:border-[#99c5ff]/20 text-gray-400 hover:text-[#1f48ff] transition-all"
-          >
-            <RefreshCw size={16} />
-          </button>
+
+          {/* Stats strip */}
+          <div className="grid grid-cols-3 divide-x divide-[#f0f4ff] border-t border-[#99c5ff]/20">
+            <div className="px-5 py-4 text-center">
+              <p className="text-2xl font-black text-[#010a4f]">{pending.length}</p>
+              <p className="text-[10px] font-semibold text-gray-400 mt-0.5 uppercase tracking-wide">Needs approval</p>
+            </div>
+            <div className="px-5 py-4 text-center">
+              <p className="text-2xl font-black text-[#010a4f]">{sentTodayCount}</p>
+              <p className="text-[10px] font-semibold text-gray-400 mt-0.5 uppercase tracking-wide">Sent today</p>
+            </div>
+            <div className="px-5 py-4 text-center">
+              <div className="flex items-center justify-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <p className="text-sm font-bold text-emerald-600">Active</p>
+              </div>
+              <p className="text-[10px] font-semibold text-gray-400 mt-0.5 uppercase tracking-wide">Status</p>
+            </div>
+          </div>
         </div>
 
         {/* Waiting chats banner */}
@@ -711,23 +747,28 @@ export default function InboxPage() {
 
         {/* Agent filter tabs */}
         <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1">
-          {FILTER_TABS.map(({ key, label }) => {
+          {FILTER_TABS.map(({ key, label, accent }) => {
             const count = pendingCount(key);
             const active = agentFilter === key;
             return (
               <button
                 key={String(key)}
                 onClick={() => setAgentFilter(key)}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
                   active
-                    ? 'bg-[#010a4f] text-white'
+                    ? 'text-white shadow-sm'
                     : 'bg-white border border-[#99c5ff]/30 text-gray-500 hover:text-[#010a4f] hover:border-[#99c5ff]/60'
                 }`}
+                style={active ? { backgroundColor: accent } : {}}
               >
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: active ? 'rgba(255,255,255,0.9)' : accent }}
+                />
                 {label}
                 {count > 0 && tab === 'pending' && (
-                  <span className={`px-1 py-0.5 rounded-full text-[9px] font-black ${
-                    active ? 'bg-amber-400 text-[#010a4f]' : 'bg-amber-100 text-amber-700'
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                    active ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-700'
                   }`}>
                     {count}
                   </span>
