@@ -46,7 +46,6 @@ const NAV_SECTIONS = [
     label: 'Grow your margins',
     items: [
       { path: '/scaling',    label: 'Cadi AI',         icon: TrendingUp },
-      { path: '/calculator', label: 'Pricing Calculator', icon: Calculator },
       { path: '/business-lab', label: 'Business Lab',  icon: Briefcase },
       { path: '/review',     label: 'Annual Review',   icon: ClipboardList },
     ],
@@ -272,8 +271,8 @@ export default function AppLayout() {
     const items = [
       { path: '/front-desk',                    label: 'Inbox',               badge: pendingActions, icon: Inbox },
       { path: '/front-desk/sales-manager',      label: 'Sales Manager',       icon: MessageSquare,  accent: '#3b5bdb' },
-      { path: '/front-desk/review-agent',       label: 'Review Agent',        icon: Star,           accent: '#059669' },
-      { path: '/front-desk/operations-manager', label: 'Operations Manager',  icon: CalendarClock,  accent: '#C2410C', proOnly: true },
+      { path: '/front-desk/review-agent',       label: 'Review Agent',        icon: Star,           accent: '#059669', comingSoon: true },
+      { path: '/front-desk/operations-manager', label: 'Operations Manager',  icon: CalendarClock,  accent: '#C2410C', proOnly: true, comingSoon: true },
     ];
 
     return (
@@ -300,8 +299,8 @@ export default function AppLayout() {
 
         {open && (
           <div className="mt-0.5 space-y-0.5 pl-2">
-            {items.map(({ path, label, badge, icon: Icon, accent, proOnly }) => {
-              const locked    = proOnly && !isPro;
+            {items.map(({ path, label, badge, icon: Icon, accent, proOnly, comingSoon }) => {
+              const locked    = proOnly && !isPro && !comingSoon;
               const isActive  = location.pathname === path || (path !== '/front-desk' && location.pathname.startsWith(path));
               return (
                 <NavLink
@@ -324,7 +323,15 @@ export default function AppLayout() {
                       {badge}
                     </span>
                   )}
-                  {locked && <Lock size={10} className="shrink-0 opacity-40" />}
+                  {comingSoon && (
+                    <span
+                      className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded-full"
+                      style={{ backgroundColor: (accent || '#4f78ff') + '33', color: accent || '#4f78ff' }}
+                    >
+                      SOON
+                    </span>
+                  )}
+                  {locked && !comingSoon && <Lock size={10} className="shrink-0 opacity-40" />}
                 </NavLink>
               );
             })}

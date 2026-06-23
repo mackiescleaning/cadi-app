@@ -42,6 +42,7 @@ const SiteSurvey          = lazy(() => import('./pages/SiteSurvey'));
 const SalesManagerPage      = lazy(() => import('./pages/front-desk/SalesManagerPage'));
 const ReviewAgentPage       = lazy(() => import('./pages/front-desk/ReviewAgentPage'));
 const OperationsManagerPage = lazy(() => import('./pages/front-desk/OperationsManagerPage'));
+const ComingSoonAgent       = lazy(() => import('./pages/front-desk/ComingSoonAgent'));
 const WidgetSetupWizard     = lazy(() => import('./pages/front-desk/WidgetSetupWizard'));
 
 // Connect (earn)
@@ -165,8 +166,36 @@ function App() {
           <Route path="front-desk"                      element={<InboxPage />} />
           <Route path="front-desk/sales-manager"        element={<SalesManagerPage />} />
           <Route path="front-desk/sales-manager/setup"  element={<WidgetSetupWizard />} />
-          <Route path="front-desk/review-agent"         element={<ReviewAgentPage />} />
-          <Route path="front-desk/operations-manager"   element={<OperationsManagerPage />} />
+          <Route
+            path="front-desk/review-agent"
+            element={
+              <ComingSoonAgent
+                name="Review Agent"
+                accent="#059669"
+                tagline="Automatically asks every happy customer for a Google review the moment a job is marked complete."
+                bullets={[
+                  'Smart timing — sends only after a positive job rating',
+                  'Templated SMS + email with a one-tap review link',
+                  'Tracks responses and feeds them back into your reputation score',
+                ]}
+              />
+            }
+          />
+          <Route
+            path="front-desk/operations-manager"
+            element={
+              <ComingSoonAgent
+                name="Operations Manager"
+                accent="#C2410C"
+                tagline="An always-on dispatcher that watches your schedule, your team and your money flow — and nudges you before things slip."
+                bullets={[
+                  'Auto reminders for upcoming jobs, no-shows and check-ins',
+                  'Matches incoming payments to invoices and flags shortfalls',
+                  'Surfaces team availability gaps before they become problems',
+                ]}
+              />
+            }
+          />
           {/* Legacy /inbox redirect */}
           <Route path="inbox" element={<Navigate to="/front-desk" replace />} />
           <Route path="services" element={<Services />} />
