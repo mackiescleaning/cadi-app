@@ -1,205 +1,290 @@
-import { useState } from 'react';
-import { Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ShoppingBag, MapPin, Send, Lock, AlertCircle, CheckCircle2, Award, Star,
+} from 'lucide-react';
+import {
+  getMyConnectProfile,
+  listOpenMarketplaceListings,
+  listMyBids,
+  placeBid,
+  withdrawBid,
+  computeFitScore,
+  TIER_LABEL,
+  TIER_COLOR,
+} from '../../lib/db/connectDb';
 
-const EARN_ORANGE = '#C2410C';
+const ORANGE = '#C2410C';
+const GREEN  = '#16a34a';
+const PURPLE = '#7c3aed';
 
-const SERVICE_COLOUR = {
-  'Daily clean':    { bg: 'rgba(79,120,255,0.1)',  border: 'rgba(79,120,255,0.25)',  text: '#1d4ed8' },
-  'Evening clean':  { bg: 'rgba(99,102,241,0.1)',  border: 'rgba(99,102,241,0.25)', text: '#4338ca' },
-  'Deep clean':     { bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.25)', text: '#7c3aed' },
-  'Hospital clean': { bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.25)',  text: '#dc2626' },
-  'Morning clean':  { bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.25)', text: '#059669' },
-  'Office clean':   { bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)', text: '#d97706' },
-};
+function fmtFreq(f) {
+  return {
+    weekly:      'Weekly',
+    fortnightly: 'Fortnightly',
+    monthly:     'Monthly',
+    quarterly:   'Quarterly',
+    annual:      'Annual',
+    one_off:     'One-off',
+  }[f] ?? f;
+}
 
-const JOBS = [
-  {
-    id: 'j1', site: 'Premier Inn Luton Airport',    postcode: 'MK42', fm: 'Britannia Group',
-    service: 'Daily clean',    freq: 'Recurring',  schedule: 'Mon–Fri',  window: '06:00–08:00',
-    value: 85, valueFreq: '/visit', monthlyEst: 1700, matchScore: 94,
-    matchReasons: ['Location match', 'Service match', 'Score threshold met'],
-    deadline: 'Today 17:00', slaReq: '06:00–08:00', photosReq: true,
-    action: 'accept',
-  },
-  {
-    id: 'j2', site: 'Luton Central Library',         postcode: 'LU1',  fm: 'Britannia Group',
-    service: 'Evening clean',  freq: 'Recurring',  schedule: 'Mon–Fri',  window: '18:00–20:00',
-    value: 68, valueFreq: '/visit', monthlyEst: 1360, matchScore: 88,
-    matchReasons: ['Service match', 'Score threshold met'],
-    deadline: 'Tomorrow 12:00', slaReq: '18:00–20:00', photosReq: true,
-    action: 'accept',
-  },
-  {
-    id: 'j3', site: 'Next – Centre:MK',      postcode: 'MK41', fm: 'Metro Clean',
-    service: 'Daily clean',    freq: 'Recurring',  schedule: 'Mon–Fri',  window: '06:30–08:30',
-    value: 92, valueFreq: '/visit', monthlyEst: 1840, matchScore: 82,
-    matchReasons: ['Location match', 'Service match'],
-    deadline: 'Fri 16:00', slaReq: '06:30–08:30', photosReq: true,
-    action: 'apply',
-  },
-  {
-    id: 'j4', site: 'MK City Council Offices', postcode: 'MK9', fm: 'Compass FM',
-    service: 'Deep clean',     freq: 'One-off',    schedule: 'Sat 17 May', window: '08:00–12:00',
-    value: 380, valueFreq: '',  monthlyEst: null, matchScore: 76,
-    matchReasons: ['Service match'],
-    deadline: 'Wed 12:00', slaReq: '08:00–12:00', photosReq: true,
-    action: 'apply',
-  },
-  {
-    id: 'j5', site: 'Tesco Express',           postcode: 'MK40', fm: 'Spotless Networks',
-    service: 'Morning clean',  freq: 'Recurring',  schedule: 'Daily',    window: '05:30–07:00',
-    value: 55, valueFreq: '/visit', monthlyEst: 1650, matchScore: 71,
-    matchReasons: ['Location match'],
-    deadline: 'Mon 09:00', slaReq: '05:30–07:00', photosReq: false,
-    action: 'apply',
-  },
-  {
-    id: 'j6', site: 'L&D Hospital – Main Tower',     postcode: 'LU2',  fm: 'Britannia Group',
-    service: 'Hospital clean', freq: 'Recurring',  schedule: 'Mon–Sat',  window: '06:00–09:00',
-    value: 110, valueFreq: '/visit', monthlyEst: 2420, matchScore: 65,
-    matchReasons: ['Service match'],
-    deadline: 'Next Mon', slaReq: '06:00–09:00 strict', photosReq: true,
-    action: 'apply',
-  },
-];
-
-function ScoreBar({ score }) {
-  const color = score >= 90 ? '#10b981' : score >= 80 ? '#3b82f6' : score >= 70 ? '#f59e0b' : '#9ca3af';
+function TierBadge({ tier }) {
+  if (!tier) return null;
+  const color = TIER_COLOR[tier] || '#6b7280';
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-black shrink-0" style={{ borderColor: color, color }}>
-        {score}
+    <span style={{
+      fontSize: 10, fontWeight: 800, color,
+      background: `${color}15`, border: `1px solid ${color}30`,
+      padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap',
+    }}>{TIER_LABEL[tier]}</span>
+  );
+}
+
+function ListingCard({ listing, myProfile, myBid, onAccept, onWithdraw, isBusy }) {
+  const score = myProfile?.connect_score ?? 0;
+  const tier  = myProfile?.connect_tier;
+
+  // Subs are RLS-gated by score_floor, but we still want to render a clear
+  // "you're 5 points away" if the sub is somehow looking at a tier-locked
+  // listing (e.g. they got the URL directly).
+  const locked = score < (listing.score_floor ?? 0);
+
+  const fit = computeFitScore({
+    price:         listing.target_price,
+    listingTarget: listing.target_price,
+    listingFloor:  listing.floor_price,
+    score,
+    distanceMi:    0,   // TODO: real postcode → distance lookup
+    capacityFree:  Math.max(0, (myProfile?.connect_capacity ?? 0)),
+  });
+  const fitColor = fit >= 90 ? GREEN : fit >= 80 ? '#3b82f6' : fit >= 70 ? '#fbbf24' : '#ef4444';
+  const cadiPick = listing.cadi_pick_user_id && listing.cadi_pick_user_id === myProfile?.id;
+  const tierColor = TIER_COLOR[listing.visibility] || '#6b7280';
+  const site = listing.visit_spec?.site;
+  const fm   = listing.fm_organisation;
+
+  return (
+    <div style={{
+      background: 'white',
+      border: `1px solid ${cadiPick ? `${ORANGE}40` : '#e2e8f0'}`,
+      borderLeft: `4px solid ${cadiPick ? ORANGE : tierColor}`,
+      borderRadius: 10, padding: 14,
+      opacity: locked ? 0.6 : 1,
+      position: 'relative',
+    }}>
+      {cadiPick && (
+        <div style={{
+          position: 'absolute', top: -10, left: 14,
+          fontSize: 9, fontWeight: 900, letterSpacing: '0.08em',
+          color: 'white', background: ORANGE,
+          padding: '4px 10px', borderRadius: 999,
+        }}>⚡ CADI RECOMMENDS YOU</div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, marginTop: cadiPick ? 6 : 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase' }}>#{listing.id.slice(0, 8)}</span>
+          <span style={{ fontSize: 10, color: '#64748b' }}>· {fm?.name ?? 'FM'}</span>
+        </div>
+        <TierBadge tier={listing.visibility} />
       </div>
-      <div className="text-[10px] font-bold" style={{ color }}>
-        {score >= 90 ? 'Excellent match' : score >= 80 ? 'Strong match' : score >= 70 ? 'Good match' : 'Partial match'}
+
+      <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a', marginBottom: 2 }}>{site?.name ?? 'Site'}</div>
+      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>
+        <MapPin size={9} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3 }} />
+        {site?.postcode ?? ''} · {fmtFreq(listing.visit_spec?.frequency)} · {listing.visit_spec?.scope ?? ''}
       </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
+        <div style={{ background: '#f1f5f9', borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>£{listing.target_price}</div>
+          <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700 }}>per visit</div>
+        </div>
+        <div style={{ background: `${fitColor}10`, border: `1px solid ${fitColor}25`, borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 900, color: fitColor }}>{fit}</div>
+          <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700 }}>your fit</div>
+        </div>
+        <div style={{ background: '#f1f5f9', borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>{listing.format === 'rate_card' ? 'Rate card' : listing.format === 'cluster' ? 'Cluster' : 'Auction'}</div>
+          <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700 }}>format</div>
+        </div>
+      </div>
+
+      {locked ? (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          padding: '8px 0', borderRadius: 6,
+          background: `${PURPLE}10`, border: `1px solid ${PURPLE}30`,
+          fontSize: 11, fontWeight: 700, color: PURPLE,
+        }}>
+          <Lock size={11} /> Need score ≥ {listing.score_floor} (you're at {score})
+        </div>
+      ) : myBid ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 6, background: '#fef9f0', border: `1px solid #fcd34d` }}>
+          <CheckCircle2 size={13} color={GREEN} />
+          <span style={{ fontSize: 11, color: '#0f172a', flex: 1, fontWeight: 700 }}>
+            Bid £{myBid.bid_price} · {myBid.status}
+          </span>
+          <button
+            onClick={() => onWithdraw(myBid.id)}
+            disabled={isBusy}
+            style={{ fontSize: 11, fontWeight: 700, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>
+            Withdraw
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => onAccept(listing)}
+            disabled={isBusy}
+            style={{ flex: 1, fontSize: 12, fontWeight: 800, color: 'white', background: ORANGE, border: 'none', borderRadius: 7, padding: '8px 0', cursor: 'pointer', opacity: isBusy ? 0.6 : 1 }}>
+            {listing.format === 'rate_card' ? `Accept at £${listing.target_price}` : `Bid at £${listing.target_price}`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function EarnMarketplace() {
-  const [filter,   setFilter]   = useState('all');
-  const [search,   setSearch]   = useState('');
-  const [applied,  setApplied]  = useState({});
+  const [profile, setProfile]   = useState(null);
+  const [listings, setListings] = useState([]);
+  const [myBids, setMyBids]     = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
+  const [busyId, setBusyId]     = useState(null);
 
-  const filtered = JOBS.filter(j => {
-    const matchFilter = filter === 'all' || (filter === 'recurring' ? j.freq === 'Recurring' : j.freq === 'One-off');
-    const matchSearch = !search || j.site.toLowerCase().includes(search.toLowerCase()) || j.postcode.toLowerCase().includes(search.toLowerCase()) || j.service.toLowerCase().includes(search.toLowerCase());
-    return matchFilter && matchSearch;
-  });
+  async function reload() {
+    setError('');
+    try {
+      const [p, l, b] = await Promise.all([
+        getMyConnectProfile(),
+        listOpenMarketplaceListings(),
+        listMyBids(),
+      ]);
+      setProfile(p);
+      setListings(l);
+      setMyBids(b);
+    } catch (e) {
+      setError(e.message || 'Failed to load marketplace');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { reload(); }, []);
+
+  const bidByListing = useMemo(() => {
+    const m = new Map();
+    for (const b of myBids) if (b.status !== 'withdrawn') m.set(b.listing_id, b);
+    return m;
+  }, [myBids]);
+
+  async function handleAccept(listing) {
+    setBusyId(listing.id);
+    try {
+      await placeBid({ listingId: listing.id, price: listing.target_price });
+      await reload();
+    } catch (e) {
+      setError(e.message || 'Bid failed');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleWithdraw(bidId) {
+    setBusyId(bidId);
+    try {
+      await withdrawBid(bidId);
+      await reload();
+    } catch (e) {
+      setError(e.message || 'Withdraw failed');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const tier = profile?.connect_tier;
+  const score = profile?.connect_score ?? 0;
+  const nextTierGap = score >= 93 ? 0 : score >= 80 ? 93 - score : 80 - score;
+  const nextTierLabel = score >= 93 ? null : score >= 80 ? 'Elite' : 'Verified';
 
   return (
-    <div className="max-w-3xl space-y-5 pb-8">
-
+    <div style={{ background: '#f8faff', minHeight: '100%', padding: '1.25rem', fontFamily: "'Satoshi','Inter',sans-serif" }}>
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-black text-[#010a4f]">Marketplace</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Jobs matched to your Cadi score and location — accept or apply directly.</p>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #e2e8f0' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ShoppingBag size={18} color={ORANGE} />
+            <h1 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0 }}>Marketplace</h1>
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+            Open jobs from FMs you're connected to · ranked by your fit · filtered to your tier
+          </div>
+        </div>
+        {tier && <TierBadge tier={tier} />}
       </div>
 
-      {/* Search + filters */}
-      <div className="space-y-3">
-        <div className="relative">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search by site, postcode or service…"
-            value={search} onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm border border-[#99c5ff]/30 focus:outline-none focus:border-[#4f78ff] bg-white" />
-        </div>
-        <div className="flex items-center gap-2">
-          {[['all', 'All jobs'], ['recurring', 'Recurring'], ['one-off', 'One-off']].map(([v, l]) => (
-            <button key={v} onClick={() => setFilter(v)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                filter === v ? 'text-white' : 'bg-white border border-[#99c5ff]/30 text-gray-600 hover:border-gray-300'
-              }`}
-              style={filter === v ? { background: EARN_ORANGE } : {}}>
-              {l}
-            </button>
-          ))}
-          <span className="ml-auto text-xs text-gray-400">{filtered.length} jobs matched to you</span>
-        </div>
-      </div>
-
-      {/* Job cards */}
-      <div className="space-y-3">
-        {filtered.map(job => {
-          const sc = SERVICE_COLOUR[job.service] || SERVICE_COLOUR['Daily clean'];
-          const done = applied[job.id];
-          return (
-            <div key={job.id}
-              className="bg-white rounded-2xl border border-[#99c5ff]/20 shadow-sm p-5 space-y-4"
-              style={done ? { opacity: 0.6 } : {}}>
-
-              {/* Top row */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="font-bold text-[#010a4f] text-sm">{job.site}</span>
-                    <span className="text-xs text-gray-400">{job.postcode}</span>
-                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full"
-                      style={{ background: job.freq === 'Recurring' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: job.freq === 'Recurring' ? '#059669' : '#d97706', border: '1px solid ' + (job.freq === 'Recurring' ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.25)') }}>
-                      {job.freq}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                      style={{ background: sc.bg, border: `1px solid ${sc.border}`, color: sc.text }}>
-                      {job.service}
-                    </span>
-                    <span className="text-xs text-gray-400">{job.fm}</span>
-                  </div>
-                </div>
-                <ScoreBar score={job.matchScore} />
-              </div>
-
-              {/* Details row */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-xl bg-[#f8faff] p-3">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Schedule</div>
-                  <div className="text-sm font-bold text-[#010a4f]">{job.schedule}</div>
-                  <div className="text-[10px] text-gray-500">{job.window}</div>
-                </div>
-                <div className="rounded-xl bg-[#f8faff] p-3">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Value</div>
-                  <div className="text-sm font-black text-[#010a4f]">£{job.value}{job.valueFreq}</div>
-                  {job.monthlyEst && <div className="text-[10px] text-gray-500">~£{job.monthlyEst.toLocaleString()}/mo</div>}
-                </div>
-                <div className="rounded-xl bg-[#f8faff] p-3">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Deadline</div>
-                  <div className="text-sm font-bold text-[#010a4f]">{job.deadline}</div>
-                  <div className="text-[10px] text-gray-500">SLA: {job.slaReq}</div>
-                </div>
-              </div>
-
-              {/* Match reasons */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] text-gray-400">Why you're seeing this:</span>
-                {job.matchReasons.map(r => (
-                  <span key={r} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#f0f4ff] text-[#4f78ff]">{r}</span>
-                ))}
-              </div>
-
-              {/* Action */}
-              <div className="flex items-center gap-3">
-                {done ? (
-                  <div className="flex items-center gap-2 text-sm font-bold"
-                    style={{ color: done === 'apply' ? EARN_ORANGE : '#10b981' }}>
-                    <span>✓</span>
-                    {done === 'apply' ? 'Application sent' : 'Accepted — check your pipeline'}
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setApplied(p => ({ ...p, [job.id]: job.action }))}
-                    className="px-6 py-2.5 rounded-xl text-sm font-black text-white transition-all hover:brightness-110"
-                    style={{ background: EARN_ORANGE }}>
-                    {job.action === 'accept' ? 'Accept job →' : 'Apply →'}
-                  </button>
-                )}
-                <button className="text-xs text-gray-400 hover:text-gray-600 transition-colors">View full details</button>
-              </div>
+      {/* Tier progress (only when below Elite) */}
+      {nextTierLabel && (
+        <div style={{
+          background: `linear-gradient(135deg, ${PURPLE}08, ${ORANGE}06)`,
+          border: `1px solid ${PURPLE}25`, borderRadius: 12, padding: '12px 14px', marginBottom: 14,
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <Award size={18} color={PURPLE} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
+              {nextTierGap} {nextTierGap === 1 ? 'point' : 'points'} from {nextTierLabel}
             </div>
-          );
-        })}
-      </div>
+            <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>
+              Geo ✓ check-ins, complete evidence, sign-off captured → score climbs. {nextTierLabel} unlocks higher-paying listings.
+            </div>
+            <div style={{ height: 5, background: '#e2e8f0', borderRadius: 3, marginTop: 6, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${score}%`, background: `linear-gradient(90deg, ${GREEN}, ${PURPLE})` }} />
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: PURPLE }}>{score}</div>
+            <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700 }}>/ 100</div>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', fontSize: 12, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlertCircle size={14} /> {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>Loading marketplace…</div>
+      ) : listings.length === 0 ? (
+        <div style={{
+          padding: 40, textAlign: 'center',
+          background: 'white', border: '1.5px dashed #e2e8f0', borderRadius: 12,
+          color: '#64748b',
+        }}>
+          <ShoppingBag size={28} color="#cbd5e1" style={{ marginBottom: 8 }} />
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>No open listings right now</div>
+          <div style={{ fontSize: 11, marginTop: 6, maxWidth: 360, margin: '6px auto 0' }}>
+            New jobs from {profile?.connect_unlocked_by_fm_id ? 'your FM' : 'FMs you connect with'} land here as they're published. Cadi will push you a notification when your fit ≥ 90.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {listings.map(l => (
+            <ListingCard
+              key={l.id}
+              listing={l}
+              myProfile={profile}
+              myBid={bidByListing.get(l.id)}
+              onAccept={handleAccept}
+              onWithdraw={handleWithdraw}
+              isBusy={busyId === l.id || (bidByListing.get(l.id) && busyId === bidByListing.get(l.id).id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

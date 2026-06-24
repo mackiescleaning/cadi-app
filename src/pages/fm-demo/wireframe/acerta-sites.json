@@ -1,0 +1,530 @@
+{
+  "contract": "ACERTA Sites \u2014 June 2026 (ARGO programme)",
+  "client_chain": "Britannia Group",
+  "work_type": "Exterior valeting / monthly site clean",
+  "site_count": 52,
+  "priced_site_count": 50,
+  "monthly_value_per_visit": 6282.0,
+  "closed_count": 3,
+  "acerta_new_count": 15,
+  "sites": [
+    {
+      "site": "Carstore Shrewbury",
+      "price_per_visit": 45.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Stratstone LR Mayfair",
+      "price_per_visit": 30.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Vauxhall Bedford",
+      "price_per_visit": 45.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Vauxhall Portsmouth",
+      "price_per_visit": 100.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Vauxhall Newport",
+      "price_per_visit": 90.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Vauxhall / Citroen Cardiff",
+      "price_per_visit": 150.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "JLR Cardiff",
+      "price_per_visit": 200.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Stratstone PORCHE Wolverhampton",
+      "price_per_visit": 350.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Porsche Centre Sutton Coldfield",
+      "price_per_visit": 150.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Evans Halshaw Vauxhall Wolverhampton",
+      "price_per_visit": 85.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Evans Halshaw Ford Walsall",
+      "price_per_visit": 95.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Stratstone BYD Milton Keynes",
+      "price_per_visit": 60.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Stratstone BYD Digbeth",
+      "price_per_visit": null,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Aston Martin Mayfair",
+      "price_per_visit": 120.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": "Closed MAY 26",
+      "acerta_new": false,
+      "closed": true
+    },
+    {
+      "site": "Aston Martin Western Avenue",
+      "price_per_visit": 180.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": "Closed MAY 26",
+      "acerta_new": false,
+      "closed": true
+    },
+    {
+      "site": "BMW-Mini Chesterfield",
+      "price_per_visit": 120.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "EH Kia Stourbridge",
+      "price_per_visit": 130.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "EH Citroen Banbury",
+      "price_per_visit": 40.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Stratstone BMW/Mini Derby",
+      "price_per_visit": 175.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Stratstone JLR Nottingham",
+      "price_per_visit": 200.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Porsche Nottingham",
+      "price_per_visit": 300.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "EH Ford Wolverhampton",
+      "price_per_visit": 40.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "EH Ford Cardiff",
+      "price_per_visit": 40.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "EH Ford Milton Keynes",
+      "price_per_visit": 60.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Stratstone JLR Tottenham Aftersales",
+      "price_per_visit": 58.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "JLR Newport",
+      "price_per_visit": 58.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": "Closde May 26",
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Farnborough Audi",
+      "price_per_visit": 90.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Farnborough Audi 1/4ly",
+      "price_per_visit": 85.0,
+      "specs": [
+        "1/4ly High internal"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Aston Martin Nottingham 2 weekly",
+      "price_per_visit": 55.0,
+      "specs": [
+        "Fortnightly external"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Aston Martin Nottingham monthly",
+      "price_per_visit": 100.0,
+      "specs": [
+        "monthly internal"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Volvo Derby",
+      "price_per_visit": 70.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Volvo Derby 1/4ly",
+      "price_per_visit": 70.0,
+      "specs": [
+        "1/4ly High internal"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Marshall Fleet Solutions",
+      "price_per_visit": 180.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "Lookers MG Brighton",
+      "price_per_visit": 60.0,
+      "specs": [],
+      "notes": "Closed April 26",
+      "acerta_new": false,
+      "closed": true
+    },
+    {
+      "site": "EH Vauxhall Nottingham",
+      "price_per_visit": 45.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "EH Motorzone Wolverhampton",
+      "price_per_visit": 240.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "EH Transit Centre Wolverhampton",
+      "price_per_visit": 25.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": false,
+      "closed": false
+    },
+    {
+      "site": "ACERTA EH Ford Bedford",
+      "price_per_visit": 45.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA USED Bedford",
+      "price_per_visit": 60.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA EH Ford Merthyr Tydfell",
+      "price_per_visit": 80.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA Hattons Of London",
+      "price_per_visit": 156.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA Hyundai Leicester",
+      "price_per_visit": 55.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA Audi Stockport",
+      "price_per_visit": 340.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA Stratstone Mayfair 14 Berkeley St,",
+      "price_per_visit": 35.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA  Audi Amersham",
+      "price_per_visit": 120.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA Stratstone Select Bracknell",
+      "price_per_visit": 190.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA - Hyundai Newport Pagnell",
+      "price_per_visit": null,
+      "specs": [],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA Audi Milton Keynes",
+      "price_per_visit": 90.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA - Porsche Colchester",
+      "price_per_visit": 650.0,
+      "specs": [
+        "Fortnightly external",
+        "Fornightly Internal",
+        "Fortnightly Cladding"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA - Ferrari Colchester",
+      "price_per_visit": 200.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA - Audi Hitchin",
+      "price_per_visit": 105.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    },
+    {
+      "site": "ACERTA - Audi Aylesbury",
+      "price_per_visit": 215.0,
+      "specs": [
+        "Monthly In & out hand height"
+      ],
+      "notes": null,
+      "acerta_new": true,
+      "closed": false
+    }
+  ]
+}

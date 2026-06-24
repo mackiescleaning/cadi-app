@@ -8,6 +8,7 @@ import ErrorBoundary       from './components/ErrorBoundary';
 import AppLayout           from './components/layout/AppLayout';
 import ProtectedRoute      from './components/layout/ProtectedRoute';
 import CookieConsent       from './components/CookieConsent';
+import IdleWarningBanner   from './components/IdleWarningBanner';
 import { getConsent, initFullStory } from './lib/fullstory';
 
 // ─── Core bundle — loaded on every session ────────────────────────────────────
@@ -30,6 +31,9 @@ const InvoiceSettings     = lazy(() => import('./pages/InvoiceSettings'));
 const InvoiceGenerator    = lazy(() => import('./pages/InvoiceGenerator'));
 const Quotes              = lazy(() => import('./pages/Quotes'));
 const Services            = lazy(() => import('./pages/Services'));
+const CatalogueEditor      = lazy(() => import('./pages/CatalogueEditor'));
+const MenuPreview          = lazy(() => import('./pages/MenuPreview'));
+const OnboardingMigration  = lazy(() => import('./pages/OnboardingMigration'));
 const Staff               = lazy(() => import('./pages/Staff'));
 const InboxPage           = lazy(() => import('./pages/Inbox'));
 const ProUpgradePage      = lazy(() => import('./components/ui/ProUpgrade'));
@@ -76,6 +80,9 @@ const YapilyCallback            = lazy(() => import('./pages/TruelayerCallback')
 // Demo portals — large, very infrequently visited
 const DemoLanding         = lazy(() => import('./pages/DemoLanding'));
 const FmDemoApp           = lazy(() => import('./pages/fm-demo/FmDemoApp'));
+const FmOpsExteriorWireframe = lazy(() => import('./pages/fm-demo/wireframe/FmOpsExteriorWireframe'));
+const FmOpsPortalWireframe   = lazy(() => import('./pages/fm-demo/wireframe/FmOpsPortalWireframe'));
+const CadiConnectTabWireframe = lazy(() => import('./pages/fm-demo/wireframe/CadiConnectTabWireframe'));
 const ClientDemoApp       = lazy(() => import('./pages/client-demo/ClientDemoApp'));
 const EmployedStaffDemo   = lazy(() => import('./pages/staff-demo/EmployedStaffDemo'));
 const OperativePortalDemo = lazy(() => import('./pages/operative-demo/OperativePortalDemo'));
@@ -105,12 +112,13 @@ function App() {
     <ClientProvider>
     <Router>
       <CookieConsent />
+      <IdleWarningBanner />
       <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* Auth */}
         <Route path="/login"      element={<Login />} />
         <Route path="/signup"     element={<Signup />} />
-        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/onboarding"           element={<Onboarding />} />
 
         {/* Staff PIN login & dashboard — no auth required */}
         <Route path="/staff-login/:token" element={<StaffLogin />} />
@@ -135,6 +143,9 @@ function App() {
         {/* Demo portals — public, no auth, separate apps */}
         <Route path="/demo"              element={<DemoLanding />} />
         <Route path="/fm-demo/*"         element={<FmDemoApp />} />
+        <Route path="/wireframe/fm-ops-exterior" element={<FmOpsExteriorWireframe />} />
+        <Route path="/wireframe/fm-ops-portal"   element={<FmOpsPortalWireframe />} />
+        <Route path="/wireframe/cadi-connect-tab" element={<CadiConnectTabWireframe />} />
         <Route path="/client-demo/*"     element={<ClientDemoApp />} />
         <Route path="/staff-demo"        element={<EmployedStaffDemo />} />
         <Route path="/operative-demo"    element={<OperativePortalDemo />} />
@@ -151,6 +162,7 @@ function App() {
           <Route path="calculator" element={<Calculator />} />
           <Route path="scheduler"  element={<Scheduler />} />
           <Route path="customers"  element={<Customers />} />
+          <Route path="onboarding/customers" element={<OnboardingMigration />} />
           <Route path="money"      element={<MoneyTracker />} />
           <Route path="scaling"       element={<BusinessLab />} />
           <Route path="business-lab"  element={<BusinessLab />} />
@@ -198,7 +210,14 @@ function App() {
           />
           {/* Legacy /inbox redirect */}
           <Route path="inbox" element={<Navigate to="/front-desk" replace />} />
-          <Route path="services" element={<Services />} />
+          {/* /services IS the catalogue — one clean view, fed by onboarding,
+              tightly coupled to Front Desk. The legacy busy Services page is
+              kept available at /services/legacy in case we ever need to fall
+              back, but nothing in the app links there. */}
+          <Route path="services"           element={<CatalogueEditor />} />
+          <Route path="services/catalogue" element={<Navigate to="/services" replace />} />
+          <Route path="services/legacy"    element={<Services />} />
+          <Route path="menu/preview"      element={<MenuPreview />} />
           <Route path="upgrade"  element={<ProUpgradePage />} />
           {/* Legacy earn → connect redirects */}
           <Route path="earn"   element={<Navigate to="/connect" replace />} />

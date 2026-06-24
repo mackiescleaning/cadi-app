@@ -1,301 +1,245 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Upload, CheckCircle2, Calendar, ChevronDown,
+  Receipt, FileText, CheckCircle2, AlertCircle, Building2, MapPin,
 } from 'lucide-react';
+import {
+  listMyConnectInvoices,
+  submitConnectInvoice,
+} from '../../lib/db/connectDb';
 
 const ORANGE = '#C2410C';
-const NAVY   = '#010a4f';
+const GREEN  = '#16a34a';
+const PURPLE = '#7c3aed';
 
-const READY_JOBS = [
-  { id: 'j1', site: 'Premier Inn Luton Airport', client: 'Britannia Group', service: 'Morning clean', date: '08 May', ref: '#BF-4468', po: 'PO-2026-0088', net: 78 },
-  { id: 'j2', site: 'Central Beds Council HQ', client: 'Britannia Group', service: 'Office deep clean', date: '12 May', ref: '#BF-4472', po: 'PO-2026-0090', net: 95 },
-];
+const STATUS_CFG = {
+  draft:     { label: 'Draft · ready to submit',      color: ORANGE },
+  submitted: { label: 'Submitted · with FM',          color: PURPLE },
+  exported:  { label: 'Exported to FM accounts',      color: '#3b82f6' },
+  paid:      { label: 'Paid',                          color: GREEN  },
+  disputed:  { label: 'Disputed',                      color: '#ef4444' },
+  void:      { label: 'Void',                          color: '#94a3b8' },
+};
 
-const TERMS_OPTIONS = ['Net 7', 'Net 14', 'Net 30', 'Due on receipt'];
-
-function dueDateFromTerms(terms) {
-  const today = new Date('2026-05-19');
-  const days = terms === 'Net 7' ? 7 : terms === 'Net 14' ? 14 : terms === 'Net 30' ? 30 : 0;
-  const due = new Date(today.getTime() + days * 86400000);
-  return due.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+function fmtDate(s) {
+  if (!s) return '—';
+  const d = new Date(s);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function FieldLabel({ children }) {
+function InvoiceRow({ inv, onSubmit, busy }) {
+  const status = STATUS_CFG[inv.status] || STATUS_CFG.draft;
+  const [open, setOpen] = useState(false);
+  const [netInput, setNetInput] = useState(String(inv.net_value ?? 0));
+  const [vatInput, setVatInput] = useState(String(inv.vat_value ?? 0));
+  const isDraft = inv.status === 'draft';
+
   return (
-    <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">
-      {children}
+    <div style={{
+      background: 'white',
+      border: '1px solid #e2e8f0',
+      borderLeft: `4px solid ${status.color}`,
+      borderRadius: 10, padding: 14,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span style={{
+          fontSize: 9, fontWeight: 800, color: status.color,
+          background: `${status.color}15`, padding: '3px 8px', borderRadius: 999,
+          letterSpacing: '0.06em', textTransform: 'uppercase',
+        }}>{status.label}</span>
+        <span style={{ fontSize: 10, color: '#64748b' }}>{inv.reference ?? '—'}</span>
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>{inv.job?.site?.name ?? 'Site'}</div>
+      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Building2 size={9} /> {inv.fm_organisation?.name ?? '—'}
+        <span style={{ color: '#cbd5e1' }}>·</span>
+        <MapPin size={9} /> {inv.job?.site?.postcode ?? ''}
+        <span style={{ color: '#cbd5e1' }}>·</span>
+        Service {fmtDate(inv.service_date)}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6, marginTop: 10 }}>
+        <div style={{ background: '#f1f5f9', borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>£{Number(inv.net_value ?? 0).toFixed(2)}</div>
+          <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700 }}>net</div>
+        </div>
+        <div style={{ background: '#f1f5f9', borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>£{Number(inv.vat_value ?? 0).toFixed(2)}</div>
+          <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700 }}>VAT</div>
+        </div>
+        <div style={{ background: `${ORANGE}10`, border: `1px solid ${ORANGE}25`, borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: ORANGE }}>£{Number(inv.total_value ?? 0).toFixed(2)}</div>
+          <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700 }}>total</div>
+        </div>
+      </div>
+
+      {isDraft && (
+        <>
+          {open && (
+            <div style={{ marginTop: 10, padding: 10, background: '#fafbff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>
+                  Net (£)
+                  <input value={netInput} onChange={e => setNetInput(e.target.value)} type="number" step="0.01" min="0"
+                    style={{ display: 'block', width: '100%', marginTop: 4, padding: '6px 8px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 12 }} />
+                </label>
+                <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>
+                  VAT (£)
+                  <input value={vatInput} onChange={e => setVatInput(e.target.value)} type="number" step="0.01" min="0"
+                    style={{ display: 'block', width: '100%', marginTop: 4, padding: '6px 8px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 12 }} />
+                </label>
+              </div>
+              <div style={{ fontSize: 10, color: '#64748b' }}>
+                Total will be £{(Number(netInput) + Number(vatInput)).toFixed(2)} after submit.
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+            <button
+              onClick={() => onSubmit(inv.id, Number(netInput), Number(vatInput))}
+              disabled={busy === inv.id}
+              style={{ flex: 1, fontSize: 12, fontWeight: 800, color: 'white', background: ORANGE, border: 'none', borderRadius: 7, padding: '8px 0', cursor: 'pointer', opacity: busy === inv.id ? 0.6 : 1 }}>
+              {busy === inv.id ? 'Submitting…' : 'Submit invoice'}
+            </button>
+            <button
+              onClick={() => setOpen(o => !o)}
+              style={{ fontSize: 11, fontWeight: 700, color: '#64748b', background: 'none', border: '1px solid #cbd5e1', borderRadius: 7, padding: '8px 14px', cursor: 'pointer' }}>
+              {open ? 'Hide edit' : 'Edit values'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {inv.status === 'paid' && (
+        <div style={{ marginTop: 10, fontSize: 11, color: GREEN, fontWeight: 700 }}>
+          ✓ Paid {fmtDate(inv.paid_at)}
+        </div>
+      )}
+      {inv.status === 'exported' && (
+        <div style={{ marginTop: 10, fontSize: 11, color: '#3b82f6' }}>
+          With FM accounts since {fmtDate(inv.exported_at)} · payment expected on FM terms
+        </div>
+      )}
+      {inv.status === 'submitted' && (
+        <div style={{ marginTop: 10, fontSize: 11, color: PURPLE }}>
+          Submitted {fmtDate(inv.submitted_at)} · waiting for FM accounts to pull into export
+        </div>
+      )}
     </div>
   );
 }
-
-function Field({ label, children }) {
-  return (
-    <div>
-      <FieldLabel>{label}</FieldLabel>
-      {children}
-    </div>
-  );
-}
-
-const inputCls = "w-full rounded-xl border border-[#e0e8ff] text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-100 transition-colors";
-const inputStyle = { color: NAVY, fontFamily: 'inherit' };
 
 export default function EarnInvoice() {
-  const [selected, setSelected] = useState({ j1: true, j2: false });
-  const [fromName, setFromName] = useState('Sarah K.');
-  const [fromUtr, setFromUtr] = useState('12345 67890');
-  const [toName, setToName] = useState('Britannia Group Ltd');
-  const [invoiceDate, setInvoiceDate] = useState('2026-05-19');
-  const [terms, setTerms] = useState('Net 14');
-  const [poNumber, setPoNumber] = useState('PO-2026-0088');
-  const [notes, setNotes] = useState('');
-  const [sent, setSent] = useState(false);
+  const [invoices, setInvoices] = useState([]);
+  const [filter, setFilter]     = useState('draft');
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
+  const [busyId, setBusyId]     = useState(null);
 
-  const selectedJobs = READY_JOBS.filter(j => selected[j.id]);
-  const subtotal = selectedJobs.reduce((s, j) => s + j.net, 0);
-  const vat = Math.round(subtotal * 0.2 * 100) / 100;
-  const total = subtotal + vat;
-
-  const toggleJob = id => setSelected(s => ({ ...s, [id]: !s[id] }));
-
-  if (sent) {
-    return (
-      <div className="max-w-2xl space-y-4 pb-10">
-        <div>
-          <h1 className="text-xl font-black" style={{ color: NAVY }}>Invoicing</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Build and send FM-approved invoices</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-[#e8eeff] shadow-sm px-5 py-10 text-center">
-          <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mx-auto mb-4">
-            <CheckCircle2 size={28} className="text-emerald-500" />
-          </div>
-          <div className="font-black text-xl mb-1" style={{ color: NAVY }}>Invoice sent!</div>
-          <div className="text-sm text-gray-400 mb-1">
-            Reference <span className="font-bold" style={{ color: ORANGE }}>#INV-0042</span>
-          </div>
-          <div className="text-xs text-gray-300 mb-0.5">Britannia Group notified</div>
-          <div className="text-xs text-gray-300">Tracking live in Earnings</div>
-          <button
-            onClick={() => setSent(false)}
-            className="mt-6 px-5 py-2.5 rounded-xl text-sm font-bold border border-[#e0e8ff] hover:bg-[#f8faff] transition-colors"
-            style={{ color: NAVY }}
-          >
-            Create another invoice
-          </button>
-        </div>
-      </div>
-    );
+  async function reload() {
+    setError('');
+    try {
+      const rows = await listMyConnectInvoices();
+      setInvoices(rows);
+    } catch (e) {
+      setError(e.message || 'Failed to load invoices');
+    } finally {
+      setLoading(false);
+    }
   }
 
+  useEffect(() => { reload(); }, []);
+
+  async function handleSubmit(id, net, vat) {
+    setBusyId(id);
+    try {
+      const { ok, data } = await submitConnectInvoice({ invoiceId: id, netValue: net, vatValue: vat });
+      if (!ok) {
+        setError(data?.error || 'Submit failed');
+      } else {
+        await reload();
+      }
+    } catch (e) {
+      setError(e.message || 'Submit failed');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const tabs = [
+    { id: 'draft',     label: 'Drafts' },
+    { id: 'submitted', label: 'Submitted' },
+    { id: 'exported',  label: 'With FM' },
+    { id: 'paid',      label: 'Paid' },
+  ];
+  const counts = invoices.reduce((acc, inv) => {
+    const k = inv.status;
+    acc[k] = (acc[k] ?? 0) + 1;
+    return acc;
+  }, {});
+  const filtered = invoices.filter(inv => {
+    if (filter === 'draft')     return inv.status === 'draft';
+    if (filter === 'submitted') return inv.status === 'submitted';
+    if (filter === 'exported')  return inv.status === 'exported';
+    if (filter === 'paid')      return inv.status === 'paid';
+    return true;
+  });
+
   return (
-    <div className="max-w-2xl space-y-4 pb-10">
-
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-black" style={{ color: NAVY }}>Invoicing</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Build and send FM-approved invoices</p>
-      </div>
-
-      {/* Job selector */}
-      <div className="bg-white rounded-2xl border border-[#e8eeff] shadow-sm px-5 py-4">
-        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">
-          Select jobs to invoice
-        </div>
-        <div className="flex flex-col gap-2">
-          {READY_JOBS.map(job => (
-            <label
-              key={job.id}
-              className="flex items-center gap-3 cursor-pointer rounded-xl px-3.5 py-3 border transition-all"
-              style={{
-                background: selected[job.id] ? 'rgba(194,65,12,0.04)' : '#f8faff',
-                borderColor: selected[job.id] ? 'rgba(194,65,12,0.25)' : '#e8eeff',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={!!selected[job.id]}
-                onChange={() => toggleJob(job.id)}
-                className="w-4 h-4 cursor-pointer flex-shrink-0"
-                style={{ accentColor: ORANGE }}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm truncate" style={{ color: NAVY }}>{job.site}</div>
-                <div className="text-xs text-gray-400 mt-0.5">{job.service} · {job.date} · {job.ref}</div>
-              </div>
-              <span className="font-black text-sm font-mono flex-shrink-0" style={{ color: selected[job.id] ? ORANGE : '#94a3b8' }}>
-                £{job.net}
-              </span>
-            </label>
-          ))}
-        </div>
-        {selectedJobs.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-[#f0f4ff] flex justify-between items-center">
-            <span className="text-xs text-gray-400">{selectedJobs.length} job{selectedJobs.length > 1 ? 's' : ''} selected</span>
-            <span className="font-black text-sm font-mono" style={{ color: NAVY }}>Subtotal £{subtotal}</span>
+    <div style={{ background: '#f8faff', minHeight: '100%', padding: '1.25rem', fontFamily: "'Satoshi','Inter',sans-serif" }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #e2e8f0' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Receipt size={18} color={ORANGE} />
+            <h1 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0 }}>Invoicing</h1>
           </div>
-        )}
-      </div>
-
-      {/* Invoice details */}
-      <div className="bg-white rounded-2xl border border-[#e8eeff] shadow-sm px-5 py-4">
-        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4">
-          Invoice details
-        </div>
-        <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-
-          <Field label="From — name">
-            <input className={inputCls} style={inputStyle} value={fromName} onChange={e => setFromName(e.target.value)} />
-          </Field>
-
-          <Field label="From — UTR">
-            <input className={inputCls} style={inputStyle} value={fromUtr} onChange={e => setFromUtr(e.target.value)} />
-          </Field>
-
-          <div className="col-span-2">
-            <Field label="To">
-              <input className={inputCls} style={inputStyle} value={toName} onChange={e => setToName(e.target.value)} />
-            </Field>
-          </div>
-
-          <Field label="Invoice date">
-            <input type="date" className={inputCls} style={inputStyle} value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
-          </Field>
-
-          <Field label="Payment terms">
-            <div className="relative">
-              <select
-                className={inputCls + " cursor-pointer appearance-none pr-8"}
-                style={inputStyle}
-                value={terms}
-                onChange={e => setTerms(e.target.value)}
-              >
-                {TERMS_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-300" />
-            </div>
-          </Field>
-
-          <Field label="Due date">
-            <div className="flex items-center gap-2 rounded-xl border border-[#e0e8ff] px-3 py-2.5 bg-[#f8faff] text-sm"
-              style={{ color: NAVY }}>
-              <Calendar size={13} className="text-gray-300" />
-              <span>{dueDateFromTerms(terms)}</span>
-              <span className="ml-auto text-[10px] text-gray-300">auto</span>
-            </div>
-          </Field>
-
-          <Field label="PO Number">
-            <input className={inputCls} style={{ ...inputStyle, fontWeight: 700, color: ORANGE }} value={poNumber} onChange={e => setPoNumber(e.target.value)} />
-          </Field>
-
-          <div className="col-span-2">
-            <Field label="Notes / work summary">
-              <textarea
-                rows={3}
-                className={inputCls + " resize-none"}
-                style={{ ...inputStyle, lineHeight: 1.6 }}
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Optional notes or work summary for this invoice..."
-              />
-            </Field>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+            Auto-drafted the moment your FM approves a job. Edit if you need to, then submit.
           </div>
         </div>
       </div>
 
-      {/* Paper invoice upload */}
-      <div className="bg-white rounded-2xl border border-[#e8eeff] shadow-sm px-5 py-4">
-        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">
-          Upload paper invoice
-        </div>
-        <label className="block border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:border-orange-300 hover:bg-orange-50/30 transition-colors"
-          style={{ borderColor: 'rgba(194,65,12,0.2)' }}>
-          <Upload size={24} className="mx-auto mb-2 text-gray-300" />
-          <div className="text-sm font-semibold text-gray-500 mb-1">Got a paper invoice? Upload it</div>
-          <div className="text-xs text-gray-400 leading-relaxed">
-            Cadi converts it to a Britannia-approved PDF automatically.
-          </div>
-          <div className="text-[10px] text-gray-300 mt-1.5">JPG · PNG · PDF</div>
-          <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf" />
-        </label>
-        <div className="text-center text-xs text-gray-300 mt-2.5">or build from scratch above ↑</div>
-      </div>
-
-      {/* Invoice preview — intentionally dark (printed document) */}
-      {selectedJobs.length > 0 && (
-        <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
-          {/* Dark header */}
-          <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', padding: '1.5rem' }}>
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="font-black text-base tracking-widest mb-0.5" style={{ color: ORANGE }}>CADI</div>
-                <div className="font-black text-lg text-white">INVOICE</div>
-                <div className="text-xs mt-0.5" style={{ color: 'rgba(226,232,240,0.45)' }}>#INV-0042</div>
-              </div>
-              <div className="text-right text-sm">
-                <div className="text-xs mb-1" style={{ color: 'rgba(226,232,240,0.45)' }}>From</div>
-                <div className="font-bold text-white">{fromName}</div>
-                <div className="text-xs" style={{ color: 'rgba(226,232,240,0.45)' }}>UTR: {fromUtr}</div>
-                <div className="text-xs mt-2 mb-1" style={{ color: 'rgba(226,232,240,0.45)' }}>To</div>
-                <div className="font-bold text-white">{toName}</div>
-                <div className="text-xs mt-1.5" style={{ color: 'rgba(226,232,240,0.4)' }}>PO: {poNumber}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Line items */}
-          <div style={{ background: 'rgba(15,23,42,0.95)', padding: '1rem 1.5rem' }}>
-            <div className="grid grid-cols-[1fr_auto] gap-x-6 pb-2 mb-1 border-b text-[10px] font-black uppercase tracking-widest"
-              style={{ borderColor: 'rgba(255,255,255,0.07)', color: 'rgba(226,232,240,0.4)' }}>
-              <span>Description</span>
-              <span>Amount</span>
-            </div>
-            {selectedJobs.map(job => (
-              <div key={job.id} className="grid grid-cols-[1fr_auto] gap-x-6 py-2.5 border-b text-sm"
-                style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-                <div>
-                  <div className="font-semibold text-white">{job.service}</div>
-                  <div className="text-xs mt-0.5" style={{ color: 'rgba(226,232,240,0.4)' }}>{job.site} · {job.date} · {job.ref}</div>
-                </div>
-                <div className="font-bold font-mono text-white text-right">£{job.net.toFixed(2)}</div>
-              </div>
-            ))}
-            <div className="mt-3 flex flex-col items-end gap-1.5 text-sm">
-              <div className="flex gap-8" style={{ color: 'rgba(226,232,240,0.5)' }}>
-                <span>Subtotal</span>
-                <span className="font-mono">£{subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex gap-8" style={{ color: 'rgba(226,232,240,0.5)' }}>
-                <span>VAT (20%)</span>
-                <span className="font-mono">£{vat.toFixed(2)}</span>
-              </div>
-              <div className="flex gap-8 font-black text-base pt-2 mt-1 border-t w-full justify-end"
-                style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
-                <span className="text-white">Total</span>
-                <span className="font-mono" style={{ color: '#fb923c' }}>£{total.toFixed(2)}</span>
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t text-xs" style={{ borderColor: 'rgba(255,255,255,0.06)', color: 'rgba(226,232,240,0.35)' }}>
-              Payment terms: {terms} · Due: {dueDateFromTerms(terms)}
-            </div>
-          </div>
+      {error && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', fontSize: 12, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlertCircle size={14} /> {error}
         </div>
       )}
 
-      {/* Send button */}
-      <button
-        onClick={() => selectedJobs.length > 0 && setSent(true)}
-        disabled={selectedJobs.length === 0}
-        className="w-full py-3.5 rounded-xl font-black text-sm transition-all"
-        style={{
-          background: selectedJobs.length > 0 ? ORANGE : '#f1f5f9',
-          color: selectedJobs.length > 0 ? 'white' : '#94a3b8',
-          border: 'none',
-          cursor: selectedJobs.length > 0 ? 'pointer' : 'not-allowed',
-        }}
-      >
-        Send to Britannia Group →
-      </button>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 4 }}>
+        {tabs.map(t => {
+          const isActive = filter === t.id;
+          return (
+            <button key={t.id} onClick={() => setFilter(t.id)} style={{
+              fontSize: 11, fontWeight: isActive ? 800 : 600,
+              padding: '6px 10px', borderRadius: 6,
+              background: isActive ? `${ORANGE}12` : 'transparent',
+              color: isActive ? ORANGE : '#64748b',
+              border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              {t.label}
+              <span style={{ fontSize: 9, color: isActive ? ORANGE : '#94a3b8', background: isActive ? `${ORANGE}15` : '#f1f5f9', padding: '1px 6px', borderRadius: 999, fontWeight: 800 }}>{counts[t.id] ?? 0}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {loading ? (
+        <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>Loading…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding: 40, textAlign: 'center', background: 'white', border: '1.5px dashed #e2e8f0', borderRadius: 12, color: '#64748b' }}>
+          <FileText size={28} color="#cbd5e1" style={{ marginBottom: 8 }} />
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>Nothing here</div>
+          <div style={{ fontSize: 11, marginTop: 6, maxWidth: 360, margin: '6px auto 0' }}>
+            Invoices appear here automatically the moment your FM approves a checked-out job.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filtered.map(inv => (
+            <InvoiceRow key={inv.id} inv={inv} onSubmit={handleSubmit} busy={busyId} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

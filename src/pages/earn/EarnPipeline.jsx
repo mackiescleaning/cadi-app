@@ -1,256 +1,76 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Upload, FileText, Clock, CheckCircle2, ChevronDown, ChevronUp,
-  Camera, Calendar, User, Building2, CreditCard, Hash, Zap,
+  ClipboardList, MapPin, Building2, Calendar, AlertCircle, ChevronRight,
 } from 'lucide-react';
+import { listMyAssignedVisitSpecs } from '../../lib/db/connectDb';
 
 const ORANGE = '#C2410C';
-const NAVY   = '#010a4f';
 
-const jobs = [
-  {
-    id: 'p1',
-    status: 'live',
-    statusLabel: 'On site now',
-    site: 'Next – Luton The Mall',
-    client: 'Britannia Group',
-    service: 'Retail morning clean',
-    date: 'Today',
-    time: '06:58–',
-    rate: 85,
-    ref: '#BF-4471',
-    po: 'PO-2026-0091',
-    defaultTasks: 'Swept and mopped all retail floor areas, cleaned customer service desk, sanitised fitting rooms, emptied bins x12, cleaned windows internal, wiped down display shelving units, cleaned staff toilets, restocked consumables.',
-    photos: 4,
-    address: 'The Mall Luton, Luton LU1 2TL',
-    sla: '06:00–09:00',
-    paymentTerms: 'Net 14',
-    dueDate: '2 Jun 2026',
-  },
-  {
-    id: 'p2',
-    status: 'invoice',
-    statusLabel: 'Complete — awaiting invoice',
-    site: 'Premier Inn Luton Airport',
-    client: 'Britannia Group',
-    service: 'Morning clean',
-    date: '08 May',
-    time: '07:15–07:58',
-    rate: 78,
-    ref: '#BF-4468',
-    po: 'PO-2026-0088',
-    defaultTasks: 'Cleaned all guest corridor floors, vacuumed lift areas, cleaned reception and lobby, sanitised public toilets x3, wiped down breakfast area, restocked hand sanitiser stations, spot-cleaned glass entrance doors.',
-    photos: 6,
-    address: 'Airport Way, Luton LU2 9LY',
-    sla: '07:00–09:30',
-    paymentTerms: 'Net 14',
-    dueDate: '22 May 2026',
-  },
-  {
-    id: 'p3',
-    status: 'upcoming',
-    statusLabel: 'Upcoming',
-    site: 'Aylesbury College',
-    client: 'Metro Clean',
-    service: 'Evening clean',
-    date: 'Mon 12 May',
-    time: '18:00–20:00',
-    rate: 120,
-    ref: '#MC-221',
-    po: 'PO-2026-0094',
-    defaultTasks: 'Full classroom sweep and mop (8 rooms), clean staff kitchen, empty all bins, sanitise door handles and light switches, vacuum common areas, clean student toilets x4.',
-    photos: 0,
-    address: 'Oxford Rd, Aylesbury HP21 8PD',
-    sla: '17:30–20:30',
-    paymentTerms: 'Net 14',
-    dueDate: '26 May 2026',
-  },
-];
-
-function StatusBadge({ status, label }) {
-  if (status === 'live') return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600">
-      <span className="w-2 h-2 rounded-full bg-blue-500 inline-block animate-pulse" />
-      {label}
-    </span>
-  );
-  if (status === 'invoice') return (
-    <span className="inline-block text-xs font-bold rounded-full px-2.5 py-0.5"
-      style={{ background: 'rgba(194,65,12,0.1)', color: ORANGE, border: `1px solid rgba(194,65,12,0.2)` }}>
-      {label}
-    </span>
-  );
-  return (
-    <span className="inline-block text-xs font-bold rounded-full px-2.5 py-0.5 text-indigo-500 bg-indigo-50 border border-indigo-100">
-      {label}
-    </span>
-  );
+function fmtFreq(f) {
+  return {
+    weekly:      'Weekly',
+    fortnightly: 'Fortnightly',
+    monthly:     'Monthly',
+    quarterly:   'Quarterly',
+    annual:      'Annual',
+    one_off:     'One-off',
+  }[f] ?? f;
 }
 
-function InfoBlock({ label, icon: Icon, children }) {
+const STATUS_CFG = {
+  unassigned: { label: 'Unassigned',  color: '#94a3b8' },
+  assigned:   { label: 'Assigned',    color: '#3b82f6' },
+  marketplace:{ label: 'Marketplace', color: '#a78bfa' },
+  active:     { label: 'Active',      color: '#16a34a' },
+  closed:     { label: 'Closed',      color: '#64748b' },
+};
+
+function VisitSpecRow({ spec }) {
+  const status = STATUS_CFG[spec.status] || STATUS_CFG.assigned;
+  const site = spec.site;
+  const fm   = spec.fm_organisation;
+
   return (
-    <div>
-      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">
-        <Icon size={10} />
-        {label}
+    <div style={{
+      background: 'white',
+      border: '1px solid #e2e8f0',
+      borderLeft: `4px solid ${status.color}`,
+      borderRadius: 10, padding: 14,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span style={{
+          fontSize: 9, fontWeight: 800, color: status.color,
+          background: `${status.color}15`, padding: '3px 8px', borderRadius: 999,
+          letterSpacing: '0.06em', textTransform: 'uppercase',
+        }}>{status.label}</span>
+        <span style={{ fontSize: 10, color: '#64748b' }}>{fm?.name ?? '—'}</span>
       </div>
-      {children}
-    </div>
-  );
-}
-
-function InfoChip({ children, accent }) {
-  return (
-    <span className="inline-block text-xs font-semibold rounded-lg px-2.5 py-1 border"
-      style={accent
-        ? { background: 'rgba(194,65,12,0.06)', color: ORANGE, borderColor: 'rgba(194,65,12,0.2)' }
-        : { background: '#f8faff', color: NAVY, borderColor: '#e0e8ff' }}>
-      {children}
-    </span>
-  );
-}
-
-function JobCard({ job }) {
-  const [open, setOpen]           = useState(job.status !== 'upcoming');
-  const [tasks, setTasks]         = useState(job.defaultTasks);
-  const [jobDone, setJobDone]     = useState(false);
-  const [invDone, setInvDone]     = useState(false);
-  const isUpcoming = job.status === 'upcoming';
-  const isLive     = job.status === 'live';
-  const isInvoice  = job.status === 'invoice';
-
-  return (
-    <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-opacity ${isUpcoming ? 'opacity-60' : ''}`}
-      style={{ borderColor: isLive ? 'rgba(59,130,246,0.3)' : isInvoice ? 'rgba(194,65,12,0.25)' : '#e8eeff' }}>
-
-      {/* Header row */}
-      <button onClick={() => setOpen(v => !v)}
-        className="w-full text-left px-5 py-4 flex items-start justify-between gap-4 hover:bg-gray-50/50 transition-colors">
-        <div className="flex-1 min-w-0">
-          <div className="mb-1"><StatusBadge status={job.status} label={job.statusLabel} /></div>
-          <div className="font-black text-base truncate" style={{ color: NAVY }}>{job.site}</div>
-          <div className="text-xs text-gray-400 mt-0.5">{job.client} · {job.service} · {job.date} {job.time}</div>
-        </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className="font-black text-lg" style={{ color: NAVY }}>£{job.rate}</span>
-          <span className="text-[10px] text-gray-300 font-mono">{job.ref}</span>
-          {open ? <ChevronUp size={14} className="text-gray-300 mt-0.5" /> : <ChevronDown size={14} className="text-gray-300 mt-0.5" />}
-        </div>
-      </button>
-
-      {/* Expanded worksheet */}
-      {open && (
-        <div className="border-t px-5 pb-5 pt-4" style={{ borderColor: '#f0f4ff' }}>
-
-          {/* 2-col grid */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-
-            {/* From */}
-            <InfoBlock label="From" icon={User}>
-              <div className="bg-[#f8faff] border border-[#e8eeff] rounded-xl px-3 py-2.5 text-xs">
-                <div className="font-bold" style={{ color: NAVY }}>Sarah K.</div>
-                <div className="text-gray-400 mt-0.5">Sole trader · cleaning operative</div>
-                <div className="text-gray-300 mt-0.5 font-mono text-[10px]">UTR: 12345 67890</div>
-              </div>
-            </InfoBlock>
-
-            {/* To */}
-            <InfoBlock label="To" icon={Building2}>
-              <div className="bg-[#f8faff] border border-[#e8eeff] rounded-xl px-3 py-2.5 text-xs">
-                <div className="font-bold" style={{ color: NAVY }}>{job.client} Ltd</div>
-                <div className="text-gray-400 mt-0.5">{job.address}</div>
-              </div>
-            </InfoBlock>
-
-            {/* Date & SLA */}
-            <InfoBlock label="Date & SLA" icon={Calendar}>
-              <div className="flex flex-wrap gap-1.5">
-                <InfoChip>{job.date}</InfoChip>
-                <InfoChip>{job.time || '—'}</InfoChip>
-                <InfoChip>SLA {job.sla}</InfoChip>
-              </div>
-            </InfoBlock>
-
-            {/* Service */}
-            <InfoBlock label="Service" icon={FileText}>
-              <InfoChip>{job.service}</InfoChip>
-            </InfoBlock>
-
-            {/* PO Number */}
-            <InfoBlock label="PO Number" icon={Hash}>
-              <InfoChip accent>{job.po}</InfoChip>
-            </InfoBlock>
-
-            {/* Payment terms */}
-            <InfoBlock label="Payment terms" icon={CreditCard}>
-              <div className="flex items-center gap-2 flex-wrap">
-                <InfoChip>{job.paymentTerms}</InfoChip>
-                <span className="text-xs text-gray-400">Due {job.dueDate}</span>
-              </div>
-            </InfoBlock>
-
-            {/* Evidence */}
-            <InfoBlock label="Evidence" icon={Camera}>
-              {job.photos > 0
-                ? <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1">
-                    <CheckCircle2 size={11} /> {job.photos} photos verified
-                  </span>
-                : <span className="text-xs text-gray-300 font-medium">No photos yet</span>
-              }
-            </InfoBlock>
-
-            {/* Paper invoice upload */}
-            <InfoBlock label="Paper invoice" icon={Upload}>
-              <label className={`block border-2 border-dashed rounded-xl p-3 text-center transition-colors ${isUpcoming ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:border-orange-300 hover:bg-orange-50/30'}`}
-                style={{ borderColor: 'rgba(194,65,12,0.2)' }}>
-                <Upload size={16} className="mx-auto mb-1 text-gray-300" />
-                <div className="text-[11px] text-gray-400 leading-snug">Upload — Cadi converts to<br />{job.client}-approved PDF</div>
-                <div className="text-[10px] text-gray-300 mt-1">JPG · PNG · PDF</div>
-                {!isUpcoming && <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf" />}
-              </label>
-            </InfoBlock>
-          </div>
-
-          {/* Work completed — full width */}
-          <div className="mt-4">
-            <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">
-              <CheckCircle2 size={10} /> Work completed
-            </div>
-            <textarea
-              value={tasks}
-              onChange={e => setTasks(e.target.value)}
-              disabled={isUpcoming}
-              rows={3}
-              className="w-full rounded-xl border text-sm px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ borderColor: '#e0e8ff', color: NAVY, fontFamily: 'inherit', lineHeight: 1.6 }}
-            />
-          </div>
-
-          {/* CTAs */}
-          {isLive && !jobDone && (
-            <button onClick={() => setJobDone(true)}
-              className="mt-3 w-full py-3 rounded-xl font-bold text-sm transition-all hover:brightness-95"
-              style={{ background: '#EFF6FF', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.2)' }}>
-              Mark Job Complete →
-            </button>
-          )}
-          {isLive && jobDone && (
-            <div className="mt-3 py-3 rounded-xl text-center text-sm font-bold text-emerald-600 bg-emerald-50 border border-emerald-100">
-              ✓ Job marked complete — ready to invoice
-            </div>
-          )}
-          {isInvoice && !invDone && (
-            <button onClick={() => setInvDone(true)}
-              className="mt-3 w-full py-3 rounded-xl font-black text-sm text-white transition-all hover:brightness-90"
-              style={{ background: ORANGE }}>
-              Create Invoice →
-            </button>
-          )}
-          {isInvoice && invDone && (
-            <div className="mt-3 py-3 rounded-xl text-center text-sm font-bold text-emerald-600 bg-emerald-50 border border-emerald-100">
-              ✓ Invoice created — tracking live in Earnings
-            </div>
-          )}
+      <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>{site?.name ?? 'Site'}</div>
+      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <MapPin size={9} />
+        {site?.postcode ?? ''} · {fmtFreq(spec.frequency)} · {spec.scope}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+        <span style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>£{spec.price_per_visit}</span>
+        <span style={{ fontSize: 10, color: '#64748b' }}>per visit</span>
+        {spec.duration_minutes && (
+          <>
+            <span style={{ color: '#cbd5e1' }}>·</span>
+            <span style={{ fontSize: 10, color: '#64748b' }}>{spec.duration_minutes} min on site</span>
+          </>
+        )}
+        <div style={{ flex: 1 }} />
+        <button style={{
+          fontSize: 11, fontWeight: 800, color: ORANGE,
+          background: 'none', border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 4,
+        }}>
+          View job card <ChevronRight size={11} />
+        </button>
+      </div>
+      {spec.access_notes && (
+        <div style={{ marginTop: 10, padding: '8px 10px', background: '#fafbff', borderRadius: 6, fontSize: 11, color: '#475569' }}>
+          <strong style={{ color: '#0f172a' }}>Access:</strong> {spec.access_notes}
         </div>
       )}
     </div>
@@ -258,40 +78,99 @@ function JobCard({ job }) {
 }
 
 export default function EarnPipeline() {
+  const [specs, setSpecs]     = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    listMyAssignedVisitSpecs()
+      .then(rows => { if (alive) setSpecs(rows); })
+      .catch(e => { if (alive) setError(e.message || 'Failed to load jobs'); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  // Group by FM
+  const byFm = specs.reduce((acc, s) => {
+    const key = s.fm_organisation?.id ?? 'unknown';
+    if (!acc[key]) acc[key] = { name: s.fm_organisation?.name ?? 'Unknown FM', specs: [] };
+    acc[key].specs.push(s);
+    return acc;
+  }, {});
+
+  const totalActive = specs.filter(s => ['assigned', 'active'].includes(s.status)).length;
+  const totalValue  = specs
+    .filter(s => ['assigned', 'active'].includes(s.status))
+    .reduce((sum, s) => sum + (parseFloat(s.price_per_visit) || 0), 0);
+
   return (
-    <div className="max-w-2xl space-y-4 pb-10">
-
+    <div style={{ background: '#f8faff', minHeight: '100%', padding: '1.25rem', fontFamily: "'Satoshi','Inter',sans-serif" }}>
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-black" style={{ color: NAVY }}>Current Work</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Active jobs, worksheets and invoice readiness</p>
-      </div>
-
-      {/* Summary strip */}
-      <div className="bg-white rounded-2xl border border-[#e8eeff] shadow-sm px-5 py-3.5 flex items-center gap-5 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-          <span className="text-xs font-bold text-blue-600">On site</span>
-          <span className="font-black text-sm" style={{ color: NAVY }}>1</span>
-        </div>
-        <div className="w-px h-4 bg-gray-100" />
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full" style={{ background: ORANGE }} />
-          <span className="text-xs font-bold" style={{ color: ORANGE }}>Invoice ready</span>
-          <span className="font-black text-sm" style={{ color: NAVY }}>1</span>
-        </div>
-        <div className="w-px h-4 bg-gray-100" />
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-indigo-400" />
-          <span className="text-xs font-bold text-indigo-500">Upcoming</span>
-          <span className="font-black text-sm" style={{ color: NAVY }}>1</span>
-        </div>
-        <div className="ml-auto flex items-center gap-1 text-[10px] text-gray-300">
-          <Clock size={10} /> Live
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #e2e8f0' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ClipboardList size={18} color={ORANGE} />
+            <h1 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0 }}>My Jobs</h1>
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+            Recurring work assigned to you across every connected FM
+          </div>
         </div>
       </div>
 
-      {jobs.map(job => <JobCard key={job.id} job={job} />)}
+      {/* KPI strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
+        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{totalActive}</div>
+          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginTop: 4 }}>Active recurring jobs</div>
+        </div>
+        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>£{totalValue.toFixed(0)}</div>
+          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginTop: 4 }}>Per-visit value (active)</div>
+        </div>
+        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{Object.keys(byFm).length}</div>
+          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginTop: 4 }}>Connected FMs</div>
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', fontSize: 12, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlertCircle size={14} /> {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>Loading your jobs…</div>
+      ) : specs.length === 0 ? (
+        <div style={{
+          padding: 40, textAlign: 'center',
+          background: 'white', border: '1.5px dashed #e2e8f0', borderRadius: 12,
+          color: '#64748b',
+        }}>
+          <ClipboardList size={28} color="#cbd5e1" style={{ marginBottom: 8 }} />
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>No jobs assigned yet</div>
+          <div style={{ fontSize: 11, marginTop: 6, maxWidth: 360, margin: '6px auto 0' }}>
+            Once you win a marketplace listing — or the FM allocates a site directly to you — the job appears here.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {Object.entries(byFm).map(([fmId, group]) => (
+            <div key={fmId}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Building2 size={13} color="#64748b" />
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{group.name}</span>
+                <span style={{ fontSize: 10, color: '#94a3b8' }}>· {group.specs.length} job{group.specs.length === 1 ? '' : 's'}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {group.specs.map(s => <VisitSpecRow key={s.id} spec={s} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
