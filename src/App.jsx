@@ -65,6 +65,7 @@ const Confirm     = lazy(() => import('./pages/auth/Confirm'));
 const Privacy     = lazy(() => import('./pages/Privacy'));
 const Terms       = lazy(() => import('./pages/Terms'));
 const InviteAccept = lazy(() => import('./pages/InviteAccept'));
+const FmApply     = lazy(() => import('./pages/FmApply'));
 
 // Staff portal
 const StaffLogin     = lazy(() => import('./pages/StaffLogin'));
@@ -76,6 +77,21 @@ const GocardlessCallback        = lazy(() => import('./pages/GocardlessCallback'
 const GoCardlessPaymentCallback = lazy(() => import('./pages/GoCardlessPaymentCallback'));
 const StripeCallback            = lazy(() => import('./pages/StripeCallback'));
 const YapilyCallback            = lazy(() => import('./pages/TruelayerCallback'));
+
+// FM Ops Portal — live (subcontractor network co-ordination)
+const FmOpsLayout      = lazy(() => import('./components/fm-ops/FmOpsLayout'));
+const FmOpsOverview    = lazy(() => import('./pages/fm-ops/FmOpsOverview'));
+const FmOpsContracts        = lazy(() => import('./pages/fm-ops/FmOpsContracts'));
+const FmOpsContractNew      = lazy(() => import('./pages/fm-ops/FmOpsContractNew'));
+const FmOpsContractDetail   = lazy(() => import('./pages/fm-ops/FmOpsContractDetail'));
+const FmOpsSites       = lazy(() => import('./pages/fm-ops/FmOpsSites'));
+const FmOpsContractors = lazy(() => import('./pages/fm-ops/FmOpsContractors'));
+const FmOpsMarketplace = lazy(() => import('./pages/fm-ops/FmOpsMarketplace'));
+const FmOpsSchedule    = lazy(() => import('./pages/fm-ops/FmOpsSchedule'));
+const FmOpsApproval    = lazy(() => import('./pages/fm-ops/FmOpsApproval'));
+const FmOpsAccounts    = lazy(() => import('./pages/fm-ops/FmOpsAccounts'));
+const FmOpsTeam        = lazy(() => import('./pages/fm-ops/FmOpsTeam'));
+const AdminFmApplications = lazy(() => import('./pages/AdminFmApplications'));
 
 // Demo portals — large, very infrequently visited
 const DemoLanding         = lazy(() => import('./pages/DemoLanding'));
@@ -136,6 +152,9 @@ function App() {
         {/* Invite accept — public, handles own auth */}
         <Route path="/invite/:token" element={<InviteAccept />} />
 
+        {/* FM application — public landing for prospective FMs */}
+        <Route path="/apply/fm" element={<FmApply />} />
+
         {/* Legal — public, no auth required */}
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms"   element={<Terms />} />
@@ -150,6 +169,33 @@ function App() {
         <Route path="/staff-demo"        element={<EmployedStaffDemo />} />
         <Route path="/operative-demo"    element={<OperativePortalDemo />} />
         <Route path="/scheduler-preview" element={<SchedulerPreview />} />
+
+        {/* FM Ops Portal — facilities-management partners co-ordinating subs */}
+        <Route path="/fm-ops" element={
+          <ProtectedRoute>
+            <FmOpsLayout />
+          </ProtectedRoute>
+        }>
+          <Route index            element={<Navigate to="/fm-ops/overview" replace />} />
+          <Route path="overview"    element={<FmOpsOverview />} />
+          <Route path="contracts"        element={<FmOpsContracts />} />
+          <Route path="contracts/new"    element={<FmOpsContractNew />} />
+          <Route path="contracts/:id"    element={<FmOpsContractDetail />} />
+          <Route path="sites"       element={<FmOpsSites />} />
+          <Route path="contractors" element={<FmOpsContractors />} />
+          <Route path="marketplace" element={<FmOpsMarketplace />} />
+          <Route path="schedule"    element={<FmOpsSchedule />} />
+          <Route path="approval"    element={<FmOpsApproval />} />
+          <Route path="accounts"    element={<FmOpsAccounts />} />
+          <Route path="team"        element={<FmOpsTeam />} />
+        </Route>
+
+        {/* Cadi admin — FM application review queue */}
+        <Route path="/admin/fm-applications" element={
+          <ProtectedRoute>
+            <AdminFmApplications />
+          </ProtectedRoute>
+        } />
 
         {/* Manager app */}
         <Route path="/" element={
