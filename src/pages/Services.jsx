@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  Plus, MoreHorizontal, Lock, ChevronDown, ChevronUp, X, AlertCircle, Check,
+  Plus, MoreHorizontal, ChevronDown, ChevronUp, X, AlertCircle, Check,
   Pencil, Copy, Trash2, MessageSquare,
 } from 'lucide-react';
 import {
@@ -16,6 +16,8 @@ import {
 } from '../lib/db/servicesDb';
 import { supabase } from '../lib/supabase';
 import ServiceChat from '../components/ServiceChat';
+import ServiceTemplatePicker from '../components/ServiceTemplatePicker';
+import PriceListImporter from '../components/PriceListImporter';
 import FrontDeskPreview from '../components/FrontDeskPreview';
 
 // ── Service catalogue (same groups as onboarding) ────────────────────────────
@@ -43,10 +45,39 @@ const SERVICE_CATALOGUE = {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// Category → sector colour. Used by ServiceCard, category tabs, the future
+// public Menu view. Keep this the single source of truth for category styling.
+export const SECTORS = {
+  residential: {
+    label: 'Residential',
+    accent: '#1f48ff',
+    bar:    'bg-[#1f48ff]',
+    chip:   'bg-[#1f48ff]/15 text-[#99c5ff] border-[#1f48ff]/30',
+    soft:   'from-[#1f48ff]/10',
+    icon:   '🏠',
+  },
+  exterior: {
+    label: 'Exterior',
+    accent: '#10b981',
+    bar:    'bg-emerald-500',
+    chip:   'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    soft:   'from-emerald-500/10',
+    icon:   '🪟',
+  },
+  commercial: {
+    label: 'Commercial',
+    accent: '#f59e0b',
+    bar:    'bg-orange-500',
+    chip:   'bg-orange-500/15 text-orange-300 border-orange-500/30',
+    soft:   'from-orange-500/10',
+    icon:   '🏢',
+  },
+};
+
 const CATEGORIES = [
-  { key: 'residential', label: 'Residential' },
-  { key: 'exterior',    label: 'Exterior'    },
-  { key: 'commercial',  label: 'Commercial'  },
+  { key: 'residential', label: SECTORS.residential.label },
+  { key: 'exterior',    label: SECTORS.exterior.label    },
+  { key: 'commercial',  label: SECTORS.commercial.label  },
 ];
 
 const PRICING_TYPES = [
@@ -445,7 +476,7 @@ function CatalogueModal({ existingNames, onAdd, onCustom, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
           <h2 className="text-lg font-semibold text-gray-900">Add services</h2>
-          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500"><X size={18} /></button>
+          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500"><X size={18} /></button>
         </div>
 
         {/* Category tabs */}
@@ -597,7 +628,7 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
             </p>
             <p className="text-xs text-[rgba(153,197,255,0.5)]">This is what Front Desk quotes from, so be specific.</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
             <X size={14} className="text-white" />
           </button>
         </div>
@@ -938,30 +969,60 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
   const duration = formatDuration(service);
   const pricing = formatPricingSummary(service);
 
+  const sector = SECTORS[service.category] ?? SECTORS.residential;
+
   return (
-    <div className={`relative bg-white border rounded-xl overflow-hidden transition-all ${
-      service.is_active ? 'border-gray-200 shadow-sm' : 'border-gray-100 opacity-60'
-    }`}>
+    <div
+      className={`group relative rounded-xl border overflow-hidden transition-all ${
+        service.is_active
+          ? 'border-[rgba(153,197,255,0.12)] hover:border-[rgba(153,197,255,0.25)] hover:-translate-y-[1px]'
+          : 'border-[rgba(153,197,255,0.06)] opacity-50'
+      }`}
+      style={{ background: 'linear-gradient(145deg, #010a4f 0%, #05124a 50%, #0d1e78 100%)' }}
+    >
+      {/* Top edge highlight */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/40 to-transparent" />
+
+      {/* Subtle grid texture */}
+      <div
+        className="absolute inset-0 opacity-[0.04] pointer-events-none"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)',
+          backgroundSize: '28px 28px',
+        }}
+      />
+
+      {/* Sector accent bar (left) */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${sector.bar}`} />
+
       {/* Pricing warning */}
       {!hasPricing && service.is_active && (
-        <div className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 border-b border-amber-100">
-          <AlertCircle size={12} className="text-amber-500 shrink-0" />
-          <p className="text-xs text-amber-700 font-medium">Add pricing so Front Desk can quote this.</p>
+        <div className="relative flex items-center gap-1.5 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20">
+          <AlertCircle size={12} className="text-amber-400 shrink-0" />
+          <p className="text-xs text-amber-300 font-medium">Add pricing so Front Desk can quote this.</p>
         </div>
       )}
 
-      <div className="p-4">
+      <div className="relative p-4 pl-5">
         {/* Header row */}
         <div className="flex items-start justify-between gap-3 mb-2">
-          <h3 className="font-black text-gray-900 text-sm leading-tight">{service.name}</h3>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-black text-white text-sm leading-tight">{service.name}</h3>
+            <span className={`mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${sector.chip}`}>
+              <span className="text-[11px] leading-none">{sector.icon}</span>
+              {sector.label}
+            </span>
+          </div>
           <div className="flex items-center gap-2 shrink-0">
             {/* Active toggle */}
             <button
               onClick={handleToggle}
               disabled={toggling}
               title={service.is_active ? 'Pause this service' : 'Reactivate this service'}
+              aria-label={service.is_active ? 'Pause service' : 'Reactivate service'}
               className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-all ${
-                service.is_active ? 'bg-[#4f78ff] justify-end' : 'bg-gray-200 justify-start'
+                service.is_active ? 'bg-[#1f48ff] justify-end' : 'bg-[rgba(153,197,255,0.12)] justify-start'
               } ${toggling ? 'opacity-60' : ''}`}
             >
               <div className="w-4 h-4 rounded-full bg-white shadow-sm" />
@@ -970,22 +1031,26 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
             <div className="relative">
               <button
                 onClick={() => setMenuOpen(o => !o)}
-                className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+                aria-label="More actions"
+                className="w-7 h-7 rounded-lg border border-[rgba(153,197,255,0.15)] bg-white/5 flex items-center justify-center hover:bg-white/10 hover:border-[rgba(153,197,255,0.3)] transition-colors"
               >
-                <MoreHorizontal size={14} className="text-gray-500" />
+                <MoreHorizontal size={14} className="text-[#99c5ff]" />
               </button>
               {menuOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute right-0 top-9 z-20 bg-white border border-gray-200 rounded-xl shadow-xl w-40 py-1 overflow-hidden">
-                    <button onClick={() => { setMenuOpen(false); onEdit(service); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                      <MessageSquare size={13} className="text-gray-400" /> Edit with Cadi
+                  <div
+                    className="absolute right-0 top-9 z-20 rounded-xl border border-[rgba(153,197,255,0.15)] shadow-2xl w-44 py-1 overflow-hidden"
+                    style={{ background: 'linear-gradient(145deg, #05124a 0%, #0a1860 100%)' }}
+                  >
+                    <button onClick={() => { setMenuOpen(false); onEdit(service); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-white hover:bg-white/5 transition-colors">
+                      <MessageSquare size={13} className="text-[#99c5ff]" /> Edit with Cadi
                     </button>
-                    <button onClick={() => { setMenuOpen(false); onDuplicate(service.id); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                      <Copy size={13} className="text-gray-400" /> Duplicate
+                    <button onClick={() => { setMenuOpen(false); onDuplicate(service.id); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-white hover:bg-white/5 transition-colors">
+                      <Copy size={13} className="text-[#99c5ff]" /> Duplicate
                     </button>
-                    <div className="h-px bg-gray-100 my-1" />
-                    <button onClick={() => { setMenuOpen(false); onDelete(service); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                    <div className="h-px bg-[rgba(153,197,255,0.1)] my-1" />
+                    <button onClick={() => { setMenuOpen(false); onDelete(service); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-300 hover:bg-red-500/10 transition-colors">
                       <Trash2 size={13} className="text-red-400" /> Delete
                     </button>
                   </div>
@@ -997,31 +1062,32 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
 
         {/* Description snippet */}
         {service.description_included && (
-          <p className="text-xs text-gray-500 mb-3 line-clamp-2">{service.description_included}</p>
+          <p className="text-xs text-[rgba(153,197,255,0.55)] mt-3 mb-3 line-clamp-2 leading-relaxed">
+            {service.description_included}
+          </p>
         )}
 
         {/* Pricing + duration */}
-        <div className="flex items-center gap-3 mb-3">
-          <span className={`text-xs font-bold ${hasPricing ? 'text-[#0d1a5e]' : 'text-amber-600'}`}>{pricing}</span>
-          {duration && <span className="text-xs text-gray-400">{duration}</span>}
+        <div className="flex items-center gap-3 mt-3 mb-3">
+          <span className={`text-base font-black tabular-nums ${hasPricing ? 'text-emerald-300' : 'text-amber-300'}`}>
+            {pricing}
+          </span>
+          {duration && <span className="text-[11px] text-[rgba(153,197,255,0.4)] font-semibold">{duration}</span>}
         </div>
 
         {/* Frequency pills */}
         {freq.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-3">
+          <div className="flex flex-wrap gap-1.5">
             {freq.map(f => (
-              <span key={f} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#040810]/5 text-[#0d1a5e] border border-[#040810]/10">
+              <span
+                key={f}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/5 text-[rgba(153,197,255,0.7)] border border-[rgba(153,197,255,0.12)]"
+              >
                 {f}
               </span>
             ))}
           </div>
         )}
-
-        {/* Profit margin tease (locked) */}
-        <div className="flex items-center gap-1.5 pt-3 border-t border-gray-100">
-          <Lock size={11} className="text-gray-300" />
-          <span className="text-[10px] text-gray-300 font-semibold">Profit margin tracking — unlock with Pro</span>
-        </div>
       </div>
     </div>
   );
@@ -1029,29 +1095,71 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState({ category, onAdd }) {
+function EmptyState({ category, onAdd, onUseTemplate, onChat, onImport }) {
+  const navigate = useNavigate();
   const examples = {
     residential: ['regular domestic clean', 'deep clean', 'end of tenancy'],
-    exterior: ['window cleaning', 'gutter clearance', 'pressure washing'],
-    commercial: ['office clean', 'school clean', 'retail clean'],
+    exterior:    ['window cleaning', 'gutter clearance', 'pressure washing'],
+    commercial:  ['office clean', 'school clean', 'retail clean'],
   };
-  const label = CATEGORIES.find(c => c.key === category)?.label ?? 'this category';
+  const sector = SECTORS[category] ?? SECTORS.residential;
+  const label = sector.label;
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-        <Plus size={24} className="text-gray-400" />
-      </div>
-      <h3 className="font-black text-gray-800 text-lg mb-1">No {label.toLowerCase()} services yet.</h3>
-      <p className="text-sm text-gray-400 mb-1">
-        Examples: {examples[category]?.join(', ')}.
-      </p>
-      <p className="text-xs text-gray-400">Services power your quotes, scheduler and pricing calculator.</p>
-      <button
-        onClick={onAdd}
-        className="mt-4 px-5 py-2.5 rounded-xl bg-[#4f78ff] text-white font-bold text-sm hover:bg-[#3d68ff] transition-colors"
+    <div className="flex flex-col items-center justify-center py-16 text-center px-6 max-w-md mx-auto">
+      <div
+        className="w-16 h-16 rounded-2xl border flex items-center justify-center mb-4 text-2xl"
+        style={{
+          background: `linear-gradient(145deg, ${sector.accent}25, ${sector.accent}08)`,
+          borderColor: `${sector.accent}40`,
+        }}
       >
-        Add a {label.toLowerCase()} service
-      </button>
+        {sector.icon}
+      </div>
+      <h3 className="font-black text-white text-lg mb-1">Build your {label.toLowerCase()} menu.</h3>
+      <p className="text-sm text-[rgba(153,197,255,0.6)] mb-5 leading-relaxed">
+        Cadi uses this menu to quote, schedule, and invoice — pick the fastest way in.
+      </p>
+      <div className="flex flex-col gap-2 w-full">
+        <button
+          onClick={() => navigate('/onboarding/customers')}
+          className="w-full px-4 py-2.5 rounded-xl bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black text-sm shadow-lg shadow-[#1f48ff]/30 transition-all"
+        >
+          ✨ Build it from your customers
+        </button>
+        {onImport && (
+          <button
+            onClick={onImport}
+            className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-[rgba(153,197,255,0.2)] hover:border-[#99c5ff] hover:bg-[rgba(153,197,255,0.1)] text-[#99c5ff] hover:text-white font-semibold text-sm transition-all"
+          >
+            📷 Snap your price list
+          </button>
+        )}
+        {onUseTemplate && (
+          <button
+            onClick={() => onUseTemplate(category)}
+            className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-[rgba(153,197,255,0.2)] hover:border-[#99c5ff] hover:bg-[rgba(153,197,255,0.1)] text-[#99c5ff] hover:text-white font-semibold text-sm transition-all"
+          >
+            ⚡ Start from a {label.toLowerCase()} template
+          </button>
+        )}
+        {onChat && (
+          <button
+            onClick={onChat}
+            className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-[rgba(153,197,255,0.2)] hover:border-[#99c5ff] hover:bg-[rgba(153,197,255,0.1)] text-[#99c5ff] hover:text-white font-semibold text-sm transition-all"
+          >
+            💬 Describe a service to Cadi
+          </button>
+        )}
+        <button
+          onClick={onAdd}
+          className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-[rgba(153,197,255,0.2)] hover:border-[#99c5ff] hover:bg-[rgba(153,197,255,0.1)] text-[#99c5ff] hover:text-white font-semibold text-sm transition-all"
+        >
+          + Add one by hand
+        </button>
+      </div>
+      <p className="text-[11px] text-[rgba(153,197,255,0.4)] mt-5">
+        Typical {label.toLowerCase()}: {examples[category]?.join(' · ')}.
+      </p>
     </div>
   );
 }
@@ -1064,8 +1172,11 @@ function Toast({ message, onDismiss }) {
     return () => clearTimeout(t);
   }, [onDismiss]);
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] px-5 py-3 rounded-xl bg-[#0d1a5e] border border-[rgba(79,120,255,0.4)] text-white text-sm font-semibold shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom">
-      <Check size={14} className="text-[#4f78ff]" /> {message}
+    <div
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] px-5 py-3 rounded-xl border border-[rgba(153,197,255,0.25)] text-white text-sm font-semibold shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom backdrop-blur-md"
+      style={{ background: 'linear-gradient(145deg, #05124a 0%, #0d1e78 100%)' }}
+    >
+      <Check size={14} className="text-emerald-400" /> {message}
     </div>
   );
 }
@@ -1087,6 +1198,22 @@ export default function Services() {
   const [firstVisitBanner, setFirstVisitBanner] = useState(false);
   // Chat-based service builder — null when closed, or { context, editService?, editField?, onboardingServices? }
   const [chatSession, setChatSession] = useState(null);
+  const [templatePickerCategory, setTemplatePickerCategory] = useState(null);
+  const [importerOpen, setImporterOpen] = useState(false);
+
+  const handleTemplateApplied = async ({ pack, count }) => {
+    const refreshed = await listServices({ includeInactive: true });
+    setServices(refreshed);
+    setAttentionCount(refreshed.filter(s => s.is_active && !serviceHasPricing(s)).length);
+    setToast(`${count} services added from "${pack.label}". Tweak prices anytime.`);
+  };
+
+  const handleImporterApplied = async ({ count }) => {
+    const refreshed = await listServices({ includeInactive: true });
+    setServices(refreshed);
+    setAttentionCount(refreshed.filter(s => s.is_active && !serviceHasPricing(s)).length);
+    setToast(`${count} services imported from your price list. Edit any of them anytime.`);
+  };
   const [showPreview, setShowPreview] = useState(false);
 
   const load = useCallback(async () => {
@@ -1231,28 +1358,58 @@ export default function Services() {
   const visible = byCategory(activeCategory);
 
   return (
-    <div className="flex flex-col h-full bg-gray-50/50">
+    <div className="flex flex-col h-full bg-[#010a4f] overflow-y-auto">
+      {/* Top-edge highlight */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/40 to-transparent z-10 pointer-events-none" />
 
       {/* Header */}
-      <div className="bg-[#040810] text-white px-5 sm:px-6 py-5">
+      <div className="relative bg-[#010a4f]/80 backdrop-blur-sm border-b border-[rgba(153,197,255,0.1)] px-5 sm:px-6 py-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#4f78ff] mb-1">Services Menu</p>
+            <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-1">Services Menu</p>
             <h2 className="text-xl font-black text-white mb-1">Your services menu</h2>
             <p className="text-xs text-[rgba(153,197,255,0.6)] max-w-md">
               Like a restaurant menu, but for the services you sell. This is what Front Desk uses to quote your customers.
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <button
+              onClick={() => setImporterOpen(true)}
+              className="hidden sm:flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[rgba(153,197,255,0.2)] bg-white/5 text-[#99c5ff] font-bold text-sm transition-all hover:bg-[rgba(153,197,255,0.1)] hover:border-[rgba(153,197,255,0.35)]"
+              title="Bring in your existing price list — photo, URL or paste"
+            >
+              📷 Import price list
+            </button>
+            <button
+              onClick={() => setTemplatePickerCategory(activeCategory)}
+              className="hidden sm:flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[rgba(153,197,255,0.2)] bg-white/5 text-[#99c5ff] font-bold text-sm transition-all hover:bg-[rgba(153,197,255,0.1)] hover:border-[rgba(153,197,255,0.35)]"
+              title="Add a starter pack by sub-industry"
+            >
+              ⚡ Templates
+            </button>
+            <button
+              onClick={() => navigate('/services/catalogue')}
+              className="hidden sm:flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#1f48ff]/40 bg-[#1f48ff]/10 text-[#99c5ff] font-bold text-sm transition-all hover:bg-[#1f48ff]/20 hover:border-[#1f48ff]/60"
+              title="Tiers, modifiers, durations + per-service pricing"
+            >
+              ✎ Edit catalogue
+            </button>
+            <button
+              onClick={() => navigate('/menu/preview')}
+              className="hidden sm:flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-bold text-sm transition-all hover:bg-emerald-500/15 hover:border-emerald-500/50"
+              title="See your shareable menu — the version your customers see"
+            >
+              ✨ Preview menu
+            </button>
             <button
               onClick={() => setShowPreview(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[rgba(153,197,255,0.3)] text-[#99c5ff] font-bold text-sm transition-colors hover:bg-[rgba(153,197,255,0.08)] shrink-0"
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[rgba(153,197,255,0.2)] bg-white/5 text-[#99c5ff] font-bold text-sm transition-all hover:bg-[rgba(153,197,255,0.1)] hover:border-[rgba(153,197,255,0.35)]"
             >
               <MessageSquare size={15} /> Try Front Desk
             </button>
             <button
               onClick={() => openAdd()}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] text-white font-bold text-sm transition-colors shrink-0"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-bold text-sm transition-all shadow-lg shadow-[#1f48ff]/30"
             >
               <Plus size={16} /> Add a service
             </button>
@@ -1262,12 +1419,12 @@ export default function Services() {
 
       {/* First-visit banner */}
       {firstVisitBanner && (
-        <div className="mx-5 mt-4 flex items-start gap-3 px-4 py-3 rounded-xl bg-[#4f78ff]/10 border border-[#4f78ff]/25">
-          <AlertCircle size={14} className="text-[#4f78ff] mt-0.5 shrink-0" />
-          <p className="text-sm text-[#0d1a5e]">
+        <div className="mx-5 mt-4 flex items-start gap-3 px-4 py-3 rounded-xl bg-[#1f48ff]/10 border border-[#1f48ff]/25">
+          <AlertCircle size={14} className="text-[#99c5ff] mt-0.5 shrink-0" />
+          <p className="text-sm text-[#99c5ff] flex-1">
             Heads up — anything in your services menu is what Front Desk will quote on. Keep it accurate and Front Desk will do the selling for you.
           </p>
-          <button onClick={() => setFirstVisitBanner(false)} className="shrink-0 text-gray-400 hover:text-gray-600">
+          <button onClick={() => setFirstVisitBanner(false)} aria-label="Dismiss" className="shrink-0 text-[rgba(153,197,255,0.5)] hover:text-white transition-colors">
             <X size={14} />
           </button>
         </div>
@@ -1275,17 +1432,17 @@ export default function Services() {
 
       {/* Pricing attention banner */}
       {attentionCount > 0 && (
-        <div className="mx-5 mt-3 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
-          <AlertCircle size={14} className="text-amber-500 shrink-0" />
-          <p className="text-sm text-amber-800 flex-1">
-            You have <span className="font-bold">{attentionCount} service{attentionCount !== 1 ? 's' : ''}</span> that need pricing added before Front Desk can quote them.
+        <div className="mx-5 mt-3 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/25">
+          <AlertCircle size={14} className="text-amber-400 shrink-0" />
+          <p className="text-sm text-amber-200 flex-1">
+            You have <span className="font-bold text-amber-100">{attentionCount} service{attentionCount !== 1 ? 's' : ''}</span> that need pricing added before Front Desk can quote them.
           </p>
           <button
             onClick={() => {
               const unpricedNames = services.filter(s => s.is_active && !serviceHasPricing(s)).map(s => s.name);
               setChatSession({ context: 'first_setup', onboardingServices: unpricedNames });
             }}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-700 text-white text-xs font-bold hover:bg-amber-800 transition-colors"
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-amber-950 text-xs font-bold transition-colors"
           >
             <MessageSquare size={11} /> Set up with Cadi
           </button>
@@ -1294,20 +1451,39 @@ export default function Services() {
 
       {/* Category tabs */}
       <div className="px-5 sm:px-6 mt-5">
-        <div className="flex gap-1 border-b border-gray-200">
-          {CATEGORIES.map(c => (
-            <button
-              key={c.key}
-              onClick={() => setActiveCategory(c.key)}
-              className={`px-4 py-2.5 text-sm font-bold border-b-2 transition-all -mb-px ${
-                activeCategory === c.key
-                  ? 'border-[#4f78ff] text-[#4f78ff]'
-                  : 'border-transparent text-gray-400 hover:text-gray-700'
-              }`}
-            >
-              {c.label} ({countByCategory(c.key)})
-            </button>
-          ))}
+        <div className="flex gap-1 border-b border-[rgba(153,197,255,0.12)] overflow-x-auto no-scrollbar">
+          {CATEGORIES.map(c => {
+            const sector = SECTORS[c.key];
+            const isActive = activeCategory === c.key;
+            const count = countByCategory(c.key);
+            return (
+              <button
+                key={c.key}
+                onClick={() => setActiveCategory(c.key)}
+                className={`relative px-4 py-2.5 text-sm font-bold transition-all -mb-px whitespace-nowrap flex items-center gap-2 ${
+                  isActive
+                    ? 'text-white'
+                    : 'text-[rgba(153,197,255,0.45)] hover:text-[#99c5ff]'
+                }`}
+              >
+                <span className={`text-[13px] ${isActive ? '' : 'opacity-50'}`}>{sector.icon}</span>
+                <span>{c.label}</span>
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md tabular-nums ${
+                  isActive
+                    ? `${sector.chip}`
+                    : 'bg-white/5 text-[rgba(153,197,255,0.5)] border border-[rgba(153,197,255,0.1)]'
+                }`}>
+                  {count}
+                </span>
+                {isActive && (
+                  <span
+                    className="absolute inset-x-0 -bottom-px h-0.5 rounded-full"
+                    style={{ background: sector.accent }}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -1315,10 +1491,16 @@ export default function Services() {
       <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5">
         {loading ? (
           <div className="flex justify-center py-20">
-            <div className="w-8 h-8 rounded-full border-2 border-[#4f78ff] border-t-transparent animate-spin" />
+            <div className="w-8 h-8 rounded-full border-2 border-[#99c5ff] border-t-transparent animate-spin" />
           </div>
         ) : visible.length === 0 ? (
-          <EmptyState category={activeCategory} onAdd={() => openAdd()} />
+          <EmptyState
+            category={activeCategory}
+            onAdd={() => openAdd()}
+            onChat={() => setChatSession({ context: 'add_new' })}
+            onUseTemplate={(cat) => setTemplatePickerCategory(cat)}
+            onImport={() => setImporterOpen(true)}
+          />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {visible.map(s => (
@@ -1334,10 +1516,10 @@ export default function Services() {
             {/* Add another card */}
             <button
               onClick={() => openAdd()}
-              className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl py-12 hover:border-[#4f78ff] hover:bg-[#4f78ff]/5 transition-all group"
+              className="group flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[rgba(153,197,255,0.15)] rounded-xl py-12 hover:border-[#99c5ff] hover:bg-[rgba(153,197,255,0.05)] transition-all"
             >
-              <Plus size={20} className="text-gray-300 group-hover:text-[#4f78ff] transition-colors" />
-              <span className="text-sm text-gray-400 group-hover:text-[#4f78ff] font-semibold transition-colors">Add a service</span>
+              <Plus size={20} className="text-[rgba(153,197,255,0.4)] group-hover:text-[#99c5ff] transition-colors" />
+              <span className="text-sm text-[rgba(153,197,255,0.5)] group-hover:text-white font-semibold transition-colors">Add a service</span>
             </button>
           </div>
         )}
@@ -1398,6 +1580,23 @@ export default function Services() {
 
       {/* Front Desk preview */}
       {showPreview && <FrontDeskPreview onClose={() => setShowPreview(false)} />}
+
+      {/* Sub-industry template packs */}
+      {templatePickerCategory && (
+        <ServiceTemplatePicker
+          category={templatePickerCategory}
+          onClose={() => setTemplatePickerCategory(null)}
+          onApplied={handleTemplateApplied}
+        />
+      )}
+
+      {/* Photo / URL / paste → AI-extracted menu */}
+      {importerOpen && (
+        <PriceListImporter
+          onClose={() => setImporterOpen(false)}
+          onApplied={handleImporterApplied}
+        />
+      )}
 
       {/* Toast */}
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
