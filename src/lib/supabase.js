@@ -1,14 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Fail fast at module load if the env vars are missing. Previously these
-// fell back to a hardcoded URL + anon key baked into the client bundle —
-// a real (if minor) leak surface and a footgun if the project ever gets
-// rotated. Now: missing env → loud error in the console + ProtectedRoute
-// will fail to authenticate, which is what we want.
-const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-if (!supabaseUrl)     throw new Error('VITE_SUPABASE_URL is required at build time');
-if (!supabaseAnonKey) throw new Error('VITE_SUPABASE_ANON_KEY is required at build time');
+// Prefer env vars at build time; fall back to the published anon key + URL.
+// Both values are public (anon role, designed for client bundles) so the
+// fallback is safe. Once VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are set
+// on the Vercel project, the fallback becomes a no-op and can be removed.
+const supabaseUrl =
+  import.meta.env.VITE_SUPABASE_URL ||
+  'https://cufgozpwbinjhjnkimmn.supabase.co';
+const supabaseAnonKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN1ZmdvenB3YmluamhqbmtpbW1uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4ODM4NDUsImV4cCI6MjA5MDQ1OTg0NX0.Vv1DQvcQj5lvjxRmPZVj3TWya072ujgv1O_C-jzfdcM';
 
 // Lazy ref so the fetch wrapper can call supabase.auth after the client is created.
 let _client = null;
