@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Receipt, FileText, CheckCircle2, AlertCircle, Building2, MapPin,
+  Receipt, FileText, CheckCircle2, AlertCircle, Building2, MapPin, Camera,
 } from 'lucide-react';
 import {
   listMyConnectInvoices,
   submitConnectInvoice,
 } from '../../lib/db/connectDb';
+import EarnInvoiceUploadWizard from './EarnInvoiceUploadWizard';
 
 const ORANGE = '#C2410C';
 const GREEN  = '#16a34a';
@@ -134,6 +135,8 @@ export default function EarnInvoice() {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
   const [busyId, setBusyId]     = useState(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const drafts = useMemo(() => invoices.filter(i => i.status === 'draft'), [invoices]);
 
   async function reload() {
     setError('');
@@ -186,16 +189,30 @@ export default function EarnInvoice() {
 
   return (
     <div style={{ background: '#f8faff', minHeight: '100%', padding: '1.25rem', fontFamily: "'Satoshi','Inter',sans-serif" }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #e2e8f0', gap: 12 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Receipt size={18} color={ORANGE} />
             <h1 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0 }}>Invoicing</h1>
           </div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            Auto-drafted the moment your FM approves a job. Edit if you need to, then submit.
+            Auto-drafted the moment your FM approves a job. Or upload a photo of your paper invoice and Cadi will read it.
           </div>
         </div>
+        <button
+          onClick={() => setWizardOpen(true)}
+          disabled={drafts.length === 0}
+          title={drafts.length === 0 ? 'A draft will appear when your FM approves a completed job' : undefined}
+          style={{
+            background: drafts.length === 0 ? '#94a3b8' : ORANGE,
+            color: 'white', border: 'none',
+            borderRadius: 8, padding: '9px 14px', fontSize: 12, fontWeight: 800,
+            cursor: drafts.length === 0 ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+          }}
+        >
+          <Camera size={13} /> Upload invoice
+        </button>
       </div>
 
       {error && (
@@ -239,6 +256,14 @@ export default function EarnInvoice() {
             <InvoiceRow key={inv.id} inv={inv} onSubmit={handleSubmit} busy={busyId} />
           ))}
         </div>
+      )}
+
+      {wizardOpen && (
+        <EarnInvoiceUploadWizard
+          drafts={drafts}
+          onClose={() => setWizardOpen(false)}
+          onSent={reload}
+        />
       )}
     </div>
   );
