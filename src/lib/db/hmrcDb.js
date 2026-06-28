@@ -49,6 +49,19 @@ const HMRC_NETWORK_ACTIONS = new Set([
   'get_bsas',
   'list_bsas',
   'final_declaration',
+  // June 2026 release additions
+  'update_accounting_type',
+  'list_penalties',
+  'submit_brought_forward_loss',
+  'carry_back_loss',
+  'list_charges',
+  'list_partner_income',
+  // Stateful sandbox journey additions
+  'submit_annual_submission',
+  'submit_accounting_adjustments',
+  'submit_dividends_income',
+  'agent_relationship_status',
+  // export_records is DB-only — no fraud headers needed
 ]);
 
 /**
@@ -196,6 +209,24 @@ export const listBsas = (taxYear) =>
 export const finalDeclaration = (taxYear, calculationId) =>
   hmrcApi('final_declaration', { taxYear, calculationId });
 
+// ─── June 2026 release endpoints ─────────────────────────────────────────────
+
+export const listPenalties = () => hmrcApi('list_penalties', {});
+
+export const updateAccountingType = (businessId, taxYear, accountingType) =>
+  hmrcApi('update_accounting_type', { businessId, taxYear, accountingType });
+
+export const submitBroughtForwardLoss = ({ businessId, taxYear, lossAmount, typeOfLoss }) =>
+  hmrcApi('submit_brought_forward_loss', { businessId, taxYear, lossAmount, typeOfLoss });
+
+export const carryBackLoss = ({ taxYearLossArose, taxYearOfRelief, lossAmount, typeOfLoss }) =>
+  hmrcApi('carry_back_loss', { taxYearLossArose, taxYearOfRelief, lossAmount, typeOfLoss });
+
+export const listCharges = (taxYear) => hmrcApi('list_charges', { taxYear });
+
+export const exportHmrcRecords = ({ fromDate, toDate } = {}) =>
+  hmrcApi('export_records', { fromDate, toDate });
+
 // ─── Compound helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -209,6 +240,8 @@ export async function submitQuarterAndCalculate({
   income,
   expenses,
   taxYear,
+  digitalRecordRefs,
+  adjustments,
 }) {
   const submission = await submitQuarter({
     businessId,
@@ -217,6 +250,8 @@ export async function submitQuarterAndCalculate({
     income,
     expenses,
     taxYear,
+    digitalRecordRefs,
+    adjustments,
   });
 
   const { calculationId } = await triggerCalculation(taxYear);

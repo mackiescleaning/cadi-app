@@ -158,6 +158,23 @@ export async function createService(fields) {
   return data;
 }
 
+// Bulk-insert a starter pack from src/lib/serviceTemplates.js.
+// Stamps business_id, appends after any existing display_order.
+export async function bulkCreateServices(servicesList) {
+  if (!servicesList?.length) return [];
+  const businessId = await getBusinessId();
+  const existing   = await listServices({ includeInactive: true });
+  const startOrder = existing.length;
+  const rows = servicesList.map((s, i) => ({
+    ...s,
+    business_id:   businessId,
+    display_order: startOrder + i,
+  }));
+  const { data, error } = await supabase.from('services').insert(rows).select();
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function updateService(id, fields) {
   const { data, error } = await supabase
     .from('services')

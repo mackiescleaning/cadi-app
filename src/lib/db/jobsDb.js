@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { getCurrentUserId } from './authDb';
+import { logAudit } from './auditDb';
 
 export async function createJob(job) {
   const ownerId = await getCurrentUserId();
@@ -24,6 +25,7 @@ export async function createJob(job) {
     assignee_ids: job.assignee_ids || [],
     recurrence: job.recurrence || 'one-off',
     notes: job.notes || '',
+    series_id: job.seriesId || null,
   };
 
   const { data, error } = await supabase
@@ -58,7 +60,9 @@ export async function bulkCreateJobs(jobs) {
     recurrence:   j.recurrence  || 'one-off',
     is_recurring: j.isRecurring ?? false,
     notes:        j.notes       || '',
-    source:       'import',
+    source:       j.source      || 'import',
+    series_id:    j.seriesId    || null,
+    import_batch_id: j.importBatchId || null,
     assignees:    [],
     assignee_ids: [],
   }));
@@ -110,6 +114,15 @@ export async function updateJob(id, updates) {
 
 export async function deleteJob(id) {
   const ownerId = await getCurrentUserId();
+  // Fetch a tiny snapshot before the delete so the audit row can identify
+  // what was removed (customer id + date) without storing the full payload.
+  const { data: snap } = await supabase
+    .from('jobs')
+    .select('customer_id, date, price')
+    .eq('id', id)
+    .eq('owner_id', ownerId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('jobs')
     .delete()
@@ -117,4 +130,15 @@ export async function deleteJob(id) {
     .eq('owner_id', ownerId);
 
   if (error) throw error;
+
+  await logAudit({
+    action:   'job.deleted',
+    category: 'job',
+    detail: {
+      job_id:      id,
+      customer_id: snap?.customer_id ?? null,
+      date:        snap?.date ?? null,
+      price:       snap?.price ?? null,
+    },
+  });
 }

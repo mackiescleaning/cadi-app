@@ -74,7 +74,7 @@ export function useYtdExpenses(taxYear = currentTaxYear()) {
           // Bank-imported business expenses (negative amounts only)
           supabase
             .from('transactions')
-            .select('transaction_date,amount,category')
+            .select('id,transaction_date,amount,category')
             .eq('business_id', businessId)         // explicit — belts the RLS suspenders
             .gte('transaction_date', ytdStart)
             .lte('transaction_date', ytdEnd)
@@ -84,7 +84,7 @@ export function useYtdExpenses(taxYear = currentTaxYear()) {
           // Manual expenses entered via Money tab + expense modal
           supabase
             .from('money_entries')
-            .select('date,amount,category')
+            .select('id,date,amount,category')
             .eq('kind', 'expense')
             .gte('date', ytdStart)
             .lte('date', ytdEnd),
@@ -94,16 +94,18 @@ export function useYtdExpenses(taxYear = currentTaxYear()) {
 
         const rows = [
           ...((bankRes.data ?? []).map(r => ({
+            id:       r.id,
             date:     r.transaction_date,
             amount:   Math.abs(Number(r.amount) || 0),
             category: r.category || 'uncategorised',
-            source:   'bank',
+            source:   'bank',                       // → transactions table
           }))),
           ...((manualRes.data ?? []).map(r => ({
+            id:       r.id,
             date:     r.date,
             amount:   Math.abs(Number(r.amount) || 0),
             category: r.category || 'other',
-            source:   'manual',
+            source:   'manual',                     // → money_entries table
           }))),
         ];
 

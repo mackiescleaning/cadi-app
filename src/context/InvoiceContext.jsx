@@ -4,6 +4,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthContext";
+import { useData } from "./DataContext";
 import {
   listInvoices as fetchInvoices,
   createInvoice as dbCreateInvoice,
@@ -69,6 +70,20 @@ const InvoiceContext = createContext(null);
 export function InvoiceProvider({ children }) {
   const { user, loading: authLoading } = useAuth();
   const isLive = Boolean(user);
+  // Pulled lazily — DataProvider sits above us in App.jsx (see line 106).
+  // We use it to invalidate the customer cache whenever an invoice
+  // transitions to paid/unpaid, so the Customer tab's outstanding
+  // balance + paid-lifetime figures stay live.
+  const { refreshCustomers } = useData();
+
+  // True when a patch/update flips collection state in either direction.
+  // Reading customer billing aggregates means we re-fetch from the
+  // customers_with_billing view, which picks up the change.
+  const touchesPaidState = (patch) =>
+    patch && (
+      'paidAt' in patch || 'paid_at' in patch ||
+      ('status' in patch && (patch.status === 'paid' || patch.status === 'cancelled' || patch.status === 'sent' || patch.status === 'overdue'))
+    );
   const isDemoUser = user?.id === 'demo-user';
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -157,16 +172,18 @@ export function InvoiceProvider({ children }) {
     setInvoices(prev => prev.map(i => i.id === upd.id ? upd : i));
     if (isLive) {
       try { await dbUpdateInvoice(upd.id, upd); } catch (err) { console.error('Failed to update invoice:', err); }
+      if (touchesPaidState(upd)) refreshCustomers?.();
     }
-  }, [isLive]);
+  }, [isLive, refreshCustomers]);
 
   // Partial patch
   const patchInvoice = useCallback(async (id, patch) => {
     setInvoices(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i));
     if (isLive) {
       try { await dbUpdateInvoice(id, patch); } catch (err) { console.error('Failed to patch invoice:', err); }
+      if (touchesPaidState(patch)) refreshCustomers?.();
     }
-  }, [isLive]);
+  }, [isLive, refreshCustomers]);
 
   // Delete
   const removeInvoice = useCallback(async (id) => {

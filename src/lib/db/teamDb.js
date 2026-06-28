@@ -132,50 +132,55 @@ export async function logAuditAction({ memberId, ownerId, action, detail = null 
 // ── Accept invite (called from InviteAccept page) ─────────────────────────────
 
 export async function acceptInvite(token) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('You must be logged in to accept an invite');
-
-  // Find the invite by token
-  const { data: member, error: fetchErr } = await supabase
-    .from('account_members')
-    .select('*')
-    .eq('invite_token', token)
-    .eq('status', 'pending')
-    .single();
-
-  if (fetchErr || !member) throw new Error('Invite not found or already used');
-  if (member.expires_at && new Date(member.expires_at) < new Date()) {
-    throw new Error('This invite has expired');
-  }
-
-  const { error } = await supabase
-    .from('account_members')
-    .update({
-      member_user_id: user.id,
-      status:         'active',
-      accepted_at:    new Date().toISOString(),
-    })
-    .eq('id', member.id);
-
-  if (error) throw new Error(error.message);
-
-  await logAuditAction({
-    memberId: member.id,
-    ownerId:  member.owner_id,
-    action:   'accepted_invite',
-    detail:   { member_email: member.member_email },
+  // Routed through the invite-accept edge function. It enforces:
+  //   1. The caller is authenticated (JWT).
+  //   2. The caller's auth email matches the invited email (case-insensitive).
+  //   3. The invite is still pending and not expired.
+  //   4. The update is race-guarded with `eq('status', 'pending')`.
+  // This replaces direct client access to `account_members` which is no longer
+  // allowed for anon (migration 037).
+  const { data, error } = await supabase.functions.invoke('invite-accept', {
+    body: { token },
   });
-
-  return member;
+  if (error) throw new Error(error.message ?? 'Could not accept invite');
+  if (data?.error) throw new Error(data.error);
+  return { id: data?.member_id, owner_id: data?.owner_id };
 }
 
 // ── List clients for the current accountant ───────────────────────────────────
 
 export async function listMyClients() {
-  const { data, error } = await supabase
+  // Pulls the active clients of the calling accountant. Belt-and-braces filter
+  // on owner_id != member_user_id — a self-invited row (owner_id matching the
+  // accountant's own user) would surface their own business and trigger the
+  // accountant banner. Shouldn't happen post-cleanup but cheap to enforce.
+  const { data: { user } } = await supabase.auth.getUser();
+  const me = user?.id;
+
+  const { data: rows, error } = await supabase
     .from('account_members')
     .select('id, owner_id, role, access_level, status, accepted_at')
     .eq('status', 'active');
   if (error) throw new Error(error.message);
-  return data ?? [];
+
+  const filtered = (rows ?? []).filter(r => r.owner_id !== me);
+  if (filtered.length === 0) return [];
+
+  // Fetch business_name + first_name from the owner's profile so the banner can
+  // render something meaningful instead of a UUID slice.
+  const ownerIds = filtered.map(r => r.owner_id);
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, business_name, first_name')
+    .in('id', ownerIds);
+
+  const byOwner = new Map((profiles ?? []).map(p => [p.id, p]));
+  return filtered.map(r => {
+    const p = byOwner.get(r.owner_id);
+    return {
+      ...r,
+      business_name: p?.business_name ?? null,
+      owner_name:    p?.first_name    ?? null,
+    };
+  });
 }

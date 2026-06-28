@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { getCurrentUserId } from './authDb';
+import { logAudit } from './auditDb';
 
 // options: { page, pageSize, status } — default loads first 100 newest.
 // Legacy: pass a number as first arg for a plain limit (backward compat).
@@ -85,6 +86,28 @@ export async function updateInvoice(id, updates) {
     .single();
 
   if (error) throw error;
+
+  // Audit invoice lifecycle events — paid, sent, status changes. We don't
+  // log every line tweak (too noisy); only the events that matter for
+  // financial accountability and dispute defence.
+  const sig = updates.paidAt || updates.paid_at ? 'invoice.paid'
+            : updates.sentAt || updates.sent_at ? 'invoice.sent'
+            : updates.status                    ? 'invoice.status_changed'
+            : null;
+  if (sig) {
+    await logAudit({
+      action:   sig,
+      category: 'invoice',
+      detail: {
+        invoice_id:  id,
+        invoice_num: data.invoice_num,
+        customer_id: data.customer_id,
+        status:      data.status,
+        total:       (Array.isArray(data.lines) ? data.lines : []).reduce((s, l) => s + (Number(l.total ?? l.unit_price ?? 0) || 0), 0),
+      },
+    });
+  }
+
   return data;
 }
 

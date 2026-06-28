@@ -86,31 +86,15 @@ function formatDnt() {
 }
 
 /**
- * Fetch the user's public IP via ipify. Cached for 10 minutes in sessionStorage
- * so we're not hitting a third-party service on every HMRC call.
+ * Public IP is intentionally not fetched from the client anymore. The edge
+ * function reads the browser's IP from x-forwarded-for and uses that as
+ * Gov-Client-Public-IP — strictly more reliable than an ipify round-trip
+ * (no third-party dependency, no CSP exemption needed, no PII leaving the
+ * browser to ipify.org). Returning null here makes the edge function fall
+ * back to its server-side detection path.
  */
 async function getPublicIp() {
-  try {
-    const cached = sessionStorage.getItem(PUBLIC_IP_CACHE_KEY);
-    if (cached) {
-      const { ip, ts } = JSON.parse(cached);
-      if (ip && Date.now() - ts < PUBLIC_IP_TTL_MS) {
-        return { ip, timestamp: new Date(ts).toISOString() };
-      }
-    }
-  } catch { /* fall through to fetch */ }
-
-  try {
-    const res = await fetch('https://api.ipify.org?format=json');
-    const { ip } = await res.json();
-    const now = Date.now();
-    try {
-      sessionStorage.setItem(PUBLIC_IP_CACHE_KEY, JSON.stringify({ ip, ts: now }));
-    } catch { /* storage disabled — skip cache */ }
-    return { ip, timestamp: new Date(now).toISOString() };
-  } catch {
-    return { ip: null, timestamp: new Date().toISOString() };
-  }
+  return { ip: null, timestamp: new Date().toISOString() };
 }
 
 /**

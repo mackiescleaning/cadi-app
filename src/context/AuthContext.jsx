@@ -1,5 +1,10 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
+
+// Idle timeout: sign out after this many minutes with no pointer/key activity.
+// Activity in any tab resets the timer (BroadcastChannel sync).
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const IDLE_WARNING_MS = 60 * 1000; // warn 60s before sign-out
 
 const AuthContext = createContext({});
 
@@ -23,6 +28,9 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [idleWarning, setIdleWarning] = useState(false);
+  const idleTimerRef = useRef(null);
+  const idleWarningRef = useRef(null);
 
   useEffect(() => {
     // Restore demo session if active
@@ -64,6 +72,48 @@ export function AuthProvider({ children }) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // ── Idle timeout ───────────────────────────────────────────────────────────
+  // Sign the user out after 30 minutes of no pointer / key activity. Activity
+  // in any open tab resets every tab's timer via a BroadcastChannel.
+  useEffect(() => {
+    if (!user) {
+      setIdleWarning(false);
+      clearTimeout(idleTimerRef.current);
+      clearTimeout(idleWarningRef.current);
+      return;
+    }
+
+    const channel = typeof BroadcastChannel !== 'undefined'
+      ? new BroadcastChannel('cadi-activity')
+      : null;
+
+    const resetTimer = () => {
+      setIdleWarning(false);
+      clearTimeout(idleTimerRef.current);
+      clearTimeout(idleWarningRef.current);
+      idleWarningRef.current = setTimeout(() => setIdleWarning(true), IDLE_TIMEOUT_MS - IDLE_WARNING_MS);
+      idleTimerRef.current   = setTimeout(() => { signOut(); }, IDLE_TIMEOUT_MS);
+    };
+
+    const onLocalActivity = () => {
+      resetTimer();
+      try { channel?.postMessage('activity'); } catch {}
+    };
+    const onRemoteActivity = (ev) => { if (ev.data === 'activity') resetTimer(); };
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'visibilitychange'];
+    events.forEach(e => window.addEventListener(e, onLocalActivity, { passive: true }));
+    if (channel) channel.addEventListener('message', onRemoteActivity);
+    resetTimer();
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, onLocalActivity));
+      if (channel) { channel.removeEventListener('message', onRemoteActivity); channel.close(); }
+      clearTimeout(idleTimerRef.current);
+      clearTimeout(idleWarningRef.current);
+    };
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchProfile(userId) {
     setProfileLoading(true);
@@ -137,6 +187,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, loading, profileLoading, isPro,
+      idleWarning, dismissIdleWarning: () => setIdleWarning(false),
       signUp, signIn, signOut, loginAsDemo, updateProfile, refreshProfile
     }}>
       {children}
