@@ -22,6 +22,19 @@ const STRIPE_SECRET_KEY   = Deno.env.get("STRIPE_SECRET_KEY")!;
 const STRIPE_PRO_PRICE_ID = Deno.env.get("STRIPE_PRO_PRICE_ID") ?? Deno.env.get("STRIPE_PRICE_ID")!;
 const STRIPE_MAX_PRICE_ID = Deno.env.get("STRIPE_MAX_PRICE_ID");
 const APP_URL             = Deno.env.get("APP_URL") ?? "https://app.cadi.cleaning";
+// Origins permitted for the client-supplied returnUrl. Anything else falls back
+// to APP_URL — prevents open-redirect-via-Stripe-success-url. Comma-separated.
+const ALLOWED_RETURN_ORIGINS = (Deno.env.get("ALLOWED_RETURN_ORIGINS") ?? APP_URL)
+  .split(",").map((s: string) => s.trim()).filter(Boolean);
+
+function safeReturnUrl(raw: string | undefined): string {
+  if (!raw) return APP_URL;
+  try {
+    const u = new URL(raw);
+    if (ALLOWED_RETURN_ORIGINS.includes(u.origin)) return raw;
+  } catch { /* invalid URL — fall through */ }
+  return APP_URL;
+}
 
 const stripe = new Stripe(STRIPE_SECRET_KEY, {
   apiVersion: "2024-06-20",
@@ -70,7 +83,7 @@ serve(async (req: Request) => {
 
     const body      = await req.json().catch(() => ({}));
     const tier      = (body.tier as string) ?? "pro";
-    const returnUrl = (body.returnUrl as string) || APP_URL;
+    const returnUrl = safeReturnUrl(body.returnUrl as string | undefined);
 
     const priceId = priceIdForTier(tier);
     if (!priceId) {
@@ -86,12 +99,30 @@ serve(async (req: Request) => {
     let customerId = profile?.stripe_customer_id as string | null;
 
     if (!customerId) {
-      const customer = await stripe.customers.create({
-        email:    user.email,
-        name:     profile?.business_name || profile?.first_name || undefined,
-        metadata: { supabase_user_id: user.id },
-      });
-      customerId = customer.id;
+      // Dedupe by email — covers the orphan-customer pattern where a user
+      // deletes their account, re-signs up with the same email, and Checkout
+      // would otherwise mint a second Stripe customer alongside the abandoned
+      // first one. Reuse the existing customer; refresh metadata to the new
+      // supabase user id so webhooks resolve to the live profile.
+      if (user.email) {
+        const existing = await stripe.customers.list({ email: user.email, limit: 1 });
+        if (existing.data.length > 0) {
+          customerId = existing.data[0].id;
+          await stripe.customers.update(customerId, {
+            metadata: { supabase_user_id: user.id },
+          });
+        }
+      }
+
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email:    user.email,
+          name:     profile?.business_name || profile?.first_name || undefined,
+          metadata: { supabase_user_id: user.id },
+        });
+        customerId = customer.id;
+      }
+
       await sb.from("profiles").update({ stripe_customer_id: customerId }).eq("id", user.id);
     }
 

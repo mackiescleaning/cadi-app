@@ -11,6 +11,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.21.0?target=denonext";
+import { writeAudit } from "../_shared/auditLog.ts";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")!;
 
@@ -52,31 +53,59 @@ serve(async (req: Request) => {
       .eq("id", user.id)
       .single();
 
-    // Cancel active Stripe subscription if they have one
-    if (profile?.stripe_customer_id) {
+    // Build the full set of Stripe customers to clean up. profile.stripe_customer_id
+    // only points at the LATEST one — if the user previously had a Checkout flow
+    // that minted an earlier customer (the orphan-customer pattern), we'd miss
+    // its subs and keep firing webhooks forever. Also search by email.
+    const customerIds = new Set<string>();
+    if (profile?.stripe_customer_id) customerIds.add(profile.stripe_customer_id);
+    if (user.email) {
       try {
-        const subscriptions = await stripe.subscriptions.list({
-          customer: profile.stripe_customer_id,
-          status: "active",
-          limit: 5,
-        });
-        for (const sub of subscriptions.data) {
-          await stripe.subscriptions.cancel(sub.id);
-        }
-        // Also catch trialing subscriptions
-        const trialing = await stripe.subscriptions.list({
-          customer: profile.stripe_customer_id,
-          status: "trialing",
-          limit: 5,
-        });
-        for (const sub of trialing.data) {
-          await stripe.subscriptions.cancel(sub.id);
-        }
-      } catch (stripeErr) {
-        // Log but don't block — account deletion proceeds even if Stripe cancel fails
-        console.error("Stripe subscription cancel error:", stripeErr);
+        const byEmail = await stripe.customers.list({ email: user.email, limit: 10 });
+        for (const c of byEmail.data) customerIds.add(c.id);
+      } catch (lookupErr) {
+        console.error("Stripe customer lookup by email failed:", lookupErr);
       }
     }
+
+    // Statuses that still generate webhooks / billable activity. canceled /
+    // incomplete_expired / ended are already terminal.
+    const CANCELLABLE = ["active", "trialing", "past_due", "unpaid"] as const;
+
+    for (const customerId of customerIds) {
+      for (const status of CANCELLABLE) {
+        try {
+          const subs = await stripe.subscriptions.list({
+            customer: customerId,
+            status,
+            limit: 10,
+          });
+          for (const sub of subs.data) {
+            await stripe.subscriptions.cancel(sub.id);
+          }
+        } catch (stripeErr) {
+          // Per-customer / per-status failures are logged but do not block the
+          // remaining cleanup or the auth-user delete itself.
+          console.error(`Stripe cancel failed for ${customerId} (${status}):`, stripeErr);
+        }
+      }
+    }
+
+    // Write the audit entry BEFORE deleting the user — once the auth row is
+    // gone, the RLS policy on audit_log would prevent the row from being
+    // visible to anyone except service-role. We want a permanent record that
+    // this account was deleted (UK GDPR Art 30 audit trail).
+    await writeAudit(sb, req, {
+      ownerId:  user.id,
+      actorId:  user.id,
+      action:   "account_delete",
+      category: "account",
+      detail:   {
+        email:                 user.email,
+        stripe_customers_swept: customerIds.size,
+        last_subscription_tier: profile?.subscription_tier ?? null,
+      },
+    });
 
     // Delete the auth user — Supabase cascades this to profiles via FK
     const { error: deleteErr } = await sb.auth.admin.deleteUser(user.id);
