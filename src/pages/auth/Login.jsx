@@ -207,6 +207,12 @@ export default function Login() {
                   Team member login →
                 </a>
               </div>
+              <div className="mt-3 text-center">
+                <p className="text-xs text-gray-400 mb-2">FM organisation user?</p>
+                <Link to="/fm-ops/login" className="text-sm font-bold text-[#ea580c] hover:underline">
+                  Cadi Connect for FMs →
+                </Link>
+              </div>
             </>
           )}
         </div>

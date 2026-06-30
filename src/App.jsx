@@ -66,6 +66,7 @@ const Privacy     = lazy(() => import('./pages/Privacy'));
 const Terms       = lazy(() => import('./pages/Terms'));
 const InviteAccept = lazy(() => import('./pages/InviteAccept'));
 const FmApply     = lazy(() => import('./pages/FmApply'));
+const FmLogin     = lazy(() => import('./pages/auth/FmLogin'));
 
 // Staff portal
 const StaffLogin     = lazy(() => import('./pages/StaffLogin'));
@@ -154,6 +155,10 @@ function App() {
 
         {/* FM application — public landing for prospective FMs */}
         <Route path="/apply/fm" element={<FmApply />} />
+
+        {/* FM Ops Portal sign-in — separate from main /login so FM admins have
+            a clean URL distinct from the cleaning-business-owner flow. */}
+        <Route path="/fm-ops/login" element={<FmLogin />} />
 
         {/* Legal — public, no auth required */}
         <Route path="/privacy" element={<Privacy />} />
