@@ -54,8 +54,18 @@ export default function LeaderboardPanel({ userScore, userBizName, userSector, c
   const boardSource = entries && entries.length > 0 ? entries : LEADERBOARD_DEMO;
   const allSource   = [...boardSource, userEntry];
 
+  // Deterministic sort: score desc, then updated_at asc (older entries win ties for
+  // having held their score longer), then owner_id asc as final tie-break.
+  const sortFn = (a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const ta = a.updated_at ?? '';
+    const tb = b.updated_at ?? '';
+    if (ta !== tb) return ta.localeCompare(tb);
+    return String(a.owner_id ?? a.id ?? '').localeCompare(String(b.owner_id ?? b.id ?? ''));
+  };
+
   const globalRanked = [...allSource]
-    .sort((a, b) => b.score - a.score)
+    .sort(sortFn)
     .map((e, i) => ({ ...e, globalRank: i + 1 }));
 
   const globalPrevRanked = [...allSource]
@@ -82,7 +92,7 @@ export default function LeaderboardPanel({ userScore, userBizName, userSector, c
           .sort((a, b) => (b.prev_score ?? b.score) - (a.prev_score ?? a.score))
           .forEach((e, i) => { sPrevMap[e.owner_id ?? e.id] = i + 1; });
         return [...inSector]
-          .sort((a, b) => b.score - a.score)
+          .sort(sortFn)
           .map((e, i) => {
             const key = e.owner_id ?? e.id;
             return { ...e, rank: i + 1, rankDelta: (sPrevMap[key] ?? i + 1) - (i + 1) };
@@ -91,8 +101,10 @@ export default function LeaderboardPanel({ userScore, userBizName, userSector, c
 
   const userRank   = filtered.find(e => e.isMe)?.rank ?? filtered.length;
   const totalCount = filtered.length;
-  const topPct     = Math.round((userRank / totalCount) * 100);
   const globalRank = allEntries.find(e => e.isMe)?.rank ?? allEntries.length;
+  // Tier label must be computed from the GLOBAL pool, not the sector-filtered one —
+  // otherwise an N=1 sector filter would show "Elite" for "#1 of 1".
+  const topPct     = Math.round((globalRank / allEntries.length) * 100);
 
   const podium = filtered.filter(e => !e.isMe).slice(0, 3);
 
@@ -144,7 +156,7 @@ export default function LeaderboardPanel({ userScore, userBizName, userSector, c
               <span className="text-2xl shrink-0">👻</span>
               <div className="flex-1">
                 <p className="text-sm font-black text-white mb-0.5">
-                  You're ranked #{globalRank} anonymously
+                  You'd be ranked ~#{globalRank} if you joined
                 </p>
                 <p className="text-xs text-white/50 leading-relaxed mb-3">
                   Reveal {userBizName || "your business name"} to claim your spot on the leaderboard — and get featured when you hit Elite tier.
@@ -255,29 +267,44 @@ export default function LeaderboardPanel({ userScore, userBizName, userSector, c
         </div>
 
         <div className="divide-y divide-white/5 mt-2 max-h-60 overflow-y-auto">
-          {filtered.slice(0, 10).map(entry => {
-            const sc = SECTOR_COLORS[entry.sector] ?? SECTOR_COLORS.residential;
-            return (
-              <div
-                key={entry.id}
-                className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${entry.isMe ? "bg-brand-skyblue/10 border-l-2 border-brand-skyblue" : "hover:bg-white/5"}`}
-              >
-                <span className={`text-xs font-black w-6 text-center shrink-0 ${entry.isMe ? "text-brand-skyblue" : "text-white/30"}`}>
-                  #{entry.rank}
-                </span>
-                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${sc.dot}`} />
-                <p className={`flex-1 text-xs font-semibold truncate ${entry.isMe ? "text-white font-black" : "text-white/60"}`}>
-                  {entry.name} {entry.isMe && <span className="text-brand-skyblue font-bold">(you)</span>}
-                </p>
-                <span className={`text-xs font-bold tabular-nums ${entry.isMe ? "text-white" : "text-white/50"}`}>{entry.score}</span>
-                {entry.rankDelta !== 0 && entry.rankDelta !== undefined && (
-                  <span className={`text-[10px] font-bold w-8 text-right shrink-0 ${entry.rankDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {entry.rankDelta > 0 ? `↑${entry.rankDelta}` : `↓${Math.abs(entry.rankDelta)}`}
+          {(() => {
+            const top10 = filtered.slice(0, 10);
+            const userEntryFiltered = filtered.find(e => e.isMe);
+            // If user is outside top 10, pin their row at the bottom with a separator so
+            // they always see where they stand.
+            const meInTop = top10.some(e => e.isMe);
+            const tail = !meInTop && userEntryFiltered ? [{ __divider: true }, userEntryFiltered] : [];
+            return [...top10, ...tail].map((entry, idx) => {
+              if (entry.__divider) {
+                return (
+                  <div key={`divider-${idx}`} className="px-4 py-1.5 text-center text-[9px] font-bold tracking-[0.2em] uppercase text-white/20">
+                    · · ·
+                  </div>
+                );
+              }
+              const sc = SECTOR_COLORS[entry.sector] ?? SECTOR_COLORS.residential;
+              return (
+                <div
+                  key={entry.id}
+                  className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${entry.isMe ? "bg-brand-skyblue/10 border-l-2 border-brand-skyblue" : "hover:bg-white/5"}`}
+                >
+                  <span className={`text-xs font-black w-6 text-center shrink-0 ${entry.isMe ? "text-brand-skyblue" : "text-white/30"}`}>
+                    #{entry.rank}
                   </span>
-                )}
-              </div>
-            );
-          })}
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${sc.dot}`} />
+                  <p className={`flex-1 text-xs font-semibold truncate ${entry.isMe ? "text-white font-black" : "text-white/60"}`}>
+                    {entry.name} {entry.isMe && <span className="text-brand-skyblue font-bold">(you)</span>}
+                  </p>
+                  <span className={`text-xs font-bold tabular-nums ${entry.isMe ? "text-white" : "text-white/50"}`}>{entry.score}</span>
+                  {entry.rankDelta !== 0 && entry.rankDelta !== undefined && (
+                    <span className={`text-[10px] font-bold w-8 text-right shrink-0 ${entry.rankDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      {entry.rankDelta > 0 ? `↑${entry.rankDelta}` : `↓${Math.abs(entry.rankDelta)}`}
+                    </span>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
 
         <div className="px-4 py-2.5 border-t border-white/10">

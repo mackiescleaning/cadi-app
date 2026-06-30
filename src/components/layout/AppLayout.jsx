@@ -573,7 +573,7 @@ export default function AppLayout() {
                       ? 'bg-[#1f48ff] text-white'
                       : 'bg-[rgba(153,197,255,0.08)] text-[rgba(153,197,255,0.7)] hover:bg-[rgba(153,197,255,0.15)]'
                   }`}>
-                  {c.owner_id.slice(0, 8)}…
+                  {c.business_name || c.owner_name || `${c.owner_id.slice(0, 8)}…`}
                 </button>
               ))}
             </div>

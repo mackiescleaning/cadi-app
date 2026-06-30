@@ -66,7 +66,7 @@ import { listLeaderboard, upsertMyEntry, deleteMyEntry } from "../lib/db/leaderb
 import AskCadi from "../components/AskCadi";
 import CadiWordmark from "../components/CadiWordmark";
 import SpotlightTour from "../components/SpotlightTour";
-import LeaderboardPanel, { LEADERBOARD_DEMO, SECTOR_COLORS } from "../components/dashboard/LeaderboardPanel";
+import LeaderboardPanel, { LEADERBOARD_DEMO } from "../components/dashboard/LeaderboardPanel";
 import ShareCardModal from "../components/dashboard/ShareCardModal";
 import MobileDashboard from "../components/dashboard/MobileDashboard";
 import Onboarding from "./Onboarding";
@@ -146,7 +146,9 @@ function calcHealthScore({ accounts, weekJobs, invoices, jobsToday }) {
   // ── Operations (25pts) ───────────────────────────────────────────────────
   const jobsDone     = weekJobs.filter(d => d.done).length;
   const jobsTotal    = weekJobs.filter(d => d.done || d.isToday).length;
-  const jobsLogged   = jobsTotal > 0 ? (jobsDone / jobsTotal) : 1;
+  // Empty-account guard: when the user has zero jobs scheduled, treat ops as 0 — NOT 1 (which
+  // inflated empty-account scores to 61/100 "Solid"). Real ops score only when there's data.
+  const jobsLogged   = jobsTotal > 0 ? (jobsDone / jobsTotal) : 0;
   const unassigned   = jobsToday.filter(j => j.status === "unassigned").length;
   const opsScore     = Math.round((jobsLogged * 18) + (unassigned === 0 ? 7 : Math.max(0, 7 - unassigned*2)));
 
@@ -156,7 +158,7 @@ function calcHealthScore({ accounts, weekJobs, invoices, jobsToday }) {
   const invoicingScore  = Math.max(0, 25 - (overdueCount * 12) - (totalUnpaid > 3 ? 5 : 0));
 
   // ── Compliance (15pts) ───────────────────────────────────────────────────
-  const taxReservePct  = accounts.taxReserveTarget > 0 ? accounts.taxReserve / accounts.taxReserveTarget : 0;
+  const taxReservePct  = accounts.taxReserveTarget > 0 ? Math.min(1, accounts.taxReserve / accounts.taxReserveTarget) : 0;
   const mileageOk      = accounts.ytdMileageClaimed >= accounts.ytdMileageLogged * 0.9;
   const mtdOk          = accounts.mtdStatus === "filed";
   const complianceScore= Math.round((taxReservePct * 7) + (mileageOk ? 4 : 0) + (mtdOk ? 4 : 0));
@@ -372,7 +374,7 @@ function KPIStrip({ accounts, weekJobs, jobsTodayData, invoices }) {
   const kpis = [
     { label: "Today's revenue",   val: fmt(todayRevAnim),                          accent: "text-brand-navy"  },
     { label: "Week revenue",       val: fmt(weekRevAnim),                           accent: "text-brand-navy",  sub: `${pct((weekRevAnim/Math.max(weekTotal,1))*100)} of ${fmt(weekTotal)}` },
-    { label: "Month income",       val: fmt(monthIncAnim),                          accent: "text-brand-navy",  sub: `${pct((monthIncAnim/accounts.monthlyTarget)*100)} of ${fmt(accounts.monthlyTarget)}` },
+    { label: "Month income",       val: fmt(monthIncAnim),                          accent: "text-brand-navy",  sub: accounts.monthlyTarget > 0 ? `${pct((monthIncAnim/accounts.monthlyTarget)*100)} of ${fmt(accounts.monthlyTarget)}` : 'Set a target →' },
     { label: "Outstanding",        val: fmt(unpaidAnim),                            accent: unpaidTotal>0?"text-amber-600":"text-emerald-600" },
     { label: "Jobs today",         val: `${jobsDone}/${jobsToday}`,                 accent: "text-brand-navy",  sub: "complete" },
     { label: "Tax reserve",        val: `${taxAnim}%`,                              accent: taxPct>=100?"text-emerald-600":taxPct>=70?"text-amber-600":"text-red-500" },
@@ -499,7 +501,7 @@ function ScoreExplainerModal({ score, onClose }) {
 
 const TIERS_ORDERED = ["Getting Started", "Building", "Solid", "Firing", "Elite"];
 
-function HealthPanel({ score, onNavigate, scoreDelta = 0 }) {
+function HealthPanel({ score, scoreDelta = 0 }) {
   const { total, dims, tier, tierNext, tierColor } = score;
   const ptsToNext   = tierNext ? tierNext - total : 0;
   const tierIdx     = TIERS_ORDERED.indexOf(tier);
@@ -980,158 +982,6 @@ function ActivityFeed({ feed }) {
 }
 
 // ─── YTD target bar ────────────────────────────────────────────────────────────
-function YTDBar({ accounts, onNavigate, taxYear, taxMonth }) {
-  // If user hasn't set an annual target, show a setup prompt
-  if (!accounts.annualTarget || accounts.annualTarget <= 0) {
-    return (
-      <Card className="p-5 text-center">
-        <SL className="mb-2">Annual target</SL>
-        <p className="text-sm text-gray-500 mb-3">Set your annual income target to track progress.</p>
-        <button onClick={() => onNavigate?.("settings")} className="px-4 py-2 text-xs font-bold text-white bg-brand-blue rounded-lg hover:bg-brand-navy transition-colors">
-          Set target in Settings →
-        </button>
-      </Card>
-    );
-  }
-
-  const pct        = Math.round((accounts.ytdIncome / accounts.annualTarget) * 100);
-  const remaining  = Math.max(0, accounts.annualTarget - accounts.ytdIncome);
-  const monthsLeft = Math.max(1, 12 - (taxMonth || 1));
-  const monthlyNeed = Math.round(remaining / monthsLeft);
-
-  return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <SL className="mb-1">Annual target — {taxYear || getCurrentTaxYear()}</SL>
-          <div className="flex items-baseline gap-2">
-            <p className="text-2xl font-bold tabular-nums text-brand-navy">{fmt(accounts.ytdIncome)}</p>
-            <p className="text-sm text-gray-400">of {fmt(accounts.annualTarget)}</p>
-          </div>
-        </div>
-        <div className="text-right">
-          <p className="text-2xl font-bold text-brand-blue">{pct}%</p>
-          <p className="text-xs text-gray-400">complete</p>
-        </div>
-      </div>
-      <div className="relative mb-2">
-        <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-700 ${pct >= 100 ? "bg-emerald-500" : "bg-brand-blue"}`}
-            style={{ width: `${Math.min(pct, 100)}%` }}
-          />
-        </div>
-        {[25, 50, 75].map(q => (
-          <div key={q} className="absolute top-0 w-px h-3 bg-white/80" style={{ left: `${q}%` }} />
-        ))}
-      </div>
-      <div className="flex justify-between text-xs text-gray-400 mb-3">
-        <span>Apr {taxYear ? taxYear.split('/')[0] : new Date().getFullYear()}</span>
-        <span className="text-brand-blue font-semibold">Month {taxMonth || 1} of 12</span>
-        <span>Mar {taxYear ? `20${taxYear.split('/')[1]}` : new Date().getFullYear() + 1}</span>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-gray-50 border border-gray-100 rounded-sm p-3">
-          <p className="text-xs text-gray-400 mb-0.5">Still to earn</p>
-          <p className="text-lg font-bold tabular-nums text-brand-navy">{fmt(remaining)}</p>
-        </div>
-        <div className="bg-gray-50 border border-gray-100 rounded-sm p-3">
-          <p className="text-xs text-gray-400 mb-0.5">Needed per month</p>
-          <p className={`text-lg font-bold tabular-nums ${monthlyNeed > 6000 ? "text-amber-600" : "text-brand-navy"}`}>{fmt(monthlyNeed)}</p>
-        </div>
-      </div>
-      <button onClick={() => onNavigate?.("money")} className="mt-3 text-xs font-bold text-brand-blue hover:underline w-full text-center">Full money dashboard →</button>
-    </Card>
-  );
-}
-
-// ─── Quick wins panel ─────────────────────────────────────────────────────────
-const QUICK_WINS = [
-  { id: "schedule", emoji: "📅", title: "Fill in a week of scheduling", sub: "Get your jobs on the calendar for the week ahead", tab: "scheduler" },
-  { id: "customers", emoji: "👤", title: "Add your first customers", sub: "Log names, addresses, notes and star ratings", tab: "customers" },
-  { id: "kit", emoji: "🧴", title: "Build your cleaning kit", sub: "Track your products, costs and restocking dates", tab: "inventory" },
-  { id: "price", emoji: "💷", title: "Price your first job", sub: "Use the calculator to build an accurate quote", tab: "calculator" },
-  { id: "sprint", emoji: "🏃", title: "Create a 90-day sprint goal", sub: "Set a target and build momentum from day one", tab: "review" },
-];
-
-function QuickWinsPanel({ onNavigate, onDismiss, savedProgress = [], onProgressChange }) {
-  const [ticked, setTicked] = useState(savedProgress);
-  const allDone = ticked.length === QUICK_WINS.length;
-
-  const toggle = (id) => {
-    const next = ticked.includes(id) ? ticked.filter(x => x !== id) : [...ticked, id];
-    setTicked(next);
-    onProgressChange?.(next);
-  };
-
-  return (
-    <Card className="overflow-hidden border-brand-blue/30">
-      <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-brand-navy to-brand-blue flex items-center justify-between">
-        <div>
-          <SL className="text-brand-skyblue mb-0.5">Day 1 — Quick Wins</SL>
-          <p className="text-sm font-bold text-white">Get started in the next 30 minutes</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-brand-skyblue">{ticked.length}/{QUICK_WINS.length}</span>
-          {allDone && (
-            <button
-              onClick={onDismiss}
-              className="px-3 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-sm hover:bg-emerald-600 transition-colors"
-            >
-              🎉 Done!
-            </button>
-          )}
-          {!allDone && (
-            <button
-              onClick={onDismiss}
-              className="text-xs text-brand-skyblue/60 hover:text-brand-skyblue font-semibold"
-            >
-              Skip for now
-            </button>
-          )}
-        </div>
-      </div>
-      {/* Progress bar */}
-      <div className="h-1 bg-gray-100">
-        <div
-          className="h-full bg-emerald-500 transition-all duration-500"
-          style={{ width: `${(ticked.length / QUICK_WINS.length) * 100}%` }}
-        />
-      </div>
-      <div className="divide-y divide-gray-100">
-        {QUICK_WINS.map(win => {
-          const done = ticked.includes(win.id);
-          return (
-            <div key={win.id} className={`flex items-center gap-3 px-4 py-3 transition-colors ${done ? "bg-emerald-50/40" : "hover:bg-gray-50"}`}>
-              <button
-                onClick={() => toggle(win.id)}
-                className={`w-5 h-5 shrink-0 rounded border-2 flex items-center justify-center transition-colors ${
-                  done ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-brand-blue"
-                }`}
-              >
-                {done && <span className="text-[10px] font-bold">✓</span>}
-              </button>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-semibold leading-tight ${done ? "line-through text-gray-400" : "text-gray-800"}`}>
-                  {win.emoji} {win.title}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">{win.sub}</p>
-              </div>
-              {!done && (
-                <button
-                  onClick={() => onNavigate?.(win.tab)}
-                  className="shrink-0 px-3 py-1 text-xs font-bold text-brand-blue bg-blue-50 border border-blue-200 rounded-sm hover:bg-blue-100 transition-colors whitespace-nowrap"
-                >
-                  Go →
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
 
 // ─── Demo tooltip wrapper ──────────────────────────────────────────────────────
 function DemoHint({ label, children }) {
@@ -1150,34 +1000,6 @@ function DemoHint({ label, children }) {
       )}
       {children}
     </div>
-  );
-}
-
-// ─── Quick actions ─────────────────────────────────────────────────────────────
-function QuickActions({ onNavigate }) {
-  const ACTIONS = [
-    { label: "+ Log payment",     onClick: () => onNavigate?.("money"),     color: "border-brand-blue text-brand-blue bg-blue-50 hover:bg-blue-100" },
-    { label: "📤 Send reminder",  onClick: () => onNavigate?.("invoices"),  color: "border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100" },
-    { label: "📊 Accounts",       onClick: () => onNavigate?.("accounts"),  color: "border-gray-200 text-gray-700 hover:bg-gray-50"                 },
-    { label: "🗺️ Route planner",  onClick: () => onNavigate?.("routes"),    color: "border-gray-200 text-gray-700 hover:bg-gray-50"                 },
-    { label: "📈 Business Lab",  onClick: () => onNavigate?.("scaling"),   color: "border-gray-200 text-gray-700 hover:bg-gray-50"                 },
-    { label: "🏃 Sprint",         onClick: () => onNavigate?.("review"),    color: "border-gray-200 text-gray-700 hover:bg-gray-50"                 },
-  ];
-  return (
-    <Card className="overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100"><SL>Quick actions</SL></div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3">
-        {ACTIONS.map(({ label, onClick, color }) => (
-          <button
-            key={label}
-            onClick={onClick}
-            className={`py-2.5 px-3 text-xs font-bold border rounded-sm transition-colors text-left ${color}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-    </Card>
   );
 }
 
@@ -1515,7 +1337,7 @@ function EliteCelebration({ onClose }) {
 export default function DashboardTab({ accountsData, schedulerData, invoiceData, teamData: incomingTeamData, feedData: incomingFeedData, onNavigate: onNavigateProp }) {
   const routerNavigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isPro, tier } = usePlan();
+  const { isPro } = usePlan();
   const [dashUpgradeReason, setDashUpgradeReason] = useState(null);
   const [showUpgradeSuccess, setShowUpgradeSuccess] = useState(false);
 
@@ -1572,7 +1394,6 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     teamData: liveTeamData,
     feedData: liveFeedData,
     jobsToday: liveJobsToday,
-    customerCount: liveCustomerCount,
     isLoading: dataLoading,
     error: dataError,
     refresh: refreshData,
@@ -1599,7 +1420,9 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const EMPTY_ACCOUNTS = {
     vatRegistered: false, taxRate: 0.20, annualTarget: 0, monthlyTarget: 0,
     ytdIncome: 0, ytdExpenses: 0, taxReserve: 0, taxReserveTarget: 0,
-    ytdMileageLogged: 0, ytdMileageClaimed: 0, mtdStatus: 'filed', mtdDaysLeft: 0, sprintActive: false,
+    // mtdStatus defaults to 'unknown' until first filing — was 'filed', which inflated empty
+    // accounts' compliance score by 4 points for free.
+    ytdMileageLogged: 0, ytdMileageClaimed: 0, mtdStatus: 'unknown', mtdDaysLeft: 0, sprintActive: false,
   };
   const accounts = isLive
     ? { ...EMPTY_ACCOUNTS, ...(resolvedAccountsData ?? {}) }
@@ -1649,7 +1472,8 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     }
   }, [profile?.community_opt_in]);
   const [liveBoard,        setLiveBoard]        = useState([]);
-  const lastLbUpsertRef = useRef(0); // epoch ms of last leaderboard DB write
+  const lastLbUpsertRef    = useRef(0);    // epoch ms of last leaderboard DB write
+  const lastLbIdentityRef  = useRef(null); // identity (name|sector|region) at last write — bypass throttle when this changes
 
   const score   = useMemo(() => calcHealthScore({ accounts, weekJobs, invoices, jobsToday }), [accounts, weekJobs, invoices, jobsToday]);
   const actions = useMemo(() => buildActions({ accounts, invoices, jobsToday, score }), [accounts, invoices, jobsToday, score]);
@@ -1712,13 +1536,25 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     if (!lastLbUpsertRef.current) {
       try { lastLbUpsertRef.current = parseInt(localStorage.getItem('cadi_lb_upsert') || '0', 10); } catch {}
     }
-    if (now - lastLbUpsertRef.current < FIVE_MIN) return;
+    // Bypass throttle when the identity columns (name, sector, region) have changed —
+    // otherwise a rename can sit stale for up to 5 minutes.
+    const identityKey = JSON.stringify([
+      profile?.business_name || displayName,
+      profile?.cleaner_type || 'residential',
+      profile?.postcode || '',
+    ]);
+    const identityChanged = lastLbIdentityRef.current && lastLbIdentityRef.current !== identityKey;
+    lastLbIdentityRef.current = identityKey;
+    if (!identityChanged && now - lastLbUpsertRef.current < FIVE_MIN) return;
     lastLbUpsertRef.current = now;
     try { localStorage.setItem('cadi_lb_upsert', String(now)); } catch {}
+    // No `score` passed — the server recomputes it from the authoritative
+    // tables. Means the leaderboard number is canonical and the client can't
+    // forge it. `score.total` stays in the dep list so we still re-sync when
+    // the client-computed score moves (a hint that real data changed).
     upsertMyEntry({
       business_name: profile?.business_name || displayName,
       sector: profile?.cleaner_type || 'residential',
-      score: score.total,
       region: (profile?.postcode || '').trim().split(' ')[0].replace(/\d.*$/, '') || null,
     }).catch(err => console.error('Failed to sync leaderboard entry:', err));
   }, [user?.id, communityOptIn, score.total, profile?.business_name, profile?.cleaner_type, profile?.postcode, displayName]);
@@ -1899,9 +1735,10 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
         kind: 'income',
       });
 
-      // Only update feed on success
+      // Only update feed on success. Prefix with 'local-' so locally-generated ids
+      // can't collide with server ids in dedupe.
       const newEntry = {
-        id:    Date.now(),
+        id:    `local-${Date.now()}`,
         icon:  "💷",
         bg:    "bg-emerald-100",
         title: `Payment received — ${customer}`,

@@ -78,10 +78,12 @@ export default function ShareCardModal({ onClose, businessName, sector, score, b
                   <span className="text-white font-black text-lg leading-none">#{rank ?? "?"}</span>
                   <span className="text-brand-skyblue/60 text-[10px] mt-0.5">Leaderboard</span>
                 </div>
-                <div className="flex flex-col items-center px-4 py-2 rounded-xl bg-white/10 border border-white/10">
-                  <span className="text-white font-black text-lg leading-none">Top {topPct}%</span>
-                  <span className="text-brand-skyblue/60 text-[10px] mt-0.5">All businesses</span>
-                </div>
+                {rank != null && (
+                  <div className="flex flex-col items-center px-4 py-2 rounded-xl bg-white/10 border border-white/10">
+                    <span className="text-white font-black text-lg leading-none">Top {topPct}%</span>
+                    <span className="text-brand-skyblue/60 text-[10px] mt-0.5">All businesses</span>
+                  </div>
+                )}
                 {streak > 0 && (
                   <div className="flex flex-col items-center px-4 py-2 rounded-xl bg-white/10 border border-white/10">
                     <span className="text-white font-black text-lg leading-none">🔥 {streak}</span>
