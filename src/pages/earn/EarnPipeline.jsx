@@ -189,7 +189,7 @@ function JobCardDrawer({ spec, onClose }) {
         {/* Footer note re: check-in */}
         <div style={{ marginTop: 8, padding: 12, background: SOFT, borderRadius: 8, fontSize: 11, color: SUB, lineHeight: 1.5 }}>
           <Calendar size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-          When you're on site, check in via <strong style={{ color: INK }}>Connect → On-site</strong> to start the GPS-verified time clock.
+          When you're on site, check in via <strong style={{ color: INK }}>Connect → Work Completion</strong> to start the GPS-verified time clock.
         </div>
       </div>
     </div>
