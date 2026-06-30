@@ -11,8 +11,9 @@ import {
   LogOut, Trash2, Download, Shield, Phone, Mail,
   MapPin, Globe, Clock, PoundSterling, ToggleLeft,
   ToggleRight, AlertCircle, CheckCircle, Plug, Link, Unlink, RefreshCw, Copy,
-  Tag, Bot, MessageSquare, Star
+  Tag, Bot, MessageSquare, Star, Cookie
 } from 'lucide-react';
+import { getConsent, setConsent, initFullStory, shutdownFullStory } from '../lib/fullstory';
 import PricingSettings from '../components/PricingSettings';
 import AgentSettings from '../components/AgentSettings';
 import FrontDeskSettings from '../components/FrontDeskSettings';
@@ -182,7 +183,10 @@ function StaffSection({ user }) {
     owner_id: r.business_id,
     name: [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || 'Unnamed',
     role: r.role || 'cleaner',
-    pin_hash: r.pin_hash || '',
+    // Edit field stays empty by default — typing a new PIN replaces; the DB
+    // trigger bcrypts it on write. `has_pin` is the canonical "is PIN set" flag.
+    pin_hash: '',
+    has_pin: !!r.has_pin,
     hourly_rate: r.hourly_rate,
     active: r.is_active,
     created_at: r.created_at,
@@ -228,12 +232,17 @@ function StaffSection({ user }) {
   async function handleUpdate(member) {
     setBusy(true);
     try {
+      // Only write pin_hash if the user typed a new one — otherwise leave the
+      // existing bcrypt'd value alone. Trigger bcrypts on save.
+      const update = {
+        hourly_rate: member.hourly_rate,
+        role:        normaliseRole(member.role),
+      };
+      if (member.pin_hash && /^\d{4,8}$/.test(member.pin_hash)) {
+        update.pin_hash = member.pin_hash;
+      }
       const { error } = await supabase.from('team_members')
-        .update({
-          pin_hash: member.pin_hash,
-          hourly_rate: member.hourly_rate,
-          role: normaliseRole(member.role),
-        })
+        .update(update)
         .eq('id', member.id);
       if (error) throw error;
       setEditingId(null);
@@ -348,6 +357,7 @@ function StaffSection({ user }) {
                         <label className="block text-xs font-bold text-gray-400 mb-1">PIN</label>
                         <input
                           value={s.pin_hash ?? ''} maxLength={4}
+                          placeholder={s.has_pin ? 'Leave blank to keep' : 'Set a new PIN'}
                           onChange={e => setStaff(prev => prev.map(x => x.id === s.id ? { ...x, pin_hash: e.target.value.replace(/\D/g, '').slice(0, 4) } : x))}
                           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-[#1f48ff]" />
                       </div>
@@ -376,7 +386,9 @@ function StaffSection({ user }) {
                       <p className="text-sm font-bold text-[#010a4f]">{s.name}</p>
                       <p className="text-xs text-gray-400">{s.role ?? 'Staff'}{s.hourly_rate ? ` · £${parseFloat(s.hourly_rate).toFixed(2)}/hr` : ''}</p>
                     </div>
-                    <span className="text-xs font-mono text-gray-300 bg-gray-50 px-2 py-1 rounded">PIN: {s.pin_hash}</span>
+                    <span className={`text-xs font-mono px-2 py-1 rounded ${s.has_pin ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400 bg-gray-50'}`}>
+                      {s.has_pin ? 'PIN set ✓' : 'No PIN'}
+                    </span>
                     <button onClick={() => setEditingId(s.id)}
                       className="text-xs text-[#1f48ff] hover:underline font-medium">Edit</button>
                     <button onClick={() => handleToggleActive(s)}
@@ -691,6 +703,82 @@ const TABS = [
   { id: 'team',         label: 'Team',          icon: User       },
 ];
 
+function CookiePreferencesToggle() {
+  const [consent, setConsentState] = useState(getConsent() || 'unset');
+  const handle = (next) => {
+    setConsent(next);
+    setConsentState(next);
+    if (next === 'accepted') initFullStory();
+    else shutdownFullStory();
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => handle('accepted')}
+        className={`text-xs font-bold px-3 py-2 rounded-xl transition-colors ${consent === 'accepted' ? 'bg-emerald-500 text-white' : 'border-2 border-gray-200 text-gray-500 hover:border-gray-400'}`}
+      >
+        Allow
+      </button>
+      <button
+        onClick={() => handle('declined')}
+        className={`text-xs font-bold px-3 py-2 rounded-xl transition-colors ${consent === 'declined' ? 'bg-gray-700 text-white' : 'border-2 border-gray-200 text-gray-500 hover:border-gray-400'}`}
+      >
+        Decline
+      </button>
+    </div>
+  );
+}
+
+function ExportDataButton() {
+  const [phase, setPhase] = useState('idle'); // idle | exporting | done | error
+  const [errorMsg, setErrorMsg] = useState('');
+
+  async function handleExport() {
+    setPhase('exporting');
+    setErrorMsg('');
+    try {
+      const { data, error } = await supabase.functions.invoke('export-data', { body: {} });
+      if (error) throw error;
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cadi-data-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setPhase('done');
+      setTimeout(() => setPhase('idle'), 3000);
+    } catch (err) {
+      setErrorMsg(err?.message ?? 'Export failed. Please email support@cadi.cleaning.');
+      setPhase('error');
+    }
+  }
+
+  if (phase === 'exporting') {
+    return <span className="text-xs font-bold px-4 py-2 text-gray-500">Preparing your data…</span>;
+  }
+  if (phase === 'done') {
+    return <span className="text-xs font-bold px-4 py-2 text-emerald-500">Downloaded ✓</span>;
+  }
+  if (phase === 'error') {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-red-500">{errorMsg}</span>
+        <button onClick={() => setPhase('idle')} className="text-xs font-bold px-3 py-1.5 border border-gray-200 rounded-lg text-gray-500 hover:border-gray-400 transition-colors">
+          Retry
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button
+      onClick={handleExport}
+      className="text-xs font-bold px-4 py-2 border-2 border-gray-200 rounded-xl text-gray-500 hover:border-[#1f48ff] hover:text-[#1f48ff] transition-colors">
+      Export
+    </button>
+  );
+}
+
 function DeleteAccountButton({ onDeleted }) {
   const [phase, setPhase] = useState('idle'); // idle | confirm | deleting | error
   const [errorMsg, setErrorMsg] = useState('');
@@ -831,6 +919,12 @@ export default function Settings() {
   });
 
   const [communityOptIn, setCommunityOptIn] = useState(Boolean(authProfile?.community_opt_in));
+  // Email reports toggle — controls whether the monthly customer pulse and
+  // monthly finance report edge functions actually send to this owner. The
+  // column defaults to true; this lets the owner opt out via Settings,
+  // which is the unsubscribe path the report-email footers link to.
+  const [emailReports, setEmailReports] = useState(authProfile?.email_reports !== false);
+  const [emailReportsSaving, setEmailReportsSaving] = useState(false);
 
   // Logo state
   const [logoUrl, setLogoUrl] = useState('');
@@ -859,6 +953,7 @@ export default function Settings() {
     }
 
     setCommunityOptIn(Boolean(authProfile?.community_opt_in));
+    setEmailReports(authProfile?.email_reports !== false);
   }, [authProfile, user]);
 
   const handleCommunityToggle = async (value) => {
@@ -869,6 +964,22 @@ export default function Settings() {
     } catch (err) {
       console.error('Failed to update community opt-in:', err);
       setCommunityOptIn(!value);
+    }
+  };
+
+  // Optimistic toggle. On failure we roll back the UI state — the
+  // monthly-report edge functions both check `profiles.email_reports`
+  // before sending, so a successful write here is the unsubscribe.
+  const handleEmailReportsToggle = async (value) => {
+    setEmailReports(value);
+    setEmailReportsSaving(true);
+    try {
+      await updateProfile({ email_reports: value });
+    } catch (err) {
+      console.error('Failed to update email reports preference:', err);
+      setEmailReports(!value);
+    } finally {
+      setEmailReportsSaving(false);
     }
   };
 
@@ -1277,7 +1388,7 @@ export default function Settings() {
               label={communityOptIn ? 'Community member' : 'Join the community'}
               desc={communityOptIn
                 ? `${business.name || 'Your business'} is visible to other Cadi users`
-                : 'Share your business name, sector, and health score on the leaderboard'}
+                : 'Share your business name, sector, region and health score on the leaderboard'}
             >
               <Toggle enabled={communityOptIn} onChange={handleCommunityToggle} />
             </SettingRow>
@@ -1413,13 +1524,15 @@ export default function Settings() {
           {/* Bank details */}
           <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-6 space-y-4">
             <h3 className="font-bold text-[#010a4f]">Bank Details (shown on invoices)</h3>
-            <InputField label="Bank Name" value={business.bankName || ''}
-              onChange={v => updateBusiness('bankName', v)} placeholder="e.g. Starling Bank" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <InputField label="Sort Code" value={business.sortCode || ''}
-                onChange={v => updateBusiness('sortCode', v)} placeholder="e.g. 60-83-71" />
-              <InputField label="Account Number" value={business.accountNum || ''}
-                onChange={v => updateBusiness('accountNum', v)} placeholder="e.g. 12345678" />
+            <div className="fs-exclude">
+              <InputField label="Bank Name" value={business.bankName || ''}
+                onChange={v => updateBusiness('bankName', v)} placeholder="e.g. Starling Bank" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <InputField label="Sort Code" value={business.sortCode || ''}
+                  onChange={v => updateBusiness('sortCode', v)} placeholder="e.g. 60-83-71" />
+                <InputField label="Account Number" value={business.accountNum || ''}
+                  onChange={v => updateBusiness('accountNum', v)} placeholder="e.g. 12345678" />
+              </div>
             </div>
           </div>
 
@@ -1580,6 +1693,16 @@ export default function Settings() {
             ))}
           </Section>
 
+          <Section title="Monthly reports" desc="Owner digests sent on the 1st of each month">
+            <SettingRow
+              icon={Mail}
+              label="Monthly email reports"
+              desc="Your finance summary + customer pulse, delivered to your inbox on the 1st. Turn off anytime."
+            >
+              <Toggle enabled={emailReports} onChange={handleEmailReportsToggle} disabled={emailReportsSaving} />
+            </SettingRow>
+          </Section>
+
           <Section title="Communication" desc="How we reach you">
             {[
               { key: 'appPush', label: 'App Notifications', desc: 'In-app alerts and badges', icon: Bell },
@@ -1703,19 +1826,12 @@ export default function Settings() {
           </Section>
 
           {/* Data */}
-          <Section title="Your Data" desc="Export or delete your account data">
-            <SettingRow icon={Download} label="Export All Data" desc="Download everything as a JSON file">
-              <button
-                onClick={async () => {
-                  const data = { profile: authProfile, settings: await getBusinessSettings() };
-                  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a'); a.href = url; a.download = 'cadi-data-export.json'; a.click();
-                  URL.revokeObjectURL(url);
-                }}
-                className="text-xs font-bold px-4 py-2 border-2 border-gray-200 rounded-xl text-gray-500 hover:border-[#1f48ff] hover:text-[#1f48ff] transition-colors">
-                Export
-              </button>
+          <Section title="Your Data" desc="Export or delete your account data (UK GDPR Article 15 & 17)">
+            <SettingRow icon={Cookie} label="Cookie preferences" desc="Choose whether to allow anonymised session replay (FullStory)">
+              <CookiePreferencesToggle />
+            </SettingRow>
+            <SettingRow icon={Download} label="Export All Data" desc="Download a complete copy of everything we hold on you (JSON)">
+              <ExportDataButton />
             </SettingRow>
             <SettingRow icon={LogOut} label="Sign Out" desc="Sign out of this device">
               <button
