@@ -227,6 +227,88 @@ export async function connectCheckOut({ jobId, lat, lng, note }) {
   return callConnectFn('connect-checkout', { job_id: jobId, lat, lng, note });
 }
 
+/**
+ * Upload an array of File objects to the connect-job-evidence bucket
+ * under {jobId}/ and insert one job_evidence row per file. Returns the
+ * inserted evidence rows so the caller can show success state. Best-
+ * effort: any per-file failure is logged but doesn't abort the rest.
+ *
+ * Storage path: {jobId}/{epoch}-{safeFilename}
+ * Evidence type: 'photo' (currently the only kind the modal supports)
+ */
+export async function uploadCheckoutEvidence({ jobId, files, note }) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Sign in first');
+
+  const inserted = [];
+
+  // Note-only evidence row (so the FM can see the note in the approval
+  // drawer even when no photos were uploaded).
+  if (note && note.trim()) {
+    const { data: noteRow, error: noteErr } = await supabase
+      .from('job_evidence')
+      .insert({
+        job_id:   jobId,
+        owner_id: user.id,
+        type:     'note',
+        data:     { text: note.trim(), source: 'checkout' },
+      })
+      .select('id, type, data, created_at')
+      .single();
+    if (noteErr) console.error('uploadCheckoutEvidence note error:', noteErr);
+    else inserted.push(noteRow);
+  }
+
+  for (const file of files || []) {
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+      const path = `${jobId}/${Date.now()}-${safeName}`;
+
+      const { error: upErr } = await supabase.storage
+        .from('connect-job-evidence')
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) {
+        console.error('uploadCheckoutEvidence upload error:', upErr);
+        continue;
+      }
+
+      // Signed URL with 30-day expiry — re-signable when the approval
+      // drawer fetches it. Stored as plain `url` on data so the
+      // existing FM approval renderer (e.data.url) picks it up.
+      const { data: signed, error: signErr } = await supabase.storage
+        .from('connect-job-evidence')
+        .createSignedUrl(path, 60 * 60 * 24 * 30);
+      if (signErr) console.error('uploadCheckoutEvidence sign error:', signErr);
+
+      const { data: evRow, error: evErr } = await supabase
+        .from('job_evidence')
+        .insert({
+          job_id:   jobId,
+          owner_id: user.id,
+          type:     'photo',
+          data:     {
+            url:       signed?.signedUrl ?? null,
+            path,
+            mime:      file.type,
+            size_b:    file.size,
+            source:    'checkout',
+          },
+        })
+        .select('id, type, data, created_at')
+        .single();
+      if (evErr) {
+        console.error('uploadCheckoutEvidence row error:', evErr);
+        continue;
+      }
+      inserted.push(evRow);
+    } catch (err) {
+      console.error('uploadCheckoutEvidence unexpected error:', err);
+    }
+  }
+
+  return inserted;
+}
+
 /** Browser geolocation as a Promise. */
 export function getCurrentPosition({ timeoutMs = 10000 } = {}) {
   return new Promise((resolve, reject) => {

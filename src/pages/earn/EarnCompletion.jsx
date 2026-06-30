@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
 import {
-  MapPin, CheckCircle2, AlertCircle, Clock,
+  MapPin, CheckCircle2, AlertCircle, Clock, X, Camera, Loader2,
 } from 'lucide-react';
 import {
   listMyConnectJobs,
   connectCheckIn,
   connectCheckOut,
   getCurrentPosition,
+  uploadCheckoutEvidence,
 } from '../../lib/db/connectDb';
 
 const ORANGE = '#C2410C';
 const GREEN  = '#16a34a';
+const INK    = '#0f172a';
+const SUB    = '#64748b';
+const LINE   = '#e2e8f0';
+const MAX_PHOTOS = 4;
 
 const STATUS_CFG = {
   scheduled:            { label: 'Upcoming',           color: '#3b82f6' },
@@ -50,9 +55,180 @@ function FenceFeedback({ result }) {
   );
 }
 
+function CheckoutModal({ job, onCancel, onConfirmed }) {
+  const [note, setNote]       = useState('');
+  const [files, setFiles]     = useState([]);
+  const [busy, setBusy]       = useState(null);
+  const [error, setError]     = useState(null);
+
+  function addFiles(picked) {
+    const arr = Array.from(picked || []);
+    if (!arr.length) return;
+    setFiles(prev => {
+      const next = [...prev, ...arr].slice(0, MAX_PHOTOS);
+      return next;
+    });
+  }
+  function removeFile(i) {
+    setFiles(prev => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function handleConfirm() {
+    setBusy('confirm');
+    setError(null);
+    try {
+      // 1. Upload evidence first so the FM sees it on the approval drawer.
+      //    Failures inside uploadCheckoutEvidence are logged but never throw.
+      await uploadCheckoutEvidence({ jobId: job.id, files, note });
+
+      // 2. Read GPS — required for the geo-fence check on the function side.
+      const pos = await getCurrentPosition();
+
+      // 3. Fire the checkout with the note (function passes it through to job_checkins).
+      const { ok, data } = await connectCheckOut({
+        jobId: job.id, lat: pos.lat, lng: pos.lng, note: note || undefined,
+      });
+      if (!ok) {
+        setError(data?.error || 'Check-out rejected.');
+        setBusy(null);
+        return;
+      }
+      onConfirmed?.({ ok: true, distance_m: data?.distance_m });
+    } catch (e) {
+      setError(e.message || 'Could not complete check-out.');
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        zIndex: 50, padding: '24px 16px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 480, background: 'white',
+          borderRadius: 16, padding: '22px 22px 18px',
+          boxShadow: '0 -12px 32px rgba(15,23,42,0.25)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 900, color: INK, lineHeight: 1.2 }}>Check out</div>
+            <div style={{ fontSize: 11, color: SUB, marginTop: 2 }}>{job.site?.name ?? 'Site'}</div>
+          </div>
+          <button onClick={onCancel} style={{ background: 'none', border: 'none', color: SUB, cursor: 'pointer', padding: 4 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Notes */}
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: SUB, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 6 }}>
+          Notes for the FM
+        </label>
+        <textarea
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          rows={3}
+          placeholder="e.g. all areas cleaned, refilled soap dispensers in WCs."
+          style={{
+            width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${LINE}`,
+            fontSize: 13, color: INK, outline: 'none', resize: 'vertical', fontFamily: 'inherit',
+            boxSizing: 'border-box', marginBottom: 14,
+          }}
+        />
+
+        {/* Photos */}
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: SUB, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 6 }}>
+          Photos ({files.length}/{MAX_PHOTOS})
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 14 }}>
+          {files.map((f, i) => {
+            const url = URL.createObjectURL(f);
+            return (
+              <div key={i} style={{ position: 'relative', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: '#f1f5f9' }}>
+                <img src={url} alt="evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <button
+                  type="button" onClick={() => removeFile(i)}
+                  style={{
+                    position: 'absolute', top: 3, right: 3, background: 'rgba(15,23,42,0.7)',
+                    border: 'none', color: 'white', borderRadius: 12, width: 20, height: 20,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                  }}
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            );
+          })}
+          {files.length < MAX_PHOTOS && (
+            <label
+              style={{
+                aspectRatio: '1', borderRadius: 8, border: `1.5px dashed ${LINE}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: SUB, cursor: 'pointer',
+              }}
+            >
+              <Camera size={18} />
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                capture="environment"
+                onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+                style={{ display: 'none' }}
+              />
+            </label>
+          )}
+        </div>
+
+        {error && (
+          <div style={{ padding: 10, marginBottom: 10, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, fontSize: 12, color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <AlertCircle size={13} /> {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onCancel} disabled={busy !== null}
+            style={{
+              flex: 1, padding: '11px 0', background: 'white', color: SUB,
+              border: `1px solid ${LINE}`, borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm} disabled={busy !== null}
+            style={{
+              flex: 2, padding: '11px 0', background: GREEN, color: 'white',
+              border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 800, cursor: 'pointer',
+              opacity: busy ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            {busy ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Submitting…</> : <><CheckCircle2 size={13} /> Confirm check out</>}
+          </button>
+        </div>
+
+        <p style={{ fontSize: 10, color: SUB, textAlign: 'center', margin: '10px 0 0', lineHeight: 1.4 }}>
+          Photos + notes go to the FM with your check-out timestamp and GPS.
+        </p>
+
+        <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+      </div>
+    </div>
+  );
+}
+
 function JobCard({ job, onUpdated }) {
   const [busy, setBusy] = useState(null);
   const [fenceResult, setFenceResult] = useState(null);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
 
   const status = STATUS_CFG[job.status] || STATUS_CFG.scheduled;
   const canCheckIn  = ['scheduled','unassigned','pending_confirmation'].includes(job.status);
@@ -77,23 +253,14 @@ function JobCard({ job, onUpdated }) {
     }
   }
 
-  async function handleCheckOut() {
-    setBusy('checkout');
+  function openCheckoutModal() {
     setFenceResult(null);
-    try {
-      const pos = await getCurrentPosition();
-      const { ok, data } = await connectCheckOut({ jobId: job.id, lat: pos.lat, lng: pos.lng });
-      if (!ok) {
-        setFenceResult({ ok: false, distance_m: data?.distance_m, message: data?.error || 'Check-out rejected.' });
-      } else {
-        setFenceResult({ ok: true, distance_m: data?.distance_m });
-        onUpdated?.();
-      }
-    } catch (e) {
-      setFenceResult({ ok: false, message: e.message });
-    } finally {
-      setBusy(null);
-    }
+    setShowCheckoutModal(true);
+  }
+  function onCheckoutConfirmed(result) {
+    setShowCheckoutModal(false);
+    setFenceResult(result);
+    onUpdated?.();
   }
 
   return (
@@ -126,14 +293,13 @@ function JobCard({ job, onUpdated }) {
           </button>
         )}
         {canCheckOut && (
-          <button onClick={handleCheckOut} disabled={busy !== null}
+          <button onClick={openCheckoutModal} disabled={busy !== null}
             style={{
               flex: 1, fontSize: 12, fontWeight: 800, color: 'white', background: GREEN,
               border: 'none', borderRadius: 7, padding: '9px 0', cursor: 'pointer',
               opacity: busy ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             }}>
-            <CheckCircle2 size={12} />
-            {busy === 'checkout' ? 'Reading GPS…' : 'Check out'}
+            <CheckCircle2 size={12} /> Check out
           </button>
         )}
         {job.status === 'complete' && (
@@ -148,6 +314,14 @@ function JobCard({ job, onUpdated }) {
       </div>
 
       <FenceFeedback result={fenceResult} />
+
+      {showCheckoutModal && (
+        <CheckoutModal
+          job={job}
+          onCancel={() => setShowCheckoutModal(false)}
+          onConfirmed={onCheckoutConfirmed}
+        />
+      )}
     </div>
   );
 }
