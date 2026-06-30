@@ -15,7 +15,7 @@ export default function Terms() {
         <div className="mb-10">
           <Link to="/login" className="text-xs text-[rgba(153,197,255,0.4)] hover:text-white transition-colors mb-6 inline-block">← Back to Cadi</Link>
           <h1 className="text-2xl font-black text-white mb-2">Terms &amp; Conditions</h1>
-          <p className="text-xs text-[rgba(153,197,255,0.4)]">Last updated: 17 May 2026</p>
+          <p className="text-xs text-[rgba(153,197,255,0.4)]">Version 1.2 — 6 June 2026</p>
         </div>
 
         <Section title="About Cadi">
@@ -53,7 +53,35 @@ export default function Terms() {
             <li>Submit the Final Declaration to complete your tax year</li>
           </ul>
           <p>You can revoke this authorisation at any time from Settings. You are responsible for reviewing all data before submission and for ensuring your records are accurate and complete.</p>
-          <p>Cadi is recognised MTD-compatible software. We comply with HMRC's fraud prevention header requirements on all API calls.</p>
+          <p>Cadi complies with HMRC's fraud prevention header requirements on all API calls.</p>
+        </Section>
+
+        <Section title="Open banking">
+          <p>If you choose to connect a bank account, you authorise Cadi (via our open banking partner <strong className="text-white">Yapily Connect Ltd</strong>, FCA FRN 827001) to read your transaction history, balances, and account details on a <strong className="text-white">read-only</strong> basis.</p>
+          <p>Cadi Software Ltd is registered with the FCA as an <strong className="text-white">agent of Yapily Connect Ltd</strong> under their AISP permission. Yapily is the FCA-regulated party; Cadi acts on your behalf under Yapily's permission.</p>
+          <p>We will never have your bank login credentials. We cannot move money, make payments, or initiate transactions. Consent is valid for up to 90 days under PSD2 rules, after which we will prompt you to re-authorise. You may revoke consent at any time through either your bank's app, Cadi Settings → Banking, or by contacting Yapily directly.</p>
+          <p>Bank transaction data is used to categorise expenses, match incoming payments to invoices, and prepare MTD submissions. You are responsible for reviewing transactions before they are submitted as part of any tax return.</p>
+        </Section>
+
+        <Section title="Direct debit collection (GoCardless)">
+          <p>If you enable direct debit collection from your customers, payments are processed by <strong className="text-white">GoCardless</strong> (FCA FRN 597190). Your customers contract directly with GoCardless for the payment service. Cadi facilitates set-up and reconciliation but is not the payment processor.</p>
+          <p>You are responsible for: ensuring you have your customers' explicit authorisation to collect by direct debit, providing accurate descriptions of the goods and services charged for, and handling any disputes or refunds in line with the Direct Debit Guarantee.</p>
+        </Section>
+
+        <Section title="AI-generated content">
+          <p>Some Cadi features use artificial intelligence to generate text, suggestions, or summaries (including the onboarding assistant, service builder, money insights, and weekly reports). AI output can be incorrect, incomplete, or out of date.</p>
+          <p>You are responsible for reviewing AI-generated content before relying on it — particularly for anything submitted to HMRC, sent to a customer, or used as a financial record. Cadi is not a substitute for professional tax, legal, or accounting advice.</p>
+          <p>See our <Link to="/privacy" className="text-white hover:underline">Privacy Policy</Link> for details on which AI sub-processor handles your input.</p>
+        </Section>
+
+        <Section title="Your customers' and staff's data">
+          <p>When you add customers or staff to Cadi, you are the <strong className="text-white">data controller</strong> for their personal data and Cadi is your <strong className="text-white">data processor</strong>. This means:</p>
+          <ul className="list-disc list-inside space-y-1 pl-2">
+            <li>You must have a lawful basis under UK GDPR for collecting and using their data</li>
+            <li>You are responsible for issuing your own privacy notice to them</li>
+            <li>You must handle their data subject requests (access, deletion, etc.) — Cadi will assist when asked</li>
+            <li>Cadi will process their data only on your documented instructions, in line with our Data Processing Agreement (available on request)</li>
+          </ul>
         </Section>
 
         <Section title="Acceptable use">
