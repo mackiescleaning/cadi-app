@@ -25,6 +25,8 @@ const DEFAULT_BUSINESS = {
   email: "", phone: "",
   address: "",
   vatNumber: "", companyNum: "",
+  entityType: "sole_trader", registeredOffice: "",
+  privacyUrl: "", termsUrl: "",
   bankName: "", sortCode: "", accountNum: "",
   paymentRef: "INV-", defaultTerms: 14,
   defaultNotes: "Thank you for your business. Please make payment within the agreed terms.",
@@ -198,8 +200,8 @@ function TypeBadge({ type }) {
 const TYPE_DOT = { residential: "#10b981", commercial: "#1f48ff", exterior: "#f59e0b" };
 
 // ─── Email send modal ─────────────────────────────────────────────────────────
-function EmailModal({ invoice, business, onSent, onClose, chaseMode = false }) {
-  const calc      = calcInvoice(invoice.lines, false, 12);
+function EmailModal({ invoice, business, accounts = DEFAULT_ACCOUNTS, onSent, onClose, chaseMode = false }) {
+  const calc      = calcInvoice(invoice.lines, accounts.vatRegistered, accounts.frsRate);
   const firstName = (invoice.customer?.name || "").split(" ")[0] || "there";
 
   const defaultMsg  = `Hi ${firstName},\n\nHere's your invoice! We appreciate your prompt payment.`;
@@ -218,6 +220,19 @@ function EmailModal({ invoice, business, onSent, onClose, chaseMode = false }) {
     setSending(true);
     setError(null);
     try {
+      // Generate PDF attachment client-side (lazy import — keeps it out of main bundle).
+      let pdfAttachment = null;
+      try {
+        const { generateInvoicePdf } = await import('../lib/invoicePdf');
+        pdfAttachment = generateInvoicePdf(
+          { ...invoice, terms: invoice.terms },
+          business,
+          { vatRegistered: !!accounts.vatRegistered },
+        );
+      } catch (pdfErr) {
+        console.warn('PDF generation failed — sending email without attachment:', pdfErr);
+      }
+
       const { error: fnError } = await supabase.functions.invoke('send-invoice', {
         body: {
           invoiceId:       invoice.id,
@@ -239,14 +254,29 @@ function EmailModal({ invoice, business, onSent, onClose, chaseMode = false }) {
           subtotal:        calc.subtotal,
           vatAmount:       calc.vatAmount,
           total:           calc.total,
+          vatRegistered:   !!accounts.vatRegistered,
           terms:           termsLabel,
           dueDate:         invoice.dueDate || '',
           businessName:    business.name   || '',
           businessAddress: business.address || '',
+          businessEmail:   business.email  || '',
+          // Reply-to: customer replies go to the business, not Cadi.
           replyTo:         business.email  || '',
+          // BCC the business so they have a copy of every invoice they sent.
+          bcc:             business.email  || '',
+          // Compliance fields for the email footer (Ltd legal info + GDPR links).
+          vatNumber:        business.vatNumber       || '',
+          companyNum:       business.companyNum      || '',
+          entityType:       business.entityType      || 'sole_trader',
+          registeredOffice: business.registeredOffice || '',
+          privacyUrl:       business.privacyUrl      || '',
+          termsUrl:         business.termsUrl        || '',
           bankName:        invoice.bankName  || business.bankName  || '',
           sortCode:        invoice.sortCode  || business.sortCode  || '',
           accountNum:      invoice.accountNum || business.accountNum || '',
+          // PDF attachment (base64 string, no data-URI prefix).
+          pdfBase64:       pdfAttachment?.base64   || null,
+          pdfFilename:     pdfAttachment?.filename || null,
         },
       });
       if (fnError) throw fnError;
@@ -289,7 +319,7 @@ function EmailModal({ invoice, business, onSent, onClose, chaseMode = false }) {
           <div>
             <SL className="mb-1.5">Personal message</SL>
             <GTextarea value={message} onChange={e => setMessage(e.target.value)} rows={4} placeholder="Add a personal note to your customer…" />
-            <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-1.5">The full invoice — line items, totals, and your bank details — is automatically included below your message.</p>
+            <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-1.5">The full invoice — line items, totals, and your bank details — is included below your message. A PDF copy is attached and you'll be BCC'd a copy for your records.</p>
           </div>
 
           {/* Email preview summary */}
@@ -1098,18 +1128,31 @@ function InvoicePreview({ draft, accounts, business, onEdit, onSaveAndSend, onBa
             </div>
           )}
 
-          {/* Footer */}
-          <div className="bg-[#010a4f] px-8 py-3 text-center">
-            <p className="text-xs text-[#99c5ff]/70">
-              {business.name} · {business.email} · {business.phone}
-              {accounts.vatRegistered && business.vatNumber ? ` · VAT ${business.vatNumber}` : ""}
+          {/* Footer — legal + privacy/terms links (mirrors what's sent) */}
+          <div className="bg-[#010a4f] px-8 py-4 text-center space-y-1.5">
+            <p className="text-[10px] text-[#99c5ff]/70 leading-relaxed">
+              {business.entityType === 'limited_company' ? (
+                <>
+                  {business.name} — registered in England &amp; Wales
+                  {business.companyNum ? ` · Company no. ${business.companyNum}` : ""}
+                  {business.registeredOffice ? ` · ${business.registeredOffice.replace(/\n/g, ', ')}` : ""}
+                </>
+              ) : (
+                <>{business.name}{business.address ? ` · ${business.address.replace(/\n/g, ', ')}` : ""}</>
+              )}
+              {accounts.vatRegistered && business.vatNumber ? ` · VAT no. ${business.vatNumber}` : ""}
+            </p>
+            <p className="text-[10px] text-[#99c5ff]/60">
+              <a href={business.privacyUrl || 'https://cadi.cleaning/privacy'} target="_blank" rel="noreferrer" className="text-[#99c5ff] hover:underline">Privacy Policy</a>
+              <span className="mx-2 text-[#99c5ff]/30">·</span>
+              <a href={business.termsUrl || 'https://cadi.cleaning/terms'} target="_blank" rel="noreferrer" className="text-[#99c5ff] hover:underline">Terms &amp; Conditions</a>
             </p>
           </div>
         </div>
       </div>
 
       {showEmail && (
-        <EmailModal invoice={{ ...draft }} business={business} onSent={() => onSaveAndSend(draft)} onClose={() => setShowEmail(false)} />
+        <EmailModal invoice={{ ...draft }} business={business} accounts={accounts} onSent={() => onSaveAndSend(draft)} onClose={() => setShowEmail(false)} />
       )}
     </div>
   );
@@ -1296,7 +1339,7 @@ function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack, onDuplic
       </div>
 
       {showEmail && (
-        <EmailModal invoice={invoice} business={business} chaseMode={chaseMode}
+        <EmailModal invoice={invoice} business={business} accounts={accounts} chaseMode={chaseMode}
           onSent={() => { onUpdate({ ...invoice, sentAt: new Date().toISOString(), reminders: [...(invoice.reminders??[]), new Date().toISOString()] }); setShowEmail(false); }}
           onClose={() => setShowEmail(false)} />
       )}
@@ -1326,14 +1369,41 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
       try {
         const settings = await getBusinessSettings();
         const bankDetails = settings?.bank_details || {};
+        // Assemble the full business address. Prefer the structured shape
+        // (setup_data.business_address: {line1, line2, town, county, postcode})
+        // because it renders cleanly per-line. Fall back to the single-string
+        // field (setup_data.address) that the Business tab in Settings writes
+        // — invoicePdf.js will split comma-separated strings into lines.
+        const ba = settings?.setup_data?.business_address || {};
+        const structured = [
+          ba.line1, ba.line2, ba.town, ba.county, ba.postcode,
+        ].filter(Boolean).join('\n');
+        const fullAddress =
+          structured ||
+          settings?.setup_data?.address ||
+          profile?.postcode ||
+          '';
+
+        // Registered office for Ltd companies — defaults to the trading address
+        // if the user hasn't set a separate one. Same address is fine for most
+        // small Ltd companies where the trading premises = registered office.
+        const registeredOffice =
+          settings?.setup_data?.registered_office ||
+          settings?.setup_data?.registered_office_address ||
+          fullAddress;
+
         setBusiness({
           name: profile?.business_name || '',
           ownerName: [profile?.first_name, profile?.last_name].filter(Boolean).join(' '),
           email: settings?.business_email || profile?.phone || '',
           phone: profile?.phone || '',
-          address: profile?.postcode || '',
+          address: fullAddress,
           vatNumber: settings?.setup_data?.vat_number || '',
-          companyNum: settings?.setup_data?.company_number || '',
+          companyNum: settings?.companies_house_number || settings?.setup_data?.company_number || '',
+          entityType: settings?.entity_type || 'sole_trader',
+          registeredOffice,
+          privacyUrl: settings?.setup_data?.privacy_url || '',
+          termsUrl: settings?.setup_data?.terms_url || '',
           logo: settings?.setup_data?.logo_url || '',
           bankName: bankDetails.bankName || '',
           sortCode: bankDetails.sortCode || '',
@@ -1512,7 +1582,7 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
         {/* Inline quick-action modals (triggered from list row buttons) */}
         {quickAction?.type === 'send' && (
           <EmailModal
-            invoice={quickAction.inv} business={BUSINESS}
+            invoice={quickAction.inv} business={BUSINESS} accounts={accounts}
             chaseMode={quickAction.inv.status === 'overdue'}
             onSent={() => {
               updateInvoice({ ...quickAction.inv, sentAt: new Date().toISOString(), reminders: [...(quickAction.inv.reminders ?? []), new Date().toISOString()] });
