@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, MapPin, ChevronRight, Loader2, ClipboardList, X } from 'lucide-react';
-import { listFmSites, SITE_STATUS } from '../../lib/db/fmOpsDb';
+import { Search, MapPin, ChevronRight, Loader2, ClipboardList, X, Send } from 'lucide-react';
+import {
+  listFmSites, SITE_STATUS,
+  listFmActiveSubs, assignVisitSpec, sendVisitSpecsToMarketplace, publishListings,
+  getMyFmOrganisation,
+} from '../../lib/db/fmOpsDb';
 import { FM_OPS_TOKENS } from '../../components/fm-ops/FmOpsLayout';
 
 const { NAVY, INK, SUB, MUTE, LINE, PAPER, ACCENT } = FM_OPS_TOKENS;
@@ -39,14 +43,49 @@ function Kpi({ label, value, accent }) {
   );
 }
 
-function SiteDrawer({ site, onClose }) {
+function SiteDrawer({ site, subs, fmOrg, onClose, onChanged }) {
+  const [busy, setBusy] = useState(new Set());
+  const [err, setErr]   = useState(null);
+  const markBusy = (specId, on) => setBusy(prev => {
+    const n = new Set(prev);
+    if (on) n.add(specId); else n.delete(specId);
+    return n;
+  });
+
+  const handleAssign = async (specId, subUserId) => {
+    markBusy(specId, true);
+    setErr(null);
+    try {
+      await assignVisitSpec({ visitSpecId: specId, subUserId });
+      await onChanged();
+    } catch (e) { setErr(e.message); }
+    finally { markBusy(specId, false); }
+  };
+
+  const handleToMarket = async (spec) => {
+    markBusy(spec.id, true);
+    setErr(null);
+    try {
+      await sendVisitSpecsToMarketplace([spec.id]);
+      if (fmOrg) {
+        await publishListings({
+          fmOrganisationId: fmOrg.id,
+          visitSpecs: [spec],
+          defaults: { visibility: 'open', bid_window_hours: 72, award_rule: 'best_fit' },
+        });
+      }
+      await onChanged();
+    } catch (e) { setErr(e.message); }
+    finally { markBusy(spec.id, false); }
+  };
+
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)',
       display: 'flex', justifyContent: 'flex-end', zIndex: 50,
     }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{
-        width: 520, maxWidth: '92vw', background: PAPER,
+        width: 560, maxWidth: '92vw', background: PAPER,
         borderLeft: `1px solid ${LINE}`, padding: '24px 28px',
         overflowY: 'auto', boxShadow: '-12px 0 40px rgba(15,23,42,0.18)',
       }}>
@@ -80,30 +119,88 @@ function SiteDrawer({ site, onClose }) {
           </div>
         )}
 
+        {err && (
+          <div style={{ padding: 10, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 12, fontSize: 11, color: '#b91c1c' }}>
+            {err}
+          </div>
+        )}
+
         <div style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>Visit specs</div>
         {site.specs.length === 0 && (
           <div style={{ padding: 16, fontSize: 12, color: SUB, background: PAPER, border: `1.5px dashed ${LINE}`, borderRadius: 10 }}>
             This site has no visit specs yet.
           </div>
         )}
-        {site.specs.map(s => (
-          <div key={s.id} style={{
-            display: 'grid', gridTemplateColumns: '120px 1fr 90px 100px',
-            gap: 8, alignItems: 'center',
-            padding: '10px 12px', borderRadius: 8, background: SOFT, marginBottom: 6,
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: INK }}>{FREQ_LABEL[s.frequency] ?? s.frequency}</div>
-            <div style={{ fontSize: 11, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.scope}</div>
-            <div style={{ fontSize: 11, fontWeight: 800 }}>£{s.price_per_visit}</div>
-            <Pill map={SPEC_STATUS_LABEL} status={s.status} />
-          </div>
-        ))}
+        {site.specs.map(s => {
+          const assignedSub = subs.find(sub => sub.id === s.assigned_sub_user_id);
+          const isBusy = busy.has(s.id);
+          const locked = s.status === 'marketplace' || s.status === 'active';
+          return (
+            <div key={s.id} style={{
+              padding: '10px 12px', borderRadius: 8, background: SOFT, marginBottom: 6,
+            }}>
+              <div style={{
+                display: 'grid', gridTemplateColumns: '70px 1fr 60px 90px',
+                gap: 8, alignItems: 'center', marginBottom: 8,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: INK }}>{FREQ_LABEL[s.frequency] ?? s.frequency}</div>
+                <div style={{ fontSize: 11, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.scope}</div>
+                <div style={{ fontSize: 11, fontWeight: 800 }}>£{s.price_per_visit}</div>
+                <Pill map={SPEC_STATUS_LABEL} status={s.status} />
+              </div>
+              {assignedSub && (
+                <div style={{ fontSize: 10, color: SUB, marginBottom: 6 }}>→ {assignedSub.name}</div>
+              )}
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {isBusy && <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite', color: SUB }} />}
+                {!isBusy && (
+                  <>
+                    <select
+                      value={s.assigned_sub_user_id ?? ''}
+                      onChange={e => handleAssign(s.id, e.target.value || null)}
+                      disabled={locked}
+                      style={{
+                        flex: 1,
+                        padding: '5px 8px', fontSize: 11,
+                        border: `1px solid ${LINE}`, borderRadius: 6,
+                        background: locked ? PAPER : 'white',
+                        color: locked ? MUTE : INK,
+                        cursor: locked ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      <option value="">{locked ? '(locked while on marketplace / active)' : 'Assign sub…'}</option>
+                      {subs.map(sub => (
+                        <option key={sub.id} value={sub.id}>{sub.name}{sub.region ? ` · ${sub.region}` : ''}</option>
+                      ))}
+                    </select>
+                    {!locked && (
+                      <button
+                        onClick={() => handleToMarket(s)}
+                        style={{
+                          fontSize: 11, fontWeight: 700,
+                          background: `${ACCENT}10`, color: ACCENT,
+                          border: `1px solid ${ACCENT}30`, borderRadius: 6,
+                          padding: '5px 9px', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 4,
+                        }}
+                      >
+                        <Send size={11} /> Market
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
 
         {site.contract?.name && (
           <div style={{ marginTop: 14, fontSize: 11, color: SUB }}>
             Contract · <strong style={{ color: INK }}>{site.contract.name}</strong>
           </div>
         )}
+
+        <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>
   );
@@ -111,15 +208,35 @@ function SiteDrawer({ site, onClose }) {
 
 export default function FmOpsSites() {
   const [sites, setSites] = useState([]);
+  const [subs, setSubs] = useState([]);
+  const [fmOrg, setFmOrg] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [q, setQ] = useState('');
   const [openSite, setOpenSite] = useState(null);
 
+  const reload = async () => {
+    const fresh = await listFmSites();
+    setSites(fresh);
+    // Keep the drawer in sync with refreshed data so post-assign labels update.
+    if (openSite) {
+      const next = fresh.find(s => s.id === openSite.id);
+      if (next) setOpenSite(next);
+    }
+  };
+
   useEffect(() => {
     (async () => {
-      try { setSites(await listFmSites()); }
-      catch (e) { setError(e.message); }
+      try {
+        const [s, subList, org] = await Promise.all([
+          listFmSites(),
+          listFmActiveSubs(),
+          getMyFmOrganisation(),
+        ]);
+        setSites(s);
+        setSubs(subList);
+        setFmOrg(org);
+      } catch (e) { setError(e.message); }
       finally { setLoading(false); }
     })();
   }, []);
@@ -260,7 +377,15 @@ export default function FmOpsSites() {
         </div>
       )}
 
-      {openSite && <SiteDrawer site={openSite} onClose={() => setOpenSite(null)} />}
+      {openSite && (
+        <SiteDrawer
+          site={openSite}
+          subs={subs}
+          fmOrg={fmOrg}
+          onClose={() => setOpenSite(null)}
+          onChanged={reload}
+        />
+      )}
     </div>
   );
 }
