@@ -7,6 +7,8 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.101.0",
+    "jspdf": "^2.5.2",
+    "jspdf-autotable": "^3.8.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.7.0",
     "react": "^19.2.4",
@@ -20,7 +22,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "./deploy.sh",
-    "generate-og": "node scripts/generate-og.mjs"
+    "generate-og": "node scripts/generate-og.mjs",
+    "test:catalogue": "node scripts/test-catalogue.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.2",

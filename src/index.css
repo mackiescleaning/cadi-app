@@ -5,6 +5,28 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── A11y: visible focus rings for keyboard users ──────────────────────────
+   :focus-visible only applies when navigation is keyboard-driven, so mouse
+   users don't see a ring on every click. Component-level focus styles
+   override this when defined. */
+*:focus-visible {
+  outline: 2px solid #1f48ff;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid #1f48ff;
+  outline-offset: 2px;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #1f48ff;
+  outline-offset: 1px;
+}
+
 @keyframes fadeSlideUp {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
