@@ -173,8 +173,11 @@ function buildHtml({
     ? `<p style="font-size:10px;color:#bbb;text-align:center;margin:0 0 6px;line-height:1.6">${legalBits.join(" &middot; ")}</p>`
     : "";
 
-  const safePrivacy = (privacyUrl || "https://cadi.cleaning/privacy").replace(/"/g, "");
-  const safeTerms   = (termsUrl   || "https://cadi.cleaning/terms").replace(/"/g, "");
+  // Default to the marketing-site .html paths — cadi.cleaning is the static
+  // marketing host, not the React app. Bare /privacy and /terms only resolve
+  // on app.cadi.cleaning where invoice recipients don't have accounts.
+  const safePrivacy = (privacyUrl || "https://cadi.cleaning/privacy.html").replace(/"/g, "");
+  const safeTerms   = (termsUrl   || "https://cadi.cleaning/terms.html").replace(/"/g, "");
   const policyLinks = `
     <p style="font-size:11px;color:#bbb;text-align:center;margin:0 0 6px">
       <a href="${safePrivacy}" style="color:${brandColour};text-decoration:none;margin:0 8px">Privacy Policy</a>
@@ -423,8 +426,11 @@ serve(async (req: Request) => {
     }
     if (vatRegistered && vatNumber) legalBitsText.push(`VAT no. ${vatNumber}`);
     const legalLineText = legalBitsText.join(" · ");
-    const privacyUrlText = privacyUrl || "https://cadi.cleaning/privacy";
-    const termsUrlText   = termsUrl   || "https://cadi.cleaning/terms";
+    // Same .html defaults as the HTML body (lines 179-180). cadi.cleaning is
+    // the static marketing host — bare /privacy and /terms only resolve on
+    // app.cadi.cleaning where invoice recipients don't have accounts.
+    const privacyUrlText = privacyUrl || "https://cadi.cleaning/privacy.html";
+    const termsUrlText   = termsUrl   || "https://cadi.cleaning/terms.html";
 
     const plainText = [
       personalMessage,
