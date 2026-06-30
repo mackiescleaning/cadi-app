@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import {
   Upload, Download, X, Loader2, Plus, MapPin, ChevronLeft, ChevronRight,
   AlertCircle, CheckCircle2, Send,
@@ -101,9 +102,18 @@ function Select(props) {
 }
 
 // ─── Pick a header from CSV row using common aliases ─────────────────────────
+// Normalises both the row's own keys and the searched aliases to lowercase +
+// trimmed, so headers like "Car Dealership Name" or " Cost Per Clean" match
+// aliases like "car dealership name" / "cost per clean" without the operator
+// having to clean the source file by hand.
 function pickHeader(row, ...keys) {
+  // Build a one-shot normalised lookup table for the row's own keys.
+  const norm = {};
+  for (const rk of Object.keys(row || {})) {
+    norm[String(rk).trim().toLowerCase()] = row[rk];
+  }
   for (const k of keys) {
-    const v = row[k];
+    const v = norm[String(k).trim().toLowerCase()];
     if (v != null && String(v).trim().length) return String(v).trim();
   }
   return '';
@@ -158,9 +168,38 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
     if (!file) return;
     setParseErr(null);
     try {
-      const txt = await file.text();
-      setCsvText(txt);
-      const { headers, rows: parsed } = parseCsv(txt);
+      const name = (file.name || '').toLowerCase();
+      const isExcel = name.endsWith('.xlsx') || name.endsWith('.xls');
+      let headers = [];
+      let parsed  = [];
+
+      if (isExcel) {
+        // Read the workbook → take the first sheet → first row is the header.
+        // Empty rows are skipped so trailing blank rows in the spreadsheet
+        // don't produce zero-site drafts.
+        const buf = await file.arrayBuffer();
+        const wb  = XLSX.read(buf, { type: 'array' });
+        const ws  = wb.Sheets[wb.SheetNames[0]];
+        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true, blankrows: false });
+        if (aoa.length < 2) {
+          setParseErr('Spreadsheet has no data rows (just a header row, or empty). Add at least one site row.');
+          return;
+        }
+        headers = aoa[0].map((h) => String(h ?? '').trim());
+        parsed  = aoa.slice(1).map((r) => {
+          const obj = {};
+          headers.forEach((h, i) => { obj[h] = r[i] != null ? r[i] : ''; });
+          return obj;
+        }).filter((r) => Object.values(r).some((v) => String(v).trim().length));
+        setCsvText(`(parsed from ${file.name})`);
+      } else {
+        const txt = await file.text();
+        setCsvText(txt);
+        const parsedCsv = parseCsv(txt);
+        headers = parsedCsv.headers;
+        parsed  = parsedCsv.rows;
+      }
+
       if (headers.length === 0 || parsed.length === 0) {
         setParseErr('Could not find any rows. Check the file has a header row.');
         return;
@@ -261,7 +300,7 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
               <Upload size={20} />
             </div>
             <div style={{ fontSize: 14, fontWeight: 800, color: INK, marginBottom: 4 }}>
-              Drop the FM's site list (CSV)
+              Drop the FM's site list (CSV or Excel)
             </div>
             <div style={{ fontSize: 11, color: SUB, marginBottom: 10 }}>
               Site · cost per visit · spec 1..3 · notes — any column order, Cadi maps it.
@@ -283,7 +322,7 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             style={{ display: 'none' }}
             onChange={e => handleFile(e.target.files?.[0])}
           />
