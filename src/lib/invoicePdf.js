@@ -293,8 +293,12 @@ export function generateInvoicePdf(invoice, business, accounts = {}) {
 
   // Privacy / T&Cs links
   const linkY = footerY + wrappedLegal.length * 9 + 4;
-  const privacyUrl = business.privacyUrl || 'https://cadi.cleaning/privacy';
-  const termsUrl   = business.termsUrl   || 'https://cadi.cleaning/terms';
+  // Default to the marketing-site .html paths — cadi.cleaning is the static
+  // marketing host (privacy.html / terms.html), not the React app. The bare
+  // /privacy and /terms URLs only resolve on app.cadi.cleaning, where the
+  // recipient (the cleaner's customer) won't have an account.
+  const privacyUrl = business.privacyUrl || 'https://cadi.cleaning/privacy.html';
+  const termsUrl   = business.termsUrl   || 'https://cadi.cleaning/terms.html';
 
   doc.setTextColor(br, bg, bb);
   const linkText = `Privacy Policy   ·   Terms & Conditions`;
