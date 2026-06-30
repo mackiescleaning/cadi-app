@@ -9,6 +9,111 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import FirstVisitCoach from '../components/FirstVisitCoach';
+
+// ─── First-visit team-structure coach ─────────────────────────────────────────
+
+const TEAM_STRUCTURE_OPTIONS = [
+  { value: 'solo',              label: 'Solo — just me' },
+  { value: 'small_team_2_5',    label: 'Small team (2-5)' },
+  { value: 'medium_team_6_20',  label: 'Medium team (6-20)' },
+  { value: 'large_team_20_plus',label: 'Large team (20+)' },
+];
+
+const EMPLOYMENT_TYPE_OPTIONS = [
+  { value: 'employed_paye',  label: 'Employed (PAYE)' },
+  { value: 'subcontractors', label: 'Sub-contractors' },
+  { value: 'mix',            label: 'Mix of both' },
+];
+
+function TeamStructureCoach({ user }) {
+  const [teamStructure, setTeamStructure] = useState('');
+  const [employmentTypes, setEmploymentTypes] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  const toggleEmployment = (val) => {
+    setEmploymentTypes(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
+  };
+
+  const persist = async () => {
+    if (!user || user.id === 'demo-user') return;
+    setSaving(true);
+    try {
+      if (teamStructure) {
+        await supabase
+          .from('profiles')
+          .upsert({ id: user.id, team_structure: teamStructure }, { onConflict: 'id' });
+      }
+      const { data: row } = await supabase
+        .from('business_settings')
+        .select('setup_data')
+        .eq('owner_id', user.id)
+        .maybeSingle();
+      const existing = row?.setup_data ?? {};
+      await supabase
+        .from('business_settings')
+        .upsert(
+          { owner_id: user.id, setup_data: { ...existing, employment_types: employmentTypes } },
+          { onConflict: 'owner_id' }
+        );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <FirstVisitCoach
+      storageKey="staff_team_structure"
+      title="Set up your team"
+      subtitle="Tell Cadi how you work so scheduling and staff tools fit your setup."
+      primaryCta="Save"
+      skipCta="Maybe later"
+      onPrimary={persist}
+      busy={saving}
+    >
+      <div>
+        <p className="text-[11px] font-bold tracking-wide uppercase text-[#010a4f]/70 mb-2">Team structure</p>
+        <div className="flex flex-wrap gap-2">
+          {TEAM_STRUCTURE_OPTIONS.map(opt => {
+            const selected = teamStructure === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setTeamStructure(opt.value)}
+                className={`text-[12px] font-semibold px-3 py-1.5 rounded-xl border border-[#1f48ff]/15 transition-colors ${
+                  selected ? 'bg-[#1f48ff] text-white' : 'bg-[#f0f4ff] text-[#010a4f] hover:bg-[#e3eaff]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div>
+        <p className="text-[11px] font-bold tracking-wide uppercase text-[#010a4f]/70 mb-2">Employment types</p>
+        <div className="flex flex-wrap gap-2">
+          {EMPLOYMENT_TYPE_OPTIONS.map(opt => {
+            const selected = employmentTypes.includes(opt.value);
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => toggleEmployment(opt.value)}
+                className={`text-[12px] font-semibold px-3 py-1.5 rounded-xl border border-[#1f48ff]/15 transition-colors ${
+                  selected ? 'bg-[#1f48ff] text-white' : 'bg-[#f0f4ff] text-[#010a4f] hover:bg-[#e3eaff]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </FirstVisitCoach>
+  );
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -857,7 +962,7 @@ function StaffPeople({ staff, training, loading, onStaffChange, onTrainingChange
                 <DrawerRow label="Rate"            value={selected.hourly_rate ? `£${Number(selected.hourly_rate).toFixed(2)}/hr` : '—'} />
                 <DrawerRow label="Contracted hrs"  value={selected.contracted_hours ? `${selected.contracted_hours} hrs/wk` : '—'} />
                 <DrawerRow label="Status"          value={selected.is_active ? 'Active' : 'Inactive'} valueClass={`font-semibold ${selected.is_active ? 'text-emerald-400' : 'text-[rgba(153,197,255,0.4)]'}`} />
-                {selected.pin_hash && <DrawerRow label="Staff app PIN" value="Set ✓" valueClass="font-semibold text-emerald-400" />}
+                {selected.has_pin && <DrawerRow label="Staff app PIN" value="Set ✓" valueClass="font-semibold text-emerald-400" />}
               </section>
 
               {/* Right to Work */}
@@ -3301,6 +3406,8 @@ export default function Staff() {
 
   return (
     <div className="min-h-full bg-[#010a4f] p-4 sm:p-6 space-y-4">
+      <TeamStructureCoach user={user} />
+
       {/* Sub-tab nav */}
       <div className="flex items-center gap-1 bg-[#05124a] border border-[rgba(153,197,255,0.15)] rounded-2xl p-1.5 overflow-x-auto">
         {TABS.map(t => {

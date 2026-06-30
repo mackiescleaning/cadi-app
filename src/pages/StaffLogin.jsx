@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useStaff } from '../context/StaffContext';
 import { Delete, Loader2 } from 'lucide-react';
 import CadiWordmark from '../components/CadiWordmark';
@@ -23,9 +23,16 @@ async function validatePin(token, pin) {
     body:    JSON.stringify({ token, pin }),
   });
   if (res.status === 401) throw new Error('Incorrect PIN — try again');
+  if (res.status === 423) {
+    const { locked_until } = await res.json().catch(() => ({}));
+    const minutes = locked_until
+      ? Math.max(1, Math.ceil((new Date(locked_until).getTime() - Date.now()) / 60000))
+      : 15;
+    throw new Error(`Too many attempts — locked for ${minutes} more minute${minutes === 1 ? '' : 's'}.`);
+  }
   if (!res.ok) throw new Error('Something went wrong');
-  const { member } = await res.json();
-  return member;
+  const { member, staffToken } = await res.json();
+  return { member, staffToken };
 }
 
 export default function StaffLogin() {
@@ -60,8 +67,11 @@ export default function StaffLogin() {
   const checkPin = async (enteredPin) => {
     setChecking(true);
     try {
-      const member = await validatePin(token, enteredPin);
-      loginAsStaff({ id: member.id, name: member.name, role: member.role, hourlyRate: member.hourly_rate, ownerId: member.owner_id });
+      const { member, staffToken } = await validatePin(token, enteredPin);
+      loginAsStaff(
+        { id: member.id, name: member.name, role: member.role, hourlyRate: member.hourly_rate, ownerId: member.owner_id },
+        staffToken,
+      );
       navigate('/staff-dashboard');
     } catch (err) {
       setShake(true);
@@ -140,6 +150,13 @@ export default function StaffLogin() {
           </button>
         ))}
       </div>
+
+      <p className="text-[10px] text-[#99c5ff]/40 mt-8">
+        By signing in you agree to our{' '}
+        <Link to="/terms" target="_blank" className="text-[#99c5ff]/70 hover:text-white underline">Terms</Link>
+        {' '}and{' '}
+        <Link to="/privacy" target="_blank" className="text-[#99c5ff]/70 hover:text-white underline">Privacy Policy</Link>.
+      </p>
 
     </div>
   );

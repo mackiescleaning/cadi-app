@@ -115,7 +115,7 @@ function TeammateChips({ assignees, myName }) {
 }
 
 // ─── Job card (expandable, with GPS clock-in/out) ────────────────────────────
-function JobCard({ job, myName, staffMember, externalTimesheet, onStatusChange }) {
+function JobCard({ job, myName, staffMember, externalTimesheet, onStatusChange, staffFetchInit }) {
   const [expanded,      setExpanded]  = useState(false);
   const [localTs,       setLocalTs]   = useState(null);
   const [clockingIn,    setClockingIn]  = useState(false);
@@ -162,17 +162,17 @@ function JobCard({ job, myName, staffMember, externalTimesheet, onStatusChange }
     }
 
     try {
-      const SB  = import.meta.env.VITE_SUPABASE_URL;
-      const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const res = await fetch(`${SB}/functions/v1/staff-timesheet`, {
+      const SB   = import.meta.env.VITE_SUPABASE_URL;
+      const init = staffFetchInit?.({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staff_id: staffMember.id, owner_id: staffMember.ownerId,
           job_id: UUID_RE.test(String(job.id)) ? job.id : null,
           date: job.date, action: 'clock_in', lat, lng, accuracy,
         }),
       });
+      if (!init) { setClockingIn(false); return; }
+      const res = await fetch(`${SB}/functions/v1/staff-timesheet`, init);
       const d = await res.json();
       if (d.timesheet) {
         setLocalTs(d.timesheet);
@@ -203,17 +203,17 @@ function JobCard({ job, myName, staffMember, externalTimesheet, onStatusChange }
     }
 
     try {
-      const SB  = import.meta.env.VITE_SUPABASE_URL;
-      const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const res = await fetch(`${SB}/functions/v1/staff-timesheet`, {
+      const SB   = import.meta.env.VITE_SUPABASE_URL;
+      const init = staffFetchInit?.({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staff_id: staffMember.id, owner_id: staffMember.ownerId,
           job_id: UUID_RE.test(String(job.id)) ? job.id : null,
           date: job.date, action: 'clock_out', lat, lng, accuracy,
         }),
       });
+      if (!init) { setClockingOut(false); return; }
+      const res = await fetch(`${SB}/functions/v1/staff-timesheet`, init);
       const d = await res.json();
       if (d.timesheet) {
         setLocalTs(d.timesheet);
@@ -357,7 +357,7 @@ function JobCard({ job, myName, staffMember, externalTimesheet, onStatusChange }
 }
 
 // ─── Week grid — day selector + expandable job list ───────────────────────────
-function WeekGrid({ weekDates, jobs, myName, staffMember, timesheets, onStatusChange }) {
+function WeekGrid({ weekDates, jobs, myName, staffMember, timesheets, onStatusChange, staffFetchInit }) {
   const todayStr = isoDate(new Date());
   const [expandedDay, setExpandedDay] = useState(() => {
     const idx = weekDates.findIndex(d => isoDate(d) === todayStr);
@@ -431,7 +431,7 @@ function WeekGrid({ weekDates, jobs, myName, staffMember, timesheets, onStatusCh
             ) : (
               <div className="space-y-2">
                 {dayJobs.map(job => (
-                  <JobCard key={job.id} job={job} myName={myName} staffMember={staffMember} externalTimesheet={timesheets?.[job.id] ?? null} onStatusChange={onStatusChange} />
+                  <JobCard key={job.id} job={job} myName={myName} staffMember={staffMember} externalTimesheet={timesheets?.[job.id] ?? null} onStatusChange={onStatusChange} staffFetchInit={staffFetchInit} />
                 ))}
               </div>
             )}
@@ -444,7 +444,7 @@ function WeekGrid({ weekDates, jobs, myName, staffMember, timesheets, onStatusCh
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function StaffDashboard() {
-  const { staffMember, logoutStaff } = useStaff();
+  const { staffMember, logoutStaff, staffFetchInit } = useStaff();
   const navigate = useNavigate();
 
   const [weekOffset,    setWeekOffset]    = useState(0);
@@ -469,12 +469,11 @@ export default function StaffDashboard() {
   const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   const loadPayslips = useCallback(async () => {
-    if (!staffMember?.id || !staffMember?.ownerId) return;
+    const init = staffFetchInit();
+    if (!init || !staffMember?.id) return;
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/functions/v1/staff-payslip?staff_id=${staffMember.id}&owner_id=${staffMember.ownerId}`,
-        { headers: { apikey: SUPABASE_ANON } },
-      );
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/staff-payslip`, init);
+      if (res.status === 401) { logoutStaff(); navigate('/staff-login'); return; }
       const { payslips: rows } = await res.json();
       if (Array.isArray(rows)) setPayslips(rows);
     } catch {
@@ -482,7 +481,7 @@ export default function StaffDashboard() {
     } finally {
       setPayslipsLoaded(true);
     }
-  }, [staffMember, SUPABASE_URL, SUPABASE_ANON]);
+  }, [staffMember, SUPABASE_URL, staffFetchInit, logoutStaff, navigate]);
 
   useEffect(() => {
     if (activeTab === 'pay' && !payslipsLoaded) loadPayslips();
@@ -490,18 +489,19 @@ export default function StaffDashboard() {
 
   // Load real jobs from the staff-jobs edge function
   useEffect(() => {
-    if (!staffMember?.id || !staffMember?.ownerId) {
+    const init = staffFetchInit();
+    if (!init || !staffMember?.id || !staffMember?.ownerId) {
       // No credentials — fall back to demo data so the UI isn't empty
       setJobs(buildDemoJobs(staffMember?.name));
       setJobsLoading(false);
       return;
     }
     setJobsLoading(true);
-    fetch(
-      `${SUPABASE_URL}/functions/v1/staff-jobs?staff_id=${staffMember.id}&owner_id=${staffMember.ownerId}`,
-      { headers: { apikey: SUPABASE_ANON } },
-    )
-      .then(r => r.json())
+    fetch(`${SUPABASE_URL}/functions/v1/staff-jobs`, init)
+      .then(r => {
+        if (r.status === 401) { logoutStaff(); navigate('/staff-login'); return { jobs: [] }; }
+        return r.json();
+      })
       .then(({ jobs: rows }) => {
         if (Array.isArray(rows)) {
           setJobs(rows.map(r => ({
@@ -530,13 +530,14 @@ export default function StaffDashboard() {
 
   // Load today's timesheets so clock-in state survives page refresh
   useEffect(() => {
-    if (!staffMember?.id || !staffMember?.ownerId) return;
+    const init = staffFetchInit();
+    if (!init || !staffMember?.id) return;
     const today = isoDate(new Date());
-    fetch(
-      `${SUPABASE_URL}/functions/v1/staff-timesheet?staff_id=${staffMember.id}&owner_id=${staffMember.ownerId}&date=${today}`,
-      { headers: { apikey: SUPABASE_ANON } },
-    )
-      .then(r => r.json())
+    fetch(`${SUPABASE_URL}/functions/v1/staff-timesheet?date=${today}`, init)
+      .then(r => {
+        if (r.status === 401) { logoutStaff(); navigate('/staff-login'); return { timesheets: [] }; }
+        return r.json();
+      })
       .then(({ timesheets: rows }) => {
         if (Array.isArray(rows)) {
           const map = {};
@@ -579,16 +580,13 @@ export default function StaffDashboard() {
     if (!staffMember?.id || !staffMember?.ownerId) return; // demo mode — local only
 
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/staff-jobs`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON },
-        body:    JSON.stringify({
-          staff_id: staffMember.id,
-          owner_id: staffMember.ownerId,
-          job_id:   jobId,
-          status:   newStatus,
-        }),
+      const init = staffFetchInit({
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ job_id: jobId, status: newStatus }),
       });
+      if (!init) return;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/staff-jobs`, init);
       if (!res.ok) {
         // Roll back on failure
         setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: j._prevStatus || j.status } : j));
@@ -717,6 +715,7 @@ export default function StaffDashboard() {
               staffMember={staffMember}
               timesheets={timesheets}
               onStatusChange={handleStatusChange}
+              staffFetchInit={staffFetchInit}
             />
           </div>
         )}
@@ -742,7 +741,7 @@ export default function StaffDashboard() {
                   })()}
                 </p>
                 {todayJobs.map(job => (
-                  <JobCard key={job.id} job={job} myName={staffMember.name} staffMember={staffMember} externalTimesheet={timesheets[job.id] ?? null} onStatusChange={handleStatusChange} />
+                  <JobCard key={job.id} job={job} myName={staffMember.name} staffMember={staffMember} externalTimesheet={timesheets[job.id] ?? null} onStatusChange={handleStatusChange} staffFetchInit={staffFetchInit} />
                 ))}
               </>
             )}
