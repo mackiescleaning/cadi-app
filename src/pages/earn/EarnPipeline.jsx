@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
-  ClipboardList, MapPin, Building2, Calendar, AlertCircle, ChevronRight,
+  ClipboardList, MapPin, Building2, Calendar, AlertCircle, ChevronRight, X, Navigation,
 } from 'lucide-react';
 import { listMyAssignedVisitSpecs } from '../../lib/db/connectDb';
 
 const ORANGE = '#C2410C';
+const INK    = '#0f172a';
+const SUB    = '#64748b';
+const LINE   = '#e2e8f0';
+const SOFT   = '#f8fafc';
 
 function fmtFreq(f) {
   return {
@@ -25,7 +29,7 @@ const STATUS_CFG = {
   closed:     { label: 'Closed',      color: '#64748b' },
 };
 
-function VisitSpecRow({ spec }) {
+function VisitSpecRow({ spec, onOpen }) {
   const status = STATUS_CFG[spec.status] || STATUS_CFG.assigned;
   const site = spec.site;
   const fm   = spec.fm_organisation;
@@ -60,11 +64,14 @@ function VisitSpecRow({ spec }) {
           </>
         )}
         <div style={{ flex: 1 }} />
-        <button style={{
-          fontSize: 11, fontWeight: 800, color: ORANGE,
-          background: 'none', border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 4,
-        }}>
+        <button
+          onClick={() => onOpen(spec)}
+          style={{
+            fontSize: 11, fontWeight: 800, color: ORANGE,
+            background: 'none', border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}
+        >
           View job card <ChevronRight size={11} />
         </button>
       </div>
@@ -77,10 +84,123 @@ function VisitSpecRow({ spec }) {
   );
 }
 
+function JobCardDrawer({ spec, onClose }) {
+  if (!spec) return null;
+  const site   = spec.site;
+  const fm     = spec.fm_organisation;
+  const status = STATUS_CFG[spec.status] || STATUS_CFG.assigned;
+  const postcode = site?.postcode ?? '';
+  const directionsUrl = postcode
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(postcode)}`
+    : null;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',
+        display: 'flex', justifyContent: 'flex-end', zIndex: 50,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: 480, maxWidth: '94vw', background: 'white',
+          borderLeft: `1px solid ${LINE}`, padding: '22px 26px',
+          overflowY: 'auto', boxShadow: '-12px 0 40px rgba(15,23,42,0.18)',
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{
+                fontSize: 9, fontWeight: 800, color: status.color,
+                background: `${status.color}15`, padding: '3px 8px', borderRadius: 999,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}>{status.label}</span>
+              <span style={{ fontSize: 11, color: SUB, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Building2 size={10} /> {fm?.name ?? '—'}
+              </span>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: INK, lineHeight: 1.3 }}>{site?.name ?? 'Site'}</div>
+            <div style={{ fontSize: 12, color: SUB, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <MapPin size={11} />
+              {postcode}{site?.address ? ` · ${site.address}` : ''}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: SUB, padding: 4 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Price + cadence grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          <div style={{ background: SOFT, border: `1px solid ${LINE}`, borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: INK, lineHeight: 1 }}>£{spec.price_per_visit}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: SUB, marginTop: 6, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Per visit</div>
+          </div>
+          <div style={{ background: SOFT, border: `1px solid ${LINE}`, borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ fontSize: 14, fontWeight: 900, color: INK, lineHeight: 1.1 }}>{fmtFreq(spec.frequency)}</div>
+            {spec.duration_minutes && (
+              <div style={{ fontSize: 11, color: SUB, marginTop: 3 }}>{spec.duration_minutes} min on site</div>
+            )}
+            <div style={{ fontSize: 10, fontWeight: 700, color: SUB, marginTop: 6, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Cadence</div>
+          </div>
+        </div>
+
+        {/* Scope */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>Specification</div>
+          <div style={{ background: 'white', border: `1px solid ${LINE}`, borderRadius: 10, padding: 14, fontSize: 13, color: INK, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+            {spec.scope}
+          </div>
+        </div>
+
+        {/* Access notes */}
+        {spec.access_notes && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <AlertCircle size={11} color={ORANGE} /> Access
+            </div>
+            <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: 14, fontSize: 13, color: '#7c2d12', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+              {spec.access_notes}
+            </div>
+          </div>
+        )}
+
+        {/* Directions */}
+        {directionsUrl && (
+          <a
+            href={directionsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              width: '100%', padding: '12px', marginBottom: 14,
+              background: ORANGE, color: 'white', fontWeight: 700, fontSize: 13,
+              borderRadius: 10, textDecoration: 'none',
+            }}
+          >
+            <Navigation size={14} /> Get directions
+          </a>
+        )}
+
+        {/* Footer note re: check-in */}
+        <div style={{ marginTop: 8, padding: 12, background: SOFT, borderRadius: 8, fontSize: 11, color: SUB, lineHeight: 1.5 }}>
+          <Calendar size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+          When you're on site, check in via <strong style={{ color: INK }}>Connect → On-site</strong> to start the GPS-verified time clock.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function EarnPipeline() {
   const [specs, setSpecs]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
+  const [openSpec, setOpenSpec] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -165,12 +285,14 @@ export default function EarnPipeline() {
                 <span style={{ fontSize: 10, color: '#94a3b8' }}>· {group.specs.length} job{group.specs.length === 1 ? '' : 's'}</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {group.specs.map(s => <VisitSpecRow key={s.id} spec={s} />)}
+                {group.specs.map(s => <VisitSpecRow key={s.id} spec={s} onOpen={setOpenSpec} />)}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <JobCardDrawer spec={openSpec} onClose={() => setOpenSpec(null)} />
     </div>
   );
 }
