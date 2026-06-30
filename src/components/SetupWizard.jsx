@@ -28,18 +28,7 @@ const STEPS = [
     detect: (profile, sd) => !!sd?.logo_url,
     autoDetect: true,
   },
-  {
-    id: 'sectors',
-    emoji: '🧹',
-    title: 'Choose your cleaning sectors',
-    mission: 'Tell Cadi what you do — residential, commercial or exterior — and the entire app reorders itself around your work.',
-    tab: 'settings',
-    tabLabel: 'Open Settings',
-    settingsTab: 'profile',
-    hint: 'Settings → Profile → Cleaning Sector',
-    detect: (profile) => !!profile?.cleaner_type,
-    autoDetect: true,
-  },
+  // 'sectors' step removed — sectors are required during Onboarding so this was a duplicate ask.
   {
     id: 'pricing',
     emoji: '💷',
@@ -87,14 +76,19 @@ const STEPS = [
   },
   {
     id: 'customers',
-    emoji: '👥',
-    title: 'Add your first customers',
-    mission: 'Log your existing clients — names, addresses, notes and a star rating. This is the foundation of everything: scheduling, invoicing, routes.',
-    tab: 'customers',
-    tabLabel: 'Open Customers',
-    hint: 'Customers tab → Add customer',
-    detect: null,
-    autoDetect: false,
+    emoji: '🚚',
+    title: 'Bring your customers across',
+    mission: "Drop in your CleanerPlanner / Aworka / Squeegee export — or photos of your paper diary — and I'll pull every customer, job, frequency and price. One sitting, no copy-paste.",
+    tab: 'onboarding/customers',
+    tabLabel: 'Start migration',
+    hint: 'Upload Customers.csv + Jobs.csv',
+    // Auto-tick when the migration flow finished a commit (sets this flag
+    // in business_settings.setup_data). Falls back to checking the legacy
+    // wizard_completed_steps array so users who already ticked manually
+    // don't see this step re-open.
+    detect: (_p, sd) => Boolean(sd?.customers_imported)
+                     || (Array.isArray(sd?.wizard_completed_steps) && sd.wizard_completed_steps.includes('customers')),
+    autoDetect: true,
   },
   {
     id: 'schedule',
@@ -439,6 +433,19 @@ export default function SetupWizard({ onAllDone }) {
                       className="shrink-0 text-xs font-bold text-gray-400 hover:text-brand-blue transition-colors"
                     >
                       Go →
+                    </button>
+                  )}
+
+                  {/* Re-open affordance for completed steps. Lets the user
+                      revisit the flow (e.g. re-import customers, tweak the
+                      menu) without having to untick the step first. */}
+                  {done && (
+                    <button
+                      onClick={() => goToTab(step)}
+                      className="shrink-0 text-xs font-semibold text-gray-400 hover:text-brand-blue transition-colors"
+                      title={`Open ${step.title}`}
+                    >
+                      Open
                     </button>
                   )}
                 </div>

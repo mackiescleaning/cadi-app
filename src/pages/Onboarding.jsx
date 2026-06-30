@@ -32,21 +32,19 @@ const ACCREDITATION_OPTIONS = ['BICSc', 'CHAS', 'Safe Contractor', 'Construction
 // ── Conversation script ───────────────────────────────────────────────────────
 // Each turn: { id, cadi(string|fn), type, field?, chapter, skippable? }
 
+// Sign-up onboarding is intentionally tight: name, contact, sectors — then
+// drop the user into the dashboard. Everything else (logo, biz structure,
+// VAT, team, goals) is moved to per-tab first-visit coaches so it only
+// surfaces when the owner first opens the relevant tool.
+
 const TURNS = [
   {
     id: 'confirm',
     cadi: f => f.firstName
-      ? `Hi ${f.firstName}! 👋 I've pulled your details from signup — just confirm everything looks right and we'll get started. Takes about 2 minutes.`
-      : `Hi! I'm Cadi — your cleaning business co-pilot 🧹\n\nLet's get your account set up. Takes about 2 minutes.`,
+      ? `Hi ${f.firstName}! Good to meet you. Quick sanity check on what you gave me — then we're off.`
+      : `Hi! I'm Cadi — your cleaning business co-pilot 🧹\n\nLet's get your account set up. Takes under a minute.`,
     type: 'confirm',
     chapter: 1,
-  },
-  {
-    id: 'logo',
-    cadi: f => `One more thing — want to add your logo? It'll appear at the top of the app, on every invoice and quote, making ${f.bizName} look completely yours from day one. Skip if you want to add it in Settings later.`,
-    type: 'logo',
-    chapter: 1,
-    skippable: true,
   },
   {
     id: 'contact',
@@ -61,80 +59,19 @@ const TURNS = [
     type: 'sectors',
     field: 'cleanerSectors',
     required: true,
-    chapter: 2,
-  },
-  {
-    id: 'bizStructure',
-    cadi: 'How is your business set up legally? This shapes your tax, accounts, and compliance tools.',
-    type: 'structure',
-    field: 'bizStructure',
-    required: true,
-    chapter: 2,
-  },
-  {
-    id: 'vatRegistered',
-    cadi: 'Are you VAT registered?\n\n(If your turnover is under £90,000 it\'s usually optional — but Cadi will track your threshold either way.)',
-    type: 'yes-no',
-    field: 'vatRegistered',
-    chapter: 2,
-  },
-  {
-    id: 'teamStructure',
-    cadi: 'Do you work solo or with a team? This sets up your scheduling, job assignment, and staff tools.',
-    type: 'team',
-    field: 'teamStructure',
-    required: true,
-    chapter: 2,
-  },
-  {
-    id: 'services',
-    cadi: f => `Now let's build your service menu.\n\nTap everything ${f.bizName} offers — these pre-fill your job cards, quotes, and invoices so you're never typing from scratch.`,
-    type: 'services',
-    field: 'services',
-    chapter: 3,
-    skippable: true,
-  },
-  {
-    id: 'widget',
-    cadi: f => `Nice — now let's get ${f.bizName} its first online lead. 🌐\n\nThis is Cadi's chat widget. It sits on your website as a small button. Visitors click it, get an instant quote, and their details land straight in your Cadi account.\n\nTap the blue button below to see exactly what your customers would see — then I'll show you how to add it to your site in 30 seconds.`,
-    type: 'widget',
-    chapter: 4,
-    skippable: true,
-  },
-  {
-    id: 'goals',
-    cadi: f => `What are you building towards, ${f.firstName}?\n\nSet your targets and the Cadi dashboard will track your progress every week — showing exactly how many jobs stand between you and your goal.`,
-    type: 'goals',
-    chapter: 5,
-    skippable: true,
-  },
-  {
-    id: 'marketplace_interest',
-    cadi: f => `One last thing, ${f.firstName} — we're building a marketplace that connects Cadi cleaners to commercial FM aggregators across the UK.\n\nWould you be interested in receiving commercial work through Cadi when the marketplace launches?`,
-    type: 'marketplace-interest',
-    chapter: 5,
-  },
-  {
-    id: 'services_builder_handoff',
-    cadi: f => `Last bit — let's get your services properly set up so Cadi knows exactly what you offer. 🛠️\n\nThis takes about 5 minutes and means your job cards, quotes, and invoices are pre-filled from day one.\n\nWhen you're ready, tap below and we'll build your menu together.`,
-    type: 'services-builder-handoff',
-    chapter: 5,
-    skippable: true,
+    chapter: 1,
   },
   {
     id: 'summary',
-    cadi: f => `You're all set, ${f.firstName}! 🎉\n\nHere's everything I've built for ${f.bizName || 'your account'} — ready to go the moment you walk in.\n\nYour first 3 actions inside Cadi:\n👥 Add your customers\n📅 Schedule your first job\n🧾 Make your invoice yours\n\nAsk Cadi anything if you get stuck — I'm on every tab.`,
+    cadi: f => `You're all set, ${f.firstName}! 🎉\n\nLet's get your customers across next — Cadi will build your menu, schedule and quoting from real data.`,
     type: 'summary',
-    chapter: 5,
+    chapter: 2,
   },
 ];
 
 const CHAPTERS = [
   { id: 1, label: 'About You' },
-  { id: 2, label: 'Your Business' },
-  { id: 3, label: 'Services & Pricing' },
-  { id: 4, label: 'Get Online' },
-  { id: 5, label: 'Goals & Finish' },
+  { id: 2, label: 'Done' },
 ];
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -409,6 +346,22 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
       if (id === 'bizStructure') {
         await saveProfile({ biz_structure: form.bizStructure, onboarding_step: 4 });
         await mergeSetupData({ company_number: form.companyNumber, fy_end: form.fyEnd || null });
+        // Mirror legal structure → business_settings.entity_type so AccountsTab
+        // shows the right tab set without the user having to re-enter it in
+        // Settings. Onboarding only offers two tax-distinct paths today:
+        // limited_company (Corporation Tax) vs everything else (Self Assessment).
+        // LLP/partnership/new_business fall through as sole_trader until we
+        // build proper partnership-tax support.
+        const entityType = form.bizStructure === 'limited' ? 'limited_company' : 'sole_trader';
+        const bsPatch    = { owner_id: user.id, entity_type: entityType };
+        if (entityType === 'limited_company') {
+          if (form.companyNumber) bsPatch.companies_house_number = form.companyNumber.trim();
+          if (form.fyEnd) {
+            const m = Number(form.fyEnd.slice(5, 7));
+            if (m >= 1 && m <= 12) bsPatch.accounting_year_end_month = m;
+          }
+        }
+        await supabase.from('business_settings').upsert(bsPatch, { onConflict: 'owner_id' });
       }
       if (id === 'vatRegistered') {
         await supabase.from('business_settings').upsert({ owner_id: user.id, vat_registered: form.vatRegistered }, { onConflict: 'owner_id' });
@@ -736,7 +689,7 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
               onClick={() => handleAnswer(id, form.cleanerSectors.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', '), form.cleanerSectors.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', '))}
               className="w-full rounded-[10px] bg-[#1f48ff] py-3 text-sm font-bold text-white shadow-[0_4px_16px_rgba(31,72,255,0.4)] transition hover:bg-[#3a5eff] disabled:opacity-60"
             >
-              {saving ? 'Saving…' : `Continue with ${form.cleanerSectors.length} sector${form.cleanerSectors.length > 1 ? 's' : ''} →`}
+              {saving ? 'Saving…' : 'Continue →'}
             </button>
           )}
         </div>
@@ -1349,6 +1302,11 @@ export default function Onboarding({ isModal = false, onComplete = null }) {
           })}
         </div>
       </div>
+
+      {/* AI disclosure — required at point of processing per Privacy Policy */}
+      <p className="mb-3 text-[10px] text-[rgba(153,197,255,0.4)] text-center">
+        Cadi uses AI (Anthropic) to personalise this setup. Your answers are processed to tailor your app — never trained on. <a href="/privacy#ai" target="_blank" rel="noopener noreferrer" className="text-[rgba(153,197,255,0.6)] hover:text-white underline">Read more</a>
+      </p>
 
       {/* Chat feed */}
       <div

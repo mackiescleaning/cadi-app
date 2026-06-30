@@ -16,6 +16,9 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  const TERMS_VERSION = '2026-06-06';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,6 +30,10 @@ export default function Signup() {
       setError('Passwords do not match. Please check and try again.');
       return;
     }
+    if (!termsAccepted) {
+      setError('Please accept the Terms & Conditions and Privacy Policy to continue.');
+      return;
+    }
     setLoading(true);
     setError('');
 
@@ -34,7 +41,12 @@ export default function Signup() {
       email,
       password,
       options: {
-        data: { first_name: firstName, business_name: businessName },
+        data: {
+          first_name:        firstName,
+          business_name:     businessName,
+          terms_accepted_at: new Date().toISOString(),
+          terms_version:     TERMS_VERSION,
+        },
         emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
     });
@@ -161,6 +173,21 @@ export default function Signup() {
                 <p className="text-xs text-green-600 mt-1">✓ Passwords match</p>
               )}
             </div>
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={e => setTermsAccepted(e.target.checked)}
+                required
+                className="mt-0.5 w-4 h-4 accent-[#1f48ff] flex-shrink-0"
+              />
+              <span className="text-xs text-gray-500 leading-relaxed">
+                I agree to the{' '}
+                <Link to="/terms" target="_blank" className="text-[#1f48ff] font-semibold hover:underline">Terms &amp; Conditions</Link>
+                {' '}and{' '}
+                <Link to="/privacy" target="_blank" className="text-[#1f48ff] font-semibold hover:underline">Privacy Policy</Link>.
+              </span>
+            </label>
             <button type="submit" disabled={loading}
               className="w-full py-3 bg-[#1f48ff] text-white font-bold rounded-xl hover:bg-[#3a5eff] transition-colors disabled:opacity-50 text-sm tracking-wide">
               {loading ? 'Setting up your account…' : 'Start for free →'}
