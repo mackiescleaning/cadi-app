@@ -291,7 +291,7 @@ export default function Quotes() {
 
                         {quote.status === 'accepted' && (
                           <button
-                            onClick={() => navigate(`/scheduler?customer=${encodeURIComponent(label)}`)}
+                            onClick={() => navigate('/scheduler', { state: { customerName: label } })}
                             className="px-3 py-1.5 text-xs font-bold border border-brand-blue text-brand-blue bg-blue-50 rounded-sm hover:bg-blue-100 transition-colors"
                           >
                             Book as job →

@@ -17,6 +17,123 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import FirstVisitCoach from "../components/FirstVisitCoach";
+import { supabase } from "../lib/supabase";
+import { getCurrentUserId } from "../lib/db/authDb";
+
+// ─── Goals coach (first-visit) ────────────────────────────────────────────────
+const AMBITIONS = [
+  { id: 'steady',        label: 'Steady & sustainable' },
+  { id: 'growing_fast',  label: 'Growing fast' },
+  { id: 'scaling',       label: 'Scaling hard' },
+];
+
+function BusinessLabGoalsCoach() {
+  const [saving, setSaving]                 = useState(false);
+  const [currentRevenue, setCurrentRevenue] = useState('');
+  const [targetRevenue, setTargetRevenue]   = useState('');
+  const [currentClients, setCurrentClients] = useState('');
+  const [targetClients, setTargetClients]   = useState('');
+  const [targetDate, setTargetDate]         = useState('');
+  const [ambition, setAmbition]             = useState('');
+
+  const lbl = "text-[10px] font-bold uppercase tracking-wider text-[#1f48ff]";
+  const inp = "w-full bg-white border border-[#1f48ff]/15 rounded-lg px-3 py-2 text-sm text-[#010a4f] focus:outline-none focus:border-[#1f48ff]/50";
+
+  const persist = async () => {
+    setSaving(true);
+    try {
+      const ownerId = await getCurrentUserId();
+      if (!ownerId) return;
+      const monthlyTarget = Number(targetRevenue || 0);
+      if (monthlyTarget) {
+        await supabase.from('business_settings').upsert(
+          { owner_id: ownerId, annual_target: monthlyTarget * 12 },
+          { onConflict: 'owner_id' }
+        );
+      }
+      const { data: row } = await supabase
+        .from('business_settings')
+        .select('setup_data')
+        .eq('owner_id', ownerId)
+        .maybeSingle();
+      const setup = row?.setup_data ?? {};
+      const next = {
+        ...setup,
+        current_revenue: Number(currentRevenue || 0) || null,
+        target_revenue:  Number(targetRevenue  || 0) || null,
+        current_clients: Number(currentClients || 0) || null,
+        target_clients:  Number(targetClients  || 0) || null,
+        target_date:     targetDate || null,
+        ambition:        ambition || null,
+      };
+      await supabase.from('business_settings').upsert(
+        { owner_id: ownerId, setup_data: next },
+        { onConflict: 'owner_id' }
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <FirstVisitCoach
+      storageKey="business_lab_goals"
+      title="What are you building towards?"
+      subtitle="Set targets so the dashboard and weekly reports track real progress."
+      primaryCta="Save targets"
+      skipCta="Set later"
+      onPrimary={persist}
+      busy={saving}
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className={lbl}>Current monthly revenue (£)</label>
+          <input type="number" inputMode="numeric" min="0" value={currentRevenue}
+            onChange={e => setCurrentRevenue(e.target.value)} placeholder="0" className={inp} />
+        </div>
+        <div>
+          <label className={lbl}>Target monthly revenue (£)</label>
+          <input type="number" inputMode="numeric" min="0" value={targetRevenue}
+            onChange={e => setTargetRevenue(e.target.value)} placeholder="0" className={inp} />
+        </div>
+        <div>
+          <label className={lbl}>Current clients</label>
+          <input type="number" inputMode="numeric" min="0" value={currentClients}
+            onChange={e => setCurrentClients(e.target.value)} placeholder="0" className={inp} />
+        </div>
+        <div>
+          <label className={lbl}>Target clients</label>
+          <input type="number" inputMode="numeric" min="0" value={targetClients}
+            onChange={e => setTargetClients(e.target.value)} placeholder="0" className={inp} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={lbl}>Target date</label>
+          <input type="date" value={targetDate}
+            onChange={e => setTargetDate(e.target.value)} className={inp} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={lbl}>Ambition</label>
+          <div className="flex flex-wrap gap-2 mt-1.5">
+            {AMBITIONS.map(a => {
+              const on = ambition === a.id;
+              return (
+                <button key={a.id} type="button" onClick={() => setAmbition(on ? '' : a.id)}
+                  className={`text-[12px] font-bold px-3 py-1.5 rounded-full border transition-colors ${
+                    on
+                      ? 'bg-[#1f48ff] text-white border-[#1f48ff]'
+                      : 'bg-[#f0f4ff] text-[#010a4f] border-[#1f48ff]/15 hover:border-[#1f48ff]/40'
+                  }`}>
+                  {a.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </FirstVisitCoach>
+  );
+}
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 const DEFAULT_ACCOUNTS = {
@@ -1187,6 +1304,9 @@ export default function BusinessLabTab({ accountsData, onNavigate: onNavigatePro
         style={{ backgroundImage: "linear-gradient(rgba(153,197,255,0.5) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,0.5) 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
 
       <div className="relative max-w-4xl mx-auto px-4 py-6 space-y-4">
+
+        {/* First-visit goals coach */}
+        <BusinessLabGoalsCoach />
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4">

@@ -1246,6 +1246,11 @@ export default function ServiceChat({
           </div>
         </div>
 
+        {/* AI disclosure — required at point of processing per Privacy Policy */}
+        <p className="relative px-5 pt-3 text-[10px] text-[rgba(153,197,255,0.4)] shrink-0">
+          Cadi uses AI (Anthropic) to help build your service menu. Your answers aren't trained on. <a href="/privacy#ai" target="_blank" rel="noopener noreferrer" className="text-[rgba(153,197,255,0.6)] hover:text-white underline">Read more</a>
+        </p>
+
         {/* Chat feed */}
         <div
           ref={chatRef}

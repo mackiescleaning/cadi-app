@@ -30,7 +30,7 @@
 //   import PricingCalculator from './components/PricingCalculator'
 //   <PricingCalculator accountsData={accountsData} />
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useData } from "../context/DataContext";
 
@@ -270,13 +270,6 @@ function priceForMargin({ targetMarginPct, hrs, staffId, extraCosts = 0, account
   return Math.max(0, Math.round(p));
 }
 
-// ─── AI photo analysis ─────────────────────────────────────────────────────────
-// AI photo analysis — disabled until API key is configured server-side
-// To enable: deploy an edge function that proxies to Anthropic API with the key
-async function analysePhoto(/* base64, mediaType, mode */) {
-  throw new Error("AI photo analysis coming soon — this feature is not yet available.");
-}
-
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 const Card = ({ children, className = "" }) =>
   <div className={`bg-white border border-gray-200 rounded-sm ${className}`}>{children}</div>;
@@ -327,110 +320,30 @@ function PillRow({ options, value, onChange, getLabel = o => o.label, getValue =
   );
 }
 
-// ─── Photo capture (works on Mac via file upload, camera on mobile) ─────────────
+// ─── Photo capture — disabled stub ──────────────────────────────────────────
+// Wired up properly in Month 2 with the extract-service-menu Sonnet vision edge
+// function. Until then, render an honest "Coming soon" card with no file input
+// (the original analysePhoto was a thrower that left users staring at an error
+// after every upload) and no Apply-AI-prices button on top of empty results.
+// eslint-disable-next-line no-unused-vars
 function PhotoCapture({ mode, onResult }) {
-  const [status,  setStatus]  = useState("idle");
-  const [preview, setPreview] = useState(null);
-  const [result,  setResult]  = useState(null);
-  const [error,   setError]   = useState(null);
-  const ref = useRef(null);
-
-  const isMobile = typeof window !== "undefined" && /Mobi|Android/i.test(navigator.userAgent);
-
-  const handle = useCallback(async (file) => {
-    if (!file) return;
-    setPreview(URL.createObjectURL(file));
-    setStatus("analysing"); setError(null);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const res = await analysePhoto(e.target.result.split(",")[1], file.type, mode);
-        setResult(res); setStatus("done"); onResult?.(res);
-      } catch { setError("Couldn't analyse the photo. Try again or upload a clearer image."); setStatus("error"); }
-    };
-    reader.readAsDataURL(file);
-  }, [mode, onResult]);
-
-  const clear = () => { setPreview(null); setResult(null); setStatus("idle"); setError(null); if (ref.current) ref.current.value = ""; };
-
-  const confColor = r => r?.confidence === "high" ? "green" : r?.confidence === "medium" ? "warn" : "gray";
-  const confLabel = r => r?.confidence === "high" ? "High confidence" : r?.confidence === "medium" ? "Medium confidence" : "Low confidence";
-
   return (
     <Card className="overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <SL>AI photo pricing</SL>
-        <Chip color="sky">Anthropic Claude</Chip>
+        <Chip color="gray">Coming soon</Chip>
       </div>
-      <div className="p-4 space-y-3">
-        {!preview ? (
-          <div className="border-2 border-dashed border-gray-200 rounded-sm">
-            <div className="flex flex-col items-center py-6 px-4 text-center">
-              <p className="text-sm font-semibold text-gray-500 mb-1">AI photo pricing</p>
-              <p className="text-xs text-gray-400 mb-3">Coming soon — Cadi will analyse a photo of the job and suggest a price range.</p>
-              <span className="px-3 py-1 bg-gray-100 text-gray-400 text-xs font-bold rounded-sm">Coming soon</span>
-            </div>
+      <div className="p-4">
+        <div className="border-2 border-dashed border-gray-200 rounded-sm">
+          <div className="flex flex-col items-center py-6 px-4 text-center">
+            <span className="text-2xl mb-2">📷</span>
+            <p className="text-sm font-semibold text-gray-500 mb-1">Snap a photo, get a price</p>
+            <p className="text-xs text-gray-400 max-w-xs">
+              Cadi will analyse a photo of the job and suggest a price range.
+              Rolling out shortly — your quotes still build by hand below.
+            </p>
           </div>
-        ) : (
-          <div className="relative">
-            <img src={preview} alt="Job" className="w-full max-h-48 object-cover rounded-sm" />
-            <button onClick={clear} className="absolute top-2 right-2 w-6 h-6 bg-white border border-gray-200 rounded-sm text-xs text-gray-500 hover:text-red-500 flex items-center justify-center">✕</button>
-          </div>
-        )}
-
-        {status === "analysing" && (
-          <div className="flex items-center gap-3 p-3 bg-brand-navy/5 border border-brand-navy/10 rounded-sm">
-            <div className="w-4 h-4 border-2 border-brand-blue border-t-transparent rounded-full animate-spin shrink-0" />
-            <p className="text-xs text-brand-navy font-semibold">Analysing photo…</p>
-          </div>
-        )}
-
-        {error && <Alert type="warn">{error}</Alert>}
-
-        {result && status === "done" && (
-          <div className="border border-brand-blue/20 bg-blue-50/30 rounded-sm overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-brand-navy text-white">
-              <p className="text-xs font-bold uppercase tracking-widest">AI Suggestion</p>
-              <Chip color={confColor(result)}>{confLabel(result)}</Chip>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-white border border-gray-100 rounded-sm p-3">
-                  <SL className="mb-1">Property / size</SL>
-                  <p className="text-sm font-semibold text-brand-navy">{result.propertyType}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{result.estimatedSize}</p>
-                </div>
-                <div className="bg-white border border-gray-100 rounded-sm p-3">
-                  <SL className="mb-1">Condition</SL>
-                  <p className={`text-sm font-semibold ${
-                    result.complexity === "light"  ? "text-emerald-600" :
-                    result.complexity === "normal" ? "text-brand-blue" :
-                    result.complexity === "heavy"  ? "text-amber-600" : "text-red-600"
-                  }`}>{result.complexity?.charAt(0).toUpperCase() + result.complexity?.slice(1)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{result.complexityReason}</p>
-                </div>
-              </div>
-              <div className="bg-white border border-brand-blue/20 rounded-sm p-3">
-                <SL className="mb-1">Suggested price</SL>
-                <div className="flex items-baseline gap-3">
-                  <p className="text-2xl font-bold tabular-nums text-brand-navy">{fmt(result.suggestedPrice)}</p>
-                  <p className="text-xs text-gray-400">{fmt(result.priceRangeMin)} – {fmt(result.priceRangeMax)} range</p>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">Est. {result.estimatedHours} hours</p>
-              </div>
-              {result.observations?.length > 0 && (
-                <div className="space-y-1">
-                  {result.observations.map((o, i) => (
-                    <p key={i} className="text-xs text-gray-600 flex gap-1.5"><span className="text-brand-blue shrink-0 font-bold">→</span>{o}</p>
-                  ))}
-                </div>
-              )}
-              <button onClick={onResult ? () => onResult(result) : undefined} className="w-full py-2 bg-brand-navy text-white text-xs font-bold uppercase tracking-wide hover:bg-brand-blue transition-colors rounded-sm">
-                Apply AI prices to quote
-              </button>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </Card>
   );
@@ -2842,7 +2755,7 @@ function ExteriorTab({ accounts, onSaveQuote, onAcceptQuote, customers = [], ini
                       </div>
                     </div>
                     <button
-                      onClick={() => navigate(`/scheduler?customer=${encodeURIComponent(lastQuote.customer)}`)}
+                      onClick={() => navigate('/scheduler', { state: { customerName: lastQuote.customer } })}
                       className="w-full py-2.5 rounded-xl text-xs font-black border border-[rgba(153,197,255,0.2)] bg-[rgba(153,197,255,0.06)] text-white hover:bg-[#1f48ff]/20 hover:border-[#1f48ff]/50 transition-all flex items-center justify-center gap-2">
                       <span>📅</span> Book as job in Scheduler →
                     </button>
@@ -3361,7 +3274,7 @@ function WalkthroughTab({ accounts, onSaveQuote, customers = [] }) {
             </div>
           </div>
           <button
-            onClick={() => navigate(`/scheduler?customer=${encodeURIComponent(lastQuote.customer)}`)}
+            onClick={() => navigate('/scheduler', { state: { customerName: lastQuote.customer } })}
             className="w-full py-3 border border-brand-navy text-brand-navy font-bold text-sm rounded-sm hover:bg-brand-navy hover:text-white transition-colors"
           >
             Book as job in Scheduler →

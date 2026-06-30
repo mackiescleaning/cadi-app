@@ -12,6 +12,14 @@ import { bulkInsertRounds, deleteRoundsForCustomer } from '../lib/db/customerRou
 import { bulkCreateJobs } from '../lib/db/jobsDb';
 import { supabase } from '../lib/supabase';
 import { usePlan } from '../hooks/usePlan';
+import {
+  parseFrequency,
+  parseBalance,
+  normalisePostcode,
+  splitAddress,
+  detectSource,
+} from '../lib/migration/parsers';
+import { newImportBatchId, rollbackBatch } from '../lib/migration/importBatch';
 
 const LITE_CAP = 30;
 
@@ -42,14 +50,14 @@ const CADI_FIELDS = [
 
 // ─── Keyword → Cadi field auto-mapping ────────────────────────────────────────
 const KEYWORD_MAP = [
-  { field: 'name',              keywords: ['name', 'full name', 'customer', 'client', 'contact'] },
-  { field: 'email',             keywords: ['email', 'e-mail', 'mail'] },
-  { field: 'phone',             keywords: ['phone', 'mobile', 'tel', 'telephone', 'cell'] },
-  { field: 'addressLine1',      keywords: ['address 1', 'address1', 'street', 'address line 1', 'line 1', 'addr1', 'addr'] },
+  { field: 'name',              keywords: ['name', 'full name', 'customer', 'client', 'contact', 'company', 'company name', 'display name'] },
+  { field: 'email',             keywords: ['email', 'e-mail', 'mail', 'main email'] },
+  { field: 'phone',             keywords: ['phone', 'mobile', 'tel', 'telephone', 'cell', 'main phone', 'work phone', 'alt phone', 'alt. phone'] },
+  { field: 'addressLine1',      keywords: ['address 1', 'address1', 'street', 'address line 1', 'line 1', 'addr1', 'addr', 'billing address', 'bill to', 'ship to', 'billing address street'] },
   { field: 'addressLine2',      keywords: ['address 2', 'address2', 'address line 2', 'line 2', 'addr2'] },
-  { field: 'town',              keywords: ['town', 'city', 'suburb'] },
-  { field: 'county',            keywords: ['county', 'region', 'state', 'area'] },
-  { field: 'postcode',          keywords: ['postcode', 'post code', 'postal', 'zip', 'zipcode'] },
+  { field: 'town',              keywords: ['town', 'city', 'suburb', 'billing address city'] },
+  { field: 'county',            keywords: ['county', 'region', 'state', 'area', 'billing address state'] },
+  { field: 'postcode',          keywords: ['postcode', 'post code', 'postal', 'zip', 'zipcode', 'billing address postal code'] },
   { field: 'frequency',         keywords: ['frequency', 'recurring', 'recurrence', 'interval'] },
   { field: 'notes',             keywords: ['notes', 'note', 'comments', 'comment', 'description', 'memo'] },
   { field: 'tags',              keywords: ['tags', 'tag', 'labels', 'label', 'category', 'categories'] },
@@ -58,7 +66,7 @@ const KEYWORD_MAP = [
   { field: 'jobReference',      keywords: ['job ref', 'job reference', 'job no', 'job number', 'jobref', 'job id'] },
   { field: 'customerReference', keywords: ['customer ref', 'customer reference', 'cust ref', 'account ref', 'account number', 'acc ref', 'ref'] },
   { field: 'schedule',          keywords: ['schedule', 'cleaning schedule', 'service schedule', 'visit schedule'] },
-  { field: 'customerBalance',   keywords: ['balance', 'customer balance', 'outstanding', 'amount due', 'account balance', 'balance due'] },
+  { field: 'customerBalance',   keywords: ['balance', 'customer balance', 'outstanding', 'amount due', 'account balance', 'balance due', 'open balance', 'current balance'] },
   { field: 'pricePerVisit',     keywords: ['price', 'cost', 'charge', 'amount', 'price per visit', 'job price', 'visit price', 'fee'] },
   { field: 'roundName',         keywords: ['round', 'round name', 'route', 'route name', 'rounds', 'area round'] },
   { field: 'accountStatus',     keywords: ['status', 'account status', 'active', 'state', 'customer status'] },
@@ -172,7 +180,10 @@ function buildCleanerPlannerData(rows, existingCustRefs = new Set()) {
       : 'active';
 
     const pricePerVisit  = parseCurrency(get('Price') || get('Job Price') || get('Price Per Visit') || get('Visit Price'));
-    const balance        = parseCurrency(get('Balance') || get('Account Balance') || get('Outstanding')) ?? 0;
+    // parseBalance honours CR/DR suffixes (CleanerPlanner and Squeegee both emit them).
+    // Falls back to parseCurrency for purely numeric cells.
+    const rawBalance     = get('Balance') || get('Account Balance') || get('Outstanding');
+    const balance        = (parseBalance(rawBalance) ?? parseCurrency(rawBalance)) ?? 0;
     const dueDate        = parseCleanerDate(get('Due') || get('Next Due') || get('Due Date') || get('Next Clean') || get('Next Visit'));
     const schedule       = get('Schedule') || get('Frequency') || get('Recurring') || get('Recurrence') || null;
     const roundName      = get('Round')    || get('Round Name') || get('Route') || null;
@@ -183,14 +194,32 @@ function buildCleanerPlannerData(rows, existingCustRefs = new Set()) {
     if (!customerMap.has(dedupKey)) {
       const phone = get('Mobile') || get('Phone') || null;
       const email = get('Email') || null;
+      // Postcode normalisation: "sw191aa" → "SW19 1AA". Falls back to raw if invalid.
+      const rawPc = get('Postcode') || get('Post Code') || null;
+      const postcode = normalisePostcode(rawPc) ?? (rawPc ? rawPc.trim() : null);
+
+      // If the import lacks structured fields but has a one-line address,
+      // try splitting it (defensive — most CP exports have structured cols).
+      let line1 = address || null;
+      let line2 = get('Address Line 2') || get('Address 2') || null;
+      let town  = get('Town') || get('City') || null;
+      let county = get('County') || get('Region') || null;
+      if (!town && !county && line1 && /,/.test(line1)) {
+        const parts = splitAddress(line1);
+        line1  = parts.addressLine1 ?? line1;
+        line2  = line2  ?? parts.addressLine2;
+        town   = town   ?? parts.town;
+        county = county ?? parts.county;
+      }
+
       customerMap.set(dedupKey, {
         customer: {
           name,
-          addressLine1:      address || null,
-          addressLine2:      get('Address Line 2') || get('Address 2') || null,
-          town:              get('Town') || get('City') || null,
-          county:            get('County') || get('Region') || null,
-          postcode:          get('Postcode') || get('Post Code') || null,
+          addressLine1:      line1,
+          addressLine2:      line2,
+          town,
+          county,
+          postcode,
           phone:             phone || null,
           email:             email || null,
           notes:             get('Account Notes') || get('Notes') || get('Comments') || null,
@@ -220,19 +249,13 @@ function buildCleanerPlannerData(rows, existingCustRefs = new Set()) {
 }
 
 // ─── Schedule generation helpers ─────────────────────────────────────────────
+// parseFrequency is shared across the import wizard, ServiceChat and AddCustomerModal —
+// lives in src/lib/migration/parsers.js. parseFrequencyDays kept as a local thin
+// wrapper for back-compat with the inline call sites below.
 
 function parseFrequencyDays(scheduleStr) {
-  if (!scheduleStr) return null;
-  const s = scheduleStr.toLowerCase().trim();
-  if (s.includes('one off') || s.includes('one-off')) return 0;
-  const weeksMatch = s.match(/(\d+)\s*week/);
-  if (weeksMatch) return parseInt(weeksMatch[1]) * 7;
-  const monthsMatch = s.match(/(\d+)\s*month/);
-  if (monthsMatch) return parseInt(monthsMatch[1]) * 30;
-  if (s === 'weekly') return 7;
-  if (s === 'fortnightly') return 14;
-  if (s === 'monthly') return 30;
-  return null;
+  const f = parseFrequency(scheduleStr);
+  return f ? f.days : null;
 }
 
 function detectJobType(customerName) {
@@ -296,6 +319,28 @@ function fmtJobDate(dateStr) {
 }
 
 // ─── Parse file (CSV or Excel) → { headers, rows } ───────────────────────────
+// Header-hint words used to locate the real header row when a file has
+// preamble rows above it (QuickBooks .xls exports have a business-name title,
+// a report title, a date, and a blank row before the actual column headers).
+const HEADER_HINTS = [
+  'name','customer','client','company','contact','display name',
+  'email','phone','mobile','telephone','main phone','fax',
+  'address','street','town','city','county','state','postcode','post code','zip','postal',
+  'balance','open balance','outstanding',
+  'round','route','due','schedule','frequency','ref','job ref','cust ref',
+  'status','tags','notes','memo','comments',
+  'bill to','ship to','billing address',
+];
+
+function normaliseCell(v) {
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    const dd = String(v.getDate()).padStart(2, '0');
+    const mm = String(v.getMonth() + 1).padStart(2, '0');
+    return `${dd}/${mm}/${v.getFullYear()}`;
+  }
+  return String(v ?? '').trim();
+}
+
 function parseFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -306,25 +351,52 @@ function parseFile(file) {
         const workbook = XLSX.read(data, { type: 'array' });
         if (!workbook.SheetNames.length) throw new Error('No sheets found in file.');
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const raw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
-        if (!raw.length) throw new Error('The sheet appears empty — make sure row 1 is the header row and rows 2+ are your customers.');
-        const headers = Object.keys(raw[0]);
-        const rows = raw.map(r => {
+
+        // Read as array-of-arrays so we can locate the real header row.
+        // QuickBooks XLS exports prefix the table with several title/blank rows.
+        const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: false });
+        if (!aoa.length) throw new Error('The sheet appears empty — make sure row 1 is the header row and rows 2+ are your customers.');
+
+        // Score each of the first 20 rows for header-likeness; the row with
+        // the most header-hint matches (and at least 2 non-empty cells) wins.
+        let headerRowIdx = 0;
+        let bestScore = 0;
+        for (let i = 0; i < Math.min(aoa.length, 20); i++) {
+          const row = aoa[i];
+          const cells = row.map(c => String(c ?? '').toLowerCase().trim());
+          const nonEmpty = cells.filter(Boolean).length;
+          if (nonEmpty < 2) continue;
+          const score = cells.reduce((acc, s) => {
+            if (!s || s.length > 40) return acc;
+            return acc + (HEADER_HINTS.some(h => s === h || s.includes(h)) ? 1 : 0);
+          }, 0);
+          if (score > bestScore) { bestScore = score; headerRowIdx = i; }
+        }
+
+        const rawHeaderRow = aoa[headerRowIdx] || [];
+        const seen = {};
+        const headers = rawHeaderRow.map((h, i) => {
+          let s = String(h ?? '').trim();
+          if (!s) s = `Column ${i + 1}`;
+          if (seen[s] == null) { seen[s] = 1; return s; }
+          seen[s]++;
+          return `${s} (${seen[s]})`;
+        });
+
+        const dataRows = aoa.slice(headerRowIdx + 1);
+        const rows = dataRows.map(arr => {
           const obj = {};
-          headers.forEach(h => {
-            const v = r[h] ?? '';
-            // Excel date cells come through as JS Date objects — normalise to DD/MM/YYYY
-            // so downstream parsers (parseCleanerDate etc.) always see a consistent format
-            if (v instanceof Date && !isNaN(v.getTime())) {
-              const dd = String(v.getDate()).padStart(2, '0');
-              const mm = String(v.getMonth() + 1).padStart(2, '0');
-              obj[h] = `${dd}/${mm}/${v.getFullYear()}`;
-            } else {
-              obj[h] = String(v).trim();
-            }
-          });
+          headers.forEach((h, i) => { obj[h] = normaliseCell(arr[i]); });
           return obj;
-        }).filter(row => Object.values(row).some(v => v !== ''));
+        }).filter(row => {
+          const vals = Object.values(row).filter(v => v !== '');
+          if (vals.length === 0) return false;
+          // QuickBooks "Total" / summary footer rows have a single labelled cell
+          if (vals.length <= 2 && /^total\b/i.test(vals[0])) return false;
+          return true;
+        });
+
+        if (!rows.length) throw new Error('The sheet appears empty — make sure row 1 is the header row and rows 2+ are your customers.');
         resolve({ headers, rows });
       } catch (err) {
         reject(err);
@@ -340,7 +412,7 @@ const SOURCES = [
     id: 'quickbooks',
     name: 'QuickBooks',
     icon: '📒',
-    hint: 'In QuickBooks go to Sales → Customers. Click the export icon (a small spreadsheet icon) in the top-right corner of the customer list. It will download an Excel file — upload that file here.',
+    hint: 'In QuickBooks go to Sales → Customers and click the export icon (top-right) — or run Reports → Customer Contact List → Export to Excel. Both .xls and .xlsx work. Cadi will skip the title rows and detect "Bill to", "Main Phone" and "Open Balance" columns automatically.',
     sampleFile: '/test-imports/quickbooks-sample.csv',
   },
   {
@@ -552,7 +624,16 @@ function StepUpload({ source, onBack, onParsed }) {
 }
 
 // ─── Step 3: Map columns ──────────────────────────────────────────────────────
-function StepMap({ headers, rows, onBack, onConfirm }) {
+function StepMap({ headers, rows, onBack, onConfirm, detectedSource }) {
+  const SOURCE_LABEL = {
+    'cleaner-planner': 'CleanerPlanner',
+    'squeegee':        'Squeegee',
+    'aworka':          'Aworka',
+    'jobber':          'Jobber',
+    'servicem8':       'ServiceM8',
+    'housecall-pro':   'Housecall Pro',
+    'quickbooks':      'QuickBooks',
+  };
   const [mapping, setMapping] = useState(() => {
     const m = {};
     headers.forEach(h => { m[h] = autoMap(h); });
@@ -576,7 +657,14 @@ function StepMap({ headers, rows, onBack, onConfirm }) {
         <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-4 transition-colors">
           <ArrowLeft size={12} /> Back
         </button>
-        <h2 className="text-xl font-black text-white">Match your columns</h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="text-xl font-black text-white">Match your columns</h2>
+          {detectedSource && SOURCE_LABEL[detectedSource] && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
+              Detected: {SOURCE_LABEL[detectedSource]}
+            </span>
+          )}
+        </div>
         <p className="text-sm text-[rgba(153,197,255,0.6)] mt-1">
           We've guessed the mapping below — check it looks right and adjust anything that's off.
         </p>
@@ -646,6 +734,24 @@ function buildCustomers(rows, mapping, existingEmails) {
     });
 
     if (!c.name) { skipped.push({ row: idx + 2, reason: 'No name' }); return; }
+
+    // QuickBooks "Bill to" / "Billing Address" cells are one multi-line string.
+    // If the mapped addressLine1 contains newlines or looks like a full address,
+    // split it into structured parts before saving.
+    if (c.addressLine1 && /[\n,]/.test(c.addressLine1) && !c.postcode && !c.town) {
+      const flat = c.addressLine1.replace(/\r?\n/g, ', ');
+      const parts = splitAddress(flat);
+      if (parts.addressLine1) c.addressLine1 = parts.addressLine1;
+      if (parts.addressLine2 && !c.addressLine2) c.addressLine2 = parts.addressLine2;
+      if (parts.town && !c.town) c.town = parts.town;
+      if (parts.county && !c.county) c.county = parts.county;
+      if (parts.postcode && !c.postcode) c.postcode = parts.postcode;
+    }
+    // Normalise postcode if present
+    if (c.postcode) {
+      const np = normalisePostcode(c.postcode);
+      if (np) c.postcode = np;
+    }
 
     // Normalise tags → array
     if (c.tags && typeof c.tags === 'string') {
@@ -928,7 +1034,7 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
 }
 
 // ─── Step 5: Done — celebration screen ────────────────────────────────────────
-function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewScheduler }) {
+function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewScheduler, batchId, onUndo }) {
   const hasSchedule = jobs > 0;
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -1124,6 +1230,15 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
           >
             {hasSchedule && onViewScheduler ? 'Back to dashboard' : 'View my customers'}
           </button>
+          {batchId && onUndo && (
+            <button
+              onClick={onUndo}
+              className="w-full py-2 text-[11px] font-semibold rounded-xl text-[rgba(153,197,255,0.45)] hover:text-red-300 transition-colors"
+              title="Delete every customer, round and job created in this import"
+            >
+              Undo this import
+            </button>
+          )}
         </div>
 
       </div>
@@ -1131,7 +1246,7 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
   );
 }
 
-// ─── 50-customer cap modal ────────────────────────────────────────────────────
+// ─── Lite-plan customer cap modal ─────────────────────────────────────────────
 function CapModal({ total, onUpgrade, onPick, onImportRecent }) {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
@@ -1165,12 +1280,13 @@ function CapModal({ total, onUpgrade, onPick, onImportRecent }) {
               </div>
             </button>
 
-            {/* Path B — Pick 50 */}
+            {/* Path B — Pick the first LITE_CAP. The badge mirrors the
+                actual constant so the visual never drifts from the limit. */}
             <button
               onClick={onPick}
               className="w-full flex items-center gap-3 p-4 rounded-xl border border-[rgba(153,197,255,0.2)] bg-[rgba(153,197,255,0.05)] hover:bg-[rgba(153,197,255,0.1)] transition-colors text-left"
             >
-              <div className="w-9 h-9 rounded-lg bg-[rgba(153,197,255,0.1)] flex items-center justify-center shrink-0 text-sm font-black text-[#99c5ff]">50</div>
+              <div className="w-9 h-9 rounded-lg bg-[rgba(153,197,255,0.1)] flex items-center justify-center shrink-0 text-sm font-black text-[#99c5ff]">{LITE_CAP}</div>
               <div>
                 <p className="text-sm font-bold text-white">Choose my first {LITE_CAP}</p>
                 <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">Pick which customers to bring in now. Upgrade later when you're ready.</p>
@@ -1298,6 +1414,7 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
   const [step, setStep] = useState('source'); // source | upload | map | preview | cap | pick | done
   const [source, setSource] = useState(null);
   const [csvData, setCsvData] = useState(null); // { headers, rows, fileName }
+  const [detectedSource, setDetectedSource] = useState(null);
   const [mapping, setMapping] = useState(null);
   const [cpData, setCpData] = useState(null);   // CleanerPlanner Jobs: { entries, skipped }
   const [importing, setImporting] = useState(false);
@@ -1309,30 +1426,50 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
   const [pendingCustomers, setPendingCustomers] = useState([]);
   const [showCap, setShowCap] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const [lastImportBatchId, setLastImportBatchId] = useState(null);
+
+  const handleUndoImport = async () => {
+    if (!lastImportBatchId) return;
+    if (!window.confirm('Undo this import? Every customer, round and job created by this run will be permanently deleted.')) return;
+    try {
+      const r = await rollbackBatch(lastImportBatchId);
+      try { localStorage.removeItem('cadi_last_import_batch'); } catch {}
+      setLastImportBatchId(null);
+      window.alert(`Reversed: ${r.customers} customers, ${r.rounds} rounds, ${r.jobs} jobs, ${r.recurringJobs} recurring rules removed.`);
+      onImported?.();
+      onClose?.();
+    } catch (err) {
+      window.alert(`Couldn't undo: ${err?.message ?? 'unknown error'}`);
+    }
+  };
 
   const existingEmails   = new Set(existingCustomers.map(c => c.email?.toLowerCase()).filter(Boolean));
   const existingCustRefs = new Set(existingCustomers.map(c => c.customer_reference).filter(Boolean));
 
-  // CleanerPlanner Jobs import: create customers, rounds, then auto-schedule jobs
+  // CleanerPlanner Jobs import: create customers, rounds, then auto-schedule jobs.
+  // Every row created here is stamped with the same import_batch_id so the
+  // entire import can be undone in one click.
   const doImportCP = async (entries) => {
     setImporting(true);
     setImportError(null);
+    const batchId = newImportBatchId();
     let count = 0;
     let roundCount = 0;
     const failures = [];
     const jobsToCreate = [];
 
-    for (const { customer, rounds } of entries) {
+    for (let i = 0; i < entries.length; i++) {
+      const { customer, rounds } = entries[i];
       try {
-        const saved = await upsertCustomer(customer);
+        const saved = await upsertCustomer({ ...customer, importBatchId: batchId, source: customer.source ?? 'import:cleaner-planner' });
         count++;
         if (rounds.length > 0 && saved?.id) {
           try {
             await deleteRoundsForCustomer(saved.id);
-            await bulkInsertRounds(rounds.map(r => ({ ...r, customerId: saved.id })));
+            await bulkInsertRounds(rounds.map(r => ({ ...r, customerId: saved.id, importBatchId: batchId })));
             roundCount += rounds.length;
           } catch (re) {
-            console.warn('Rounds insert failed for', customer.name, re?.message);
+            console.warn(`Rounds insert failed for row ${i}: ${re?.message}`);
           }
 
           // Build scheduled jobs for the next 4 months
@@ -1356,12 +1493,13 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
                 recurrence:   round.schedule || 'one-off',
                 isRecurring:  (parseFrequencyDays(round.schedule) ?? 0) > 0,
                 notes:        round.jobReference ? `Job ref: ${round.jobReference}` : '',
+                importBatchId: batchId,
               });
             }
           }
         }
       } catch (err) {
-        console.error('CP import row failed:', err?.message, customer.name);
+        console.error(`CP import row ${i} failed: ${err?.message}`);
         failures.push(err?.message || 'Unknown error');
       }
     }
@@ -1390,6 +1528,8 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
       setImportedRoundCount(roundCount);
       setImportedJobCount(jobCount);
       setImportedUpcomingJobs(upcoming);
+      setLastImportBatchId(batchId);
+      try { localStorage.setItem('cadi_last_import_batch', JSON.stringify({ id: batchId, at: Date.now(), source: 'cleaner-planner', customers: count, rounds: roundCount, jobs: jobCount })); } catch {}
       setStep('done');
       onImported?.();
     } else {
@@ -1426,14 +1566,15 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
   const doImport = async (customers, overflow = []) => {
     setImporting(true);
     setImportError(null);
+    const batchId = newImportBatchId();
     let count = 0;
     const failures = [];
-    for (const { data } of customers) {
+    for (let i = 0; i < customers.length; i++) {
       try {
-        await upsertCustomer(data);
+        await upsertCustomer({ ...customers[i].data, importBatchId: batchId });
         count++;
       } catch (err) {
-        console.error('Import row failed:', err?.message, data);
+        console.error(`Import row ${i} failed: ${err?.message}`);
         failures.push(err?.message || 'Unknown error');
       }
     }
@@ -1443,6 +1584,8 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
     setImporting(false);
     if (count > 0) {
       setImportedCount(count);
+      setLastImportBatchId(batchId);
+      try { localStorage.setItem('cadi_last_import_batch', JSON.stringify({ id: batchId, at: Date.now(), source: 'csv', customers: count })); } catch {}
       setStep('done');
       onImported?.();
     } else {
@@ -1499,7 +1642,9 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
             onBack={() => setStep('source')}
             onParsed={(data) => {
               setCsvData(data);
-              if (isCleanerPlannerJobs(data.headers)) {
+              const detected = detectSource(data.headers);
+              setDetectedSource(detected);
+              if (isCleanerPlannerJobs(data.headers) || detected === 'cleaner-planner') {
                 const built = buildCleanerPlannerData(data.rows, existingCustRefs);
                 setCpData(built);
                 setStep('preview');
@@ -1513,6 +1658,7 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
           <StepMap
             headers={csvData.headers}
             rows={csvData.rows}
+            detectedSource={detectedSource}
             onBack={() => setStep('upload')}
             onConfirm={(m) => { setMapping(m); setStep('preview'); }}
           />
@@ -1537,11 +1683,13 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
             upcomingJobs={importedUpcomingJobs}
             onClose={onClose}
             onViewScheduler={onViewScheduler}
+            batchId={lastImportBatchId}
+            onUndo={handleUndoImport}
           />
         )}
       </ModalShell>
 
-      {/* 50-cap modal — renders outside ModalShell so it's above everything */}
+      {/* Lite-plan cap modal — renders outside ModalShell so it's above everything */}
       {showCap && (
         <CapModal
           total={pendingCustomers.length}

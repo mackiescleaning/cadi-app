@@ -17,17 +17,17 @@ import { usePlan } from '../hooks/usePlan';
 const PHASE1_STEPS = [
   {
     key: 'add_customers',
-    title: 'Add your customers',
-    incompleteSub: 'Bring your customer list into Cadi. Upload a CSV or add them one at a time.',
+    title: 'Bring your customers across',
+    incompleteSub: "Drop in your CleanerPlanner / Aworka / Squeegee export — or photos of your paper diary — and I'll pull every customer, job, frequency and price. One sitting, no copy-paste.",
     completeSub: () => 'Customers in Cadi.',
-    cta: 'Add customers',
-    path: '/customers',
+    cta: 'Start migration',
+    path: '/onboarding/customers',
   },
   {
     key: 'first_job',
-    title: 'Schedule your first job',
-    incompleteSub: 'Put your first job in the schedule. Cadi takes it from here.',
-    completeSub: (meta) => meta?.customer_name ? `First job scheduled — ${meta.customer_name}.` : 'First job scheduled.',
+    title: 'View your schedule',
+    incompleteSub: 'Your jobs were auto-scheduled from your customer import — have a look, shuffle if needed.',
+    completeSub: () => 'Your week is mapped out.',
     cta: 'Open schedule',
     path: '/scheduler',
   },
@@ -190,7 +190,7 @@ function Phase1Celebration({ stats, onClose, onViewPhase2 }) {
             {stats.firstJobDate && (
               <div className="rounded-xl bg-white/5 border border-white/10 p-4">
                 <p className="text-sm font-black text-white">{stats.firstJobDate}</p>
-                <p className="text-xs text-[rgba(153,197,255,0.6)] mt-1">first job scheduled</p>
+                <p className="text-xs text-[rgba(153,197,255,0.6)] mt-1">your next job</p>
               </div>
             )}
             <div className="rounded-xl bg-white/5 border border-white/10 p-4">
@@ -445,6 +445,9 @@ export default function ThirtyDayPlan({ onRefresh }) {
   const [bankStatus, setBankStatus]         = useState(null);
   const [latestReport, setLatestReport]     = useState(null);
   const [walkInProgress, setWalkInProgress] = useState(null);
+  // Lets the user flick back to a completed phase to revisit steps (e.g. re-run the walkthrough).
+  // null = follow the natural current phase. 1/2/3 = pinned to that phase view.
+  const [viewPhaseOverride, setViewPhaseOverride] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -485,7 +488,7 @@ export default function ThirtyDayPlan({ onRefresh }) {
       // ── Phase 2 data (only if Phase 1 done) ────────────────────────────────
       if (prog?.phase_1_completed_at) {
         const { data: biz } = await supabase
-          .from('businesses').select('id').eq('owner_id', session.user.id).single();
+          .from('businesses').select('id').eq('owner_user_id', session.user.id).single();
 
         const [bankConn, walkRow, reportRow] = await Promise.all([
           supabase.from('bank_connections')
@@ -640,8 +643,8 @@ export default function ThirtyDayPlan({ onRefresh }) {
 
   if (loading) return null;
 
-  // Plan complete — small persistent badge only
-  if (phase3Done && collapsed) {
+  // Plan complete — small persistent badge only (skip when user has opened a past phase)
+  if (phase3Done && collapsed && viewPhaseOverride === null) {
     return (
       <div className="bg-[#040810] border-b border-[rgba(79,120,255,0.2)] px-5 py-2 flex items-center justify-between">
         <button
@@ -655,7 +658,7 @@ export default function ThirtyDayPlan({ onRefresh }) {
   }
 
   // Collapsed badge (mid-plan)
-  if (phase1Done && currentPhase > 1 && collapsed) {
+  if (phase1Done && currentPhase > 1 && collapsed && viewPhaseOverride === null) {
     return (
       <div className="bg-[#040810] border-b border-[rgba(79,120,255,0.2)] px-5 py-2 flex items-center justify-between">
         <button
@@ -668,8 +671,10 @@ export default function ThirtyDayPlan({ onRefresh }) {
     );
   }
 
-  // Auto-collapse to badge when plan is fully done and user has seen it
-  if (phase3Done && !showCelebration) {
+  // Auto-collapse to badge when plan is fully done and user has seen it.
+  // "Review journey" pins viewPhaseOverride to Phase 1 — from there the user can use
+  // the phase tabs in the header to flick between 1/2/3 and re-run anything.
+  if (phase3Done && !showCelebration && viewPhaseOverride === null) {
     return (
       <div className="bg-[#040810] border-b border-[rgba(79,120,255,0.2)] px-5 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -679,10 +684,10 @@ export default function ThirtyDayPlan({ onRefresh }) {
           <span className="text-xs text-[rgba(153,197,255,0.4)]">Your Front Desk staff are running things</span>
         </div>
         <button
-          onClick={() => setCollapsed(false)}
-          className="text-xs text-[rgba(153,197,255,0.3)] hover:text-[#99c5ff] transition-colors"
+          onClick={() => { setViewPhaseOverride(1); setCollapsed(false); }}
+          className="text-xs text-[rgba(153,197,255,0.4)] hover:text-[#99c5ff] transition-colors font-semibold"
         >
-          Review journey
+          Review journey ↻
         </button>
       </div>
     );
@@ -690,8 +695,11 @@ export default function ThirtyDayPlan({ onRefresh }) {
 
   // ── Determine what to render ──────────────────────────────────────────────
 
-  const showPhase3 = phase2Done && currentPhase >= 3;
-  const showPhase2 = phase1Done && currentPhase >= 2 && !showPhase3;
+  // If the user has clicked a phase tab to revisit a completed phase, that pin wins.
+  const effectivePhase = viewPhaseOverride ?? currentPhase;
+  const showPhase3 = phase2Done && effectivePhase >= 3;
+  const showPhase2 = phase1Done && effectivePhase === 2;
+  const isRevisiting = viewPhaseOverride !== null && viewPhaseOverride < currentPhase;
   const activeStepDefs  = showPhase3 ? PHASE3_STEPS : showPhase2 ? PHASE2_STEPS : PHASE1_STEPS;
   const activeStepRows  = showPhase3 ? p3Steps      : showPhase2 ? p2Steps      : p1Steps;
   const activeDone      = showPhase3 ? p3Done        : showPhase2 ? p2Done       : p1Done;
@@ -731,24 +739,48 @@ export default function ThirtyDayPlan({ onRefresh }) {
 
         {!collapsed && (
           <>
-            {/* Phase progress bar */}
+            {/* Phase progress bar — bars are clickable for phases the user has reached.
+                Lets users flick back to a completed phase to revisit (e.g. re-run the walkthrough). */}
             <div className="px-5 sm:px-6 mb-4">
               <div className="flex gap-1.5 mb-2">
-                {[1, 2, 3].map(ph => (
-                  <div key={ph} className="flex-1 flex flex-col gap-1">
-                    <div className={`h-1 rounded-full transition-all ${
-                      ph < currentPhase ? 'bg-emerald-500' :
-                      ph === currentPhase ? 'bg-[#4f78ff]' :
-                      'bg-[rgba(153,197,255,0.1)]'
-                    }`} />
-                    <p className={`text-[9px] font-bold text-center hidden sm:block ${
-                      ph === currentPhase ? 'text-[#4f78ff]' : ph < currentPhase ? 'text-emerald-500' : 'text-[rgba(153,197,255,0.2)]'
-                    }`}>
-                      {ph < currentPhase ? '✓' : ph === currentPhase ? `Phase ${ph}` : <Lock size={8} />}
-                    </p>
-                  </div>
-                ))}
+                {[1, 2, 3].map(ph => {
+                  const reached  = ph <= currentPhase;
+                  const isActive = ph === effectivePhase;
+                  return (
+                    <button
+                      key={ph}
+                      type="button"
+                      onClick={() => reached && setViewPhaseOverride(ph === currentPhase ? null : ph)}
+                      disabled={!reached}
+                      className={`flex-1 flex flex-col gap-1 text-left ${reached ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                    >
+                      <div className={`h-1 rounded-full transition-all ${
+                        isActive ? 'bg-[#4f78ff]' :
+                        ph < currentPhase ? 'bg-emerald-500' :
+                        'bg-[rgba(153,197,255,0.1)]'
+                      }`} />
+                      <p className={`text-[9px] font-bold text-center hidden sm:block ${
+                        isActive ? 'text-[#4f78ff]' : ph < currentPhase ? 'text-emerald-500' : 'text-[rgba(153,197,255,0.2)]'
+                      }`}>
+                        {isActive ? `Phase ${ph}` : ph < currentPhase ? '✓ Phase ' + ph : <Lock size={8} className="inline" />}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
+              {isRevisiting && (
+                <div className="mt-2 flex items-center justify-between px-3 py-2 rounded-lg bg-[rgba(79,120,255,0.08)] border border-[rgba(79,120,255,0.2)]">
+                  <p className="text-[10px] text-[#99c5ff] font-semibold">
+                    Revisiting Phase {effectivePhase} — pick any step to run again.
+                  </p>
+                  <button
+                    onClick={() => setViewPhaseOverride(null)}
+                    className="text-[10px] text-[#99c5ff] hover:text-white font-bold transition-colors"
+                  >
+                    Back to current →
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Regressed user notice (Phase 1 only) */}
@@ -781,22 +813,27 @@ export default function ThirtyDayPlan({ onRefresh }) {
                   path     = def.path;
                 }
 
+                // When revisiting, done steps become clickable with a "Revisit" button
+                // — lets the user re-run the walkthrough, reconnect a bank, etc.
+                const clickable = (!done && !disabled) || (done && isRevisiting);
                 return (
                   <div
                     key={def.key}
                     className={`flex items-start gap-3 p-3 rounded-xl transition-all ${
-                      done
+                      done && !isRevisiting
                         ? 'bg-emerald-500/10 border border-emerald-500/20'
+                        : done && isRevisiting
+                        ? 'bg-emerald-500/5 border border-emerald-500/15 hover:bg-emerald-500/10 cursor-pointer'
                         : disabled
                         ? 'bg-white/2 border border-white/5 opacity-50'
                         : 'bg-white/4 border border-[rgba(153,197,255,0.1)] hover:bg-white/8 hover:border-[rgba(79,120,255,0.3)] cursor-pointer'
                     }`}
-                    onClick={() => !done && !disabled && navigate(path)}
+                    onClick={() => clickable && navigate(path)}
                   >
                     <StepDot status={disabled ? 'locked' : status} />
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-bold leading-tight ${
-                        done ? 'line-through text-[rgba(153,197,255,0.4)]' : 'text-white'
+                        done && !isRevisiting ? 'line-through text-[rgba(153,197,255,0.4)]' : 'text-white'
                       }`}>{def.title}</p>
                       <p className={`text-xs mt-0.5 ${
                         done ? 'text-[rgba(153,197,255,0.3)]' : 'text-[rgba(153,197,255,0.5)]'
@@ -808,6 +845,14 @@ export default function ThirtyDayPlan({ onRefresh }) {
                         className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap bg-[#4f78ff] hover:bg-[#3d68ff] text-white"
                       >
                         {ctaLabel}
+                      </button>
+                    )}
+                    {done && isRevisiting && (
+                      <button
+                        onClick={e => { e.stopPropagation(); navigate(path); }}
+                        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap bg-white/8 hover:bg-white/15 text-[#99c5ff] border border-[rgba(79,120,255,0.3)]"
+                      >
+                        ↻ Revisit
                       </button>
                     )}
                   </div>
