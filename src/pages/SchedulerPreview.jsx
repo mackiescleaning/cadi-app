@@ -5,36 +5,7 @@
 
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Filter, Search } from "lucide-react";
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-// Job blocks live on a white canvas. Each type gets a pastel fill + saturated
-// left bar + deep text. Never full-bleed colour — that's the old look.
-const TYPE = {
-  exterior: {
-    label: "Exterior",
-    bar:   "#F97316",                     // orange-500
-    fill:  "#FFF4E6",                     // warm cream
-    ink:   "#7C2D12",                     // orange-900
-    chip:  "bg-orange-100 text-orange-800 border-orange-200",
-    dot:   "bg-orange-500",
-  },
-  residential: {
-    label: "Residential",
-    bar:   "#10B981",                     // emerald-500
-    fill:  "#ECFDF5",                     // emerald-50
-    ink:   "#064E3B",                     // emerald-900
-    chip:  "bg-emerald-100 text-emerald-800 border-emerald-200",
-    dot:   "bg-emerald-500",
-  },
-  commercial: {
-    label: "Commercial",
-    bar:   "#1F48FF",                     // brand-blue
-    fill:  "#EEF2FF",                     // indigo-50
-    ink:   "#1E3A8A",                     // blue-900
-    chip:  "bg-blue-100 text-blue-800 border-blue-200",
-    dot:   "bg-blue-600",
-  },
-};
+import { TYPE } from "../lib/jobTheme";
 
 // ─── Crews ────────────────────────────────────────────────────────────────────
 const CREWS = [

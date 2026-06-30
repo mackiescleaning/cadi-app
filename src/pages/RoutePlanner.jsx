@@ -15,6 +15,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { listRoutes, createRoute, updateRoute, deleteRoute, listMileageLogs, createMileageLog } from "../lib/db/routesDb";
+import { typeDot } from "../lib/jobTheme";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const HMRC_RATE            = 0.45;  // 45p/mile first 10,000
@@ -181,18 +182,6 @@ function GAlert({ type = "blue", children }) {
   );
 }
 
-// Type colours for dots
-const TYPE_DOT = {
-  residential: "bg-emerald-500",
-  commercial:  "bg-[#1f48ff]",
-  exterior:    "bg-amber-500",
-};
-const TYPE_CHIP = {
-  residential: "green",
-  commercial:  "blue",
-  exterior:    "amber",
-};
-
 // ─── Stop List (drag-to-reorder) ──────────────────────────────────────────────
 function StopList({ stops, setStops, homePostcode, stats, onAddStop, onRemoveStop }) {
   const [dragging, setDragging] = useState(null);
@@ -264,7 +253,7 @@ function StopList({ stops, setStops, homePostcode, stats, onAddStop, onRemoveSto
               {/* Stop info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${TYPE_DOT[stop.type] ?? "bg-gray-500"}`} />
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${typeDot(stop.type)}`} />
                   <p className="text-sm font-black text-white truncate">{stop.customer}</p>
                 </div>
                 <p className="text-[11px] text-[rgba(153,197,255,0.4)] truncate">
@@ -664,7 +653,7 @@ function SavedRoutesPanel({ routes, onLoad, onDelete, homePostcode = DEFAULT_HOM
               onClick={() => onLoad(r)}
               className="w-full flex items-start gap-3 px-4 py-3 hover:bg-[rgba(153,197,255,0.03)] text-left transition-colors group"
             >
-              <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${TYPE_DOT[r.type] ?? "bg-gray-400"}`} />
+              <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${typeDot(r.type)}`} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <p className="text-sm font-black text-white group-hover:text-[#99c5ff] transition-colors">{r.name}</p>
@@ -877,6 +866,7 @@ export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileage
                   href={googleMapsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
+                  referrerPolicy="no-referrer"
                   className="flex items-center gap-1.5 px-3 py-2 bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] text-white text-xs font-black rounded-xl hover:border-[rgba(153,197,255,0.35)] transition-colors"
                 >
                   🗺️ Open in Maps
@@ -1009,6 +999,7 @@ export default function RoutePlannerTab({ accountsData, schedulerJobs, onMileage
                       href={googleMapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
+                      referrerPolicy="no-referrer"
                       className="flex items-center justify-center gap-2 w-full py-3 bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] text-white text-xs font-black rounded-xl hover:border-[rgba(153,197,255,0.3)] transition-colors"
                     >
                       🗺️ Open route in Google Maps
