@@ -15,7 +15,10 @@ export async function listInvoices(optionsOrLimit = {}) {
 
   let q = supabase
     .from('invoices')
-    .select('*')
+    .select(`
+      *,
+      invoice_sends ( status, delivered_at, bounced_at, bounce_reason, opened_at, complaint_at, sent_at )
+    `)
     .eq('owner_id', ownerId)
     .order('created_at', { ascending: false })
     .range(page * pageSize, (page + 1) * pageSize - 1);

@@ -182,6 +182,29 @@ function StatusBadge({ inv }) {
   return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[10px] font-black border ${cls}`}>{label}</span>;
 }
 
+// Delivery badge — only shows for invoices Cadi has actually attempted to
+// email. Surfaces real Resend delivery events (bounced / delivered /
+// complained) so the user doesn't have to ask the customer if it arrived.
+function DeliveryBadge({ inv }) {
+  const d = inv.delivery;
+  if (!d) return null;
+  const map = {
+    bounced:    { label: 'Bounced',   cls: 'bg-red-500/15 border-red-500/30 text-red-300',     title: d.bounceReason || 'Recipient mail server rejected.' },
+    complained: { label: 'Spam',      cls: 'bg-orange-500/15 border-orange-500/30 text-orange-300', title: 'Recipient marked as spam.' },
+    delivered:  { label: d.openedAt ? 'Opened' : 'Delivered',
+                  cls: d.openedAt ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                                  : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
+                  title: d.openedAt ? `Opened ${new Date(d.openedAt).toLocaleString('en-GB')}` : `Delivered ${d.deliveredAt ? new Date(d.deliveredAt).toLocaleString('en-GB') : ''}` },
+    sent:       { label: 'Sent',      cls: 'bg-blue-500/10 border-blue-500/20 text-blue-300',  title: 'Accepted by Resend — awaiting delivery confirmation.' },
+  };
+  const m = map[d.status] || map.sent;
+  return (
+    <span title={m.title} className={`inline-flex items-center ml-1.5 px-2 py-0.5 rounded-lg text-[10px] font-black border ${m.cls}`}>
+      {m.label}
+    </span>
+  );
+}
+
 function TypeBadge({ type }) {
   const map = {
     residential: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
@@ -650,8 +673,9 @@ function InvoiceList({ invoices, accounts, onSelect, onCreate, onQuickSend, onQu
                     {accounts.vatRegistered && <p className="text-[10px] text-[rgba(153,197,255,0.35)]">inc. VAT</p>}
                   </div>
 
-                  {/* Status */}
+                  {/* Status + delivery */}
                   <StatusBadge inv={inv} />
+                  <DeliveryBadge inv={inv} />
                 </button>
 
                 {/* Inline quick actions */}
@@ -1006,9 +1030,26 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
 
 // ─── SCREEN: Invoice preview ──────────────────────────────────────────────────
 // The document itself stays clean white — it's customer-facing
-function InvoicePreview({ draft, accounts, business, onEdit, onSaveAndSend, onBack }) {
+function InvoicePreview({ draft, accounts, business, onEdit, onSaveAndSend, onSaveDraftForSend, onBack }) {
   const calc = calcInvoice(draft.lines, accounts.vatRegistered, accounts.frsRate);
   const [showEmail, setShowEmail] = useState(false);
+  // Persisted draft (with real DB id) — set when "Send invoice" is clicked.
+  // EmailModal needs this so send-invoice can correlate its delivery log
+  // back to a real invoice row.
+  const [persistedDraft, setPersistedDraft] = useState(null);
+  const [savingForSend, setSavingForSend]   = useState(false);
+
+  async function handleOpenSendModal() {
+    if (savingForSend) return;
+    setSavingForSend(true);
+    try {
+      const saved = await (onSaveDraftForSend ? onSaveDraftForSend(draft) : Promise.resolve(draft));
+      setPersistedDraft(saved || draft);
+      setShowEmail(true);
+    } finally {
+      setSavingForSend(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -1023,9 +1064,9 @@ function InvoicePreview({ draft, accounts, business, onEdit, onSaveAndSend, onBa
           className="px-4 py-2 rounded-xl border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.5)] text-xs font-black hover:text-white hover:border-[rgba(153,197,255,0.3)] transition-all">
           ✏️ Edit
         </button>
-        <button onClick={() => setShowEmail(true)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors">
-          📤 Send invoice
+        <button onClick={handleOpenSendModal} disabled={savingForSend}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors disabled:opacity-60">
+          {savingForSend ? 'Preparing…' : '📤 Send invoice'}
         </button>
       </div>
 
@@ -1152,7 +1193,13 @@ function InvoicePreview({ draft, accounts, business, onEdit, onSaveAndSend, onBa
       </div>
 
       {showEmail && (
-        <EmailModal invoice={{ ...draft }} business={business} accounts={accounts} onSent={() => onSaveAndSend(draft)} onClose={() => setShowEmail(false)} />
+        <EmailModal
+          invoice={persistedDraft ?? draft}
+          business={business}
+          accounts={accounts}
+          onSent={() => onSaveAndSend(persistedDraft ?? draft)}
+          onClose={() => setShowEmail(false)}
+        />
       )}
     </div>
   );
@@ -1460,8 +1507,21 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
 
   const handlePreview = (draft) => { setPreviewDraft(draft); setScreen("preview"); };
 
+  // Persist a draft *before* the send modal opens, so EmailModal can pass
+  // the saved invoice id into the send-invoice edge function. Without this,
+  // sends from the Preview screen bypassed invoice_sends logging and the
+  // Resend delivery webhook had nothing to update.
+  const handleSaveDraftForSend = async (draft) => {
+    const draftRow = { ...draft, id: draft.id || draft.num, status: 'draft' };
+    const saved = await addInvoice(draftRow);
+    return saved || draftRow;
+  };
+
   const handleSaveAndSend = (draft) => {
-    const withSent = { ...draft, id: draft.id || draft.num, status: "sent", sentAt: new Date().toISOString() };
+    // Draft already persisted by handleSaveDraftForSend; the send-invoice
+    // function has already flipped status='sent' + sent_at server-side.
+    // Mirror that locally + navigate to detail.
+    const withSent = { ...draft, id: draft.id || draft.num, status: "sent", sentAt: draft.sentAt || new Date().toISOString() };
     addInvoice(withSent);
     setPreviewDraft(null); setActiveInv(withSent); setScreen("detail");
   };
@@ -1565,7 +1625,9 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
           <InvoicePreview
             draft={previewDraft} accounts={accounts} business={BUSINESS}
             onEdit={() => { setPendingNum(previewDraft.num); setDraftInv(previewDraft); setScreen("create"); }}
-            onSaveAndSend={handleSaveAndSend} onBack={() => setScreen("create")}
+            onSaveAndSend={handleSaveAndSend}
+            onSaveDraftForSend={handleSaveDraftForSend}
+            onBack={() => setScreen("create")}
           />
         )}
         {screen === "detail"  && activeInv && (

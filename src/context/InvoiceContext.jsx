@@ -43,6 +43,28 @@ export const invCustomerName = (inv) =>
   typeof inv.customer === "object" ? (inv.customer?.name ?? "") : (inv.customer ?? "");
 
 // Map DB row to component shape
+// Reduce N invoice_sends rows for one invoice into a single "delivery"
+// summary: latest known status + the terminal-event timestamps. Used so
+// the UI can show "Bounced" / "Delivered" badges without doing the join
+// itself. Priority: bounced > complained > delivered > sent.
+function summariseDelivery(sends) {
+  if (!sends || !sends.length) return null;
+  const priority = { bounced: 4, complained: 3, delivered: 2, sent: 1 };
+  let best = sends[0];
+  for (const s of sends) {
+    if ((priority[s.status] ?? 0) > (priority[best.status] ?? 0)) best = s;
+  }
+  return {
+    status:        best.status ?? 'sent',
+    deliveredAt:   best.delivered_at ?? null,
+    bouncedAt:     best.bounced_at ?? null,
+    bounceReason:  best.bounce_reason ?? null,
+    openedAt:      sends.find(s => s.opened_at)?.opened_at ?? null,
+    complaintAt:   best.complaint_at ?? null,
+    sentAt:        best.sent_at ?? null,
+  };
+}
+
 function mapInvoiceRow(row) {
   return {
     id: row.id,
@@ -61,6 +83,7 @@ function mapInvoiceRow(row) {
     paidAt: row.paid_at,
     paymentMethod: row.payment_method,
     reminders: row.reminders || [],
+    delivery: summariseDelivery(row.invoice_sends),
   };
 }
 
@@ -125,6 +148,10 @@ export function InvoiceProvider({ children }) {
   }, [user, authLoading, isDemoUser]);
 
   // Add or update invoice — persists to Supabase
+  // Returns the persisted invoice (with real DB id) so callers that need
+  // to act on the saved row — e.g. send-invoice needs the id to log a
+  // delivery row — can chain off it. Falls back to the local inv on any
+  // persistence failure so the UI still moves forward.
   const addInvoice = useCallback(async (inv) => {
     if (isLive) {
       try {
@@ -132,6 +159,7 @@ export function InvoiceProvider({ children }) {
         if (existing) {
           await dbUpdateInvoice(inv.id, inv);
           setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, ...inv } : i));
+          return { ...inv };
         } else {
           const saved = await dbCreateInvoice({
             invoiceNum: inv.num,
@@ -149,7 +177,9 @@ export function InvoiceProvider({ children }) {
             paymentMethod: inv.paymentMethod,
             reminders: inv.reminders,
           });
-          setInvoices(prev => [mapInvoiceRow(saved), ...prev]);
+          const mapped = mapInvoiceRow(saved);
+          setInvoices(prev => [mapped, ...prev]);
+          return mapped;
         }
       } catch (err) {
         console.error('Failed to save invoice:', err);
@@ -158,12 +188,14 @@ export function InvoiceProvider({ children }) {
           const exists = prev.find(i => i.id === inv.id);
           return exists ? prev.map(i => i.id === inv.id ? inv : i) : [inv, ...prev];
         });
+        return { ...inv };
       }
     } else {
       setInvoices(prev => {
         const exists = prev.find(i => i.id === inv.id);
         return exists ? prev.map(i => i.id === inv.id ? inv : i) : [inv, ...prev];
       });
+      return { ...inv };
     }
   }, [isLive, invoices]);
 

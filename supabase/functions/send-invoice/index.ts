@@ -531,14 +531,21 @@ serve(async (req: Request) => {
       return json({ error: "Email delivery failed" }, 502);
     }
 
+    // Capture Resend's message id so the delivery webhook can find this
+    // row to update with delivered / bounced / complained events. Resend
+    // returns { id: "re_..." } on success.
+    const resendBody = await resendRes.json().catch(() => ({}));
+    const resendMessageId: string | null = resendBody?.id ?? null;
+
     // ── Log + update invoice ────────────────────────────────────────────────
     if (invoiceId) {
       await sb.from("invoice_sends").insert({
-        owner_id:        user.id,
-        invoice_id:      invoiceId,
-        recipient_email: to,
-        status:          "sent",
-        provider:        "resend",
+        owner_id:          user.id,
+        invoice_id:        invoiceId,
+        recipient_email:   to,
+        status:            "sent",
+        provider:          "resend",
+        resend_message_id: resendMessageId,
       });
 
       await sb.from("invoices")
@@ -547,7 +554,7 @@ serve(async (req: Request) => {
         .eq("owner_id", user.id);
     }
 
-    return json({ ok: true, invoiceNum });
+    return json({ ok: true, invoiceNum, resendMessageId });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("send-invoice error:", msg);
