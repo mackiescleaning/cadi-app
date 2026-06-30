@@ -181,8 +181,8 @@ function computeHoles(
     });
   }
 
-  // Bank charges
-  const bankCharges = txs.filter(t => t.category === "bank_charges");
+  // Bank charges — accept both the Money-tab id (`bankfees`) and the legacy/AI id (`bank_charges`).
+  const bankCharges = txs.filter(t => t.category === "bank_charges" || t.category === "bankfees");
   if (bankCharges.length > 0) {
     const total = bankCharges.reduce((s, t) => s + Math.abs(t.amount), 0);
     holes.push({

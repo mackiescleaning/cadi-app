@@ -1,13 +1,10 @@
 /**
  * supabase/functions/staff-jobs/index.ts
- * No JWT required — scoped by staff member UUID (acts as credential).
+ * Authenticated by short-lived staff JWT (Authorization: Bearer <token>).
+ * The token is issued by staff-auth POST on PIN success.
  *
- * GET  ?staff_id=xxx&owner_id=xxx
- *        → jobs assigned to this staff member, last 7 days + next 35 days
- *
- * PATCH { staff_id, owner_id, job_id, status }
- *        → updates job status (only allowed statuses: scheduled, in-progress, complete)
- *        → validates staff is actually assigned to that job before writing
+ * GET   → jobs assigned to this staff member, last 7 days + next 35 days
+ * PATCH { job_id, status } → updates job status (scheduled/in-progress/complete)
  *
  * Schema notes (post migration 019):
  * - team_members is canonical (business_id = owner_id UUID).
@@ -18,10 +15,11 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireStaffAuth } from "../_shared/staffJwt.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "content-type, apikey",
+  "Access-Control-Allow-Headers": "content-type, apikey, authorization",
   "Access-Control-Allow-Methods": "GET, PATCH, OPTIONS",
 };
 
@@ -38,17 +36,24 @@ type StaffRecord = { id: string; full_name: string };
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
+  // All non-OPTIONS routes require a valid staff JWT. claims.sub = member id,
+  // claims.biz = owner_id. We re-verify the member is still active each call.
+  let claims;
+  try { claims = await requireStaffAuth(req); }
+  catch { return json({ error: "Unauthorized" }, 401); }
+
   const sb = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // Verify staff_id belongs to the given owner — returns { id, full_name } or null
-  async function validateStaff(staffId: string, ownerId: string): Promise<StaffRecord | null> {
+  // Look up the member from JWT claims — also catches deactivated staff
+  // whose JWT hasn't expired yet (revocation by deactivation).
+  async function loadStaff(memberId: string, ownerId: string): Promise<StaffRecord | null> {
     const { data } = await sb
       .from("team_members")
       .select("id, first_name, last_name")
-      .eq("id", staffId)
+      .eq("id", memberId)
       .eq("business_id", ownerId)
       .eq("is_active", true)
       .single();
@@ -57,37 +62,26 @@ serve(async (req) => {
     return { id: data.id, full_name };
   }
 
-  // Match a job to this staff member by UUID (canonical) or name (fallback)
   function isAssigned(job: Record<string, unknown>, staff: StaffRecord): boolean {
     const ids = Array.isArray(job.assignee_ids) ? job.assignee_ids as string[] : [];
     if (ids.includes(staff.id)) return true;
-    // Fallback for any row not yet backfilled
     const names = Array.isArray(job.assignees) ? job.assignees as string[] : [];
     if (names.includes(staff.full_name)) return true;
     if (job.assignee === staff.full_name) return true;
     return false;
   }
 
-  // ── GET — jobs for this staff member ────────────────────────────────────────
+  const staff = await loadStaff(claims.sub, claims.biz);
+  if (!staff) return json({ error: "Unauthorized" }, 401);
+
   if (req.method === "GET") {
-    const params  = new URL(req.url).searchParams;
-    const staffId = params.get("staff_id");
-    const ownerId = params.get("owner_id");
-
-    if (!staffId || !ownerId) return json({ error: "staff_id and owner_id required" }, 400);
-
-    const staff = await validateStaff(staffId, ownerId);
-    if (!staff) return json({ error: "Unauthorized" }, 401);
-
-    const from = new Date();
-    from.setDate(from.getDate() - 7);
-    const to = new Date();
-    to.setDate(to.getDate() + 35);
+    const from = new Date(); from.setDate(from.getDate() - 7);
+    const to   = new Date(); to.setDate(to.getDate() + 35);
 
     const { data: jobs, error } = await sb
       .from("jobs")
       .select("*")
-      .eq("owner_id", ownerId)
+      .eq("owner_id", claims.biz)
       .gte("date", from.toISOString().slice(0, 10))
       .lte("date", to.toISOString().slice(0, 10))
       .order("date")
@@ -98,33 +92,23 @@ serve(async (req) => {
       return json({ error: "Failed to load jobs" }, 500);
     }
 
-    const myJobs = (jobs ?? []).filter(j => isAssigned(j, staff));
-
-    return json({ jobs: myJobs });
+    return json({ jobs: (jobs ?? []).filter(j => isAssigned(j, staff)) });
   }
 
-  // ── PATCH — update job status ────────────────────────────────────────────────
   if (req.method === "PATCH") {
-    let body: { staff_id?: string; owner_id?: string; job_id?: string; status?: string };
+    let body: { job_id?: string; status?: string };
     try { body = await req.json(); }
     catch { return json({ error: "Invalid JSON" }, 400); }
 
-    const { staff_id, owner_id, job_id, status } = body;
-    if (!staff_id || !owner_id || !job_id || !status) {
-      return json({ error: "staff_id, owner_id, job_id, status required" }, 400);
-    }
-    if (!ALLOWED_STATUSES.has(status)) {
-      return json({ error: "Invalid status" }, 400);
-    }
-
-    const staff = await validateStaff(staff_id, owner_id);
-    if (!staff) return json({ error: "Unauthorized" }, 401);
+    const { job_id, status } = body;
+    if (!job_id || !status)                    return json({ error: "job_id and status required" }, 400);
+    if (!ALLOWED_STATUSES.has(status))         return json({ error: "Invalid status" }, 400);
 
     const { data: job } = await sb
       .from("jobs")
       .select("id, assignee_ids, assignees, assignee")
       .eq("id", job_id)
-      .eq("owner_id", owner_id)
+      .eq("owner_id", claims.biz)
       .single();
 
     if (!job) return json({ error: "Job not found" }, 404);
@@ -141,7 +125,6 @@ serve(async (req) => {
       console.error("staff-jobs PATCH error:", updateErr);
       return json({ error: "Failed to update job" }, 500);
     }
-
     return json({ ok: true });
   }
 

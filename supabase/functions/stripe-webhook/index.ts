@@ -221,6 +221,27 @@ serve(async (req: Request) => {
     return new Response(`Webhook signature error: ${msg}`, { status: 400 });
   }
 
+  // Idempotency: reject duplicate event.id at the door. Stripe retries with
+  // the same event_id, so a successful insert here means "first delivery".
+  // Conflict on PK = duplicate; ack 200 immediately without re-running handlers.
+  {
+    const { error: insertErr } = await sb.from("stripe_webhook_events").insert({
+      event_id:   event.id,
+      event_type: event.type,
+    });
+    if (insertErr) {
+      // 23505 = unique violation = duplicate event. Ack 200 silently.
+      if ((insertErr as { code?: string }).code === "23505") {
+        return new Response(JSON.stringify({ received: true, duplicate: true }), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        });
+      }
+      // Any other DB error: 500 so Stripe retries.
+      console.error("stripe-webhook idempotency insert failed:", insertErr);
+      return new Response("Idempotency insert failed", { status: 500 });
+    }
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -280,6 +301,12 @@ serve(async (req: Request) => {
         break;
     }
 
+    // Mark this event as fully processed so a future retry shortcuts at the
+    // idempotency check above.
+    await sb.from("stripe_webhook_events")
+      .update({ succeeded_at: new Date().toISOString() })
+      .eq("event_id", event.id);
+
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -291,8 +318,16 @@ serve(async (req: Request) => {
       `Stripe webhook handler threw on ${event.type}`,
       `Event ID: ${event.id}\nType: ${event.type}\nError: ${msg}\n\nCheck Supabase edge function logs for the full trace.`,
     );
-    return new Response(JSON.stringify({ received: true, handlerError: msg }), {
-      status: 200,
+    // Record the failure on the dedupe row so we can see what bounced.
+    // Then return 500 so Stripe retries — previously this returned 200 and
+    // swallowed handler errors silently.
+    await sb.from("stripe_webhook_events")
+      .update({ error: msg })
+      .eq("event_id", event.id);
+    // Also delete the dedupe row so the retry actually runs the handler again.
+    await sb.from("stripe_webhook_events").delete().eq("event_id", event.id);
+    return new Response(JSON.stringify({ error: "Handler failed" }), {
+      status: 500,
       headers: { "Content-Type": "application/json" },
     });
   }

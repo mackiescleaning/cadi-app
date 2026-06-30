@@ -29,6 +29,16 @@ const json = (data: unknown, status = 200) =>
     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   });
 
+// Render one service for the system prompt. If the owner has supplied
+// cadi_context in the catalogue editor, include it indented under the
+// name so the LLM has the owner's own framing when quoting.
+function formatServiceLine(s: ServiceRecord): string {
+  const ctx = (s.inference_meta?.cadi_context ?? '').trim();
+  return ctx
+    ? `- ${s.name}\n    Owner's notes: ${ctx.replace(/\n+/g, ' ')}`
+    : `- ${s.name}`;
+}
+
 // ─── Build system prompt from business context ────────────────────────────────
 
 function buildSystemPrompt(ctx: BusinessContext): string {
@@ -81,7 +91,7 @@ Suggestions must be 2–5 words, max 4, directly relevant to what comes next in 
   if (selectedMode === "residential") {
     const resServices = services
       .filter(s => !s.category || s.category === "residential" || s.category === "other")
-      .map(s => `- ${s.name}`)
+      .map(formatServiceLine)
       .join("\n") || "- General home cleaning services";
 
     return `You are the lead-capture assistant for ${businessName}, a cleaning business. A website visitor is looking for residential cleaning.
@@ -123,7 +133,7 @@ ${SHARED_RULES}`;
   if (selectedMode === "exterior") {
     const extServices = services
       .filter(s => s.category === "exterior")
-      .map(s => `- ${s.name}`)
+      .map(formatServiceLine)
       .join("\n") || "- Window cleaning\n- Gutter clearing\n- Pressure washing\n- Fascias & soffits";
 
     return `You are the lead-capture assistant for ${businessName}, a cleaning business. A website visitor wants exterior cleaning.
@@ -168,7 +178,7 @@ ${SHARED_RULES}`;
   if (selectedMode === "commercial") {
     const commServices = services
       .filter(s => s.category === "commercial")
-      .map(s => `- ${s.name}`)
+      .map(formatServiceLine)
       .join("\n") || "- Commercial cleaning\n- Office cleaning\n- Deep clean";
 
     return `You are the lead-capture assistant for ${businessName}, a cleaning business. A website visitor wants commercial cleaning.
@@ -342,6 +352,7 @@ interface ServiceRecord {
   frequency_fortnightly?: boolean;
   frequency_monthly?: boolean;
   site_visit_required?: boolean;
+  inference_meta?: { cadi_context?: string | null } | null;
 }
 
 interface WidgetConfig {
@@ -411,7 +422,7 @@ async function loadBusinessContext(sb: ReturnType<typeof createClient>, business
       .eq("agent", "front_desk")
       .maybeSingle(),
     sb.from("services")
-      .select("id, name, category, pricing_type, pricing_matrix, price_hourly_rate, price_hourly_minimum_hours, price_fixed_basic, price_per_sqm, price_per_room, price_per_bathroom, pricing_notes, frequency_one_off, frequency_weekly, frequency_fortnightly, frequency_monthly, site_visit_required")
+      .select("id, name, category, pricing_type, pricing_matrix, price_hourly_rate, price_hourly_minimum_hours, price_fixed_basic, price_per_sqm, price_per_room, price_per_bathroom, pricing_notes, frequency_one_off, frequency_weekly, frequency_fortnightly, frequency_monthly, site_visit_required, inference_meta")
       .eq("business_id", businessId)
       .eq("is_active", true)
       .order("display_order", { ascending: true }),

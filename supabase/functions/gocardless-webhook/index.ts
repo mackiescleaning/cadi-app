@@ -41,7 +41,13 @@ const json = (data: unknown, status = 200) =>
   });
 
 async function verifySignature(rawBody: string, signature: string): Promise<boolean> {
-  if (!GC_WEBHOOK_SECRET) return true; // skip verification in dev if secret not set
+  // Fail closed: if the secret isn't configured we cannot verify, so we MUST
+  // reject. The previous `return true` here let anyone forge `payment.confirmed`
+  // events whenever the env var was unset or empty (security audit P0).
+  if (!GC_WEBHOOK_SECRET) {
+    throw new Error("GC_WEBHOOK_SECRET is not configured");
+  }
+  if (!signature) return false;
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(GC_WEBHOOK_SECRET),
@@ -51,7 +57,13 @@ async function verifySignature(rawBody: string, signature: string): Promise<bool
   );
   const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
   const expected = new TextDecoder().decode(encode(new Uint8Array(mac)));
-  return expected === signature;
+  // Constant-time compare to avoid signature-timing side channel.
+  if (expected.length !== signature.length) return false;
+  let diff = 0;
+  for (let i = 0; i < signature.length; i++) {
+    diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 serve(async (req: Request) => {
@@ -80,8 +92,10 @@ serve(async (req: Request) => {
     return json({ received: true });
 
   } catch (err) {
+    // Log full detail server-side, return generic 500 to GoCardless so we don't
+    // leak misconfiguration (e.g. missing secret) in the response body.
     console.error("gocardless-webhook error:", err);
-    return json({ error: String(err) }, 500);
+    return json({ error: "Webhook processing failed" }, 500);
   }
 });
 

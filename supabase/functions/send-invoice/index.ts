@@ -69,12 +69,19 @@ function buildHtml({
   subtotal,
   vatAmount,
   total,
+  vatRegistered,
   terms,
   issueDate,
   dueDate,
   businessName,
   businessAddress,
   businessEmail,
+  vatNumber,
+  companyNum,
+  entityType,
+  registeredOffice,
+  privacyUrl,
+  termsUrl,
   logoUrl,
   logoPosition,
   tmpl,
@@ -86,12 +93,19 @@ function buildHtml({
   subtotal: number;
   vatAmount: number;
   total: number;
+  vatRegistered?: boolean;
   terms: string;
   issueDate?: string;
   dueDate: string;
   businessName: string;
   businessAddress?: string;
   businessEmail?: string;
+  vatNumber?: string;
+  companyNum?: string;
+  entityType?: string;
+  registeredOffice?: string;
+  privacyUrl?: string;
+  termsUrl?: string;
   logoUrl?: string;
   logoPosition?: string;
   tmpl: Partial<InvoiceTemplate> | null;
@@ -140,6 +154,33 @@ function buildHtml({
   const footerMsg = tmpl?.footer_message
     ? `<p style="font-size:12px;color:#aaa;text-align:center;margin:0">${tmpl.footer_message.replace(/</g, "&lt;")}</p>`
     : "";
+
+  // ─── Compliance footer ────────────────────────────────────────────────────
+  // UK Ltd companies MUST display: registered name, company number, registered
+  // office, place of registration on any business document including invoices.
+  // Sole traders just need business name + trading address. VAT-registered
+  // sellers must show their VAT number on every VAT invoice.
+  const legalBits: string[] = [];
+  if (entityType === "limited_company") {
+    legalBits.push(`${businessName} — registered in England &amp; Wales`);
+    if (companyNum) legalBits.push(`Company no. ${companyNum.replace(/</g, "&lt;")}`);
+    if (registeredOffice) legalBits.push(`Registered office: ${registeredOffice.replace(/</g, "&lt;").replace(/\n/g, ", ")}`);
+  } else if (businessAddress) {
+    legalBits.push(businessAddress.replace(/</g, "&lt;").replace(/\n/g, ", "));
+  }
+  if (vatRegistered && vatNumber) legalBits.push(`VAT no. ${vatNumber.replace(/</g, "&lt;")}`);
+  const legalLine = legalBits.length
+    ? `<p style="font-size:10px;color:#bbb;text-align:center;margin:0 0 6px;line-height:1.6">${legalBits.join(" &middot; ")}</p>`
+    : "";
+
+  const safePrivacy = (privacyUrl || "https://cadi.cleaning/privacy").replace(/"/g, "");
+  const safeTerms   = (termsUrl   || "https://cadi.cleaning/terms").replace(/"/g, "");
+  const policyLinks = `
+    <p style="font-size:11px;color:#bbb;text-align:center;margin:0 0 6px">
+      <a href="${safePrivacy}" style="color:${brandColour};text-decoration:none;margin:0 8px">Privacy Policy</a>
+      <span style="color:#ddd">·</span>
+      <a href="${safeTerms}" style="color:${brandColour};text-decoration:none;margin:0 8px">Terms &amp; Conditions</a>
+    </p>`;
 
   return `<!DOCTYPE html>
 <html>
@@ -230,9 +271,9 @@ function buildHtml({
           <tr>
             <td></td>
             <td style="width:220px">
-              ${subtotal !== total ? `
+              ${(vatRegistered || subtotal !== total) ? `
               <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f5">
-                <span style="font-size:12px;color:#888">Subtotal</span>
+                <span style="font-size:12px;color:#888">Net total</span>
                 <span style="font-size:12px;font-weight:600;color:#1a1a2e">${fmt2(subtotal)}</span>
               </div>` : ""}
               ${vatAmount > 0 ? `
@@ -252,7 +293,9 @@ function buildHtml({
         <!-- Footer -->
         <div style="padding:20px 32px 28px;border-top:1px solid #f2f2f7;margin-top:20px;text-align:center">
           ${footerMsg}
-          <p style="font-size:11px;color:#ccc;margin:${tmpl?.footer_message ? "8px" : "0"} 0 0">Sent via <a href="https://cadi.cleaning" style="color:${brandColour};text-decoration:none">Cadi</a></p>
+          ${legalLine}
+          ${policyLinks}
+          <p style="font-size:11px;color:#ccc;margin:6px 0 0">Sent via <a href="https://cadi.cleaning" style="color:${brandColour};text-decoration:none">Cadi</a></p>
         </div>
 
       </div>
@@ -287,11 +330,24 @@ serve(async (req: Request) => {
       subtotal = 0,
       vatAmount = 0,
       total = 0,
+      vatRegistered = false,
       terms,
       dueDate,
       businessName,
       businessAddress,
+      businessEmail,
       replyTo,
+      bcc,
+      // Compliance fields (rendered in footer + used on the PDF)
+      vatNumber,
+      companyNum,
+      entityType,
+      registeredOffice,
+      privacyUrl,
+      termsUrl,
+      // PDF attachment (base64 string + filename) — generated client-side
+      pdfBase64,
+      pdfFilename,
       // Per-invoice bank details (override the template's stored block if provided)
       bankName,
       sortCode,
@@ -356,6 +412,20 @@ serve(async (req: Request) => {
     const effectiveTerms = tmpl?.payment_terms_note || terms || "Net 14";
     const bankBlock = tmpl?.bank_details ? `\nBank details:\n${tmpl.bank_details}\nReference: ${invoiceNum}` : "";
 
+    // Plain-text compliance footer mirrors the HTML legal line + policy links.
+    const legalBitsText: string[] = [];
+    if (entityType === "limited_company") {
+      legalBitsText.push(`${businessName} — registered in England & Wales`);
+      if (companyNum) legalBitsText.push(`Company no. ${companyNum}`);
+      if (registeredOffice) legalBitsText.push(`Registered office: ${registeredOffice.replace(/\n/g, ", ")}`);
+    } else if (businessAddress) {
+      legalBitsText.push(businessAddress.replace(/\n/g, ", "));
+    }
+    if (vatRegistered && vatNumber) legalBitsText.push(`VAT no. ${vatNumber}`);
+    const legalLineText = legalBitsText.join(" · ");
+    const privacyUrlText = privacyUrl || "https://cadi.cleaning/privacy";
+    const termsUrlText   = termsUrl   || "https://cadi.cleaning/terms";
+
     const plainText = [
       personalMessage,
       "",
@@ -370,10 +440,16 @@ serve(async (req: Request) => {
       "",
       lineText,
       "",
+      vatRegistered ? `Net: £${subtotal.toFixed(2)}` : "",
+      vatRegistered ? `VAT (20%): £${vatAmount.toFixed(2)}` : "",
       `Balance due: £${total.toFixed(2)}`,
       bankBlock,
       tmpl?.footer_message ? `\n${tmpl.footer_message}` : "",
-    ].filter(l => l !== undefined).join("\n");
+      "",
+      legalLineText ? `— ${legalLineText}` : "",
+      `Privacy: ${privacyUrlText}`,
+      `Terms: ${termsUrlText}`,
+    ].filter(l => l !== undefined && l !== "").join("\n");
 
     // ── Build HTML ──────────────────────────────────────────────────────────
     const htmlEmail = buildHtml({
@@ -384,11 +460,18 @@ serve(async (req: Request) => {
       subtotal,
       vatAmount,
       total,
+      vatRegistered,
       terms,
       dueDate,
       businessName,
       businessAddress,
-      businessEmail: replyTo,
+      businessEmail: businessEmail || replyTo,
+      vatNumber,
+      companyNum,
+      entityType,
+      registeredOffice,
+      privacyUrl,
+      termsUrl,
       tmpl,
     });
 
@@ -399,21 +482,41 @@ serve(async (req: Request) => {
     const cleanName   = (businessName || "Cadi").replace(/[<>"]/g, "").trim();
     const dynamicFrom = `${cleanName} <${fromAddress}>`;
 
+    // ── Build attachments (PDF copy of the invoice) ─────────────────────────
+    const attachments: Array<{ filename: string; content: string }> = [];
+    if (pdfBase64 && typeof pdfBase64 === "string" && pdfBase64.length > 100) {
+      attachments.push({
+        filename: pdfFilename || `${invoiceNum}.pdf`,
+        content:  pdfBase64,
+      });
+    }
+
     // ── Send via Resend ─────────────────────────────────────────────────────
+    //   - reply_to: customer replies go to the business, not Cadi
+    //   - bcc:      business gets a copy of every invoice they send
+    //   - attachments: PDF copy of the invoice
+    const resendPayload: Record<string, unknown> = {
+      from:     dynamicFrom,
+      to:       [to],
+      subject,
+      text:     plainText,
+      html:     htmlEmail,
+      reply_to: replyTo || undefined,
+    };
+    if (bcc && typeof bcc === "string" && bcc.includes("@") && bcc.toLowerCase() !== String(to).toLowerCase()) {
+      resendPayload.bcc = [bcc];
+    }
+    if (attachments.length) {
+      resendPayload.attachments = attachments;
+    }
+
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from:     dynamicFrom,
-        to:       [to],
-        subject,
-        text:     plainText,
-        html:     htmlEmail,
-        reply_to: replyTo || undefined,
-      }),
+      body: JSON.stringify(resendPayload),
     });
 
     if (!resendRes.ok) {

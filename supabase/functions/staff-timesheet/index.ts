@@ -1,21 +1,20 @@
 /**
  * supabase/functions/staff-timesheet/index.ts
- * No JWT — staff_id + owner_id acts as credential, validated against team_members.
+ * Authenticated by short-lived staff JWT (Authorization: Bearer <token>).
  *
- * GET  ?staff_id=xxx&owner_id=xxx&date=YYYY-MM-DD
- *        → all timesheet rows for this staff member on that date
- *
- * POST { staff_id, owner_id, job_id?, date, action, lat?, lng?, accuracy? }
+ * GET  ?date=YYYY-MM-DD          → all timesheet rows for this member on that date
+ * POST { job_id?, date, action, lat?, lng?, accuracy? }
  *        action = 'clock_in'  → insert new row, calculate distance to job postcode
  *        action = 'clock_out' → update row with clock_out_at, mark clocked_out
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireStaffAuth } from "../_shared/staffJwt.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "content-type, apikey",
+  "Access-Control-Allow-Headers": "content-type, apikey, authorization",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
@@ -38,37 +37,38 @@ function haversineMetres(lat1: number, lon1: number, lat2: number, lon2: number)
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
+  let claims;
+  try { claims = await requireStaffAuth(req); }
+  catch { return json({ error: "Unauthorized" }, 401); }
+  const staff_id = claims.sub;
+  const owner_id = claims.biz;
+
   const sb = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  async function validateStaff(staffId: string, ownerId: string): Promise<boolean> {
-    const { data } = await sb
+  // Confirm staff still active (revocation-by-deactivation while JWT lives)
+  {
+    const { data: active } = await sb
       .from("team_members")
       .select("id")
-      .eq("id", staffId)
-      .eq("business_id", ownerId)
+      .eq("id", staff_id)
+      .eq("business_id", owner_id)
       .eq("is_active", true)
       .single();
-    return !!data;
+    if (!active) return json({ error: "Unauthorized" }, 401);
   }
 
-  // ── GET ──────────────────────────────────────────────────────────────────────
   if (req.method === "GET") {
-    const url     = new URL(req.url);
-    const staffId = url.searchParams.get("staff_id");
-    const ownerId = url.searchParams.get("owner_id");
-    const date    = url.searchParams.get("date");
-
-    if (!staffId || !ownerId || !date) return json({ error: "Missing params" }, 400);
-    if (!await validateStaff(staffId, ownerId)) return json({ error: "Unauthorised" }, 403);
+    const date = new URL(req.url).searchParams.get("date");
+    if (!date) return json({ error: "date required" }, 400);
 
     const { data, error } = await sb
       .from("timesheets")
       .select("*")
-      .eq("staff_id", staffId)
-      .eq("business_id", ownerId)
+      .eq("staff_id", staff_id)
+      .eq("business_id", owner_id)
       .eq("date", date)
       .order("created_at", { ascending: true });
 
@@ -76,11 +76,8 @@ serve(async (req) => {
     return json({ timesheets: data });
   }
 
-  // ── POST ─────────────────────────────────────────────────────────────────────
   if (req.method === "POST") {
     let body: {
-      staff_id: string;
-      owner_id: string;
       job_id?: string | null;
       date: string;
       action: "clock_in" | "clock_out";
@@ -92,9 +89,8 @@ serve(async (req) => {
     try { body = await req.json(); }
     catch { return json({ error: "Invalid JSON" }, 400); }
 
-    const { staff_id, owner_id, job_id, date, action, lat, lng, accuracy } = body;
-    if (!staff_id || !owner_id || !date || !action) return json({ error: "Missing fields" }, 400);
-    if (!await validateStaff(staff_id, owner_id)) return json({ error: "Unauthorised" }, 403);
+    const { job_id, date, action, lat, lng, accuracy } = body;
+    if (!date || !action) return json({ error: "Missing fields" }, 400);
 
     // ── clock_in ──────────────────────────────────────────────────────────────
     if (action === "clock_in") {

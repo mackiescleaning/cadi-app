@@ -18,6 +18,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { writeAudit } from "../_shared/auditLog.ts";
 
 const APP_ID         = Deno.env.get("YAPILY_APP_ID")     ?? "";
 const APP_SECRET     = Deno.env.get("YAPILY_SECRET")     ?? "";
@@ -276,30 +277,24 @@ serve(async (req: Request) => {
         return json({ error: "Consent does not belong to this user" }, 403, origin);
       }
 
-      const yapilyConsentId   = matching?.id ?? null;
-      const consentExpiresAt  = matching?.expiresAt ?? null; // 90-day rolling, set by Yapily
-
-      // Deactivate any previous connection (and revoke its consent — see disconnect logic below)
-      const { data: prevConns } = await sb
-        .from("bank_connections")
-        .select("id, access_token, yapily_consent_id")
-        .eq("business_id", businessId)
-        .eq("is_active", true);
-
-      for (const pc of (prevConns ?? [])) {
-        if (pc.yapily_consent_id) {
-          await fetch(`${API_BASE}/consents/${pc.yapily_consent_id}`, {
-            method: "DELETE", headers: { Authorization: BASIC_AUTH },
-          }).catch(() => {});
-        }
+      // Fail closed: if Yapily hasn't surfaced the new consent yet (backend lag,
+      // very common in the first 1-2 seconds after redirect), DO NOT touch the
+      // existing connection. Tell the client to retry. Previously we wiped the
+      // old connection AND failed to insert a new one — user ended up with no
+      // working bank link.
+      if (!matching) {
+        return json({
+          error: "Consent not yet visible from Yapily — please retry in a moment.",
+          retryable: true,
+        }, 503, origin);
       }
-      await sb
-        .from("bank_connections")
-        .update({ is_active: false, disconnected_at: new Date().toISOString(), access_token: null })
-        .eq("business_id", businessId)
-        .eq("is_active", true);
 
-      // Fetch all accounts under this consent (multi-account banks supported)
+      const yapilyConsentId   = matching.id;
+      const consentExpiresAt  = matching.expiresAt ?? null; // 90-day rolling, set by Yapily
+
+      // Fetch all accounts under this consent BEFORE touching the DB, so a
+      // Yapily-side failure here doesn't leave the user with no active
+      // connection. Multi-account banks supported.
       let accounts: Array<{ id: string; accountNames?: Array<{ name: string }>; accountIdentifications?: Array<{ type: string; identification: string }>; type?: string; currency?: string }> = [];
       try {
         const acctData = await fetch(`${API_BASE}/accounts`, {
@@ -316,31 +311,44 @@ serve(async (req: Request) => {
         .replace(/-/g, " ")
         .replace(/\b\w/g, (l: string) => l.toUpperCase());
 
+      // Atomic swap: lock the business row, deactivate prior actives, insert
+      // the new active connection in a single transaction. Prevents two
+      // parallel callbacks producing duplicate is_active=true rows.
+      const swapPayload = {
+        truelayer_account_id: firstAcct?.id ?? null,
+        bank_name:            bankName,
+        account_name:         firstAcct?.accountNames?.[0]?.name ?? null,
+        account_last_4:       firstAcct?.accountIdentifications
+                                ?.find((i) => i.type === "ACCOUNT_NUMBER")
+                                ?.identification?.slice(-4) ?? null,
+        access_token:         await encryptToken(consentToken),
+        yapily_consent_id:    yapilyConsentId,
+        consent_expires_at:   consentExpiresAt,
+      };
+
+      const { data: swapResult, error: swapErr } = await sb.rpc("swap_active_bank_connection", {
+        p_business_id:    businessId,
+        p_new_connection: swapPayload,
+      });
+      if (swapErr) throw new Error(swapErr.message);
+      const swapRow = Array.isArray(swapResult) ? swapResult[0] : swapResult;
+      const newConnectionId: string = swapRow?.new_connection_id;
+      const oldConsentIds: string[] = swapRow?.old_consent_ids ?? [];
+
+      // Fire-and-forget revoke of old Yapily consents — DB is already updated,
+      // so a Yapily-side failure here is recoverable.
+      for (const oldConsentId of oldConsentIds) {
+        fetch(`${API_BASE}/consents/${oldConsentId}`, {
+          method: "DELETE", headers: { Authorization: BASIC_AUTH },
+        }).catch(() => {});
+      }
+
+      // Re-fetch the inserted row for the downstream account-persist + response.
       const { data: conn, error: connErr } = await sb
         .from("bank_connections")
-        .insert({
-          business_id:          businessId,
-          provider:             "yapily",
-          truelayer_account_id: firstAcct?.id ?? null, // primary, for display
-          bank_name:            bankName,
-          account_name:         firstAcct?.accountNames?.[0]?.name ?? null,
-          account_last_4:       firstAcct?.accountIdentifications
-                                  ?.find((i) => i.type === "ACCOUNT_NUMBER")
-                                  ?.identification?.slice(-4) ?? null,
-          access_token:         await encryptToken(consentToken),
-          refresh_token:        null,
-          token_expires_at:     null,
-          yapily_consent_id:    yapilyConsentId,
-          consent_expires_at:   consentExpiresAt,
-          needs_reauth:         false,
-          sync_error:           null,
-          sync_error_code:      null,
-          is_active:            true,
-          connected_at:         new Date().toISOString(),
-        })
         .select("id, bank_name, account_last_4")
+        .eq("id", newConnectionId)
         .single();
-
       if (connErr) throw new Error(connErr.message);
 
       // Persist all bank accounts so multi-account banks work end-to-end
@@ -449,6 +457,17 @@ serve(async (req: Request) => {
         })
         .eq("business_id", businessId)
         .eq("is_active", true);
+
+      await writeAudit(sb, req, {
+        ownerId:  user.id,
+        actorId:  user.id,
+        action:   "bank_disconnect",
+        category: "banking",
+        detail:   {
+          provider:        "yapily",
+          consents_revoked: (conns ?? []).map((c: { yapily_consent_id: string | null }) => c.yapily_consent_id).filter(Boolean),
+        },
+      });
 
       return json({ success: true }, 200, origin);
     }

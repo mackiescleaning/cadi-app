@@ -61,13 +61,26 @@
 
 import { serve }       from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptWith, decryptWith } from "../_shared/tokenCrypto.ts";
+import { writeAudit } from "../_shared/auditLog.ts";
+
+const HMRC_ENC_ENV = "HMRC_TOKEN_ENC_KEY";
+// Legacy plaintext fallback — CLOSED by default ahead of HMRC recognition.
+// Re-enable only by explicitly setting ALLOW_HMRC_LEGACY_PLAINTEXT="true".
+// HMRC's fraud-prevention guidance requires tokens at rest to be encrypted;
+// any unmigrated row will force a reconnect, which is the correct safety
+// posture for an MTD-ITSA submission path.
+const ALLOW_LEGACY_PLAINTEXT = (Deno.env.get("ALLOW_HMRC_LEGACY_PLAINTEXT") ?? "false") === "true";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface HmrcTokens {
-  hmrc_access_token:     string | null;
-  hmrc_refresh_token:    string | null;
-  hmrc_token_expires_at: string | null;
-  hmrc_nino:             string | null;
+  hmrc_access_token:      string | null;  // legacy plaintext (rollout window)
+  hmrc_refresh_token:     string | null;  // legacy plaintext (rollout window)
+  hmrc_access_token_enc:  string | null;
+  hmrc_refresh_token_enc: string | null;
+  hmrc_token_expires_at:  string | null;
+  hmrc_nino:              string | null;  // legacy plaintext (rollout window)
+  hmrc_nino_enc:          string | null;
 }
 
 interface DeviceInfo {
@@ -157,21 +170,58 @@ async function getUser(req: Request) {
 async function getAccessToken(userId: string, sb: ReturnType<typeof createClient>): Promise<{ token: string; nino: string | null }> {
   const { data: profile } = await sb
     .from("profiles")
-    .select("hmrc_access_token, hmrc_refresh_token, hmrc_token_expires_at, hmrc_nino")
+    .select("hmrc_access_token, hmrc_refresh_token, hmrc_access_token_enc, hmrc_refresh_token_enc, hmrc_token_expires_at, hmrc_nino, hmrc_nino_enc")
     .eq("id", userId)
     .single<HmrcTokens>();
 
-  if (!profile?.hmrc_refresh_token) {
+  // Prefer encrypted columns; fall back to legacy plaintext during the rollout
+  // window (gated by ALLOW_LEGACY_PLAINTEXT). After backfill + grace period
+  // the legacy plaintext columns are NULLed and this fallback never fires.
+  const accessToken  = profile?.hmrc_access_token_enc
+    ? await decryptWith(HMRC_ENC_ENV, profile.hmrc_access_token_enc, false)
+    : (profile?.hmrc_access_token ?? null);
+  const refreshToken = profile?.hmrc_refresh_token_enc
+    ? await decryptWith(HMRC_ENC_ENV, profile.hmrc_refresh_token_enc, false)
+    : (profile?.hmrc_refresh_token ?? null);
+  const nino         = profile?.hmrc_nino_enc
+    ? await decryptWith(HMRC_ENC_ENV, profile.hmrc_nino_enc, false)
+    : (profile?.hmrc_nino ?? null);
+
+  if (!refreshToken) {
     throw new Error("HMRC not connected — user must complete OAuth flow");
   }
 
-  const expiresAt = profile.hmrc_token_expires_at
+  // Reject legacy plaintext fallback if disabled (post-backfill enforcement).
+  if (!ALLOW_LEGACY_PLAINTEXT && !profile?.hmrc_refresh_token_enc) {
+    throw new Error("HMRC token storage requires re-authorisation — please reconnect");
+  }
+
+  const expiresAt = profile?.hmrc_token_expires_at
     ? new Date(profile.hmrc_token_expires_at)
     : new Date(0);
   const needsRefresh = expiresAt < new Date(Date.now() + 5 * 60 * 1000); // refresh if < 5 min left
 
-  if (!needsRefresh && profile.hmrc_access_token) {
-    return { token: profile.hmrc_access_token, nino: profile.hmrc_nino };
+  // Passive migration: if we resolved tokens via the legacy plaintext columns
+  // (no _enc twin yet), encrypt them now and null the plaintext. This makes the
+  // first read after deploy migrate the user, so we don't have to wait for a
+  // refresh-window to roll through every account.
+  const needsBackfill = !profile?.hmrc_access_token_enc && !!profile?.hmrc_access_token;
+  if (needsBackfill && accessToken && refreshToken) {
+    const accessEnc  = await encryptWith(HMRC_ENC_ENV, accessToken);
+    const refreshEnc = await encryptWith(HMRC_ENC_ENV, refreshToken);
+    const ninoEnc    = nino ? await encryptWith(HMRC_ENC_ENV, nino) : null;
+    await sb.from("profiles").update({
+      hmrc_access_token:      null,
+      hmrc_refresh_token:     null,
+      hmrc_nino:              null,
+      hmrc_access_token_enc:  accessEnc,
+      hmrc_refresh_token_enc: refreshEnc,
+      ...(ninoEnc ? { hmrc_nino_enc: ninoEnc } : {}),
+    }).eq("id", userId);
+  }
+
+  if (!needsRefresh && accessToken) {
+    return { token: accessToken, nino };
   }
 
   // ── Refresh the access token ───────────────────────────────────────────────
@@ -182,7 +232,7 @@ async function getAccessToken(userId: string, sb: ReturnType<typeof createClient
       grant_type:    "refresh_token",
       client_id:     HMRC_CLIENT_ID,
       client_secret: HMRC_CLIENT_SECRET,
-      refresh_token: profile.hmrc_refresh_token,
+      refresh_token: refreshToken,
     }),
   });
 
@@ -193,25 +243,33 @@ async function getAccessToken(userId: string, sb: ReturnType<typeof createClient
   };
 
   if (!refreshRes.ok) {
-    // Refresh token expired — user needs to re-authorise
+    // Refresh token expired — user needs to re-authorise. Null both legacy
+    // and encrypted columns so the next sign-in path is unambiguous.
     await sb.from("profiles").update({
-      hmrc_access_token:     null,
-      hmrc_refresh_token:    null,
-      hmrc_token_expires_at: null,
-      hmrc_connected_at:     null,
+      hmrc_access_token:      null,
+      hmrc_refresh_token:     null,
+      hmrc_access_token_enc:  null,
+      hmrc_refresh_token_enc: null,
+      hmrc_token_expires_at:  null,
+      hmrc_connected_at:      null,
     }).eq("id", userId);
     throw new Error("HMRC refresh token expired — please reconnect");
   }
 
-  const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
+  const newExpiry  = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
+  const accessEnc  = await encryptWith(HMRC_ENC_ENV, refreshed.access_token);
+  const refreshEnc = await encryptWith(HMRC_ENC_ENV, refreshed.refresh_token);
 
   await sb.from("profiles").update({
-    hmrc_access_token:     refreshed.access_token,
-    hmrc_refresh_token:    refreshed.refresh_token, // HMRC may rotate this
-    hmrc_token_expires_at: newExpiry,
+    // Null the legacy plaintext on first encrypted write (one-way migration).
+    hmrc_access_token:      null,
+    hmrc_refresh_token:     null,
+    hmrc_access_token_enc:  accessEnc,
+    hmrc_refresh_token_enc: refreshEnc,
+    hmrc_token_expires_at:  newExpiry,
   }).eq("id", userId);
 
-  return { token: refreshed.access_token, nino: profile.hmrc_nino };
+  return { token: refreshed.access_token, nino };
 }
 
 /**
@@ -268,15 +326,55 @@ async function buildFraudHeaders(
   headers["Gov-Client-Window-Size"]           = device.windowSize;
   headers["Gov-Client-Timezone"]              = device.timezone;
 
+  // Gov-Client-Public-IP — the END USER's public IP, not the vendor's.
+  // Prefer the IP the browser reported via ipify (most accurate). If the
+  // client couldn't reach ipify (CSP block, third-party outage, etc.), fall
+  // back to the first hop of x-forwarded-for, which is the browser's IP as
+  // seen by Supabase's edge. HMRC requires this header on every MTD call.
   if (device.publicIp) {
     headers["Gov-Client-Public-IP"]           = device.publicIp;
     headers["Gov-Client-Public-IP-Timestamp"] = device.publicIpTimestamp;
+  } else {
+    const xffFirst = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim();
+    if (xffFirst) {
+      headers["Gov-Client-Public-IP"]           = xffFirst;
+      headers["Gov-Client-Public-IP-Timestamp"] = new Date().toISOString();
+    }
   }
   if (device.userId) {
     headers["Gov-Client-User-IDs"] = `cadi=${encodeURIComponent(device.userId)}`;
   }
 
+  // Gov-Client-Multi-Factor — omitted intentionally. HMRC's spec requires this
+  // header only when the user authenticated with multi-factor. Cadi sign-in is
+  // single-factor (Supabase email+password), so the correct posture is to omit
+  // the header rather than send a placeholder. Re-add here when MFA ships.
+  // See: https://developer.service.hmrc.gov.uk/guides/fraud-prevention/#gov-client-multi-factor
+
   return headers;
+}
+
+/**
+ * HMRC ships Deprecation/Sunset/Link headers on endpoints scheduled for
+ * retirement (post-Jan 2024 releases). We want a paper trail the moment any
+ * endpoint we depend on is flagged — so a deprecated API doesn't silently
+ * become a 410 Gone six months later. Returned to the caller so it can also
+ * be persisted in the audit log alongside the action that triggered it.
+ */
+interface DeprecationInfo {
+  deprecation: string;          // IMF-fixdate
+  sunset?:     string;          // IMF-fixdate
+  link?:       string;          // Documentation URL
+}
+
+function extractDeprecation(res: Response): DeprecationInfo | null {
+  const dep = res.headers.get("deprecation");
+  if (!dep) return null;
+  return {
+    deprecation: dep,
+    sunset: res.headers.get("sunset") ?? undefined,
+    link:   res.headers.get("link")   ?? undefined,
+  };
 }
 
 /** Make an authenticated HMRC API call with fraud prevention headers */
@@ -288,7 +386,7 @@ async function hmrcFetch(
   fraud:   Record<string, string>,
   body?:   unknown,
   extraHeaders?: Record<string, string>,
-): Promise<{ ok: boolean; status: number; data: unknown }> {
+): Promise<{ ok: boolean; status: number; data: unknown; deprecation: DeprecationInfo | null }> {
   const headers: Record<string, string> = {
     ...fraud,
     ...(extraHeaders ?? {}),
@@ -312,7 +410,34 @@ async function hmrcFetch(
 
   // Non-2xx — error payload is returned to the caller so they can surface it
 
-  return { ok: res.ok, status: res.status, data };
+  return { ok: res.ok, status: res.status, data, deprecation: extractDeprecation(res) };
+}
+
+/**
+ * Fire-and-forget audit write when HMRC flags an endpoint as deprecated. Keeps
+ * the warning trail in `audit_log` so we have a date-stamped record the first
+ * time the header appeared — useful when planning version bumps.
+ */
+async function logDeprecationIfPresent(
+  sb: ReturnType<typeof createClient>,
+  req: Request,
+  userId: string,
+  action: string,
+  path: string,
+  dep: DeprecationInfo | null,
+): Promise<void> {
+  if (!dep) return;
+  try {
+    await writeAudit(sb, req, {
+      ownerId: userId, actorId: userId,
+      action: "hmrc_endpoint_deprecated",
+      category: "hmrc",
+      detail: { triggeredBy: action, path, ...dep, sandbox: SANDBOX },
+    });
+    console.warn(`HMRC deprecation: ${path} → ${dep.deprecation}${dep.sunset ? ` (sunset ${dep.sunset})` : ""}`);
+  } catch (e) {
+    console.error("deprecation log failed:", e);
+  }
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
@@ -332,7 +457,9 @@ serve(async (req: Request) => {
       if (!/^[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]$/.test(nino)) {
         return json({ error: "Invalid NINO format. Expected e.g. QQ123456C" }, 400);
       }
-      await sb.from("profiles").update({ hmrc_nino: nino }).eq("id", user.id);
+      const ninoEnc = await encryptWith(HMRC_ENC_ENV, nino);
+      // Null the plaintext column on every write — encrypted is now canonical.
+      await sb.from("profiles").update({ hmrc_nino: null, hmrc_nino_enc: ninoEnc }).eq("id", user.id);
       return json({ success: true, nino });
     }
 
@@ -346,15 +473,26 @@ serve(async (req: Request) => {
     const device = body.deviceInfo as DeviceInfo | undefined;
     const fraud  = await buildFraudHeaders(device, req);
 
+    // Auto-log Deprecation/Sunset headers from every HMRC call this request
+    // makes. We swap the bare `hmrcFetch` in handlers below for `callHmrc`,
+    // which is a closure that captures the audit context. Closure-based, so
+    // concurrent requests don't see each other's context.
+    const callHmrc = async (
+      path: string, method: string, accept: string,
+      reqBody?: unknown, extra?: Record<string, string>,
+    ) => {
+      const result = await hmrcFetch(path, method, token, accept, fraud, reqBody, extra);
+      await logDeprecationIfPresent(sb, req, user.id, action, path, result.deprecation);
+      return result;
+    };
+
     // ── List self-employment businesses ───────────────────────────────────────
     // Business Details (MTD) API is v2.0 — sending v3.0 returns 404.
     if (action === "businesses") {
-      const result = await hmrcFetch(
+      const result = await callHmrc(
         `/individuals/business/details/${nino}/list`,
         "GET",
-        token,
         "application/vnd.hmrc.2.0+json",
-        fraud,
       );
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json(result.data);
@@ -376,12 +514,10 @@ serve(async (req: Request) => {
       if (status) qs.set("status",    status);
       const query = qs.toString() ? `?${qs}` : "";
 
-      const result = await hmrcFetch(
+      const result = await callHmrc(
         `/obligations/details/${nino}/income-and-expenditure${query}`,
         "GET",
-        token,
         "application/vnd.hmrc.3.0+json",
-        fraud,
       );
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json(result.data);
@@ -407,6 +543,70 @@ serve(async (req: Request) => {
         return json({ error: "businessId and taxYear are required" }, 400);
       }
 
+      // ── Digital-records guardrail (MTD ITSA ToU compliance) ──────────────
+      // Every figure submitted to HMRC must derive from a digital record, not
+      // a number typed into the submission screen. The client passes source
+      // IDs in `digitalRecordRefs`, partitioned by table:
+      //   { invoiceIds: [...], transactionIds: [...], moneyEntryIds: [...] }
+      // We verify every ID exists for this owner and that the linked income
+      // amounts sum to the declared turnover (±1p tolerance). Submissions
+      // without refs, with missing rows, or with a sum mismatch return 422.
+      const refs = body.digitalRecordRefs as {
+        invoiceIds?:     string[];   // paid invoices (income)
+        transactionIds?: string[];   // bank txns (income or expense)
+        moneyEntryIds?:  string[];   // manual entries (income or expense)
+      } | undefined;
+      const requireRefs = Deno.env.get("HMRC_REQUIRE_DIGITAL_RECORDS") !== "false";
+      if (requireRefs) {
+        const totalRefs = (refs?.invoiceIds?.length ?? 0)
+                        + (refs?.transactionIds?.length ?? 0)
+                        + (refs?.moneyEntryIds?.length ?? 0);
+        if (totalRefs === 0) {
+          return json({
+            error: "Submission refused: figures must derive from digital records (no manual entry). Pass digitalRecordRefs.",
+            code:  "DIGITAL_RECORDS_REQUIRED",
+          }, 422);
+        }
+
+        const invIds = refs?.invoiceIds     ?? [];
+        const txIds  = refs?.transactionIds ?? [];
+        const meIds  = refs?.moneyEntryIds  ?? [];
+
+        const [inv, tx, me] = await Promise.all([
+          invIds.length
+            ? sb.from("invoices").select("id, total, paid_at, status").eq("owner_id", user.id).in("id", invIds)
+            : Promise.resolve({ data: [] as Array<{ id: string; total: number; paid_at: string; status: string }> }),
+          txIds.length
+            ? sb.from("transactions").select("id, amount, date, is_business").eq("owner_id", user.id).in("id", txIds)
+            : Promise.resolve({ data: [] as Array<{ id: string; amount: number; date: string; is_business: boolean | null }> }),
+          meIds.length
+            ? sb.from("money_entries").select("id, amount, entry_date, kind").eq("owner_id", user.id).in("id", meIds)
+            : Promise.resolve({ data: [] as Array<{ id: string; amount: number; entry_date: string; kind: string }> }),
+        ]);
+
+        if ((inv.data?.length ?? 0) !== invIds.length ||
+            (tx.data?.length  ?? 0) !== txIds.length  ||
+            (me.data?.length  ?? 0) !== meIds.length) {
+          return json({ error: "One or more digitalRecordRefs were not found in your account.", code: "DIGITAL_RECORDS_NOT_FOUND" }, 422);
+        }
+
+        // Income sum: every invoice is income; positive transactions are income;
+        // money_entries with kind='income' are income. Expense rows excluded.
+        const sumIncome =
+          (inv.data ?? []).reduce((s, r) => s + Number(r.total  || 0), 0) +
+          (tx.data  ?? []).filter(r => Number(r.amount) > 0)
+                          .reduce((s, r) => s + Number(r.amount || 0), 0) +
+          (me.data  ?? []).filter(r => r.kind === 'income')
+                          .reduce((s, r) => s + Number(r.amount || 0), 0);
+        const declaredIncome = Number(incomeData.turnover || 0) + Number(incomeData.other || 0);
+        if (Math.abs(sumIncome - declaredIncome) > 0.01) {
+          return json({
+            error: `Income mismatch: declared £${declaredIncome.toFixed(2)} but linked records total £${sumIncome.toFixed(2)}.`,
+            code:  "DIGITAL_RECORDS_INCOME_MISMATCH",
+          }, 422);
+        }
+      }
+
       const expenses: Record<string, number> = {};
       const EXPENSE_MAP: Record<keyof SubmitExpenses, string> = {
         costOfGoods:           "costOfGoods",
@@ -428,6 +628,17 @@ serve(async (req: Request) => {
         if (val && val > 0) expenses[hmrcKey] = val;
       }
 
+      // SE Business API v5 (June 2026 sandbox change) — optional adjustments
+      // block, with adjustmentToProfitsForClass4 to manually reconcile Class 4
+      // NI exposure across multiple businesses. We only send the block when at
+      // least one adjustment is provided; HMRC rejects empty objects.
+      const adjustmentsInput = body.adjustments as { adjustmentToProfitsForClass4?: number } | undefined;
+      const adjustments: Record<string, number> = {};
+      if (adjustmentsInput?.adjustmentToProfitsForClass4 !== undefined &&
+          adjustmentsInput.adjustmentToProfitsForClass4 !== null) {
+        adjustments.adjustmentToProfitsForClass4 = adjustmentsInput.adjustmentToProfitsForClass4;
+      }
+
       const hmrcBody = {
         periodDates: {
           periodStartDate: periodStart,
@@ -438,14 +649,13 @@ serve(async (req: Request) => {
           ...(incomeData.other ? { other: incomeData.other } : {}),
         },
         ...(Object.keys(expenses).length > 0 ? { periodExpenses: expenses } : {}),
+        ...(Object.keys(adjustments).length > 0 ? { adjustments } : {}),
       };
 
-      const result = await hmrcFetch(
+      const result = await callHmrc(
         `/individuals/business/self-employment/${nino}/${businessId}/cumulative/${taxYear}`,
         "PUT",
-        token,
         "application/vnd.hmrc.5.0+json",
-        fraud,
         hmrcBody,
         SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
@@ -462,6 +672,25 @@ serve(async (req: Request) => {
         }).then(null, () => {});
       }
 
+      // Audit trail — fire-and-forget regardless of HMRC outcome, with the
+      // outcome captured in detail. Needed for FCA agent review.
+      await writeAudit(sb, req, {
+        ownerId:  user.id,
+        actorId:  user.id,
+        action:   "hmrc_submit_quarter",
+        category: "hmrc",
+        detail:   {
+          ok:           result.ok,
+          status:       result.status,
+          businessId,
+          taxYear,
+          periodStart,
+          periodEnd,
+          turnover:     incomeData.turnover,
+          sandbox:      SANDBOX,
+        },
+      });
+
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json(result.data);
     }
@@ -474,12 +703,10 @@ serve(async (req: Request) => {
     if (action === "trigger_calculation") {
       const taxYear         = (body.taxYear         as string) ?? "2026-27";
       const calculationType = (body.calculationType as string) ?? "in-year";
-      const result = await hmrcFetch(
+      const result = await callHmrc(
         `/individuals/calculations/${nino}/self-assessment/${taxYear}/trigger/${calculationType}`,
         "POST",
-        token,
         "application/vnd.hmrc.8.0+json",
-        fraud,
         {},
         SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
@@ -491,12 +718,10 @@ serve(async (req: Request) => {
     if (action === "get_calculation") {
       const taxYear       = body.taxYear       as string;
       const calculationId = body.calculationId as string;
-      const result = await hmrcFetch(
+      const result = await callHmrc(
         `/individuals/calculations/${nino}/self-assessment/${taxYear}/${calculationId}`,
         "GET",
-        token,
         "application/vnd.hmrc.8.0+json",
-        fraud,
         undefined,
         SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
@@ -516,12 +741,10 @@ serve(async (req: Request) => {
         return json({ error: "businessId, periodStart and periodEnd are required" }, 400);
       }
 
-      const result = await hmrcFetch(
+      const result = await callHmrc(
         `/individuals/self-assessment/adjustable-summary/${nino}/trigger`,
         "POST",
-        token,
         "application/vnd.hmrc.7.0+json",
-        fraud,
         {
           typeOfBusiness:   "self-employment",
           businessId,
@@ -538,12 +761,10 @@ serve(async (req: Request) => {
       const taxYear = body.taxYear as string; // "2026-27"
       if (!taxYear) return json({ error: "taxYear is required" }, 400);
 
-      const result = await hmrcFetch(
+      const result = await callHmrc(
         `/individuals/self-assessment/adjustable-summary/${nino}/${taxYear}`,
         "GET",
-        token,
         "application/vnd.hmrc.7.0+json",
-        fraud,
         undefined,
         SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
@@ -559,12 +780,10 @@ serve(async (req: Request) => {
         return json({ error: "taxYear and calculationId are required" }, 400);
       }
 
-      const result = await hmrcFetch(
+      const result = await callHmrc(
         `/individuals/self-assessment/adjustable-summary/${nino}/self-employment/${calculationId}?taxYear=${taxYear}`,
         "GET",
-        token,
         "application/vnd.hmrc.7.0+json",
-        fraud,
         undefined,
         // No Gov-Test-Scenario — rely on stateful sandbox to return the triggered record
         undefined,
@@ -585,17 +804,292 @@ serve(async (req: Request) => {
         return json({ error: "taxYear and calculationId are required" }, 400);
       }
 
-      const result = await hmrcFetch(
+      const result = await callHmrc(
         `/individuals/calculations/${nino}/self-assessment/${taxYear}/${calculationId}/final-declaration`,
         "POST",
-        token,
         "application/vnd.hmrc.8.0+json",
-        fraud,
         {},
         SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
       );
+      await writeAudit(sb, req, {
+        ownerId:  user.id,
+        actorId:  user.id,
+        action:   "hmrc_final_declaration",
+        category: "hmrc",
+        detail:   { ok: result.ok, status: result.status, taxYear, calculationId, sandbox: SANDBOX },
+      });
+
       if (!result.ok) return hmrcError(result.status, result.data, action);
       return json({ success: true, declared: true });
+    }
+
+    // ── Business Details v2 — update accounting type (cash vs accruals) ──────
+    // June 2026 production release: customers may now switch between cash basis
+    // and accruals in-year. PUT against the business's accounting-type endpoint.
+    if (action === "update_accounting_type") {
+      const businessId     = body.businessId     as string;
+      const taxYear        = body.taxYear        as string;       // "2026-27"
+      const accountingType = body.accountingType as string;       // "CASH" | "ACCRUALS"
+      if (!businessId || !taxYear || !accountingType) {
+        return json({ error: "businessId, taxYear and accountingType are required" }, 400);
+      }
+      const result = await callHmrc(
+        `/individuals/business/details/${nino}/${businessId}/${taxYear}/accounting-type`,
+        "PUT",
+        "application/vnd.hmrc.2.0+json",
+        { accountingType },
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
+      );
+      await writeAudit(sb, req, {
+        ownerId: user.id, actorId: user.id,
+        action: "hmrc_update_accounting_type",
+        category: "hmrc",
+        detail: { ok: result.ok, status: result.status, businessId, taxYear, accountingType, sandbox: SANDBOX },
+      });
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Self Assessment Accounts v4 — list penalties ─────────────────────────
+    // June 2026: read-only retrieval of ITSA penalties applied to the account.
+    // Surfaced in the UI so users see what they owe before a sandbox test fails
+    // with a surprise penalty in the calculation. Read-only.
+    if (action === "list_penalties") {
+      const result = await callHmrc(
+        `/accounts/self-assessment/${nino}/penalties`,
+        "GET",
+        "application/vnd.hmrc.4.0+json",
+        undefined,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
+      );
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Individual Losses v7 — submit brought-forward loss ───────────────────
+    // Customer carries a self-employment loss forward into the new tax year.
+    if (action === "submit_brought_forward_loss") {
+      const businessId  = body.businessId  as string;
+      const taxYear     = body.taxYear     as string;       // "2026-27"
+      const lossAmount  = body.lossAmount  as number;
+      const typeOfLoss  = (body.typeOfLoss as string) ?? "self-employment";
+      if (!businessId || !taxYear || lossAmount == null) {
+        return json({ error: "businessId, taxYear and lossAmount are required" }, 400);
+      }
+      const result = await callHmrc(
+        `/individuals/losses/${nino}/brought-forward-losses`,
+        "POST",
+        "application/vnd.hmrc.7.0+json",
+        { businessId, typeOfLoss, taxYearBroughtForwardFrom: taxYear, lossAmount },
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
+      );
+      await writeAudit(sb, req, {
+        ownerId: user.id, actorId: user.id,
+        action: "hmrc_submit_brought_forward_loss",
+        category: "hmrc",
+        detail: { ok: result.ok, status: result.status, businessId, taxYear, lossAmount, sandbox: SANDBOX },
+      });
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Tax Liability Adjustments v1 — carry back loss to a prior year ───────
+    // NEW API in June 2026. Sets off a loss from one tax year against profits
+    // in a previous tax year, subject to HMRC rules. Read the calculation
+    // result for the relief amount.
+    if (action === "carry_back_loss") {
+      const taxYearLossArose   = body.taxYearLossArose   as string; // "2026-27"
+      const taxYearOfRelief    = body.taxYearOfRelief    as string; // "2025-26"
+      const lossAmount         = body.lossAmount         as number;
+      const typeOfLoss         = (body.typeOfLoss        as string) ?? "self-employment";
+      if (!taxYearLossArose || !taxYearOfRelief || lossAmount == null) {
+        return json({ error: "taxYearLossArose, taxYearOfRelief and lossAmount are required" }, 400);
+      }
+      const result = await callHmrc(
+        `/individuals/tax-liability-adjustments/${nino}/carry-back-loss`,
+        "POST",
+        "application/vnd.hmrc.1.0+json",
+        { typeOfLoss, taxYearLossArose, taxYearOfRelief, lossAmount },
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
+      );
+      await writeAudit(sb, req, {
+        ownerId: user.id, actorId: user.id,
+        action: "hmrc_carry_back_loss",
+        category: "hmrc",
+        detail: { ok: result.ok, status: result.status, taxYearLossArose, taxYearOfRelief, lossAmount, sandbox: SANDBOX },
+      });
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Individuals Charges v3 — winter fuel payment ─────────────────────────
+    // June 2026 sandbox: customer can declare a winter fuel payment to be
+    // included in the calculation. Sole-trader cleaners aged 66+ may be in
+    // scope. Read-only retrieval here; declaration uses a future PUT.
+    if (action === "list_charges") {
+      const taxYear = body.taxYear as string;
+      if (!taxYear) return json({ error: "taxYear is required" }, 400);
+      const result = await callHmrc(
+        `/individuals/charges/${nino}/${taxYear}`,
+        "GET",
+        "application/vnd.hmrc.3.0+json",
+        undefined,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
+      );
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Individuals Partner Income v1 — partner income summary ───────────────
+    // Read-only stub for users with partnership income. Cleaners targeting the
+    // sole-trader tier rarely hit this — included for production-coverage of
+    // every supported income type.
+    if (action === "list_partner_income") {
+      const taxYear = body.taxYear as string;
+      if (!taxYear) return json({ error: "taxYear is required" }, 400);
+      const result = await callHmrc(
+        `/individuals/partner-income/${nino}/${taxYear}`,
+        "GET",
+        "application/vnd.hmrc.1.0+json",
+        undefined,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
+      );
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Create / Amend Self-Employment Annual Submission ─────────────────────
+    // Used to declare annual allowances (AIA, capital allowances, structures &
+    // buildings) and adjustments that aren't tied to a single quarter. Required
+    // in the stateful sandbox journey before BSAS can be triggered.
+    if (action === "submit_annual_submission") {
+      const businessId = body.businessId as string;
+      const taxYear    = body.taxYear    as string;       // "2026-27"
+      const payload    = body.payload    as Record<string, unknown> | undefined;
+      if (!businessId || !taxYear) {
+        return json({ error: "businessId and taxYear are required" }, 400);
+      }
+      const result = await callHmrc(
+        `/individuals/business/self-employment/${nino}/${businessId}/annual/${taxYear}`,
+        "PUT",
+        "application/vnd.hmrc.5.0+json",
+        payload ?? {},
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
+      );
+      await writeAudit(sb, req, {
+        ownerId: user.id, actorId: user.id,
+        action: "hmrc_submit_annual_submission",
+        category: "hmrc",
+        detail: { ok: result.ok, status: result.status, businessId, taxYear, sandbox: SANDBOX },
+      });
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Submit Self-Employment Accounting Adjustments ────────────────────────
+    // Applied to a previously triggered BSAS to correct the figures (e.g.
+    // business-insurance reclassification). Part of the stateful BSAS journey.
+    if (action === "submit_accounting_adjustments") {
+      const calculationId = body.calculationId as string;
+      const payload       = body.payload       as Record<string, unknown> | undefined;
+      if (!calculationId || !payload) {
+        return json({ error: "calculationId and payload are required" }, 400);
+      }
+      const result = await callHmrc(
+        `/individuals/self-assessment/adjustable-summary/${nino}/self-employment/${calculationId}/adjust`,
+        "POST",
+        "application/vnd.hmrc.7.0+json",
+        payload,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
+      );
+      await writeAudit(sb, req, {
+        ownerId: user.id, actorId: user.id,
+        action: "hmrc_submit_accounting_adjustments",
+        category: "hmrc",
+        detail: { ok: result.ok, status: result.status, calculationId, sandbox: SANDBOX },
+      });
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Create and Amend Dividends Income ────────────────────────────────────
+    // Personal dividends income (separate from a Ltd Co's dividends out). For
+    // sole-trader cleaners this is rare but in scope for the journey.
+    if (action === "submit_dividends_income") {
+      const taxYear = body.taxYear as string;             // "2026-27"
+      const payload = body.payload as Record<string, unknown> | undefined;
+      if (!taxYear || !payload) {
+        return json({ error: "taxYear and payload are required" }, 400);
+      }
+      const result = await callHmrc(
+        `/individuals/income-received/dividends/${nino}/${taxYear}`,
+        "PUT",
+        "application/vnd.hmrc.2.0+json",
+        payload,
+        SANDBOX ? { "Gov-Test-Scenario": govTestScenario } : undefined,
+      );
+      await writeAudit(sb, req, {
+        ownerId: user.id, actorId: user.id,
+        action: "hmrc_submit_dividends_income",
+        category: "hmrc",
+        detail: { ok: result.ok, status: result.status, taxYear, sandbox: SANDBOX },
+      });
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Agent Authorisation — get status of relationship ─────────────────────
+    // Returns whether the current agent is "main" or "supporting" for this
+    // customer. Use this client-side to gate UI actions: supporting agents
+    // can't make final declarations or view calculations.
+    if (action === "agent_relationship_status") {
+      const arn = body.arn as string;   // agent reference number
+      if (!arn) return json({ error: "arn is required" }, 400);
+      const result = await callHmrc(
+        `/agents/${arn}/relationship/status?service=HMRC-MTD-IT&clientId=${nino}`,
+        "GET",
+        "application/vnd.hmrc.1.0+json",
+      );
+      if (!result.ok) return hmrcError(result.status, result.data, action);
+      return json(result.data);
+    }
+
+    // ── Records portability — export the user's HMRC-relevant data ───────────
+    // ToU requirement: "Users must be able to access and export their records."
+    // Bundles the audit trail, hmrc_submissions, money_entries, and bank
+    // transactions for the requested tax-year window. Returned as JSON; the
+    // client serialises to a download.
+    if (action === "export_records") {
+      const fromDate = body.fromDate as string | undefined;
+      const toDate   = body.toDate   as string | undefined;
+
+      const [subs, money, txns, audit] = await Promise.all([
+        sb.from("hmrc_submissions").select("*").eq("owner_id", user.id)
+          .gte("period_start", fromDate ?? "1900-01-01").lte("period_end", toDate ?? "2999-12-31"),
+        sb.from("money_entries").select("*").eq("owner_id", user.id)
+          .gte("entry_date", fromDate ?? "1900-01-01").lte("entry_date", toDate ?? "2999-12-31"),
+        sb.from("transactions").select("*").eq("owner_id", user.id)
+          .gte("date", fromDate ?? "1900-01-01").lte("date", toDate ?? "2999-12-31"),
+        sb.from("audit_log").select("*").eq("owner_id", user.id).eq("category", "hmrc")
+          .order("created_at", { ascending: false }).limit(2000),
+      ]);
+
+      await writeAudit(sb, req, {
+        ownerId: user.id, actorId: user.id,
+        action: "hmrc_export_records",
+        category: "hmrc",
+        detail: { fromDate: fromDate ?? null, toDate: toDate ?? null, submissions: subs.data?.length ?? 0 },
+      });
+
+      return json({
+        exportedAt: new Date().toISOString(),
+        nino,
+        window: { fromDate: fromDate ?? null, toDate: toDate ?? null },
+        submissions:  subs.data  ?? [],
+        moneyEntries: money.data ?? [],
+        transactions: txns.data  ?? [],
+        auditLog:     audit.data ?? [],
+      });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);

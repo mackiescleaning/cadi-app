@@ -1,18 +1,19 @@
 /**
  * supabase/functions/staff-payslip/index.ts
- * No JWT — staff_id + owner_id acts as credential, validated against team_members.
+ * Authenticated by short-lived staff JWT (Authorization: Bearer <token>).
  *
- * GET ?staff_id=xxx&owner_id=xxx
- *   → recent payslips for this staff member, newest first, limit 12
- *     Each row includes pay_run fields (payment_date, period_start, period_end, tax_year, period_no, status)
+ * GET → recent payslips for this staff member, newest first, limit 12.
+ *       Each row includes pay_run fields (payment_date, period_start,
+ *       period_end, tax_year, period_no, status).
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireStaffAuth } from "../_shared/staffJwt.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "content-type, apikey",
+  "Access-Control-Allow-Headers": "content-type, apikey, authorization",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 
@@ -26,26 +27,26 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "GET") return json({ error: "Method not allowed" }, 405);
 
+  let claims;
+  try { claims = await requireStaffAuth(req); }
+  catch { return json({ error: "Unauthorized" }, 401); }
+  const staffId = claims.sub;
+  const ownerId = claims.biz;
+
   const sb = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const url      = new URL(req.url);
-  const staffId  = url.searchParams.get("staff_id");
-  const ownerId  = url.searchParams.get("owner_id");
-
-  if (!staffId || !ownerId) return json({ error: "Missing staff_id or owner_id" }, 400);
-
-  // Validate staff belongs to this owner
+  // Confirm member is still active (revocation by deactivation)
   const { data: member } = await sb
     .from("team_members")
     .select("id")
     .eq("id", staffId)
     .eq("business_id", ownerId)
+    .eq("is_active", true)
     .single();
-
-  if (!member) return json({ error: "Unauthorised" }, 401);
+  if (!member) return json({ error: "Unauthorized" }, 401);
 
   // Fetch payslips with pay_run details
   const { data: payslips, error } = await sb
