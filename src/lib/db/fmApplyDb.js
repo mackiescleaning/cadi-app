@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../supabase';
 
 /**
  * FM onboarding helpers — separate from fmOpsDb so the public application
@@ -10,15 +10,15 @@ import { supabase } from '../supabase';
 async function callFn(name, body, { auth = true } = {}) {
   const headers = {
     'Content-Type': 'application/json',
-    'apikey':       import.meta.env.VITE_SUPABASE_ANON_KEY,
+    'apikey':       SUPABASE_ANON_KEY,
   };
   if (auth) {
     const { data: { session } } = await supabase.auth.getSession();
-    headers.Authorization = `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY}`;
+    headers.Authorization = `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`;
   } else {
-    headers.Authorization = `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`;
+    headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
   }
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${name}`;
+  const url = `${SUPABASE_URL}/functions/v1/${name}`;
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   const json = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data: json };

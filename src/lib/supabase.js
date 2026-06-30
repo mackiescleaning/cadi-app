@@ -4,12 +4,21 @@ import { createClient } from '@supabase/supabase-js';
 // Both values are public (anon role, designed for client bundles) so the
 // fallback is safe. Once VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are set
 // on the Vercel project, the fallback becomes a no-op and can be removed.
-const supabaseUrl =
+//
+// Exported so any raw-fetch helper (e.g. callConnectFn, callFmFn, edge
+// function invokers) can use the same fallback chain. Reading
+// import.meta.env directly elsewhere causes `apikey: undefined` and
+// `/functions/v1/...` URLs that resolve to "undefined" host on prod
+// where the env vars aren't set.
+export const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL ||
   'https://cufgozpwbinjhjnkimmn.supabase.co';
-const supabaseAnonKey =
+export const SUPABASE_ANON_KEY =
   import.meta.env.VITE_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN1ZmdvenB3YmluamhqbmtpbW1uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4ODM4NDUsImV4cCI6MjA5MDQ1OTg0NX0.Vv1DQvcQj5lvjxRmPZVj3TWya072ujgv1O_C-jzfdcM';
+
+const supabaseUrl     = SUPABASE_URL;
+const supabaseAnonKey = SUPABASE_ANON_KEY;
 
 // Lazy ref so the fetch wrapper can call supabase.auth after the client is created.
 let _client = null;

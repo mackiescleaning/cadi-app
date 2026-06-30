@@ -3,9 +3,9 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useStaff } from '../context/StaffContext';
 import { Delete, Loader2 } from 'lucide-react';
 import CadiWordmark from '../components/CadiWordmark';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 
-const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_ANON = SUPABASE_ANON_KEY;
 
 async function fetchStaffList(token) {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/staff-auth?token=${token}`, {

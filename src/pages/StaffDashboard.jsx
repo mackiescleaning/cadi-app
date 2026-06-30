@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStaff } from '../context/StaffContext';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import {
   MapPin, Clock, CheckCircle, LogOut, Calendar,
   Phone, Key, AlertCircle, Users, ChevronLeft,
@@ -162,7 +163,7 @@ function JobCard({ job, myName, staffMember, externalTimesheet, onStatusChange, 
     }
 
     try {
-      const SB   = import.meta.env.VITE_SUPABASE_URL;
+      const SB   = SUPABASE_URL;
       const init = staffFetchInit?.({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -203,7 +204,7 @@ function JobCard({ job, myName, staffMember, externalTimesheet, onStatusChange, 
     }
 
     try {
-      const SB   = import.meta.env.VITE_SUPABASE_URL;
+      const SB   = SUPABASE_URL;
       const init = staffFetchInit?.({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -465,8 +466,7 @@ export default function StaffDashboard() {
     });
   }, [weekOffset]);
 
-  const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
-  const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const SUPABASE_ANON = SUPABASE_ANON_KEY;
 
   const loadPayslips = useCallback(async () => {
     const init = staffFetchInit();

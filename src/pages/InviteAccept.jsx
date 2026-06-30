@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { acceptInvite } from '../lib/db/teamDb';
 
 export default function InviteAccept() {
@@ -32,12 +32,12 @@ export default function InviteAccept() {
         const fn = isFmOps ? 'fm-invite-lookup' : 'connect-invite-lookup';
         let data;
         try {
-          const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`, {
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
             method:  'POST',
             headers: {
               'Content-Type':  'application/json',
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-              'apikey':        import.meta.env.VITE_SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'apikey':        SUPABASE_ANON_KEY,
             },
             body: JSON.stringify({ token }),
           });
@@ -117,12 +117,12 @@ export default function InviteAccept() {
       if (isConnect || isFmOps) {
         const { data: { session } } = await supabase.auth.getSession();
         const fn = isFmOps ? 'fm-invite-accept' : 'connect-invite-accept';
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`, {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
           method:  'POST',
           headers: {
             'Content-Type':  'application/json',
-            'Authorization': `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'apikey':        import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
+            'apikey':        SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({ token }),
         });

@@ -6,7 +6,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, ToggleLeft, ToggleRight, Edit2 } from 'lucide-react';
 import { createService, updateService } from '../lib/db/servicesDb';
-import { supabase } from '../lib/supabase';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 
 // ── Microcopy ─────────────────────────────────────────────────────────────────
 
@@ -214,13 +214,13 @@ async function callNlp(step, input) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) return null;
     const res = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-service-nlp`,
+      `${SUPABASE_URL}/functions/v1/parse-service-nlp`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization:  `Bearer ${session.access_token}`,
-          apikey:         import.meta.env.VITE_SUPABASE_ANON_KEY,
+          apikey:         SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({ step, input }),
       },

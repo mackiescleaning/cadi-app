@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../supabase';
 
 // ── Invite ────────────────────────────────────────────────────────────────────
 
@@ -25,13 +25,13 @@ export async function inviteMember({ email, role = 'accountant', accessLevel = '
   // Fire invite email via edge function
   const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-invite`,
+    `${SUPABASE_URL}/functions/v1/send-invite`,
     {
       method:  'POST',
       headers: {
         'Content-Type':  'application/json',
         Authorization:   `Bearer ${session.access_token}`,
-        apikey:          import.meta.env.VITE_SUPABASE_ANON_KEY,
+        apikey:          SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({ member_id: data.id }),
     },
@@ -60,13 +60,13 @@ export async function listMembers() {
 export async function resendInvite(memberId) {
   const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-invite`,
+    `${SUPABASE_URL}/functions/v1/send-invite`,
     {
       method:  'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization:  `Bearer ${session.access_token}`,
-        apikey:         import.meta.env.VITE_SUPABASE_ANON_KEY,
+        apikey:         SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({ member_id: memberId }),
     },

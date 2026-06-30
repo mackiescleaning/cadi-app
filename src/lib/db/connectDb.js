@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../supabase';
 
 /**
  * Cadi Connect — sub-side data helpers.
@@ -205,13 +205,13 @@ export async function listMyConnectJobs() {
 // preflight x-client-info issue. See InviteAccept.jsx for the same pattern.
 async function callConnectFn(name, body) {
   const { data: { session } } = await supabase.auth.getSession();
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${name}`;
+  const url = `${SUPABASE_URL}/functions/v1/${name}`;
   const res = await fetch(url, {
     method:  'POST',
     headers: {
       'Content-Type':  'application/json',
-      'Authorization': `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      'apikey':        import.meta.env.VITE_SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
+      'apikey':        SUPABASE_ANON_KEY,
     },
     body: JSON.stringify(body),
   });

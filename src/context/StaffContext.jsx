@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from 'react';
+import { SUPABASE_ANON_KEY } from '../lib/supabase';
 
 const StaffContext = createContext({});
 
@@ -36,7 +37,7 @@ export function StaffProvider({ children }) {
       headers: {
         ...(extra.headers || {}),
         Authorization: `Bearer ${staffToken}`,
-        apikey:        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        apikey:        SUPABASE_ANON_KEY,
       },
     };
   }
