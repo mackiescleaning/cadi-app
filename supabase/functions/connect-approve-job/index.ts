@@ -25,6 +25,64 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
+const RESEND_FROM    = Deno.env.get("RESEND_FROM")    ?? "Cadi <team@cadi.cleaning>";
+const APP_ORIGIN     = Deno.env.get("APP_ORIGIN")     ?? "https://app.cadi.cleaning";
+
+async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+  if (!RESEND_API_KEY || !to) return false;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: RESEND_FROM, to: [to], subject, html }),
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+// deno-lint-ignore no-explicit-any
+async function getUserEmail(sb: any, userId: string): Promise<string | null> {
+  try {
+    const { data, error } = await sb.auth.admin.getUserById(userId);
+    if (error || !data?.user?.email) return null;
+    return data.user.email as string;
+  } catch { return null; }
+}
+
+function renderDecisionEmail(opts: {
+  decision: "approved" | "queried" | "rejected";
+  siteName: string;
+  serviceDate: string;
+  note: string | null;
+  jobsUrl: string;
+}): { subject: string; html: string } {
+  const { decision, siteName, serviceDate, note, jobsUrl } = opts;
+  const headline =
+    decision === "approved" ? "Job approved" :
+    decision === "queried"  ? "Job queried — they need a bit more info" :
+                              "Job rejected";
+  const lead =
+    decision === "approved" ? "Your invoice draft is ready in Cadi Connect." :
+    decision === "queried"  ? "The FM has flagged a query against your job. Open Cadi Connect to read and respond." :
+                              "The FM has rejected this job. Open Cadi Connect to see the reason.";
+  const noteBlock = note
+    ? `<p style="margin:16px 0;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#7c2d12;font-size:14px;line-height:1.5;"><strong>Their note:</strong><br/>${note.replace(/\n/g, "<br/>")}</p>`
+    : "";
+  return {
+    subject: `${headline} — ${siteName}`,
+    html: `<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#f8fafc;margin:0;padding:24px;">
+      <div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:28px;border:1px solid #e2e8f0;">
+        <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a;">${headline}</h1>
+        <p style="margin:0 0 4px;font-size:14px;color:#475569;"><strong>${siteName}</strong> · service date ${serviceDate}</p>
+        <p style="margin:16px 0;font-size:14px;color:#334155;line-height:1.6;">${lead}</p>
+        ${noteBlock}
+        <p style="margin:24px 0 0;"><a href="${jobsUrl}" style="display:inline-block;padding:10px 20px;background:#ea580c;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;">Open Cadi Connect →</a></p>
+      </div>
+    </body></html>`,
+  };
+}
+
 const json = (data: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(data), { status, headers: { ...CORS, "Content-Type": "application/json", ...extra } });
 
@@ -178,6 +236,21 @@ serve(async (req) => {
       ip:       ip === "unknown" ? null : ip,
       user_agent: ua || null,
     }).then(() => {}).catch(() => {});
+
+    // Notify sub by email (best-effort — never blocks the response)
+    if (job.sub_user_id) {
+      const subEmail = await getUserEmail(sb, job.sub_user_id);
+      if (subEmail) {
+        const { subject, html } = renderDecisionEmail({
+          decision:    decision as "approved" | "queried" | "rejected",
+          siteName:    job.site?.name ?? "your site",
+          serviceDate: job.date ?? "",
+          note,
+          jobsUrl:     `${APP_ORIGIN}/connect/completion`,
+        });
+        sendEmail(subEmail, subject, html).then(() => {}).catch(() => {});
+      }
+    }
 
     return json({
       ok: true,

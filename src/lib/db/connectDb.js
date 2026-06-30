@@ -111,6 +111,12 @@ export async function placeBid({ listingId, price, note }) {
     .single();
 
   if (error) throw error;
+
+  // Best-effort: tell the FM org their listing got a bid. We don't await on
+  // the response — notification failure must not surface as a placeBid error.
+  callConnectFn('connect-notify-bid', { listing_id: listingId, bid_id: data.id })
+    .catch(() => { /* swallow */ });
+
   return data;
 }
 
