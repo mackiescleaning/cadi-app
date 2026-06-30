@@ -119,6 +119,11 @@ serve(async (req) => {
     }
 
     // Write the check-in row. RLS allows it because sub_user_id matches.
+    // business_id is intentionally omitted: jobs.business_id references the
+    // residential `businesses` table, but job_checkins.business_id has an FK
+    // to `profiles`. Passing jobs.business_id violates the FK. The column was
+    // made nullable in migration 066, so omitting it on Connect checkins is
+    // both correct and accepted by the schema.
     const { error: ciErr } = await sb.from("job_checkins").insert({
       job_id:                jobId,
       sub_user_id:           user.id,
@@ -128,7 +133,6 @@ serve(async (req) => {
       checked_in_at:         new Date().toISOString(),
       inside_geo_fence:      true,
       distance_from_site_m:  distanceM,
-      business_id:           job.business_id ?? null,
     });
     if (ciErr) return json({ error: ciErr.message }, 500);
 

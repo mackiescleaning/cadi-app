@@ -137,6 +137,9 @@ serve(async (req) => {
       ? Math.round((checkedOutAt.getTime() - new Date(checkin.checked_in_at).getTime()) / 60000)
       : null;
 
+    // business_id omitted — see connect-checkin for the same fix.
+    // jobs.business_id refs `businesses`; job_checkins.business_id refs
+    // `profiles`. Migration 066 made the column nullable so Connect can omit.
     const { error: coErr } = await sb.from("job_checkins").insert({
       job_id:                jobId,
       sub_user_id:           user.id,
@@ -147,7 +150,6 @@ serve(async (req) => {
       note:                  note || null,
       inside_geo_fence:      true,
       distance_from_site_m:  distanceM,
-      business_id:           job.business_id ?? null,
     });
     if (coErr) return json({ error: coErr.message }, 500);
 
