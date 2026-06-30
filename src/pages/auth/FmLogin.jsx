@@ -43,21 +43,31 @@ export default function FmLogin() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { error: signInErr } = await signIn(email, password);
+    const { data, error: signInErr } = await signIn(email, password);
     if (signInErr) {
       setError('Invalid email or password. Please try again.');
       setLoading(false);
       return;
     }
     // Verify the signed-in user actually has FM org access before sending
-    // them into the portal. If not, surface a clear error and sign them out
-    // so they're not stuck in a half-authed state.
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('fm_organisation_id')
-      .eq('id', user?.id)
-      .maybeSingle();
+    // them into the portal. Use the userId from signIn's response directly
+    // — supabase.auth.getUser() right after sign-in can race with the
+    // client's JWT-attach step and return stale state on first call.
+    //
+    // The single retry-after-refreshSession() is defensive — if the profile
+    // read ever returns null for a transient reason (RLS / network), give
+    // the session one chance to settle before failing the user out.
+    const userId = data?.user?.id ?? data?.session?.user?.id;
+    let profile = null;
+    for (let attempt = 0; attempt < 2 && !profile; attempt++) {
+      const { data: row } = await supabase
+        .from('profiles')
+        .select('fm_organisation_id')
+        .eq('id', userId)
+        .maybeSingle();
+      profile = row;
+      if (!profile && attempt === 0) await supabase.auth.refreshSession();
+    }
     if (!profile?.fm_organisation_id) {
       await supabase.auth.signOut();
       setError("This sign-in is for FM organisation users. If you're a cleaning business owner, sign in at the main Cadi app instead.");
