@@ -16,21 +16,33 @@ import { markStepComplete } from '../lib/db/thirtyDayPlanDb';
 
 const fmt = (n) => `£${Math.round(Math.abs(n ?? 0)).toLocaleString('en-GB')}`;
 
+// Covers BOTH the Money tab's user-facing ids (fuel, professional, phone, bankfees…)
+// and the legacy / edge-function ids (professional_services, phone_internet, bank_charges…).
+// If we don't enumerate both, Screen 3 shows raw keys like "bankfees".
 const CAT_LABELS = {
-  fuel:                 'Fuel',
+  // Money tab ids (current)
+  fuel:                 'Fuel & travel',
   supplies:             'Supplies',
   equipment:            'Equipment',
   insurance:            'Insurance',
-  phone_internet:       'Phone & internet',
-  vehicle:              'Vehicle',
-  tax_payment:          'Tax payments',
-  staff:                'Staff',
-  professional_services:'Professional services',
-  food_drink:           'Food & drink',
-  subscriptions:        'Subscriptions',
-  shopping:             'Shopping',
-  bank_charges:         'Bank charges',
   marketing:            'Marketing',
+  vehicle:              'Vehicle',
+  staff:                'Staff costs',
+  premises:             'Premises',
+  professional:         'Professional fees',
+  subscriptions:        'Subscriptions',
+  phone:                'Phone & internet',
+  training:             'Training',
+  uniform:              'Uniform & PPE',
+  bankfees:             'Bank & finance',
+  other:                'Other',
+  // Legacy / edge-function ids (kept for back-compat)
+  phone_internet:       'Phone & internet',
+  professional_services:'Professional services',
+  bank_charges:         'Bank & finance',
+  tax_payment:          'Tax payments',
+  food_drink:           'Food & drink',
+  shopping:             'Shopping',
   income_customer:      'Customer income',
   income_other:         'Other income',
   uncategorised:        'Other',
@@ -88,8 +100,11 @@ function HoleCard({ hole, onAction }) {
     );
   }
 
+  // "Mark as paid" was a fake button — it only stashed a response, never updated the
+  // invoice. Removed until we wire it up to invoiceDb. Users can still mark paid in
+  // the Money/Accounts tab.
   const actions = hole.type === 'unpaid_invoice'
-    ? [['Draft a chase', 'chase'], ['Mark as paid', 'paid'], ['Ignore', 'ignore']]
+    ? [['Draft a chase', 'chase'], ['Ignore', 'ignore']]
     : hole.type === 'subscription'
     ? [['Mark for follow-up', 'follow_up'], ['Still using it', 'expected'], ['Ignore', 'ignore']]
     : [['Mark for follow-up', 'follow_up'], ['Already on it', 'expected'], ['Ignore', 'ignore']];
@@ -154,6 +169,8 @@ export default function FinancialWalkthrough() {
   const [focusArea, setFocusArea]   = useState(null);
   const [customFocus, setCustomFocus] = useState('');
   const [saving, setSaving]         = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -189,6 +206,22 @@ export default function FinancialWalkthrough() {
   }, [navigate]);
 
   useEffect(() => { load(); }, [load]);
+
+  async function generateAnalysis() {
+    setGenerating(true);
+    setGenerateError(null);
+    try {
+      const { error } = await supabase.functions.invoke('walkthrough-analysis', {
+        body: { action: 'generate' },
+      });
+      if (error) throw error;
+      await load();
+    } catch (e) {
+      setGenerateError(e.message ?? 'Could not generate analysis. Check your bank is connected and try again.');
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   // Create or resume walkthrough record
   async function ensureWalkthrough() {
@@ -278,18 +311,37 @@ export default function FinancialWalkthrough() {
       <Layout screen={0} total={0}>
         <div className="text-center py-12">
           <div className="w-14 h-14 rounded-full bg-[#4f78ff]/10 border border-[#4f78ff]/30 flex items-center justify-center mx-auto mb-4">
-            <div className="w-4 h-4 rounded-full bg-[#4f78ff] animate-pulse" />
+            {generating
+              ? <div className="w-6 h-6 rounded-full border-2 border-[#4f78ff]/20 border-t-[#4f78ff] animate-spin" />
+              : <div className="w-4 h-4 rounded-full bg-[#4f78ff]" />}
           </div>
-          <h2 className="text-white font-black text-xl mb-2">Cadi is analysing your transactions.</h2>
+          <h2 className="text-white font-black text-xl mb-2">
+            {generating ? 'Cadi is reading your transactions…' : "Let's get your numbers ready."}
+          </h2>
           <p className="text-white/50 text-sm mb-6 max-w-sm mx-auto leading-relaxed">
-            Give it 5–10 minutes — I'll let you know when I've got something to show you. Pop back to your dashboard and I'll ping you when it's ready.
+            {generating
+              ? 'This usually takes under a minute.'
+              : "I need to look through the last 60 days of your bank account before we walk through it together. Make sure your bank's connected in the Money tab, then tap below."}
           </p>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="px-6 py-3 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] text-white font-bold text-sm transition-colors"
-          >
-            Back to dashboard
-          </button>
+          {generateError && (
+            <p className="text-rose-300 text-xs mb-4 max-w-sm mx-auto">{generateError}</p>
+          )}
+          <div className="space-y-2 max-w-xs mx-auto">
+            <button
+              onClick={generateAnalysis}
+              disabled={generating}
+              className="w-full px-6 py-3 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] disabled:opacity-50 text-white font-bold text-sm transition-colors"
+            >
+              {generating ? 'Reading…' : 'Run it now'}
+            </button>
+            <button
+              onClick={() => navigate('/dashboard')}
+              disabled={generating}
+              className="w-full py-2.5 text-sm text-white/40 hover:text-white/60 font-semibold transition-colors disabled:opacity-50"
+            >
+              Back to dashboard
+            </button>
+          </div>
         </div>
       </Layout>
     );

@@ -10,6 +10,7 @@ import { Check, ArrowLeft, ExternalLink, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { markStepComplete, checkAndCompletePhase1 } from '../lib/db/thirtyDayPlanDb';
 import { useAuth } from '../context/AuthContext';
+import FirstVisitCoach from '../components/FirstVisitCoach';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -244,6 +245,57 @@ export default function InvoiceSettings() {
   const [logoUrl, setLogoUrl] = useState('');
   const businessName = profile?.business_name || '';
 
+  // Coach: staged logo file before save
+  const [stagedLogoFile, setStagedLogoFile] = useState(null);
+  const [stagedLogoPreview, setStagedLogoPreview] = useState('');
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  const compressImage = (file) => new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 256;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/png', 0.85));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const handleCoachLogoSelect = (file) => {
+    if (!file) return;
+    setStagedLogoFile(file);
+    const reader = new FileReader();
+    reader.onload = e => setStagedLogoPreview(e.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const persistStagedLogo = async () => {
+    if (!stagedLogoFile || !user) return;
+    setLogoUploading(true);
+    try {
+      const dataUrl = await compressImage(stagedLogoFile);
+      const { data: existing } = await supabase
+        .from('business_settings')
+        .select('setup_data')
+        .eq('owner_id', user.id)
+        .maybeSingle();
+      const sd = existing?.setup_data ?? {};
+      await supabase
+        .from('business_settings')
+        .upsert({ owner_id: user.id, setup_data: { ...sd, logo_url: dataUrl } }, { onConflict: 'owner_id' });
+      setLogoUrl(dataUrl);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   function flash(msg, type = 'success') {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
@@ -406,6 +458,57 @@ export default function InvoiceSettings() {
       </div>
 
       <div className="max-w-6xl mx-auto px-5 sm:px-8 py-8">
+        <FirstVisitCoach
+          storageKey="invoice_logo"
+          title="Make your invoices yours"
+          subtitle="Add your logo so every invoice and quote carries your branding."
+          primaryCta="Save logo"
+          skipCta="Skip for now"
+          onPrimary={async () => {
+            if (!stagedLogoFile) throw new Error('Pick a file first, or tap Skip for now.');
+            await persistStagedLogo();
+          }}
+          busy={logoUploading}
+        >
+          <label className="block cursor-pointer rounded-xl border border-[#1f48ff]/15 bg-[#f0f4ff] p-4 hover:bg-white text-[#010a4f] transition-colors">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold">
+                  {stagedLogoFile ? stagedLogoFile.name : 'Choose a logo image'}
+                </p>
+                <p className="text-[11px] text-[#010a4f]/55 mt-0.5">
+                  PNG or JPG — we'll resize it for you.
+                </p>
+              </div>
+              <span className="shrink-0 text-[11px] font-black uppercase tracking-wider text-[#1f48ff]">
+                Browse
+              </span>
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => handleCoachLogoSelect(e.target.files?.[0])}
+            />
+          </label>
+
+          {(stagedLogoPreview || logoUrl) && (
+            <div className="bg-white border border-[#1f48ff]/15 rounded-xl p-3 flex items-center justify-center">
+              <img
+                src={stagedLogoPreview || logoUrl}
+                alt="Logo preview"
+                style={{ maxHeight: 80, maxWidth: '100%', objectFit: 'contain' }}
+              />
+            </div>
+          )}
+
+          {!stagedLogoFile && (
+            <p className="text-[11px] text-[#010a4f]/55">
+              Pick a file to enable Save logo.
+            </p>
+          )}
+        </FirstVisitCoach>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
 
           {/* ── Left: form ── */}

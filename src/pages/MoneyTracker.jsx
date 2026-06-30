@@ -5,6 +5,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import AskCadi from "../components/AskCadi";
+import UndoToast from "../components/ui/UndoToast";
 import { createMoneyEntry, listMoneyEntries, updateMoneyEntry, deleteMoneyEntry } from "../lib/db/moneyDb";
 import { listQuotes, updateQuoteStatus } from "../lib/db/quotesDb";
 import { getBusinessSettings, upsertBusinessSettings } from "../lib/db/settingsDb";
@@ -25,6 +26,11 @@ const EXPENSE_CATS = [
   { id: "staff",        label: "Staff costs",       emoji: "👥", hmrc: "staffCosts",               dot: "#ec4899", pill: "bg-pink-500/15 border-pink-500/25 text-pink-300"      },
   { id: "premises",     label: "Premises",          emoji: "🏢", hmrc: "premisesRunningCosts",     dot: "#14b8a6", pill: "bg-teal-500/15 border-teal-500/25 text-teal-300"      },
   { id: "professional", label: "Professional fees", emoji: "⚖️",  hmrc: "professionalFees",        dot: "#7c3aed", pill: "bg-violet-500/15 border-violet-500/25 text-violet-300"},
+  { id: "subscriptions",label: "Subscriptions",     emoji: "💳", hmrc: "otherAllowableCharges",    dot: "#a855f7", pill: "bg-purple-500/15 border-purple-500/25 text-purple-300"},
+  { id: "phone",        label: "Phone & internet",  emoji: "📱", hmrc: "adminCosts",               dot: "#0ea5e9", pill: "bg-sky-500/15 border-sky-500/25 text-sky-300"          },
+  { id: "training",     label: "Training",          emoji: "🎓", hmrc: "otherAllowableCharges",    dot: "#22c55e", pill: "bg-green-500/15 border-green-500/25 text-green-300"   },
+  { id: "uniform",      label: "Uniform & PPE",     emoji: "🧤", hmrc: "otherAllowableCharges",    dot: "#fb7185", pill: "bg-rose-500/15 border-rose-500/25 text-rose-300"      },
+  { id: "bankfees",     label: "Bank & finance",    emoji: "🏦", hmrc: "financialCharges",         dot: "#94a3b8", pill: "bg-slate-500/15 border-slate-500/25 text-slate-300"   },
   { id: "other",        label: "Other",             emoji: "📦", hmrc: "otherAllowableCharges",    dot: "#6b7280", pill: "bg-gray-500/15 border-gray-500/25 text-gray-300"      },
 ];
 
@@ -42,6 +48,11 @@ const MERCHANT_RULES = [
   { re: /sage |xero |quickbooks|accountant|bookkeep|hmrc |companies house|freeagent|clearbooks/i,             cat: "professional" },
   { re: /rent |rates |council tax|electricity|gas |water board|thames water|british gas|eon |edf |npower|broadband|bt |virgin media/i, cat: "premises" },
   { re: /wages |salary|payroll|staff pay/i,                                                                    cat: "staff"        },
+  { re: /netflix|spotify|adobe|microsoft 365|office 365|dropbox|notion|slack|zoom |canva|squarespace|wix |godaddy|namecheap|cadi |subscript/i, cat: "subscriptions" },
+  { re: /vodafone|o2 |ee |three |giffgaff|tesco mobile|sky mobile|talktalk|plusnet|hyperoptic|openreach/i,    cat: "phone"        },
+  { re: /udemy|coursera|skillshare|linkedin learn|training|course |workshop|seminar|bics |british institute/i, cat: "training"     },
+  { re: /uniform|workwear|ppe |gloves|safety boot|hi.?vis|screwfix workwear|engelbert strauss|portwest/i,    cat: "uniform"      },
+  { re: /bank charge|overdraft|interest|loan repay|finance charge|stripe fee|paypal fee|sumup fee|gocardless|izettle/i, cat: "bankfees" },
 ];
 
 function suggestCategory(merchantName = "", description = "") {
@@ -264,6 +275,7 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
   const [showTxs,           setShowTxs]           = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [showAllClear,      setShowAllClear]      = useState(false);
+  const [ackToast,          setAckToast]          = useState(null); // { kind: 'business'|'personal', count, category }
   const [reviewIdx,         setReviewIdx]         = useState(0); // which needs-review tx to show
   const [sortMode,          setSortMode]          = useState(null); // 'smart' | 'one-by-one' — null = auto-pick
   const [groupBy,           setGroupBy]           = useState(null); // 'merchant' | 'amount' — null = auto-pick
@@ -333,6 +345,10 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
     try {
       const tx = bankTxs.find(t => t.id === txId);
       const tKey = mKey(tx?.merchant_name || tx?.description);
+      // Fire the acknowledgment toast immediately so the user knows we heard them —
+      // backend categorise + propagation can take ~1s and feels frozen otherwise.
+      setAckToast({ kind: isBusiness ? 'business' : 'personal', count: 1, category });
+      setTimeout(() => setAckToast(a => (a && a.count === 1 ? null : a)), 1800);
       await tlInvoke('yapily-api', { action: 'categorise', transactionId: txId, isBusiness, category });
       // Backend propagates the rule to all matching merchants — mirror it locally
       setBankTxs(prev => {
@@ -390,6 +406,8 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
   const handleBulkGroup = async (txIds, isBusiness, category) => {
     const matching = bankTxs.filter(t => txIds.includes(t.id) && (t.is_business === null || (t.category === 'uncategorised' && t.categorised_by !== 'user')));
     if (!matching.length) return;
+    setAckToast({ kind: isBusiness ? 'business' : 'personal', count: matching.length, category });
+    setTimeout(() => setAckToast(null), 2200);
     setSyncing(true); setError(null);
     try {
       for (let i = 0; i < matching.length; i += 8) {
@@ -868,6 +886,25 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
           </div>
         );
       })()}
+
+      {/* ── Ack toast — confirms Cadi heard the Business/Personal tap so users
+              don't rage-click while the backend categorises (~1s round-trip). ── */}
+      {ackToast && (
+        <div className="pointer-events-none fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg backdrop-blur-md border ${
+            ackToast.kind === 'business'
+              ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-200'
+              : 'bg-amber-500/20 border-amber-400/40 text-amber-200'
+          }`}>
+            <span className="text-base">{ackToast.kind === 'business' ? '✓' : '✗'}</span>
+            <span className="text-xs font-black tracking-wide">
+              Got it — {ackToast.count > 1 ? `${ackToast.count} ` : ''}
+              {ackToast.kind === 'business' ? 'business' : 'personal'}
+              {ackToast.kind === 'business' && ackToast.category && ackToast.category !== 'personal' && ` · ${catById(ackToast.category).label}`}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ── All clear celebration ── */}
       {showAllClear && (
@@ -3308,19 +3345,11 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
       {showReminder && <ReminderModal   invoice={reminderInv}    onClose={() => setShowReminder(false)} />}
 
       {/* Bulk delete undo snackbar — 8-second window before the DB delete fires */}
-      {pendingDelete && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl bg-slate-900 border border-white/10 shadow-2xl flex items-center gap-4">
-          <p className="text-sm text-white">
-            Deleted {pendingDelete.ids.length} expense{pendingDelete.ids.length === 1 ? '' : 's'}.
-          </p>
-          <button
-            onClick={undoBulkDelete}
-            className="text-xs font-bold text-amber-300 hover:text-amber-200 transition-colors uppercase tracking-wider"
-          >
-            Undo
-          </button>
-        </div>
-      )}
+      <UndoToast
+        open={Boolean(pendingDelete)}
+        message={pendingDelete ? `Deleted ${pendingDelete.ids.length} expense${pendingDelete.ids.length === 1 ? '' : 's'}.` : null}
+        onUndo={undoBulkDelete}
+      />
     </div>
   );
 }

@@ -13,6 +13,12 @@ import { useYtdExpenses, CATEGORY_TO_SA103 } from "../hooks/useYtdExpenses";
 import { useYtdIncome, SOURCE_DISPLAY } from "../hooks/useYtdIncome";
 import { currentTaxYear, taxYearStart, taxYearLabel, parseTaxYearLabel, recentTaxYears, today } from "../lib/taxYear";
 import { calculateCT, calcSelfEmployedTax } from "../lib/taxCalc";
+import {
+  listDividends, addDividend, deleteDividend,
+  listDirectorLoanEntries, addDirectorLoanEntry, deleteDirectorLoanEntry, dlaBalance, DLA_BIK_THRESHOLD,
+  listCtAccruals, upsertCtAccrual, deleteCtAccrual, deriveCtDeadlines,
+} from "../lib/db/ltdDb";
+import FirstVisitCoach from "./FirstVisitCoach";
 
 // ─── Calculator logic (unchanged) ────────────────────────────────────────────
 const FRS_RATES = {
@@ -179,7 +185,119 @@ function SectionDivider({ label, right }) {
 }
 
 // ─── TAB: Overview ────────────────────────────────────────────────────────────
-function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {} }) {
+// ─── Business address card ────────────────────────────────────────────────────
+// Captures the trading / registered office address shown on every invoice.
+// Required for UK Limited companies (Companies Act 2006 s.82) on all business
+// correspondence; recommended for sole traders so invoices look professional.
+// Stored as setup_data.business_address JSONB (no migration needed).
+function BusinessAddressCard({ bizSettings = {}, saveSettings, isLtd = false, isDemo = false }) {
+  const stored = bizSettings.setup_data?.business_address || {};
+  const [line1,    setLine1]    = useState(stored.line1    || '');
+  const [line2,    setLine2]    = useState(stored.line2    || '');
+  const [town,     setTown]     = useState(stored.town     || '');
+  const [county,   setCounty]   = useState(stored.county   || '');
+  const [postcode, setPostcode] = useState(stored.postcode || '');
+  const [saving,   setSaving]   = useState(false);
+  const [saved,    setSaved]    = useState(false);
+  const [err,      setErr]      = useState(null);
+
+  const isComplete = line1.trim() && town.trim() && postcode.trim();
+  const dirty =
+    line1    !== (stored.line1    || '') ||
+    line2    !== (stored.line2    || '') ||
+    town     !== (stored.town     || '') ||
+    county   !== (stored.county   || '') ||
+    postcode !== (stored.postcode || '');
+
+  async function save() {
+    if (!saveSettings) return;
+    setSaving(true); setErr(null);
+    try {
+      const merged = {
+        ...(bizSettings.setup_data || {}),
+        business_address: {
+          line1: line1.trim(),
+          line2: line2.trim(),
+          town: town.trim(),
+          county: county.trim(),
+          postcode: postcode.trim().toUpperCase(),
+        },
+      };
+      await saveSettings({ setup_data: merged });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2200);
+    } catch (e) {
+      setErr(e?.message || 'Could not save — please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <GCard className="p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <SL>Business address {isLtd && <span className="ml-1 text-red-300 font-black">required</span>}</SL>
+          <p className="text-[10px] text-[rgba(153,197,255,0.45)] mt-0.5">
+            {isLtd
+              ? "Shown on invoices as your registered office (Companies Act s.82)."
+              : "Shown on every invoice so customers know who they're paying."}
+          </p>
+        </div>
+        {!isComplete && (
+          <span className="text-[10px] font-black text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2 py-1">
+            Not set
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="sm:col-span-2">
+          <label className="block text-[10px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.45)] mb-1">Address line 1</label>
+          <GInput type="text" value={line1} onChange={e => setLine1(e.target.value)} placeholder="e.g. Unit 4, Business Park" />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="block text-[10px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.45)] mb-1">Address line 2 <span className="text-[rgba(153,197,255,0.3)]">(optional)</span></label>
+          <GInput type="text" value={line2} onChange={e => setLine2(e.target.value)} placeholder="e.g. High Street" />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.45)] mb-1">Town / City</label>
+          <GInput type="text" value={town} onChange={e => setTown(e.target.value)} placeholder="e.g. Hemel Hempstead" />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.45)] mb-1">County <span className="text-[rgba(153,197,255,0.3)]">(optional)</span></label>
+          <GInput type="text" value={county} onChange={e => setCounty(e.target.value)} placeholder="e.g. Hertfordshire" />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold tracking-widest uppercase text-[rgba(153,197,255,0.45)] mb-1">Postcode</label>
+          <GInput type="text" value={postcode} onChange={e => setPostcode(e.target.value)} placeholder="e.g. HP2 7TE" />
+        </div>
+      </div>
+
+      {err && <GAlert type="red">{err}</GAlert>}
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] text-[rgba(153,197,255,0.45)]">
+          {saved ? <span className="text-emerald-300 font-black">Saved — your next invoice will use this address.</span> : "Used on every invoice you send."}
+        </p>
+        <button
+          onClick={save}
+          disabled={saving || !dirty || !isComplete || isDemo}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+            saving || !dirty || !isComplete || isDemo
+              ? 'bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.3)] cursor-not-allowed'
+              : 'bg-[#1f48ff] text-white hover:bg-[#3a5eff]'
+          }`}
+          title={isDemo ? 'Sign in to save your business details' : undefined}
+        >
+          {saving ? 'Saving…' : isDemo ? 'Demo — sign in to save' : 'Save address'}
+        </button>
+      </div>
+    </GCard>
+  );
+}
+
+function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {}, saveSettings }) {
   const { invoices } = useInvoices();
   const { user } = useAuth();
   const isDemo  = user?.id === 'demo-user';
@@ -265,6 +383,9 @@ function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {
           MTD ITSA does not apply to your company. CT600 is filed via HMRC online or your accountant.
         </GAlert>
       )}
+
+      {/* Business address — required for invoice compliance */}
+      <BusinessAddressCard bizSettings={bizSettings} saveSettings={saveSettings} isLtd={isLtd} isDemo={isDemo} />
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
@@ -496,6 +617,137 @@ function CalcResult({ calc }) {
 }
 
 // ─── TAB: HMRC Connect ────────────────────────────────────────────────────────
+// ─── Compliance & Adjustments (June 2026 MTD ITSA release) ───────────────────
+// Surfaces three new HMRC actions in one card so the user doesn't hunt for them:
+//   • Switch accounting basis in-year (cash ↔ accruals) — Business Details v2
+//   • Submit a brought-forward loss — Individual Losses v7
+//   • Carry back a loss to a prior tax year — Tax Liability Adjustments v1
+function ComplianceAndAdjustments({ businessId, taxYear, adjBusy, setAdjBusy, adjResult, setAdjResult }) {
+  const [open, setOpen]               = useState(null);   // 'accounting' | 'brought' | 'carry' | null
+  const [accType, setAccType]         = useState('CASH'); // 'CASH' | 'ACCRUALS'
+  const [bfLoss, setBfLoss]           = useState({ amount: '' });
+  const [cbLoss, setCbLoss]           = useState({ amount: '', yearLossArose: taxYear, yearOfRelief: '' });
+
+  const run = async (label, fn) => {
+    setAdjBusy(true); setAdjResult(null);
+    try { await fn(); setAdjResult({ success: true, message: `${label} submitted to HMRC.` }); }
+    catch (e) { setAdjResult({ success: false, message: `${label} failed: ${e.message || e}` }); }
+    finally { setAdjBusy(false); setOpen(null); }
+  };
+
+  const submitAccountingType = async () => {
+    const { updateAccountingType, getHmrcBusinesses } = await import('../lib/db/hmrcDb');
+    let biz = businessId;
+    if (!biz) {
+      const list = await getHmrcBusinesses();
+      biz = list?.businesses?.[0]?.businessId ?? list?.[0]?.businessId;
+      if (!biz) throw new Error('No business found on your HMRC account.');
+    }
+    await updateAccountingType(biz, taxYear, accType);
+  };
+
+  const submitBfLoss = async () => {
+    const { submitBroughtForwardLoss, getHmrcBusinesses } = await import('../lib/db/hmrcDb');
+    let biz = businessId;
+    if (!biz) {
+      const list = await getHmrcBusinesses();
+      biz = list?.businesses?.[0]?.businessId ?? list?.[0]?.businessId;
+      if (!biz) throw new Error('No business found on your HMRC account.');
+    }
+    await submitBroughtForwardLoss({ businessId: biz, taxYear, lossAmount: Number(bfLoss.amount), typeOfLoss: 'self-employment' });
+  };
+
+  const submitCarryBack = async () => {
+    const { carryBackLoss } = await import('../lib/db/hmrcDb');
+    if (!cbLoss.yearOfRelief) throw new Error('Pick a tax year of relief.');
+    await carryBackLoss({
+      taxYearLossArose: cbLoss.yearLossArose,
+      taxYearOfRelief:  cbLoss.yearOfRelief,
+      lossAmount:       Number(cbLoss.amount),
+      typeOfLoss:       'self-employment',
+    });
+  };
+
+  return (
+    <GCard className="p-4">
+      <SectionDivider label="Compliance & adjustments · June 2026" right={<GChip color="ghost">MTD ITSA</GChip>} />
+
+      {adjResult && (
+        <div className="mb-3">
+          <GAlert type={adjResult.success ? 'green' : 'red'}>
+            {adjResult.message}
+            <button onClick={() => setAdjResult(null)} className="ml-2 opacity-50 hover:opacity-100">×</button>
+          </GAlert>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Accounting basis */}
+        <button onClick={() => setOpen(open === 'accounting' ? null : 'accounting')}
+          className="text-left px-3 py-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] hover:border-[#99c5ff]/30 transition-colors">
+          <p className="text-xs font-black text-white">🔄 Accounting basis</p>
+          <p className="text-[10px] text-[rgba(153,197,255,0.5)] mt-0.5">Switch cash ↔ accruals in-year</p>
+        </button>
+        {/* Brought-forward loss */}
+        <button onClick={() => setOpen(open === 'brought' ? null : 'brought')}
+          className="text-left px-3 py-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] hover:border-[#99c5ff]/30 transition-colors">
+          <p className="text-xs font-black text-white">📉 Brought-forward loss</p>
+          <p className="text-[10px] text-[rgba(153,197,255,0.5)] mt-0.5">Carry a prior-year loss forward</p>
+        </button>
+        {/* Carry-back loss */}
+        <button onClick={() => setOpen(open === 'carry' ? null : 'carry')}
+          className="text-left px-3 py-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] hover:border-[#99c5ff]/30 transition-colors">
+          <p className="text-xs font-black text-white">↩️ Carry-back loss</p>
+          <p className="text-[10px] text-[rgba(153,197,255,0.5)] mt-0.5">Set off against a prior tax year</p>
+        </button>
+      </div>
+
+      {open === 'accounting' && (
+        <div className="mt-3 p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] space-y-3">
+          <GSelect label="New accounting basis" value={accType} onChange={e => setAccType(e.target.value)}>
+            <option value="CASH">Cash basis</option>
+            <option value="ACCRUALS">Accruals (traditional)</option>
+          </GSelect>
+          <button onClick={() => run('Accounting basis update', submitAccountingType)} disabled={adjBusy}
+            className="w-full px-3 py-2 rounded-xl bg-[#1f48ff] text-white text-[11px] font-black disabled:opacity-50">
+            {adjBusy ? 'Submitting…' : 'Submit to HMRC'}
+          </button>
+        </div>
+      )}
+
+      {open === 'brought' && (
+        <div className="mt-3 p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] space-y-3">
+          <GInput type="number" label="Loss amount £" value={bfLoss.amount}
+            onChange={e => setBfLoss({ amount: e.target.value })} min="0" step="0.01" placeholder="0.00" />
+          <button onClick={() => run('Brought-forward loss', submitBfLoss)} disabled={adjBusy || !bfLoss.amount}
+            className="w-full px-3 py-2 rounded-xl bg-[#1f48ff] text-white text-[11px] font-black disabled:opacity-50">
+            {adjBusy ? 'Submitting…' : 'Submit to HMRC'}
+          </button>
+        </div>
+      )}
+
+      {open === 'carry' && (
+        <div className="mt-3 p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <GInput type="number" label="Loss amount £" value={cbLoss.amount}
+              onChange={e => setCbLoss(p => ({ ...p, amount: e.target.value }))} min="0" step="0.01" placeholder="0.00" />
+            <GInput type="text" label="Relief tax year" value={cbLoss.yearOfRelief}
+              onChange={e => setCbLoss(p => ({ ...p, yearOfRelief: e.target.value }))} placeholder="2025-26" />
+          </div>
+          <p className="text-[10px] text-[rgba(153,197,255,0.5)]">
+            Carries a self-employment loss from {cbLoss.yearLossArose} back into {cbLoss.yearOfRelief || 'a prior year'}.
+            Subject to HMRC carry-back rules — the relief amount may differ from the loss declared.
+          </p>
+          <button onClick={() => run('Carry-back loss', submitCarryBack)} disabled={adjBusy || !cbLoss.amount || !cbLoss.yearOfRelief}
+            className="w-full px-3 py-2 rounded-xl bg-[#1f48ff] text-white text-[11px] font-black disabled:opacity-50">
+            {adjBusy ? 'Submitting…' : 'Submit to HMRC'}
+          </button>
+        </div>
+      )}
+    </GCard>
+  );
+}
+
 function HmrcTab({ entityType = 'sole_trader' }) {
   const { invoices } = useInvoices();
   const { user }     = useAuth();
@@ -528,6 +780,12 @@ function HmrcTab({ entityType = 'sole_trader' }) {
   const [submitBusy,   setSubmitBusy]   = useState(false);
   const [submitResult, setSubmitResult] = useState(null);  // { success, message }
 
+  // June 2026 release — compliance & adjustments state
+  const [penalties, setPenalties]       = useState(null);  // { totalisations?, penalties? } | null
+  const [penaltiesBusy, setPenaltiesBusy] = useState(false);
+  const [adjBusy,   setAdjBusy]         = useState(false);
+  const [adjResult, setAdjResult]       = useState(null);  // { success, message }
+
   // End-of-year flow state
   const [bsasCalcId,   setBsasCalcId]   = useState(null);  // calculationId from triggerBsas
   const [eoyBusy,      setEoyBusy]      = useState(false);
@@ -547,21 +805,40 @@ function HmrcTab({ entityType = 'sole_trader' }) {
         ? (demoExp[q.id] ?? 0)
         : (ytdExpData.byQuarter?.[q.id] ?? 0);
 
-      // Group expenses by HMRC SA103 field for this quarter (real users only)
-      const byHmrcField = {};
+      // Group expenses by HMRC SA103 field for this quarter (real users only).
+      // Collect source-row IDs at the same time so we can satisfy HMRC's
+      // digital-records-only rule on submission (no manual entry allowed).
+      const byHmrcField   = {};
+      const transactionIds = [];
+      const moneyEntryIds  = [];
       if (!isDemo && Array.isArray(ytdExpData.rows)) {
         for (const r of ytdExpData.rows) {
           if (r.date < start || r.date > end) continue;
           const field = (CATEGORY_TO_SA103[r.category] || CATEGORY_TO_SA103.other).hmrcField;
           byHmrcField[field] = (byHmrcField[field] || 0) + r.amount;
+          if (r.id && r.source === 'bank')   transactionIds.push(r.id);
+          if (r.id && r.source === 'manual') moneyEntryIds.push(r.id);
         }
       } else if (isDemo) {
         byHmrcField.other = expenses;
       }
 
+      // Paid-invoice IDs that compose this quarter's income — needed for the
+      // digital-records guardrail on submit_quarter.
+      const invoiceIds = isDemo ? [] : invoices
+        .filter(inv => {
+          if (inv.status !== 'paid' || !inv.paidAt) return false;
+          const d = inv.paidAt.slice(0, 10);
+          return d >= start && d <= end;
+        })
+        .map(inv => inv.id);
+
       const net = income - expenses;
       const tax = Math.max(0, (net - (12570 / 4)) * 0.20);
-      return { ...q, start, end, income, expenses, net, tax, byHmrcField };
+      return {
+        ...q, start, end, income, expenses, net, tax, byHmrcField,
+        digitalRecordRefs: { invoiceIds, transactionIds, moneyEntryIds },
+      };
     });
   }, [invoices, isDemo, ytdExpData.byQuarter, ytdExpData.rows]);
 
@@ -577,6 +854,27 @@ function HmrcTab({ entityType = 'sole_trader' }) {
     { field: "professionalFees",     box: "Box 24", label: "Legal & professional fees"   },
     { field: "other",                box: "Box 27", label: "Other allowable expenses"    },
   ];
+
+  // Auto-load penalties exposure once HMRC is connected — surfaces any ITSA
+  // penalties HMRC has applied to the account so the user isn't blindsided by
+  // a higher calculation result. SA Accounts API v4 (June 2026).
+  useEffect(() => {
+    if (!isLive || !connected || !nino) return;
+    let cancelled = false;
+    (async () => {
+      setPenaltiesBusy(true);
+      try {
+        const { listPenalties } = await import('../lib/db/hmrcDb');
+        const data = await listPenalties();
+        if (!cancelled) setPenalties(data);
+      } catch {
+        if (!cancelled) setPenalties(null);
+      } finally {
+        if (!cancelled) setPenaltiesBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isLive, connected, nino]);
 
   // Map HMRC obligation periods to quarter IDs by matching periodStartDate
   const obligationMap = useMemo(() => {
@@ -694,12 +992,34 @@ function HmrcTab({ entityType = 'sole_trader' }) {
               </button>
             )}
             {isLive && connected && (
-              <button
-                onClick={disconnectHmrc}
-                disabled={connecting}
-                className="px-3 py-1.5 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] text-[10px] font-black text-[rgba(153,197,255,0.5)] hover:border-red-500/30 hover:text-red-400 transition-colors whitespace-nowrap disabled:opacity-50">
-                {connecting ? "Disconnecting…" : "Disconnect"}
-              </button>
+              <>
+                <button
+                  onClick={async () => {
+                    try {
+                      const { hmrcApi } = await import('../lib/db/hmrcDb');
+                      const data = await hmrcApi('export_records', {});
+                      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `cadi-hmrc-records-${new Date().toISOString().slice(0,10)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (e) {
+                      alert(`Export failed: ${e.message || e}`);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] text-[10px] font-black text-[rgba(153,197,255,0.6)] hover:border-[#99c5ff]/30 hover:text-white transition-colors whitespace-nowrap"
+                  title="Download every HMRC submission, money entry, transaction, and audit log as JSON. Required by HMRC ToU.">
+                  📥 Export my records
+                </button>
+                <button
+                  onClick={disconnectHmrc}
+                  disabled={connecting}
+                  className="px-3 py-1.5 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] text-[10px] font-black text-[rgba(153,197,255,0.5)] hover:border-red-500/30 hover:text-red-400 transition-colors whitespace-nowrap disabled:opacity-50">
+                  {connecting ? "Disconnecting…" : "Disconnect"}
+                </button>
+              </>
             )}
             {!isLive && (
               <button
@@ -741,6 +1061,34 @@ function HmrcTab({ entityType = 'sole_trader' }) {
           ))}
         </div>
       </GCard>
+
+      {/* ── Penalties exposure banner (SA Accounts v4) ────────────────────── */}
+      {isLive && connected && (() => {
+        const items = penalties?.penalties ?? penalties?.totalisations ?? [];
+        const hasPenalties = Array.isArray(items) && items.length > 0;
+        if (!hasPenalties && !penaltiesBusy) return null;
+        return (
+          <GAlert type={hasPenalties ? 'red' : 'blue'}>
+            {penaltiesBusy && <>Checking HMRC for any penalties on your account…</>}
+            {!penaltiesBusy && hasPenalties && (
+              <>
+                <strong>HMRC has {items.length} penalt{items.length === 1 ? 'y' : 'ies'} on your account.</strong>
+                {' '}These are factored into your tax calculation. Contact HMRC if you believe a penalty is wrong.
+              </>
+            )}
+          </GAlert>
+        );
+      })()}
+
+      {/* ── Compliance & Adjustments (June 2026 release) ──────────────────── */}
+      {isLive && connected && nino && (
+        <ComplianceAndAdjustments
+          businessId={undefined /* resolved server-side */}
+          taxYear="2026-27"
+          adjBusy={adjBusy} setAdjBusy={setAdjBusy}
+          adjResult={adjResult} setAdjResult={setAdjResult}
+        />
+      )}
 
       {/* Submission result toast */}
       {submitResult && (
@@ -929,11 +1277,12 @@ function HmrcTab({ entityType = 'sole_trader' }) {
                   )
                 : { other: submitModal.expenses };
               await submitAndCalculate({
-                periodStart: submitModal.start,
-                periodEnd:   submitModal.end,
-                income:      { turnover: submitModal.income },
-                expenses:    expensesPayload,
-                taxYear:     "2026-27",
+                periodStart:       submitModal.start,
+                periodEnd:         submitModal.end,
+                income:            { turnover: submitModal.income },
+                expenses:          expensesPayload,
+                taxYear:           "2026-27",
+                digitalRecordRefs: submitModal.digitalRecordRefs,
               });
               setSubmitResult({ success: true, message: `${submitModal.label} submitted to HMRC successfully.` });
             } catch (ex) {
@@ -2267,6 +2616,615 @@ function YearEndTab({ entityType = 'sole_trader', bizSettings = {}, isDemo = fal
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
+// ─── First-visit coach: business structure + VAT ────────────────────────────
+function AccountsSetupCoach({ user, onSaved }) {
+  const [bizStructure, setBizStructure]   = useState('sole_trader');
+  const [companyNumber, setCompanyNumber] = useState('');
+  const [fyEnd, setFyEnd]                 = useState('');
+  const [vatRegistered, setVatRegistered] = useState(false);
+  const [vatNumber, setVatNumber]         = useState('');
+  const [vatScheme, setVatScheme]         = useState('Standard');
+  const [saving, setSaving]               = useState(false);
+
+  const STRUCTURES = [
+    { id: 'sole_trader',     label: 'Sole trader' },
+    { id: 'limited_company', label: 'Limited company' },
+    { id: 'partnership',     label: 'Partnership' },
+  ];
+  const SCHEMES = ['Standard', 'Flat Rate', 'Cash Accounting'];
+
+  const chip = (active) =>
+    `px-3 py-1.5 rounded-lg text-[12px] font-bold transition-colors border ${
+      active
+        ? 'bg-[#1f48ff] text-white border-[#1f48ff]'
+        : 'bg-[#f0f4ff] text-[#010a4f] border-[#1f48ff]/15 hover:bg-[#e3ebff]'
+    }`;
+  const inputCls =
+    'w-full bg-white border border-[#1f48ff]/15 text-[#010a4f] placeholder-[#010a4f]/40 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1f48ff]';
+  const labelCls = 'text-[11px] font-bold tracking-wide uppercase text-[#1f48ff] mb-1.5 block';
+
+  const persist = async () => {
+    if (!user?.id || user.id === 'demo-user') return;
+    setSaving(true);
+    try {
+      // profiles.biz_structure
+      await supabase.from('profiles').upsert(
+        { id: user.id, biz_structure: bizStructure },
+        { onConflict: 'id' }
+      );
+
+      // business_settings: vat_registered + setup_data merge
+      const { data: row } = await supabase
+        .from('business_settings')
+        .select('setup_data')
+        .eq('owner_id', user.id)
+        .maybeSingle();
+      const existing = row?.setup_data ?? {};
+      const patch = { ...existing };
+      if (companyNumber.trim()) patch.company_number = companyNumber.trim();
+      if (fyEnd)                patch.fy_end         = fyEnd;
+      if (vatRegistered) {
+        if (vatNumber.trim()) patch.vat_number = vatNumber.trim();
+        if (vatScheme)        patch.vat_scheme = vatScheme;
+      }
+      await supabase.from('business_settings').upsert(
+        { owner_id: user.id, vat_registered: vatRegistered, setup_data: patch },
+        { onConflict: 'owner_id' }
+      );
+
+      onSaved?.();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <FirstVisitCoach
+      storageKey="accounts_setup"
+      title="Set up your accounts"
+      subtitle="Tell Cadi how your business is set up — drives your tax, reports, and accounting tools."
+      primaryCta="Save"
+      skipCta="Maybe later"
+      onPrimary={persist}
+      busy={saving}
+    >
+      <div>
+        <span className={labelCls}>Business structure</span>
+        <div className="flex flex-wrap gap-2">
+          {STRUCTURES.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setBizStructure(s.id)}
+              className={chip(bizStructure === s.id)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {bizStructure === 'limited_company' && (
+        <div>
+          <label className={labelCls}>Company number (optional)</label>
+          <input
+            type="text"
+            value={companyNumber}
+            onChange={(e) => setCompanyNumber(e.target.value)}
+            placeholder="e.g. 12345678"
+            className={inputCls}
+          />
+        </div>
+      )}
+
+      <div>
+        <label className={labelCls}>Financial year end (optional)</label>
+        <input
+          type="date"
+          value={fyEnd}
+          onChange={(e) => setFyEnd(e.target.value)}
+          className={inputCls}
+        />
+      </div>
+
+      <div>
+        <span className={labelCls}>VAT registered?</span>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setVatRegistered(false)} className={chip(!vatRegistered)}>No</button>
+          <button type="button" onClick={() => setVatRegistered(true)}  className={chip(vatRegistered)}>Yes</button>
+        </div>
+      </div>
+
+      {vatRegistered && (
+        <>
+          <div>
+            <label className={labelCls}>VAT number (optional)</label>
+            <input
+              type="text"
+              value={vatNumber}
+              onChange={(e) => setVatNumber(e.target.value)}
+              placeholder="GB123456789"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <span className={labelCls}>VAT scheme</span>
+            <div className="flex flex-wrap gap-2">
+              {SCHEMES.map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setVatScheme(s)}
+                  className={chip(vatScheme === s)}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </FirstVisitCoach>
+  );
+}
+
+// ─── Limited Company tab ─────────────────────────────────────────────────────
+// First-use guide: surfaces a 3-step "what each tool does + try it now" card
+// at the top of the Ltd tab until the user has interacted with each tool, or
+// they explicitly dismiss it. Dismissal is per-browser (localStorage), so a
+// dismiss-then-clear-storage user gets it back.
+const LTD_GUIDE_DISMISS_KEY = 'cadi_ltd_guide_dismissed';
+
+function LtdFirstUseGuide({ showCt, showDiv, showDla }) {
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem(LTD_GUIDE_DISMISS_KEY) === '1'; }
+    catch { return false; }
+  });
+
+  // Hide entirely once every tool has been touched — no need to badger the user.
+  if (dismissed || (!showCt && !showDiv && !showDla)) return null;
+
+  const dismiss = () => {
+    try { localStorage.setItem(LTD_GUIDE_DISMISS_KEY, '1'); } catch { /* ignore */ }
+    setDismissed(true);
+  };
+
+  const steps = [
+    showCt && {
+      icon: '🧮', title: 'Set your estimated profit',
+      body: "We auto-calculate Corporation Tax due (19% small profits, 25% main, with marginal relief between £50k–£250k) and a funded-% bar so you see exactly what's already in the tax pot.",
+      what: "Type your best estimate for full-year profit into the box below. It's editable any time as your numbers firm up.",
+    },
+    showDiv && {
+      icon: '💷', title: 'Log your first dividend',
+      body: 'HMRC compliance needs a paper trail for every dividend: who, when, how much, voucher reference. We track it per tax year and warn once you cross the £500 dividend allowance.',
+      what: 'Click + Log dividend → pick a date → enter the amount → save. We pre-fill the shareholder as Director.',
+    },
+    showDla && {
+      icon: '🔁', title: 'Track director’s loan account',
+      body: "Movements between you and the company — personal expenses charged to the business, salary advances, repayments. Cadi warns automatically above £10,000 (the s.455 benefit-in-kind threshold).",
+      what: 'Click + Entry → pick the date → choose Drawn / Repaid / Personal expense charged → enter the amount. Positive = director owes company.',
+    },
+  ].filter(Boolean);
+
+  if (steps.length === 0) return null;
+
+  return (
+    <GCard className="p-4 relative">
+      <button
+        onClick={dismiss}
+        title="Dismiss this guide"
+        className="absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center text-[rgba(153,197,255,0.4)] hover:text-white hover:bg-[rgba(153,197,255,0.08)] text-base leading-none">
+        ×
+      </button>
+      <SL className="mb-2">Getting started · {steps.length} step{steps.length === 1 ? '' : 's'} left</SL>
+      <p className="text-xs text-[rgba(153,197,255,0.55)] mb-4 leading-relaxed">
+        First time here? These three tools work together to give you total visibility on what your Ltd
+        owes HMRC and Companies House. Tap any step below to see what it does and how to use it.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {steps.map(s => (
+          <details key={s.title}
+            className="group rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] open:border-[#99c5ff]/30 transition-colors">
+            <summary className="cursor-pointer list-none px-3 py-2.5 flex items-start gap-2 select-none">
+              <span className="text-base shrink-0">{s.icon}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-black text-white">{s.title}</p>
+                <p className="text-[10px] text-[rgba(153,197,255,0.45)] mt-0.5 group-open:hidden">Tap to expand</p>
+              </div>
+              <span className="text-[10px] text-[rgba(153,197,255,0.5)] shrink-0 group-open:rotate-180 transition-transform">▾</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <p className="text-[11px] text-[rgba(153,197,255,0.65)] leading-relaxed">{s.body}</p>
+              <div className="pt-2 border-t border-[rgba(153,197,255,0.08)]">
+                <p className="text-[10px] font-black text-[#99c5ff] mb-1">How to use it</p>
+                <p className="text-[11px] text-white leading-relaxed">{s.what}</p>
+              </div>
+            </div>
+          </details>
+        ))}
+      </div>
+      <p className="text-[10px] text-[rgba(153,197,255,0.35)] mt-3">
+        Tip: you can edit any number later — nothing here is submitted to HMRC automatically.
+      </p>
+    </GCard>
+  );
+}
+
+function LtdTab({ bizSettings = {}, isDemo = false }) {
+  const yearEndMonth = bizSettings.accounting_year_end_month ?? 3;
+  const today = new Date();
+  const currentPeriodEnd = (() => {
+    const y = today.getMonth() + 1 > yearEndMonth ? today.getFullYear() : today.getFullYear();
+    const yr = today.getMonth() + 1 > yearEndMonth ? y + 1 : y;
+    const lastDay = new Date(yr, yearEndMonth, 0).getDate();
+    return `${yr}-${String(yearEndMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  })();
+  const currentPeriodStart = (() => {
+    const end = new Date(currentPeriodEnd);
+    const start = new Date(end.getFullYear() - 1, end.getMonth(), end.getDate() + 1);
+    return start.toISOString().slice(0, 10);
+  })();
+  const currentTaxYearLabel = `${new Date(currentPeriodStart).getFullYear()}/${String(new Date(currentPeriodEnd).getFullYear()).slice(-2)}`;
+
+  const [dividends, setDividends] = useState([]);
+  const [dla, setDla]             = useState([]);
+  const [accruals, setAccruals]   = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [err, setErr]             = useState(null);
+
+  const reload = useCallback(async () => {
+    if (isDemo) {
+      setDividends([
+        { id: 'd1', declared_on: '2026-04-30', paid_on: '2026-04-30', amount: 5000, shareholder: 'Director', tax_year: currentTaxYearLabel, voucher_ref: 'DV-001' },
+        { id: 'd2', declared_on: '2026-05-31', paid_on: '2026-05-31', amount: 3000, shareholder: 'Director', tax_year: currentTaxYearLabel, voucher_ref: 'DV-002' },
+      ]);
+      setDla([
+        { id: 'l1', entry_date: '2026-04-15', description: 'Personal expense reimbursed', amount: -250, category: 'repaid' },
+        { id: 'l2', entry_date: '2026-05-20', description: 'Cash drawn',                 amount:  800, category: 'drawn'  },
+      ]);
+      setAccruals([{ id: 'c1', period_start: currentPeriodStart, period_end: currentPeriodEnd, estimated_profit: 48000, ct_due: 9120, ct_paid: 0, status: 'open', ...deriveCtDeadlines(currentPeriodEnd) }]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const [d, l, c] = await Promise.all([listDividends(), listDirectorLoanEntries(), listCtAccruals()]);
+      setDividends(d); setDla(l); setAccruals(c);
+    } catch (e) { setErr(e.message || String(e)); }
+    finally { setLoading(false); }
+  }, [isDemo, currentPeriodStart, currentPeriodEnd, currentTaxYearLabel]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  const currentAccrual = accruals.find(a => a.period_end === currentPeriodEnd);
+  const ctDue          = currentAccrual?.ct_due ?? 0;
+  const ctPaid         = Number(currentAccrual?.ct_paid ?? 0);
+  const ctFunded       = ctDue > 0 ? Math.min(100, Math.round((ctPaid / ctDue) * 100)) : 0;
+
+  const dlaBal         = dlaBalance(dla);
+  const dlaOverThreshold = dlaBal > DLA_BIK_THRESHOLD;
+
+  const ytdDividends = dividends
+    .filter(d => d.tax_year === currentTaxYearLabel)
+    .reduce((s, d) => s + Number(d.amount || 0), 0);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <SL className="mb-0.5">Ltd money tools</SL>
+        <h2 className="text-2xl font-black text-white">Limited Company</h2>
+        <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">
+          Corporation Tax accrual · Dividends register · Director's loan account
+        </p>
+      </div>
+
+      {err && <GAlert type="red">Couldn't load Ltd data: {err}</GAlert>}
+      {loading && <p className="text-xs text-[rgba(153,197,255,0.45)]">Loading…</p>}
+
+      {/* First-use guide — shows until the user has done at least one thing
+          on each tool. Dismissable via localStorage so it doesn't nag forever. */}
+      {!loading && <LtdFirstUseGuide
+        showCt={!currentAccrual || !currentAccrual.estimated_profit}
+        showDiv={dividends.length === 0}
+        showDla={dla.length === 0}
+      />}
+
+      {/* CT accrual */}
+      <CtAccrualCard
+        accrual={currentAccrual}
+        periodStart={currentPeriodStart}
+        periodEnd={currentPeriodEnd}
+        onSave={async (profit, paid) => {
+          if (isDemo) return;
+          await upsertCtAccrual({
+            period_start: currentPeriodStart,
+            period_end:   currentPeriodEnd,
+            estimated_profit: Number(profit) || 0,
+            ct_paid:          Number(paid) || 0,
+          });
+          await reload();
+        }}
+        ctDue={ctDue} ctPaid={ctPaid} ctFunded={ctFunded}
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Dividends */}
+        <DividendsCard
+          dividends={dividends}
+          ytd={ytdDividends}
+          taxYear={currentTaxYearLabel}
+          onAdd={async (row) => {
+            if (isDemo) return;
+            await addDividend({ ...row, tax_year: currentTaxYearLabel });
+            await reload();
+          }}
+          onDelete={async (id) => {
+            if (isDemo) return;
+            await deleteDividend(id);
+            await reload();
+          }}
+        />
+
+        {/* Director's loan */}
+        <DirectorLoanCard
+          entries={dla}
+          balance={dlaBal}
+          overThreshold={dlaOverThreshold}
+          onAdd={async (row) => {
+            if (isDemo) return;
+            await addDirectorLoanEntry(row);
+            await reload();
+          }}
+          onDelete={async (id) => {
+            if (isDemo) return;
+            await deleteDirectorLoanEntry(id);
+            await reload();
+          }}
+        />
+      </div>
+
+      <GAlert type="blue">
+        <strong>Money confidence:</strong> CT accrual updates every time you change your estimated profit.
+        Dividends are logged with vouchers for HMRC compliance. Director's loan balance warns you above the
+        £10,000 benefit-in-kind threshold (s.455).
+        {(() => {
+          let dismissed = false;
+          try { dismissed = localStorage.getItem(LTD_GUIDE_DISMISS_KEY) === '1'; } catch { /* ignore */ }
+          return dismissed ? (
+            <button
+              onClick={() => { try { localStorage.removeItem(LTD_GUIDE_DISMISS_KEY); } catch { /* ignore */ } window.location.reload(); }}
+              className="ml-2 underline hover:text-white">Show the getting-started guide again</button>
+          ) : null;
+        })()}
+      </GAlert>
+    </div>
+  );
+}
+
+function CtAccrualCard({ accrual, periodStart, periodEnd, onSave, ctDue, ctPaid, ctFunded }) {
+  const [profit, setProfit] = useState(accrual?.estimated_profit ?? 0);
+  const [paid, setPaid]     = useState(accrual?.ct_paid ?? 0);
+  const [busy, setBusy]     = useState(false);
+  useEffect(() => {
+    setProfit(accrual?.estimated_profit ?? 0);
+    setPaid(accrual?.ct_paid ?? 0);
+  }, [accrual?.estimated_profit, accrual?.ct_paid]);
+
+  const liveCT = calculateCT(Number(profit) || 0);
+  const deadlines = deriveCtDeadlines(periodEnd);
+
+  return (
+    <GCard className="p-5">
+      <SectionDivider label={`Corporation Tax · ${periodStart} → ${periodEnd}`} />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div>
+          <SL className="mb-1.5">Estimated profit</SL>
+          <input type="number" value={profit} onChange={e => setProfit(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm text-white bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl focus:outline-none focus:border-[rgba(153,197,255,0.4)]" />
+        </div>
+        <GStatCard label="CT due (estimated)" value={fmt(liveCT)} sub={liveCT > 50000 ? 'Marginal-relief band' : 'Small-profits rate'} valueColor="text-amber-300" />
+        <div>
+          <SL className="mb-1.5">CT paid so far</SL>
+          <input type="number" value={paid} onChange={e => setPaid(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm text-white bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl focus:outline-none focus:border-[rgba(153,197,255,0.4)]" />
+        </div>
+      </div>
+
+      {/* funded bar */}
+      <div className="mb-4">
+        <div className="flex justify-between text-[10px] mb-1.5">
+          <span className="text-[rgba(153,197,255,0.5)] font-black uppercase tracking-wider">Funded</span>
+          <span className="text-white font-black">{ctFunded}%</span>
+        </div>
+        <div className="h-2 bg-[rgba(153,197,255,0.08)] rounded-full overflow-hidden">
+          <div className={`h-full transition-all ${ctFunded >= 100 ? 'bg-emerald-500' : ctFunded >= 50 ? 'bg-amber-400' : 'bg-red-500'}`} style={{ width: `${ctFunded}%` }} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-4 text-xs">
+        <Deadline label="Pay CT" date={deadlines.payment_due_on} />
+        <Deadline label="File CT600" date={deadlines.return_due_on} />
+        <Deadline label="Companies House" date={deadlines.ch_filing_due_on} />
+      </div>
+
+      <button
+        onClick={async () => { setBusy(true); try { await onSave(profit, paid); } finally { setBusy(false); } }}
+        disabled={busy}
+        className="w-full px-4 py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors disabled:opacity-50">
+        {busy ? 'Saving…' : 'Save CT accrual'}
+      </button>
+    </GCard>
+  );
+}
+
+function Deadline({ label, date }) {
+  const d = date ? new Date(date) : null;
+  const dl = d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+  return (
+    <div className="px-3 py-2 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
+      <SL className="mb-0.5">{label}</SL>
+      <p className="text-xs text-white font-black">{dl}</p>
+    </div>
+  );
+}
+
+function DividendsCard({ dividends, ytd, taxYear, onAdd, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ declared_on: '', amount: '', shareholder: 'Director', voucher_ref: '' });
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.declared_on || !form.amount) return;
+    setBusy(true);
+    try {
+      await onAdd({ declared_on: form.declared_on, paid_on: form.declared_on, amount: Number(form.amount), shareholder: form.shareholder, voucher_ref: form.voucher_ref });
+      setForm({ declared_on: '', amount: '', shareholder: 'Director', voucher_ref: '' });
+      setOpen(false);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <GCard className="p-4">
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <SL className="mb-0.5">Dividends · {taxYear}</SL>
+          <p className="text-xl font-black text-white tabular-nums">{fmt(ytd)}</p>
+          <p className="text-[10px] text-[rgba(153,197,255,0.45)]">YTD declared</p>
+        </div>
+        <button onClick={() => setOpen(o => !o)}
+          className="px-3 py-1.5 rounded-xl bg-[#1f48ff] text-white text-[10px] font-black hover:bg-[#3a5eff]">
+          {open ? 'Close' : '+ Log dividend'}
+        </button>
+      </div>
+
+      {ytd > 500 && (
+        <GAlert type="warn">£500 dividend allowance used — anything above is taxable (8.75% basic / 33.75% higher).</GAlert>
+      )}
+
+      {open && (
+        <form onSubmit={submit} className="space-y-2 mt-3 p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
+          <div className="grid grid-cols-2 gap-2">
+            <GInput type="date"   label="Declared"     value={form.declared_on}  onChange={e => setForm(f => ({ ...f, declared_on: e.target.value }))} required />
+            <GInput type="number" label="Amount £"     value={form.amount}       onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}      required min="0" step="0.01" />
+            <GInput                label="Shareholder"  value={form.shareholder} onChange={e => setForm(f => ({ ...f, shareholder: e.target.value }))} />
+            <GInput                label="Voucher ref"  value={form.voucher_ref} onChange={e => setForm(f => ({ ...f, voucher_ref: e.target.value }))} />
+          </div>
+          <button type="submit" disabled={busy} className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-[11px] font-black disabled:opacity-50">
+            {busy ? 'Saving…' : 'Save dividend'}
+          </button>
+        </form>
+      )}
+
+      <div className="mt-3 space-y-1.5 max-h-72 overflow-y-auto">
+        {dividends.length === 0 && (
+          <div className="text-center py-4 px-3">
+            <p className="text-xs text-[rgba(153,197,255,0.55)] mb-1">No dividends logged yet.</p>
+            <p className="text-[10px] text-[rgba(153,197,255,0.35)] leading-relaxed">
+              Each dividend needs a board minute and a voucher. Cadi stores them automatically when you click <strong>+ Log dividend</strong>.
+            </p>
+          </div>
+        )}
+        {dividends.map(d => (
+          <div key={d.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[rgba(153,197,255,0.03)]">
+            <div className="min-w-0">
+              <p className="text-xs font-black text-white truncate">{fmt(d.amount)} · {d.shareholder}</p>
+              <p className="text-[10px] text-[rgba(153,197,255,0.45)]">{d.declared_on}{d.voucher_ref && ` · ${d.voucher_ref}`}</p>
+            </div>
+            <button onClick={() => onDelete(d.id)} className="text-[10px] text-red-400 hover:text-red-300 shrink-0">delete</button>
+          </div>
+        ))}
+      </div>
+    </GCard>
+  );
+}
+
+function DirectorLoanCard({ entries, balance, overThreshold, onAdd, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ entry_date: '', description: '', amount: '', category: 'drawn' });
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.entry_date || !form.amount) return;
+    setBusy(true);
+    try {
+      const sign = form.category === 'repaid' ? -1 : 1;
+      await onAdd({ entry_date: form.entry_date, description: form.description || form.category, amount: sign * Math.abs(Number(form.amount)), category: form.category });
+      setForm({ entry_date: '', description: '', amount: '', category: 'drawn' });
+      setOpen(false);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <GCard className="p-4">
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <SL className="mb-0.5">Director's loan account</SL>
+          <p className={`text-xl font-black tabular-nums ${balance > 0 ? 'text-amber-300' : 'text-emerald-400'}`}>
+            {balance >= 0 ? fmt(balance) : `(${fmt(Math.abs(balance))})`}
+          </p>
+          <p className="text-[10px] text-[rgba(153,197,255,0.45)]">{balance > 0 ? 'Director owes company' : 'Company owes director'}</p>
+        </div>
+        <button onClick={() => setOpen(o => !o)}
+          className="px-3 py-1.5 rounded-xl bg-[#1f48ff] text-white text-[10px] font-black hover:bg-[#3a5eff]">
+          {open ? 'Close' : '+ Entry'}
+        </button>
+      </div>
+
+      {overThreshold && (
+        <GAlert type="red">
+          Balance exceeds £10,000 — benefit-in-kind reporting may be required (HMRC s.455 / P11D).
+        </GAlert>
+      )}
+
+      {open && (
+        <form onSubmit={submit} className="space-y-2 mt-3 p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
+          <div className="grid grid-cols-2 gap-2">
+            <GInput type="date"   label="Date"        value={form.entry_date}  onChange={e => setForm(f => ({ ...f, entry_date: e.target.value }))} required />
+            <GInput type="number" label="Amount £"    value={form.amount}      onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}    required min="0" step="0.01" />
+            <GSelect              label="Category"    value={form.category}    onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+              <option value="drawn">Drawn (director takes)</option>
+              <option value="repaid">Repaid (director pays back)</option>
+              <option value="expenses">Personal expense charged</option>
+              <option value="other">Other</option>
+            </GSelect>
+            <GInput                label="Description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+          <button type="submit" disabled={busy} className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-[11px] font-black disabled:opacity-50">
+            {busy ? 'Saving…' : 'Save entry'}
+          </button>
+        </form>
+      )}
+
+      <div className="mt-3 space-y-1.5 max-h-72 overflow-y-auto">
+        {entries.length === 0 && (
+          <div className="text-center py-4 px-3">
+            <p className="text-xs text-[rgba(153,197,255,0.55)] mb-1">No entries yet.</p>
+            <p className="text-[10px] text-[rgba(153,197,255,0.35)] leading-relaxed">
+              Log any cash, expense, or loan movement between you and the company. Positive amounts mean the director owes the company.
+            </p>
+          </div>
+        )}
+        {entries.map(e => (
+          <div key={e.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[rgba(153,197,255,0.03)]">
+            <div className="min-w-0">
+              <p className="text-xs font-black text-white truncate">
+                <span className={Number(e.amount) > 0 ? 'text-amber-300' : 'text-emerald-400'}>
+                  {Number(e.amount) > 0 ? '+' : '−'}{fmt(Math.abs(Number(e.amount)))}
+                </span> · {e.description}
+              </p>
+              <p className="text-[10px] text-[rgba(153,197,255,0.45)]">{e.entry_date} · {e.category}</p>
+            </div>
+            <button onClick={() => onDelete(e.id)} className="text-[10px] text-red-400 hover:text-red-300 shrink-0">delete</button>
+          </div>
+        ))}
+      </div>
+    </GCard>
+  );
+}
+
 export default function AccountsTab() {
   const { user }     = useAuth();
   const { invoices } = useInvoices();
@@ -2289,6 +3247,28 @@ export default function AccountsTab() {
     try {
       const data = await getBusinessSettings();
       if (data) setBizSettings(prev => ({ ...prev, ...data }));
+
+      // Backfill: if business_settings.entity_type wasn't set but the user
+      // already picked a legal structure in onboarding (profiles.biz_structure),
+      // derive it so the right Accounts tabs show. One-time per session — the
+      // upsert below makes future loads cheap.
+      if (!data?.entity_type) {
+        const { data: { user: u } } = await supabase.auth.getUser();
+        if (u?.id && u.id !== 'demo-user') {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('biz_structure')
+            .eq('id', u.id)
+            .maybeSingle();
+          if (prof?.biz_structure) {
+            const entityType = prof.biz_structure === 'limited' ? 'limited_company' : 'sole_trader';
+            await supabase
+              .from('business_settings')
+              .upsert({ owner_id: u.id, entity_type: entityType }, { onConflict: 'owner_id' });
+            setBizSettings(prev => ({ ...prev, entity_type: entityType }));
+          }
+        }
+      }
     } catch { /* keep defaults */ }
   }, []);
 
@@ -2310,22 +3290,26 @@ export default function AccountsTab() {
 
   const unpaidCount = invoices.filter(i => i.status !== "paid" && i.status !== "draft").length;
 
+  const isLtdEntity = entityType === 'limited_company';
+
   const TABS = [
     { id: "overview",  label: "📊 Overview"      },
     { id: "hmrc",      label: "🏛️ HMRC Connect",  badge: "MTD" },
     { id: "income",    label: "💰 Income",         badge: unpaidCount > 0 ? String(unpaidCount) : undefined },
     { id: "expenses",  label: "💸 Expenses"       },
     { id: "vat",       label: "🔢 VAT"             },
+    ...(isLtdEntity ? [{ id: "ltd", label: "🏢 Ltd Co", badge: "CT" }] : []),
     { id: "tax-tools", label: "⚡ Tax Tools"       },
     { id: "year-end",  label: "📅 Year End"        },
   ];
 
   const panels = {
-    overview:    <OverviewTab  setActiveTab={setActiveTab} entityType={entityType} bizSettings={bizSettings} />,
+    overview:    <OverviewTab  setActiveTab={setActiveTab} entityType={entityType} bizSettings={bizSettings} saveSettings={saveSettings} />,
     hmrc:        <HmrcTab entityType={entityType} />,
     income:      <IncomeTab />,
     expenses:    <ExpensesTab />,
     vat:         <VATTab bizSettings={bizSettings} saveSettings={saveSettings} />,
+    ltd:         <LtdTab bizSettings={bizSettings} isDemo={isDemo} />,
     "tax-tools": <TaxToolsTab setActiveTab={setActiveTab} isDemo={isDemo} />,
     "year-end":  <YearEndTab entityType={entityType} bizSettings={bizSettings} isDemo={isDemo} />,
   };
@@ -2357,6 +3341,9 @@ export default function AccountsTab() {
             </div>
           )}
         </div>
+
+        {/* First-visit setup coach */}
+        <AccountsSetupCoach user={user} onSaved={loadSettings} />
 
         {/* Pill nav — scrollable on mobile */}
         <div className="overflow-x-auto pb-1">
