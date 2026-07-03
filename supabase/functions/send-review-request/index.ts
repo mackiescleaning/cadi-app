@@ -14,6 +14,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { tierForBusiness, isPaidTier } from "../_shared/entitlements.ts";
 
 const SUPABASE_URL         = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -105,6 +106,11 @@ serve(async (req: Request) => {
   if (!action) return json({ error: "Action not found" }, 404);
   if (action.action_type !== "send_review_request") {
     return json({ error: "Action is not a review request" }, 400);
+  }
+  // Server-side entitlement gate: the Reviews agent is Pro/Max only. The client
+  // hides it for Lite (and /review is tab-locked), but that is bypassable here.
+  if (!isPaidTier(await tierForBusiness(sb, action.business_id))) {
+    return json({ error: "The Reviews agent requires a Pro or Max plan.", upgrade_required: true }, 403);
   }
   // Allow approved or auto_sent — both mean "do it"
   if (!["approved", "auto_sent", "pending_approval"].includes(action.status)) {

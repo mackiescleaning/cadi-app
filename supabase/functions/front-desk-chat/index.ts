@@ -12,6 +12,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { tierForBusiness, LITE_LIMITS } from "../_shared/entitlements.ts";
 
 const SUPABASE_URL         = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -565,6 +566,27 @@ serve(async (req: Request) => {
   // Get or create conversation
   let convId = conversation_id ?? null;
   if (!convId) {
+    // Server-side entitlement gate: Lite businesses get a capped number of
+    // Front Desk conversations per month. The client tracks this too, but the
+    // widget endpoint is public, so the real cap must live here. Only a NEW
+    // conversation consumes quota; continuing an existing one (conversation_id
+    // supplied) does not. Fail open on a DB hiccup so a real lead is never lost.
+    if ((await tierForBusiness(sb, business_id)) === "lite") {
+      const thisMonth = new Date().toISOString().slice(0, 7) + "-01";
+      const { data: allowed, error: rpcErr } = await sb.rpc("check_and_consume_fd_limit", {
+        p_business_id: business_id,
+        p_month:       thisMonth,
+        p_limit:       LITE_LIMITS.frontDeskMonthlyLimit,
+      });
+      if (!rpcErr && !allowed) {
+        return json({
+          conversation_id: null,
+          message:         "Thanks for your message! This chat has reached its limit for now — please reach out to the business directly and they'll be happy to help.",
+          limit_reached:   true,
+        });
+      }
+    }
+
     const { data: newConv } = await sb
       .from("conversations")
       .insert({ business_id, channel: "web_chat", status: "open" })

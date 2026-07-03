@@ -21,6 +21,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { tierForUser, isPaidTier } from "../_shared/entitlements.ts";
 
 const GC_CLIENT_ID     = Deno.env.get("GC_CLIENT_ID") ?? "";
 const GC_CLIENT_SECRET = Deno.env.get("GC_CLIENT_SECRET") ?? "";
@@ -81,6 +82,13 @@ serve(async (req: Request) => {
     // ── URL: generate GoCardless OAuth authorise URL ──────────────────────────
     if (action === "url") {
       const { user, sb } = await getUser(req);
+
+      // Server-side entitlement gate: GoCardless direct debit is a paid feature.
+      // The client UI hides it for Lite, but that gate is bypassable here.
+      if (!isPaidTier(await tierForUser(sb, user.id))) {
+        return json({ error: "GoCardless direct debit requires a Pro or Max plan.", upgrade_required: true }, 403);
+      }
+
       const state = crypto.randomUUID();
 
       await sb

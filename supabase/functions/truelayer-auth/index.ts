@@ -11,6 +11,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { tierForUser, isPaidTier } from "../_shared/entitlements.ts";
 
 const SANDBOX       = Deno.env.get("TL_SANDBOX") !== "false";
 const CLIENT_ID     = Deno.env.get("TL_CLIENT_ID") ?? "";
@@ -71,6 +72,12 @@ serve(async (req: Request) => {
 
     // ── url ───────────────────────────────────────────────────────────────────
     if (action === "url") {
+      // Server-side entitlement gate: open banking is a paid feature. The client
+      // UI hides it for Lite, but that gate is bypassable by calling this directly.
+      if (!isPaidTier(await tierForUser(sb, user.id))) {
+        return json({ error: "Open banking requires a Pro or Max plan.", upgrade_required: true }, 403);
+      }
+
       const state = crypto.randomUUID();
       await sb.from("profiles").update({ tl_oauth_state: state }).eq("id", user.id);
 

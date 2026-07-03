@@ -226,7 +226,7 @@ serve(async (req) => {
     const { data: allowed, error: rpcErr } = await sb.rpc("check_and_consume_fd_limit", {
       p_business_id: business_id,
       p_month:       thisMonth,
-      p_limit:       10,
+      p_limit:       5,
     });
     if (rpcErr) {
       console.error("fd limit check error:", rpcErr);

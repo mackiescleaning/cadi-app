@@ -19,6 +19,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { writeAudit } from "../_shared/auditLog.ts";
+import { tierForUser, isPaidTier } from "../_shared/entitlements.ts";
 
 const APP_ID         = Deno.env.get("YAPILY_APP_ID")     ?? "";
 const APP_SECRET     = Deno.env.get("YAPILY_SECRET")     ?? "";
@@ -209,6 +210,12 @@ serve(async (req: Request) => {
     // institutionId is REQUIRED. No default — sandbox banks are gated by the
     // client passing the sandbox id explicitly when VITE_YAPILY_ENV=sandbox.
     if (action === "url") {
+      // Server-side entitlement gate: open banking is a paid feature. The client
+      // UI hides it for Lite, but that gate is bypassable by calling this directly.
+      if (!isPaidTier(await tierForUser(sb, user.id))) {
+        return json({ error: "Open banking requires a Pro or Max plan.", upgrade_required: true }, 403, origin);
+      }
+
       const institutionId = body.institutionId as string;
       if (!institutionId || typeof institutionId !== "string") {
         return json({ error: "institutionId required" }, 400, origin);
