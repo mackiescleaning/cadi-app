@@ -210,7 +210,7 @@ function buildHtml({
               ${logoBlock}
               <p style="font-size:${logoUrl ? 12 : 16}px;font-weight:${logoUrl ? 700 : 800};color:${logoUrl ? '#555' : brandColour};margin:0 0 2px">${businessName}</p>
               ${businessAddress ? `<p style="font-size:11px;color:#aaa;margin:0;white-space:pre-wrap">${businessAddress.replace(/</g,"&lt;")}</p>` : ""}
-              ${businessEmail   ? `<p style="font-size:11px;color:#aaa;margin:2px 0 0"><a href="mailto:${businessEmail}" style="color:${brandColour};text-decoration:none">${businessEmail}</a></p>` : ""}
+              ${businessEmail   ? `<p style="font-size:11px;color:#aaa;margin:2px 0 0">${businessEmail}</p>` : ""}
             </td>
             <td style="vertical-align:top;text-align:right">
               <p style="font-size:28px;font-weight:900;color:${brandColour};margin:0 0 4px;letter-spacing:-0.5px">INVOICE</p>

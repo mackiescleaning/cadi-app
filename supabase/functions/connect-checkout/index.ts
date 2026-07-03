@@ -70,11 +70,23 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({})) as {
       job_id?: string; lat?: number; lng?: number; note?: string;
+      customer_on_site?: boolean; customer_name?: string;
     };
     const jobId = body.job_id;
     const lat   = Number(body.lat);
     const lng   = Number(body.lng);
     const note  = (body.note ?? "").slice(0, 1000);
+
+    // Customer-presence capture (added 2026-06 — replaces the paper sign-off).
+    // null when the sub didn't answer; true/false when they did. Name is only
+    // meaningful when customer_on_site === true, but we don't enforce that —
+    // the FM-side UI shows them together.
+    const customerOnSite =
+      typeof body.customer_on_site === "boolean" ? body.customer_on_site : null;
+    const customerName =
+      typeof body.customer_name === "string"
+        ? body.customer_name.trim().slice(0, 200) || null
+        : null;
 
     if (!jobId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       return json({ error: "job_id, lat, lng required" }, 400);
@@ -150,6 +162,8 @@ serve(async (req) => {
       note:                  note || null,
       inside_geo_fence:      true,
       distance_from_site_m:  distanceM,
+      customer_on_site:      customerOnSite,
+      customer_name:         customerName,
     });
     if (coErr) return json({ error: coErr.message }, 500);
 

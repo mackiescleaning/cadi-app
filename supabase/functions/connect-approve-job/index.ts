@@ -18,6 +18,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { htmlEscape, htmlEscapeMultiline } from "../_shared/htmlEscape.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
@@ -61,21 +62,21 @@ function renderDecisionEmail(opts: {
   const headline =
     decision === "approved" ? "Job approved" :
     decision === "queried"  ? "Job queried — they need a bit more info" :
-                              "Job rejected";
+                              "Job rejected — please redo";
   const lead =
     decision === "approved" ? "Your invoice draft is ready in Cadi Connect." :
     decision === "queried"  ? "The FM has flagged a query against your job. Open Cadi Connect to read and respond." :
-                              "The FM has rejected this job. Open Cadi Connect to see the reason.";
+                              "The FM has rejected this job and the site is back in your upcoming list to redo. Their reason is below.";
   const noteBlock = note
-    ? `<p style="margin:16px 0;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#7c2d12;font-size:14px;line-height:1.5;"><strong>Their note:</strong><br/>${note.replace(/\n/g, "<br/>")}</p>`
+    ? `<p style="margin:16px 0;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#7c2d12;font-size:14px;line-height:1.5;"><strong>Their note:</strong><br/>${htmlEscapeMultiline(note)}</p>`
     : "";
   return {
     subject: `${headline} — ${siteName}`,
     html: `<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#f8fafc;margin:0;padding:24px;">
       <div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:28px;border:1px solid #e2e8f0;">
-        <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a;">${headline}</h1>
-        <p style="margin:0 0 4px;font-size:14px;color:#475569;"><strong>${siteName}</strong> · service date ${serviceDate}</p>
-        <p style="margin:16px 0;font-size:14px;color:#334155;line-height:1.6;">${lead}</p>
+        <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a;">${htmlEscape(headline)}</h1>
+        <p style="margin:0 0 4px;font-size:14px;color:#475569;"><strong>${htmlEscape(siteName)}</strong> · service date ${htmlEscape(serviceDate)}</p>
+        <p style="margin:16px 0;font-size:14px;color:#334155;line-height:1.6;">${htmlEscape(lead)}</p>
         ${noteBlock}
         <p style="margin:24px 0 0;"><a href="${jobsUrl}" style="display:inline-block;padding:10px 20px;background:#ea580c;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;">Open Cadi Connect →</a></p>
       </div>
@@ -130,10 +131,24 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({})) as {
       job_id?: string; decision?: string; note?: string;
+      rating_stars?: number; rating_comment?: string;
     };
     const jobId = body.job_id;
     const decision = body.decision;
     const note = (body.note ?? "").slice(0, 2000) || null;
+
+    // Optional rating on approve — the FM can 1-5 star + comment. Only
+    // applies when decision === 'approved'. Silently ignored otherwise so
+    // the client can pass the fields unconditionally.
+    const ratingStarsRaw = body.rating_stars;
+    const ratingStars = (typeof ratingStarsRaw === "number"
+      && Number.isFinite(ratingStarsRaw)
+      && ratingStarsRaw >= 1 && ratingStarsRaw <= 5)
+      ? Math.round(ratingStarsRaw)
+      : null;
+    const ratingComment = typeof body.rating_comment === "string"
+      ? body.rating_comment.trim().slice(0, 2000) || null
+      : null;
 
     if (!jobId || !["approved","queried","rejected"].includes(decision || "")) {
       return json({ error: "job_id + decision (approved/queried/rejected) required" }, 400);
@@ -163,7 +178,9 @@ serve(async (req) => {
 
     const now = new Date().toISOString();
 
-    // Update job approval state
+    // Update job approval state. For rejection, also reset the job to
+    // 'scheduled' and clear completion metadata so it appears back in the
+    // sub's upcoming list — the contractor must redo the clean from scratch.
     const patch: Record<string, unknown> = {
       approval_status:     decision,
       approved_by_user_id: user.id,
@@ -171,6 +188,12 @@ serve(async (req) => {
       query_note:          decision === "queried"  ? note : null,
       rejection_note:      decision === "rejected" ? note : null,
     };
+    if (decision === "rejected") {
+      patch.status                  = "scheduled";
+      patch.completion_marked_at    = null;
+      patch.completion_method       = null;
+      patch.actual_duration_minutes = null;
+    }
 
     const { error: updErr } = await sb
       .from("jobs")
@@ -179,6 +202,14 @@ serve(async (req) => {
       .eq("fm_organisation_id", caller.fm_organisation_id);
     if (updErr) return json({ error: updErr.message }, 500);
 
+    // On rejection, wipe the working-table data so the contractor sees a
+    // clean slate. The audit_log keeps the full history (what photos
+    // existed, what notes were written) — nothing is truly lost.
+    if (decision === "rejected") {
+      await sb.from("job_checkins").delete().eq("job_id", jobId).then(() => {}).catch(() => {});
+      await sb.from("job_evidence").delete().eq("job_id", jobId).then(() => {}).catch(() => {});
+    }
+
     let invoiceId: string | null = null;
 
     if (decision === "approved" && job.sub_user_id) {
@@ -186,6 +217,10 @@ serve(async (req) => {
       // visit_spec.price_per_visit. VAT defaults to 0 — sub adjusts on submit.
       const netValue = Number(job.price ?? job.visit_spec?.price_per_visit ?? 0);
       const reference = `INV-${jobId.slice(0, 8).toUpperCase()}`;
+      // deno-lint-ignore no-explicit-any
+      const siteName = (job as any).site?.name ?? "Cleaning service";
+      const lineDescription =
+        `${siteName}${job.date ? " · " + job.date : ""}`;
 
       const { data: invRow, error: invErr } = await sb
         .from("connect_invoices")
@@ -209,6 +244,37 @@ serve(async (req) => {
       }
       invoiceId = invRow?.id ?? null;
 
+      // Also write the line item so the (now multi-line capable) invoice
+      // has its source job tracked. If invRow is null (conflict path), look
+      // up the existing invoice id by job_id to attach a line.
+      if (!invoiceId) {
+        const { data: existing } = await sb
+          .from("connect_invoices")
+          .select("id")
+          .eq("job_id", jobId)
+          .maybeSingle();
+        invoiceId = existing?.id ?? null;
+      }
+      if (invoiceId) {
+        // Skip if a line for this job already exists on this invoice (cycle).
+        const { data: existingLine } = await sb
+          .from("connect_invoice_lines")
+          .select("id")
+          .eq("invoice_id", invoiceId)
+          .eq("job_id", jobId)
+          .maybeSingle();
+        if (!existingLine) {
+          await sb.from("connect_invoice_lines").insert({
+            invoice_id:   invoiceId,
+            job_id:       jobId,
+            description:  lineDescription,
+            service_date: job.date,
+            net_value:    netValue,
+            vat_value:    0,
+          }).then(() => {}).catch(() => {});
+        }
+      }
+
       // Reputation event — input for the Connect score recompute (Phase 3.5)
       await sb.from("reputation_events").insert({
         cleaner_user_id: job.sub_user_id,
@@ -217,6 +283,30 @@ serve(async (req) => {
         source_fm_id:    job.fm_organisation_id,
         job_id:          jobId,
       }).then(() => {}).catch(() => {});
+
+      // Optional star rating + comment — attaches to the same job so the
+      // sub sees it on their profile AND the score engine picks it up.
+      if (ratingStars != null) {
+        await sb.from("job_ratings").upsert({
+          job_id:             jobId,
+          sub_user_id:        job.sub_user_id,
+          fm_organisation_id: job.fm_organisation_id,
+          rated_by_user_id:   user.id,
+          stars:              ratingStars,
+          comment:            ratingComment,
+          updated_at:         now,
+        }, { onConflict: "job_id" }).then(() => {}).catch(() => {});
+        // Extra reputation event so the score engine can shift on rating
+        // alone (e.g. 5-star lifts, 2-star drags) without re-running the
+        // approved event.
+        await sb.from("reputation_events").insert({
+          cleaner_user_id: job.sub_user_id,
+          event_type:      "job_rated",
+          value:           ratingStars,
+          source_fm_id:    job.fm_organisation_id,
+          job_id:          jobId,
+        }).then(() => {}).catch(() => {});
+      }
     } else if (decision === "rejected" && job.sub_user_id) {
       await sb.from("reputation_events").insert({
         cleaner_user_id: job.sub_user_id,

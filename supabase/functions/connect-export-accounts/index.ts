@@ -44,6 +44,216 @@ function toCsv(rows: Record<string, unknown>[]): string {
   return out.join("\n");
 }
 
+// ── Per-accounting-platform export presets ──────────────────────────────────
+// Each preset takes the canonical invoice shape (built below) and returns a
+// row keyed by the EXACT column names the destination accounting system
+// expects to see. Adding a new platform = one new entry here.
+
+type FmSettings = {
+  accounts_platform:           string;
+  default_nominal_code:        string | null;
+  default_vat_code:            string | null;
+  default_payment_terms_days:  number | null;
+};
+type CanonicalInvoice = {
+  supplier_code:  string;
+  supplier_name:  string;
+  reference:      string;
+  service_date:   string;        // YYYY-MM-DD
+  due_date:       string;        // YYYY-MM-DD
+  description:    string;
+  net_value:      number;
+  vat_value:      number;
+  total_value:    number;
+  nominal_code:   string;
+};
+
+function fmtDDMMYYYY(d: string): string {
+  if (!d) return "";
+  const [y, m, day] = d.split("-");
+  return `${day}/${m}/${y}`;
+}
+function fmtISO(d: string): string { return d ?? ""; }
+
+// Sage T-code from VAT rate. Cleaning is typically T1 (20%) when sub is
+// VAT registered, T9 (out of scope) when not. We infer from VAT > 0.
+function sageVatCode(inv: CanonicalInvoice, fm: FmSettings): string {
+  if (inv.vat_value > 0) {
+    // Could be T1 (20%) or T5 (5%). 20% is the overwhelming default for cleaning.
+    return "T1";
+  }
+  return fm.default_vat_code || "T9";
+}
+
+// Xero TaxType. "Output" + percentage suffix in API; CSV uses friendly labels.
+function xeroTaxType(inv: CanonicalInvoice): string {
+  if (inv.vat_value > 0) return "20% (VAT on Income)";
+  return "No VAT";
+}
+
+const PRESETS: Record<string, {
+  filename: (label: string) => string;
+  build:    (rows: CanonicalInvoice[], fm: FmSettings) => Record<string, unknown>[];
+}> = {
+  // Sage 50 Purchase Invoice batch import (the "Easy Import" CSV format).
+  sage_50: {
+    filename: (label) => `sage50-purchase-invoices-${label}.csv`,
+    build: (rows, fm) => rows.map(r => ({
+      "A/C":     r.supplier_code,
+      "Date":    fmtDDMMYYYY(r.service_date),
+      "Ref":     r.reference,
+      "N/C":     r.nominal_code,
+      "Details": r.description,
+      "Net":     r.net_value.toFixed(2),
+      "T/C":     sageVatCode(r, fm),
+      "Tax":     r.vat_value.toFixed(2),
+    })),
+  },
+
+  // Sage Business Cloud Accounting CSV — broadly the same shape as Sage 50,
+  // different header casing convention.
+  sage_cloud: {
+    filename: (label) => `sage-cloud-purchase-invoices-${label}.csv`,
+    build: (rows, fm) => rows.map(r => ({
+      "Supplier Reference": r.supplier_code,
+      "Supplier Name":      r.supplier_name,
+      "Date":               fmtDDMMYYYY(r.service_date),
+      "Reference":          r.reference,
+      "Description":        r.description,
+      "Ledger Account":     r.nominal_code,
+      "Net":                r.net_value.toFixed(2),
+      "Tax Rate":           sageVatCode(r, fm),
+      "Tax":                r.vat_value.toFixed(2),
+      "Total":              r.total_value.toFixed(2),
+    })),
+  },
+
+  // Xero — "Bills" CSV import. Xero uses ContactName-driven matching.
+  xero: {
+    filename: (label) => `xero-bills-${label}.csv`,
+    build: (rows, _fm) => rows.map(r => ({
+      "ContactName":   r.supplier_name,
+      "InvoiceNumber": r.reference,
+      "InvoiceDate":   fmtISO(r.service_date),
+      "DueDate":       fmtISO(r.due_date),
+      "Description":   r.description,
+      "Quantity":      "1",
+      "UnitAmount":    r.net_value.toFixed(2),
+      "AccountCode":   r.nominal_code,
+      "TaxType":       xeroTaxType(r),
+    })),
+  },
+
+  // QuickBooks Online "Bills" import (Expenses → New → Bill → Import).
+  quickbooks: {
+    filename: (label) => `quickbooks-bills-${label}.csv`,
+    build: (rows, _fm) => rows.map(r => ({
+      "Bill No":      r.reference,
+      "Supplier":     r.supplier_name,
+      "Bill Date":    fmtISO(r.service_date),
+      "Due Date":     fmtISO(r.due_date),
+      "Terms":        "",
+      "Memo":         r.description,
+      "Account":      r.nominal_code,
+      "Line Description": r.description,
+      "Amount":       r.net_value.toFixed(2),
+      "VAT":          r.vat_value > 0 ? "20% S" : "No VAT",
+    })),
+  },
+
+  // FreeAgent — bills CSV.
+  freeagent: {
+    filename: (label) => `freeagent-bills-${label}.csv`,
+    build: (rows, _fm) => rows.map(r => ({
+      "Dated on":      fmtISO(r.service_date),
+      "Due on":        fmtISO(r.due_date),
+      "Reference":     r.reference,
+      "Supplier":      r.supplier_name,
+      "Description":   r.description,
+      "Category":      r.nominal_code,
+      "Amount":        r.net_value.toFixed(2),
+      "VAT rate":      r.vat_value > 0 ? "20%" : "Out of Scope",
+    })),
+  },
+
+  // Generic — all fields, no platform-specific headers. Use when an FM is on
+  // a system we haven't built a preset for yet; they map columns manually.
+  generic: {
+    filename: (label) => `connect-invoices-${label}.csv`,
+    build: (rows, _fm) => rows.map(r => ({
+      "Supplier Code":   r.supplier_code,
+      "Supplier Name":   r.supplier_name,
+      "Invoice Ref":     r.reference,
+      "Service Date":    fmtISO(r.service_date),
+      "Due Date":        fmtISO(r.due_date),
+      "Description":     r.description,
+      "Nominal Code":    r.nominal_code,
+      "Net":             r.net_value.toFixed(2),
+      "VAT":             r.vat_value.toFixed(2),
+      "Total":           r.total_value.toFixed(2),
+    })),
+  },
+};
+
+// Lazy-create or fetch a supplier code for (fm_org, sub) pair. Sequence is
+// per-FM-org. Format: first 3 letters of business name (uppercased, alpha only)
+// + 3-digit sequence. Conflicts retry with the next sequence number.
+// deno-lint-ignore no-explicit-any
+async function ensureSupplierCode(sb: any, fmOrgId: string, subUserId: string, subName: string): Promise<{ code: string; nominal_override: string | null }> {
+  // Existing row?
+  const { data: existing } = await sb
+    .from("fm_supplier_codes")
+    .select("supplier_code, nominal_code_override")
+    .eq("fm_organisation_id", fmOrgId)
+    .eq("sub_user_id", subUserId)
+    .maybeSingle();
+  if (existing) return { code: existing.supplier_code, nominal_override: existing.nominal_code_override };
+
+  // Build a 3-letter stem from business name. Fall back to "SUB" if empty.
+  const stem = (subName || "SUB")
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 3)
+    .padEnd(3, "X");
+
+  // Find the highest existing sequence for this stem so we don't recycle codes.
+  const { data: takenRows } = await sb
+    .from("fm_supplier_codes")
+    .select("supplier_code")
+    .eq("fm_organisation_id", fmOrgId)
+    .like("supplier_code", `${stem}%`);
+  const takenSeqs = new Set<number>(
+    (takenRows ?? []).map((r: { supplier_code: string }) => {
+      const m = /(\d+)$/.exec(r.supplier_code);
+      return m ? parseInt(m[1], 10) : -1;
+    }).filter((n: number) => n >= 0),
+  );
+  let seq = 1;
+  while (takenSeqs.has(seq)) seq++;
+  const candidate = `${stem}${String(seq).padStart(3, "0")}`;
+
+  const { data: inserted, error } = await sb
+    .from("fm_supplier_codes")
+    .insert({
+      fm_organisation_id: fmOrgId,
+      sub_user_id:        subUserId,
+      supplier_code:      candidate,
+    })
+    .select("supplier_code, nominal_code_override")
+    .single();
+  if (error) {
+    // Most likely race condition on unique constraint — re-fetch.
+    const { data: r2 } = await sb
+      .from("fm_supplier_codes")
+      .select("supplier_code, nominal_code_override")
+      .eq("fm_organisation_id", fmOrgId)
+      .eq("sub_user_id", subUserId)
+      .maybeSingle();
+    return { code: r2?.supplier_code || candidate, nominal_override: r2?.nominal_code_override ?? null };
+  }
+  return { code: inserted.supplier_code, nominal_override: inserted.nominal_code_override };
+}
+
 async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
   if (!RESEND_API_KEY || !to) return false;
   try {
@@ -111,6 +321,21 @@ serve(async (req) => {
     if (!caller?.fm_organisation_id) return json({ error: "Not an FM-organisation member" }, 403);
     const fmId = caller.fm_organisation_id;
 
+    // Rate limit — generous for legitimate FM use (previews + exports +
+    // mark-paid), tight enough to stop a runaway script scraping the
+    // invoice queue in tight loops.
+    const { data: rl } = await sb.rpc("check_and_increment_rate_limit", {
+      p_bucket: "connect_export_accounts", p_key: user.id, p_limit: 60, p_window_ms: 60000,
+    });
+    const rlRow = Array.isArray(rl) ? rl[0] : rl;
+    if (rlRow && !rlRow.ok) {
+      const retry = Math.max(1, Math.ceil((new Date(rlRow.reset_at).getTime() - Date.now()) / 1000));
+      return new Response(
+        JSON.stringify({ error: "Too many requests" }),
+        { status: 429, headers: { ...CORS, "Content-Type": "application/json", "Retry-After": String(retry) } },
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const op = body.op;
 
@@ -174,13 +399,28 @@ serve(async (req) => {
     const to   = body.period_to;
     if (!from || !to) return json({ error: "period_from + period_to required (YYYY-MM-DD)" }, 400);
 
+    // FM accounts settings drive which preset we render. Lives in the
+    // dedicated fm_accounts_settings table (migration 067). Default to
+    // 'generic' when no row exists so a brand-new FM still gets a usable file.
+    const { data: fmRow } = await sb
+      .from("fm_accounts_settings")
+      .select("accounts_platform, default_nominal_code, default_vat_code, default_payment_terms_days")
+      .eq("fm_organisation_id", fmId)
+      .maybeSingle();
+    const fmSettings: FmSettings = {
+      accounts_platform:           fmRow?.accounts_platform ?? "generic",
+      default_nominal_code:        fmRow?.default_nominal_code ?? null,
+      default_vat_code:            fmRow?.default_vat_code ?? null,
+      default_payment_terms_days:  fmRow?.default_payment_terms_days ?? 30,
+    };
+    const preset = PRESETS[fmSettings.accounts_platform] ?? PRESETS.generic;
+
     const { data: invs, error: invErr } = await sb
       .from("connect_invoices")
       .select(`
-        id, reference, service_date, net_value, vat_value, total_value, status, created_at,
+        id, reference, service_date, net_value, vat_value, total_value, status, created_at, sub_user_id,
         sub:profiles!connect_invoices_sub_user_id_fkey ( id, business_name, first_name, last_name ),
-        job:jobs ( id ),
-        site:jobs ( id, site:sites ( id, name, postcode ) )
+        lines:connect_invoice_lines ( id, description, service_date, net_value )
       `)
       .eq("fm_organisation_id", fmId)
       .eq("status", "submitted")
@@ -190,25 +430,60 @@ serve(async (req) => {
 
     if (invErr) return json({ error: invErr.message }, 500);
 
-    const rows = (invs ?? []).map((i: Record<string, unknown>) => {
+    // Build canonical invoice rows. Each invoice is one CSV row (the
+    // accounting platform's bill-level import); line-level detail goes into
+    // the description so it's still searchable. Supplier code lazy-created
+    // per (fm, sub) pair.
+    const canonical: CanonicalInvoice[] = [];
+    for (const i of (invs ?? []) as Array<Record<string, unknown>>) {
       const sub = i.sub as { business_name?: string; first_name?: string; last_name?: string } | null;
-      const siteRow = i.site as { site?: { name?: string; postcode?: string } } | null;
-      return {
-        reference:    i.reference ?? "",
-        service_date: i.service_date ?? "",
-        sub:          sub?.business_name || `${sub?.first_name ?? ""} ${sub?.last_name ?? ""}`.trim(),
-        site:         siteRow?.site?.name ?? "",
-        postcode:     siteRow?.site?.postcode ?? "",
-        net_value:    Number(i.net_value).toFixed(2),
-        vat_value:    Number(i.vat_value).toFixed(2),
-        total_value:  Number(i.total_value).toFixed(2),
-      };
-    });
+      const supplierName = sub?.business_name || `${sub?.first_name ?? ""} ${sub?.last_name ?? ""}`.trim() || "Unknown supplier";
+      const { code: supplierCode, nominal_override } = await ensureSupplierCode(
+        sb, fmId, i.sub_user_id as string, supplierName,
+      );
+
+      // Build a per-invoice description from the lines (cap at ~200 chars so
+      // the CSV stays sane for FMs reading the import preview).
+      const lines = (i.lines as Array<{ description: string; service_date?: string }>) ?? [];
+      const description = lines.length === 0
+        ? "Cleaning service"
+        : lines.map(l => l.description).join("; ").slice(0, 200);
+
+      const serviceDate = (i.service_date as string) ?? "";
+      const dueDate = serviceDate
+        ? (() => {
+            const d = new Date(serviceDate);
+            d.setUTCDate(d.getUTCDate() + (fmSettings.default_payment_terms_days ?? 30));
+            return d.toISOString().slice(0, 10);
+          })()
+        : "";
+
+      canonical.push({
+        supplier_code:  supplierCode,
+        supplier_name:  supplierName,
+        reference:      (i.reference as string) ?? "",
+        service_date:   serviceDate,
+        due_date:       dueDate,
+        description,
+        net_value:      Number(i.net_value) || 0,
+        vat_value:      Number(i.vat_value) || 0,
+        total_value:    Number(i.total_value) || 0,
+        nominal_code:   nominal_override || fmSettings.default_nominal_code || "",
+      });
+    }
+
+    const rows = preset.build(canonical, fmSettings);
     const csv = toCsv(rows);
-    const totalValue = rows.reduce((s: number, r) => s + Number(r.total_value), 0);
+    const totalValue = canonical.reduce((s, r) => s + r.total_value, 0);
 
     if (op === "preview") {
-      return json({ ok: true, row_count: rows.length, total_value: totalValue, csv });
+      return json({
+        ok:           true,
+        platform:     fmSettings.accounts_platform,
+        row_count:    canonical.length,
+        total_value:  totalValue,
+        csv,
+      });
     }
 
     // op === 'export'
@@ -221,7 +496,7 @@ serve(async (req) => {
         period_label:        body.period_label ?? null,
         period_from:         from,
         period_to:           to,
-        row_count:           rows.length,
+        row_count:           canonical.length,
         total_value:         totalValue,
         file_format:         fileFormat,
       })
@@ -247,15 +522,18 @@ serve(async (req) => {
       actor_id: user.id,
       action:   "connect_accounts_exported",
       category: "connect",
-      detail:   { fm_organisation_id: fmId, export_id: exp.id, row_count: rows.length, total_value: totalValue },
+      detail:   { fm_organisation_id: fmId, export_id: exp.id, row_count: canonical.length, total_value: totalValue, platform: fmSettings.accounts_platform },
       ip:       ip === "unknown" ? null : ip,
       user_agent: ua || null,
     }).then(() => {}).catch(() => {});
 
+    const periodLabel = (body.period_label ?? `${from}_to_${to}`).replace(/[^a-z0-9_-]/gi, "_");
     return json({
-      ok: true,
+      ok:          true,
       export_id:   exp.id,
-      row_count:   rows.length,
+      platform:    fmSettings.accounts_platform,
+      filename:    preset.filename(periodLabel),
+      row_count:   canonical.length,
       total_value: totalValue,
       file_format: fileFormat,
       csv,

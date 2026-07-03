@@ -22,8 +22,13 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const json = (data: unknown, status = 200) =>
-  new Response(JSON.stringify(data), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+const json = (data: unknown, status = 200, extra: Record<string, string> = {}) =>
+  new Response(JSON.stringify(data), { status, headers: { ...CORS, "Content-Type": "application/json", ...extra } });
+
+function clientIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for") ?? "";
+  return xff.split(",")[0].trim() || (req.headers.get("x-real-ip") ?? "unknown");
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -34,6 +39,19 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // Rate limit per-IP — anon endpoint, so no auth.uid() to bucket on.
+    // 30/min is generous for a legitimate invite click, aggressive enough
+    // to stop token-fishing bots.
+    const ip = clientIp(req);
+    const { data: rl } = await supabase.rpc("check_and_increment_rate_limit", {
+      p_bucket: "connect_invite_lookup", p_key: ip, p_limit: 30, p_window_ms: 60000,
+    });
+    const rlRow = Array.isArray(rl) ? rl[0] : rl;
+    if (rlRow && !rlRow.ok) {
+      const retry = Math.max(1, Math.ceil((new Date(rlRow.reset_at).getTime() - Date.now()) / 1000));
+      return json({ error: "Too many requests" }, 429, { "Retry-After": String(retry) });
+    }
 
     const { token } = await req.json().catch(() => ({})) as { token?: string };
     if (!token || typeof token !== "string" || token.length < 16) {

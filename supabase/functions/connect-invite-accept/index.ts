@@ -32,6 +32,9 @@ const CORS = {
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
+const jsonR = (data: unknown, status = 200, extra: Record<string, string> = {}) =>
+  new Response(JSON.stringify(data), { status, headers: { ...CORS, "Content-Type": "application/json", ...extra } });
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST")    return json({ error: "Method not allowed" }, 405);
@@ -45,6 +48,18 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
     const { data: { user }, error: authErr } = await sb.auth.getUser(authHeader);
     if (authErr || !user) return json({ error: "Unauthorized" }, 401);
+
+    // Rate limit per authed user — accepting invites shouldn't need more
+    // than a handful of attempts, and this caps token-guessing by someone
+    // who's created a fresh Supabase account.
+    const { data: rl } = await sb.rpc("check_and_increment_rate_limit", {
+      p_bucket: "connect_invite_accept", p_key: user.id, p_limit: 20, p_window_ms: 60000,
+    });
+    const rlRow = Array.isArray(rl) ? rl[0] : rl;
+    if (rlRow && !rlRow.ok) {
+      const retry = Math.max(1, Math.ceil((new Date(rlRow.reset_at).getTime() - Date.now()) / 1000));
+      return jsonR({ error: "Too many requests" }, 429, { "Retry-After": String(retry) });
+    }
 
     const { token } = await req.json().catch(() => ({})) as { token?: string };
     if (!token || typeof token !== "string" || token.length < 16) {

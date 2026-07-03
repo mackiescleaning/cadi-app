@@ -19,7 +19,7 @@ const ANTHROPIC_API_KEY    = Deno.env.get("ANTHROPIC_API_KEY")!;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "content-type",
+  "Access-Control-Allow-Headers": "content-type, authorization, apikey, x-client-info",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
