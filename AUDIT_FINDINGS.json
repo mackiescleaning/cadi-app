@@ -1,0 +1,1468 @@
+[
+  {
+    "dimension": "UX audit \u2014 Schedule (Scheduler) tab",
+    "tab": "Schedule",
+    "findings": [
+      {
+        "title": "Day view header lies about contents \u2014 it's a list, not a swim-lane grid",
+        "detail": "The codebase markets DAY as 'per-crew swim lanes on a 20-min grid' (Scheduler.jsx:5, 519) and SchedulerPreview.jsx renders exactly that, but the live DayView (Scheduler.jsx:744-946) renders a single flat run-sheet list of SortableJobCards (line 911-922). HourRuler, CrewLane and JobBlock components (lines 619-663) are defined and unused. A user who watches a demo of the gorgeous swim-lane preview and then signs up will get a different product \u2014 and a multi-crew operator (Britannia's 1500 staff scenario) has no way to see crews side-by-side. The crew filter pills above (line 2392) suggest crews exist as a dimension, but selecting one only filters the same list rather than showing lanes.",
+        "fix": "Either (a) restore the multi-lane DayView from SchedulerPreview when >1 crew is active and fall back to the run-sheet for single-cleaner accounts, or (b) delete the dead lane components and re-message the marketing copy. The cleaner-friendly answer: per-crew lanes on desktop, swipeable per-crew run-sheet stack on mobile.",
+        "severity": "HIGH",
+        "effort": "L",
+        "file": "Scheduler.jsx:744 vs SchedulerPreview.jsx:395-406"
+      },
+      {
+        "title": "Week view silently drops every job \u2014 `j.day` is never set on real data",
+        "detail": "WeekView reads `j.day` to bucket jobs (Scheduler.jsx:964-971): `if (j.day >= 0 && j.day < 7) map[j.day].push(j)`. Real jobs from Supabase have a `date` string, no `day` integer. The root component does compute it at line 2280-2285 (`weekJobsWithDay`) and passes it in, so it works \u2014 but it ONLY works because of that one mapping. The instant anyone refactors WeekView to receive `weekJobs` directly (which the type filter logic and demo data both assume), the entire grid silently shows empty. Worse, when day = 0 (Sunday legacy data) and `dayOfWeek === 0` it gets remapped to index 6 \u2014 meaning historical CleanerPlanner-imported Sunday jobs may quietly land on the wrong column.",
+        "fix": "Compute day-of-week from `date` inside WeekView so it's self-contained, and add a dev-only assertion when `j.day` is undefined. Use a stable date-keyed Map rather than a 7-slot array so DST/locale don't bite.",
+        "severity": "HIGH",
+        "effort": "S",
+        "file": "Scheduler.jsx:964-971"
+      },
+      {
+        "title": "Drag-to-reorder destroys real start times",
+        "detail": "On drag end (Scheduler.jsx:817-842) every incomplete job's start_hour is rewritten to `baseHour + i * 0.01`, i.e. 36-second gaps. The Day drawer then displays `Time 08:00 \u2014 08:00` (line 1472) because durations are 30+min but starts are 36s apart. The swim-lane DayView (when it's used, line 552-603) positions jobs by `(startHour - DAY_START) * PX_PER_HR`, so after one drag every job collapses into a 1px stack. Week view (`layoutDayJobs`, line 263) uses the same data and will mis-overlap. A cleaner who 'just wanted to swap job 3 and 4' will look at their week and see chaos.",
+        "fix": "Persist sort order in a separate `display_order` column or as `sort_index` JSON on the job \u2014 don't fight start_hour. If the goal is to keep times meaningful, snap to the original time slots and only swap the times between the two reordered jobs.",
+        "severity": "CRITICAL",
+        "effort": "M",
+        "file": "Scheduler.jsx:824-839"
+      },
+      {
+        "title": "'Route' button opens Google Maps with NO origin \u2014 drives cleaners to first customer instead of from home",
+        "detail": "`handleRoute` (Scheduler.jsx:797-801) builds `https://www.google.com/maps/dir/{pc1}/{pc2}/...` \u2014 no starting point. Google Maps interprets the first stop as the origin. A window cleaner with a profile.home_postcode set will still get a route that 'starts' at their first customer, hiding the morning drive-to-first-job (often 20+ min). Auth already exposes `home_postcode` per the memory file. Also: postcodes go in raw \u2014 if any contain a space (W8 4AA), the URL works but if any are missing/empty, the URL silently breaks with `//`.",
+        "fix": "Prepend `profile.home_postcode` (fallback: first job postcode) as the explicit origin. Add an end-of-day return-to-base toggle. Drop trailing `/` segments. Bonus wow: show the optimised order with estimated drive time and a 'Save 14 minutes \u2014 reorder?' banner above the run-sheet (this is the uniquely cleaner-industry insight competitors don't show).",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "Scheduler.jsx:797-801"
+      },
+      {
+        "title": "Empty state is the loudest missed wow-moment in the product",
+        "detail": "DayView empty state (Scheduler.jsx:846-855) is one sad line: 'No jobs scheduled for this day. Use the \"+ New job\" button to add one.' A first-time user lands on Day view (the hero) and sees this on day 1. Compare to Cleaner Planner / Squeegee \u2014 they show a 'how rounds work' explainer; Jobber shows a sample job. Cadi has demo data baked in (buildDemoJobs, line 83) and a Rounds importer, but doesn't surface either from the empty Day. The Rounds tab has a much better empty pattern (line 2094-2101) \u2014 that energy belongs on Day.",
+        "fix": "Make empty Day a celebration moment: '\ud83c\udf24\ufe0f Nothing booked for Thursday \u2014 fancy a day off, or shall we...' with three big chips: 'See demo day (the Kensington round)', 'Import my customers from CleanerPlanner', 'Add a one-off'. Same treatment for empty Week. This is also where AskCadi could proactively offer 'Want me to schedule your fortnightly round for this week?'",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "Scheduler.jsx:846-855"
+      },
+      {
+        "title": "Rounds 'Schedule' button is a dead end \u2014 uses round name as customer name",
+        "detail": "Per the mapper and confirmed at Scheduler.jsx:2245-2249, clicking 'Schedule' on a Friday \u2014 SW19 Exterior round opens NewJobModal with preCustomer = 'Friday \u2014 SW19 Exterior'. A user expects 'schedule this round = create all 3 customer jobs sequentially for next due date'. Instead they get a blank form with a weird customer name typed in. For an exterior window cleaner \u2014 Cadi's stated wow audience (memory says exterior round of 25 customers in 20-min slots) \u2014 this is THE feature. Right now it's a brochure-only promise.",
+        "fix": "Replace the modal with a 'Schedule round' preview sheet: shows all active customers as draggable cards in suggested order (postcode-clustered, longest leg first), pre-fills date/duration/price from round metadata, lets user pick crew + start time once, then writes N jobs in one Supabase batch. End-of-flow animation: cards fly into the Day timeline one-by-one. This is the moment that beats Squeegee.",
+        "severity": "CRITICAL",
+        "effort": "XL",
+        "file": "Scheduler.jsx:2245-2249, 2138-2143"
+      },
+      {
+        "title": "Generic time-grid where Cadi could own a unique 'round timeline'",
+        "detail": "Day, Week, Month, Quarter are all standard SaaS calendar views \u2014 every competitor has them. The 20-min slot system, route-aware ordering, and per-customer due dates from the Rounds data model are unique to Cadi but invisible on the timeline. JobBlock (line 552-603) uses pastel by type, but there's no visual cue for: 'this customer's last visit was 9 weeks ago \u2014 they're overdue', 'driving 12 min from previous job', 'this is an Airbnb turnover with a 11am hard deadline'.",
+        "fix": "Inject three uniquely-cleaner overlays on the Day timeline: (1) thin grey 'drive time' gap blocks between jobs computed from postcode haversine, (2) a red left-edge pulse on overdue rounds customers, (3) a clock-icon badge on Airbnb/end-of-tenancy jobs with hard deadlines. None of Jobber/ServiceM8/Squeegee do this combined. This is the screenshot that goes on the marketing site.",
+        "severity": "OPPORTUNITY",
+        "effort": "L",
+        "file": "Scheduler.jsx:552-603"
+      },
+      {
+        "title": "Day view celebration is muted \u2014 100% complete just shows '\ud83c\udf89 All done!'",
+        "detail": "Line 866: `{done === total && total > 0 ? '\ud83c\udf89 All done!' : ...}`. That's the entire end-of-day moment. A van-based exterior cleaner who's just finished 25 houses in the rain wants a hero moment: today's takings counted up (the count-up animation IS already there at line 790 \u2014 but only for partial), a 'best day this week' badge, a 'send all 25 invoices' one-tap CTA, a share-to-WhatsApp 'just finished my round' card.",
+        "fix": "On done===total swap the progress strip for a full-bleed celebration card: animated \u00a3 total, jobs completed, miles driven, a confetti burst on mobile (one-time per day, gated by localStorage to avoid annoyance), and a 'Invoice all \u00a3X' CTA wired to the Stripe billing or the Britannia invoice workflow.",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "Scheduler.jsx:861-901"
+      },
+      {
+        "title": "NewJobModal recurrence balloons up to 12 future jobs with no opt-out",
+        "detail": "Line 1776-1788: when recurrence != 'none', the modal silently creates 11 additional jobs (`for i < 11`). The 'next occurrence' hint (line 1986) only shows the FIRST one. A first-time user picks 'Fortnightly' assuming Cadi will roll one forward each time it's completed \u2014 instead they get 12 jobs littering their Month view, all editable but none labelled as part of a series. There's no 'edit series' affordance later, and no series_id stored on the job (line 1762-1772) so changing one customer's price later won't propagate.",
+        "fix": "Either (a) show a clear 'Schedule 12 occurrences' preview chip with a number-picker, OR (b) switch to a recurrence rule on the customer (the recommended pattern \u2014 Rounds already implies this) and generate jobs lazily 4 weeks ahead. Add a `series_id` so the drawer can offer 'Edit this \u00b7 Edit series'.",
+        "severity": "HIGH",
+        "effort": "L",
+        "file": "Scheduler.jsx:1776-1791"
+      },
+      {
+        "title": "Mobile search is missing \u2014 and mobile IS the cleaner's primary device",
+        "detail": "Search input is `hidden md:block` (Scheduler.jsx:2350). A cleaner on a van iPhone trying to find 'Mrs Davies' from a missed call has no search at all. There's a MobileDayStrip (line 476-517) but no mobile search affordance. Filter pills are also wrap-heavy on small screens with no scroll containment.",
+        "fix": "Add an icon-only Search button next to the New Job button on mobile that pops a full-width sheet with recent customers + voice input. Make the filter row horizontally scrollable rather than wrapping.",
+        "severity": "HIGH",
+        "effort": "S",
+        "file": "Scheduler.jsx:2350-2358"
+      },
+      {
+        "title": "Status updater asks user to think in jargon, not verbs",
+        "detail": "JobDrawer (line 1487-1502) shows four equally-weighted square buttons: Scheduled, In progress, Complete, Unassigned. For an in-van cleaner the question is always 'have I started?' or 'am I done?'. Forcing a four-way state picker on every job is a tap tax.",
+        "fix": "Make the drawer header a single big context-aware button: when scheduled \u2192 'Start job \u25b6', when in-progress \u2192 'Mark complete \u2713', with a small overflow menu for the rarer states. Add swipe-right-to-complete on the run-sheet cards (the SortableJobCard at line 666-742 already has a Done button column \u2014 just promote it to a swipe gesture). Combined with the count-up \u00a3 animation this becomes Cadi's signature one-handed-in-the-van flow.",
+        "severity": "MED",
+        "effort": "M",
+        "file": "Scheduler.jsx:1487-1502, 727-739"
+      },
+      {
+        "title": "Accessibility: drag handles unreachable by keyboard, status pills colour-only",
+        "detail": "(a) SortableJobCard (line 666-742) uses dnd-kit but only attaches PointerSensor + TouchSensor (line 810-813). KeyboardSensor isn't installed \u2014 keyboard users cannot reorder jobs at all. (b) JobBlock 'isComplete ? opacity 0.55 + line-through' (line 572) is fine, but the unassigned indicator is a 6px red dot (line 597-599) with no text alt, no aria-label, and red-on-pastel-orange/green fails WCAG. (c) StatusChip 'Now' (line 608) uses colour as the only differentiator from 'Booked'. (d) The whole grid background is glassmorphism with backdrop-blur and white-on-white shadows \u2014 text contrast on the 0.55-opacity completed jobs is roughly 3:1 against the gradient. (e) Modal close button (line 1823) is a 18px X with no aria-label; same for drawer (line 1438).",
+        "fix": "Add KeyboardSensor + visible focus rings on cards (currently none). Add aria-labels to all icon-only buttons (X, Trash2, Pencil, GripVertical). Pair every colour-coded status with a glyph (\u2713 for complete, \u25b6 for in-progress, ! for unassigned). Up opacity floor to 0.7 and darken ink for complete state. Test the day-strip with VoiceOver \u2014 `aria-current=date` is missing.",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "Scheduler.jsx:810-813, 597-599, 605-617, 1438"
+      },
+      {
+        "title": "MonthView dot row collapses 25-job exterior days into 6 indistinguishable dots",
+        "detail": "Line 1204-1208: `cell.jobs?.slice(0,6).map(...)` shows max 6 dots then '+19'. On the hero exterior round day this hides the at-a-glance density that's the whole point of a month view. Also all dots are same size regardless of revenue \u2014 a \u00a325 windows job looks like a \u00a3280 end-of-tenancy.",
+        "fix": "Replace dots with a single mini sparkline-style stacked bar per cell (type slices sized by count + saturation by revenue). Or borrow GitHub's contribution-graph idea: cell background tint by total \u00a3, with type indicator strip top-right. Adds genuine information density.",
+        "severity": "MED",
+        "effort": "M",
+        "file": "Scheduler.jsx:1204-1212"
+      },
+      {
+        "title": "Filter state survives view-switch and silently hides jobs the user can't see why",
+        "detail": "`typeFilter` / `crewFilter` (line 2220-2221) are global to the tab. A user filters to 'Jamie' in Day view, switches to Month, and now their month silently excludes everyone \u2014 but Month/Quarter (line 1143-1382) don't render the filter bar (only Day does, line 2374-2401). The stat strip at the top still respects the filter (line 2370) so revenue figures lie. No 'X jobs hidden' banner.",
+        "fix": "Either reset filters on view change, or persist them visibly with a small 'Filters: Jamie \u00b7 Exterior \u2014 clear' pill above the view content regardless of view.",
+        "severity": "MED",
+        "effort": "S",
+        "file": "Scheduler.jsx:2220-2221, 2374-2401"
+      },
+      {
+        "title": "First-five seconds: no progressive disclosure, no 'what is this'",
+        "detail": "On first load with demo data, a new user sees: gradient orbs, glass cards, 13 stat numbers, 5 view tabs, 5 filter pills, 5+ crew pills, 20 job cards, AskCadi at the bottom. There's no welcome state, no spotlight, no 'Tap a job to see details'. Onboarding (per memory) covers chat onboarding but the Schedule tab itself has no first-run coach-marks.",
+        "fix": "Add a one-time tour scoped to the Schedule tab: highlight 'tap a job \u2192 details', 'drag to reorder your run', 'tap Route for sat-nav'. Trigger from the Ready banner on Dashboard mentioned in onboarding memory. Three steps max.",
+        "severity": "MED",
+        "effort": "M",
+        "file": "Scheduler.jsx:2322-2414"
+      },
+      {
+        "title": "Weather + traffic = the killer wow Cadi could ship in a week",
+        "detail": "Exterior cleaners (Tom's softwash + Jamie's window round in the demo data) live and die by weather. Currently nothing in DayView, WeekView or the New Job modal references weather. A single Met Office API call keyed off home_postcode + date could add a tiny \u2614\ufe0f icon to any exterior job at >60% precipitation forecast, with a 'Suggest reschedule' chip. None of Jobber / ServiceM8 / Squeegee / Cleaner Planner do this. This is exactly the kind of uniquely-cleaner moment the brief asks for.",
+        "fix": "Met Office DataHub (free tier) \u2192 cache 7-day forecast per postcode \u2192 render a weather strip across the Week view header (one icon per day) + a per-job warning badge for exterior jobs. The 'reschedule rain day' confirmation that drags the whole day forward to next dry day = the screenshot moment.",
+        "severity": "OPPORTUNITY",
+        "effort": "L",
+        "file": "Scheduler.jsx:1142, 948"
+      },
+      {
+        "title": "No 'what changed' feedback after save \u2014 silent success teaches mistrust",
+        "detail": "Drawer save (line 1394-1405) closes the panel on success with no toast. New job modal (line 1730-1791) same \u2014 modal closes, you blink and a new card appears (or doesn't, if the Week is wrong). Delete (line 1407-1415) is irreversible with no undo. For a cleaner adding 12 fortnightly jobs at once this is terrifying.",
+        "fix": "Bottom-of-screen toast 'Job saved \u00b7 12 occurrences scheduled \u2014 Undo' with a 6-second timer. Same pattern for delete. Wire to a simple `pendingDelete` queue so 'undo' actually un-deletes within the window.",
+        "severity": "MED",
+        "effort": "M",
+        "file": "Scheduler.jsx:1394-1415, 1730-1791"
+      }
+    ]
+  },
+  {
+    "tab": "Schedule",
+    "dimension": "code_health",
+    "findings": [
+      {
+        "title": "Scheduler.jsx is a 2449-line god-component",
+        "severity": "HIGH",
+        "effort": "XL",
+        "file": "src/pages/Scheduler.jsx",
+        "detail": "One file holds DayView, WeekView, MonthView, QuarterView, RoundsView, JobDrawer, NewJobModal, MobileDayStrip, FilterBar, DateNav, ViewTabs, SortableJobCard, JobBlock, HourRuler, CrewLane, StatStrip, demo data, theme constants, layout engine, and the top-level container. NewJobModal alone (lines 1635-2017) is ~380 lines. JobDrawer (1385-1563) ~180 lines. Cognitive load is enormous, file is impossible to test, hot-reload is slow.",
+        "fix": "Split into src/pages/scheduler/ with files: Scheduler.jsx (root only), views/{DayView,WeekView,MonthView,QuarterView,RoundsView}.jsx, components/{JobDrawer,NewJobModal,FilterBar,DateNav,ViewTabs,MobileDayStrip,StatStrip,JobBlock,CrewLane}.jsx, lib/{theme.js,dates.js,layoutDayJobs.js,demoData.js}. Extract shared constants (TYPE, STATUS_STYLES, STATUS_LABELS) to src/lib/jobTheme.js so RoutePlanner + SchedulerPreview can import them."
+      },
+      {
+        "title": "TYPE / colour constants duplicated across 3 files",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:33-66, src/pages/SchedulerPreview.jsx:12-37, src/pages/RoutePlanner.jsx:185-194",
+        "detail": "Confirmed. Scheduler.jsx has full TYPE object with 4 keys (incl. site_visit). SchedulerPreview has identical 3-key version. RoutePlanner has TYPE_DOT + TYPE_CHIP separately. Drift risk is real \u2014 Scheduler has a 4th key (site_visit) the others don't.",
+        "fix": "Create src/lib/jobTheme.js exporting TYPE, STATUS_STYLES, STATUS_LABELS, tintForCrew, CREW_PALETTE. All 3 files import from there. Adds a single source of truth and lets a future Site Visit type flow through to RoutePlanner."
+      },
+      {
+        "title": "DayView and WeekView duplicate filter logic verbatim",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:748-756 and 954-962",
+        "detail": "Confirmed. Both compute the same `if (typeFilter !== 'all') ... if (crewFilter !== 'all') ...` block including the unused '__unassigned__' branch. MonthView and QuarterView don't apply these filters at all, which is itself a UX inconsistency.",
+        "fix": "Extract `function applyJobFilters(jobs, { typeFilter, crewFilter })` in scheduler/lib/filters.js. Apply consistently in all 4 views so the type/crew filter strip means the same thing in every view."
+      },
+      {
+        "title": "Time-formatting helpers duplicated, hourToTime redefined inside NewJobModal",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:248-260, 1639-1643",
+        "detail": "fmtTime + fmtTime12 are top-level (Scheduler.jsx 248), but NewJobModal redefines hourToTime locally (1639). RoutePlanner has no 12-hour formatter at all but uses its own fmt2/fmtMi/fmtDate set.",
+        "fix": "Move all time/money formatters into src/lib/format.js (fmtMoney, fmtTime, fmtTime12, hourToTime, durLabel). NewJobModal imports hourToTime instead of redefining it."
+      },
+      {
+        "title": "Modal shell template repeated across 3 modals",
+        "severity": "LOW",
+        "effort": "M",
+        "file": "src/pages/RoutePlanner.jsx:340 (AddStopModal), 420 (SaveRouteModal); src/pages/Scheduler.jsx:1814 (NewJobModal)",
+        "detail": "Confirmed. Same fixed-inset overlay + GCard/glass header + close-X + footer button row. RoutePlanner uses dark glass; Scheduler uses light glass \u2014 but the structural skeleton is the same.",
+        "fix": "Create <ModalShell title, subtitle, onClose, footer, theme='light'|'dark'> in src/components/Modal.jsx. All three modals reduce to body content only."
+      },
+      {
+        "title": "Rounds 'Schedule' button is a dead-end \u2014 only pre-fills customer name field",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "src/pages/Scheduler.jsx:2139, 2245-2249",
+        "detail": "Confirmed. onScheduleRound just runs `setPreCustomer(round.roundName); setShowNewJob(true)`. The whole round (10\u201320 customers, postcodes, prices, recurrence, due dates) is collapsed to one string in the customer field of a single empty job. There is no batch creation of jobs for the round's customers, no auto-assign, no recurrence carry-through. Users will tap it expecting 'schedule the round' and get one job titled 'Monday AM \u2014 Kensington'.",
+        "fix": "Either (a) wire a real batch flow: open a 'Schedule round' modal that lists each customer with editable date/time/assignee then creates N jobs; or (b) rename the button 'New job from round' and leave a TODO. Until (a) lands, hiding the button on live data (it's most dangerous when dbRounds has real customers) is the safer interim."
+      },
+      {
+        "title": "WeekView assumes j.day is set; only safe because parent decorates it",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:964-971, 2280-2285",
+        "detail": "Verified. WeekView reads `j.day` and stuffs into map[0..6]. j.day is added by parent in weekJobsWithDay (line 2283). If WeekView is ever rendered with raw weekJobs by accident, every job is silently dropped (the `if (j.day >= 0 && j.day < 7)` filters undefined to false). No warning, no fallback.",
+        "fix": "Either compute day-of-week inside WeekView from j.date (decouples view from parent), or warn/coerce in WeekView: if j.day == null, derive from j.date. Drop the parent's weekJobsWithDay decorator."
+      },
+      {
+        "title": "crewFilter '__unassigned__' branch is unreachable",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:752, 958",
+        "detail": "Confirmed dead code. deriveCrews (line 524-550) DOES emit an '__unassigned__' crew id when jobs are unassigned, AND sorts it last \u2014 so the branch IS reachable when there are unassigned jobs. Mapper claim is wrong. However: the FilterBar (line 428-451) only renders these crews when `crews.length > 0` and renders each crew's name including 'Unassigned'. Verify: it does render. So this branch is live. Mark mapper finding as false.",
+        "fix": "No change. Mapper was wrong \u2014 the '__unassigned__' branch is reachable through deriveCrews."
+      },
+      {
+        "title": "Month/Quarter views are read-only, lack edit affordance",
+        "severity": "LOW",
+        "effort": "M",
+        "file": "src/pages/Scheduler.jsx:1142-1252, 1255-1382",
+        "detail": "Confirmed. MonthView expanded-day list calls onJobClick (which opens the drawer \u2014 actually editable). QuarterView has no job click at all. So Month is partially actionable (via drawer), Quarter is fully read-only. That's defensible for a summary view but users may tap the bars expecting drill-down.",
+        "fix": "In QuarterView, make week bars clickable to switch view to Week with that offset. Not really a 'dead-end' for Month since the drawer opens via the expanded list."
+      },
+      {
+        "title": "Mobile search bar is missing (hidden md:block on desktop input)",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:2350-2358",
+        "detail": "Confirmed. The search input wraps in `<div className='relative hidden md:block'>`. There's no mobile equivalent \u2014 search state still exists but cannot be set on mobile. All view filtering on `search` therefore can't be exercised by phone users.",
+        "fix": "Either show a compact search icon-button on mobile that toggles a full-width search input below the StatStrip, or move the search field below the header on mobile (sm:hidden block)."
+      },
+      {
+        "title": "NewJobModal initial-state useEffect fetches team_members on every mount with no cleanup",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:1653-1669",
+        "detail": "Each time the modal opens, it dynamic-imports supabase and queries team_members. Errors are silently swallowed (.catch(()=>{}) both at the import and the query level). No cleanup if user closes the modal mid-fetch \u2014 setStaffOptions can fire on an unmounted component (React 18 tolerates it but it's a smell). On a slow connection, the modal opens with just 'You/Unassigned' and silently 'upgrades' later \u2014 confusing if you've already chosen.",
+        "fix": "Lift team_members fetch into DataContext (it's needed elsewhere too \u2014 Rota/Pay/Holiday). Read from context. If you must keep it local, add a cancelled flag in cleanup and surface fetch errors with a small inline notice."
+      },
+      {
+        "title": "NewJobModal recurring expansion: hard-coded 11 future occurrences regardless of cadence",
+        "severity": "HIGH",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:1776-1788",
+        "detail": "`for (let i = 0; i < 11; i++)` creates 11 future jobs no matter what \u2014 for a daily round that's only 11 days of work; for an 8-weekly round it's ~22 months ahead. Each call uses `id: Date.now() + i + 1` which can collide if two recurring jobs are created in the same ms across users. Also onSave is called 12 times synchronously \u2014 if onSave optimistically inserts into DataContext, that's 12 re-renders, and if any insert fails partway you get a partial recurring series with no rollback.",
+        "fix": "Replace client-side expansion with a server-side recurrence column on jobs + a daily edge function that materialises N days ahead. Or at minimum: cap by date (12 months out), not by count; use crypto.randomUUID() for ids; batch the inserts via Promise.allSettled and roll back if any fail."
+      },
+      {
+        "title": "DayView initialOrder useMemo dep uses joined string \u2014 fragile invalidation",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:759-775",
+        "detail": "`useMemo(..., [filteredJobs.map(j => j.id + j.status).join(',')])` works but disables exhaustive-deps and is O(n) string-build every render. The follow-up useEffect resyncs `order` from `initialOrder` whenever the join changes \u2014 meaning any status flip wipes the user's drag order. Combined with the drag-end handler that mutates start_hour by 0.01 to 'persist' order (line 833-836), this is a hidden race: status changes \u2192 effect resets order \u2192 drag offsets are lost until the next status change.",
+        "fix": "Use a stable dep like `filteredJobs.length + ':' + completedCount + ':' + dayOffset`. Better: persist a true `display_order` column on jobs rather than abusing start_hour. The start_hour micro-spread (baseHour + i*0.01) is misleading data \u2014 a job 'scheduled for 08:01' is wrong if base was 08:00 and it's actually the 60th in line."
+      },
+      {
+        "title": "RoundsView swallows listAllRounds error and falls back to demo data",
+        "severity": "HIGH",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:2066-2070, 2090",
+        "detail": "`listAllRounds().then(setDbRounds).catch(() => setDbRounds([]))`. On error, dbRounds is set to []. Then `isDemo = !dbRounds || dbRounds.length === 0` \u2014 so a failed fetch silently shows demo data with a 'Demo data shown' banner, indistinguishable from a fresh account with no rounds. Users with real rounds will see DEMO_ROUNDS (Kensington, West Nine) appear in their tab on a transient network error. Confusing and looks like data loss.",
+        "fix": "Three states: loading (null), error (Error), empty ([]), populated. Show distinct UI: spinner / 'Couldn't load rounds \u2014 retry' / current 'Import rounds' empty state / list. Don't conflate error with empty."
+      },
+      {
+        "title": "JobDrawer save/delete handlers swallow error details",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:1394-1415",
+        "detail": "`} catch { setDrawerError('Could not save changes. Please try again.'); }` discards the error. No telemetry, no console. If onUpdateJob rejects because of e.g. a RLS policy violation or constraint error, the user just sees 'Please try again' forever.",
+        "fix": "`} catch (err) { console.error('[JobDrawer] save failed', err); setDrawerError(err?.message || 'Could not save\u2026'); }`. Same for handleDelete. Consider a global toast/log hook."
+      },
+      {
+        "title": "RoutePlanner SaveRoute and DeleteRoute optimistic updates on failure silently desync",
+        "severity": "MED",
+        "effort": "M",
+        "file": "src/pages/RoutePlanner.jsx:798-846",
+        "detail": "handleDeleteRoute removes from local state first, then tries deleteRoute(id) \u2014 on failure shows a 5s toast that 'will reappear on next load'. But the local state already removed it; user thinks it's gone. handleSaveRoute on createRoute failure inserts a local-only entry with a fake id `r${Date.now()}` and a toast \u2014 that entry then won't sync, won't update, won't delete cleanly later (deleteRoute(localId) will 404 silently). Mileage log path has the same flaw (line 832-836).",
+        "fix": "For delete: try server first, then remove on success \u2014 or roll back local removal on failure. For save: don't insert a fake-id row; show retry. Add a 'pending sync' badge if you want to keep optimistic UX."
+      },
+      {
+        "title": "RoutePlanner AddStopModal cannot be dismissed by overlay click or Esc",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/RoutePlanner.jsx:333-409",
+        "detail": "Verified. The outer overlay div has no onClick={onClose}. Same for SaveRouteModal (line 412). Only the explicit \u2715 button dismisses. Compare with Scheduler.jsx JobDrawer (line 1420) which does have overlay onClick. Inconsistent UX; accessibility miss (no Esc handler anywhere).",
+        "fix": "Add onClick={onClose} to overlay + e.stopPropagation on inner; add useEffect to listen for Escape. Bake into the ModalShell extraction above."
+      },
+      {
+        "title": "RoutePlanner Optimise button uses inline 25-line nearest-neighbour algorithm",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/RoutePlanner.jsx:944-960",
+        "detail": "Inline anonymous function inside JSX onClick. Untestable, untyped. Also: starts from prev[0] (the first stop the user added) rather than from homePostcode, so 'optimal' may start at the furthest stop.",
+        "fix": "Extract `function nearestNeighbourOrder(stops, homePostcode)` to lib/route.js. Start from home so the first leg is also optimised. Unit test it."
+      },
+      {
+        "title": "Recurrence weekly arithmetic uses 30/91 days (calendar drift)",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:1725, 1777",
+        "detail": "`monthly: 30, quarterly: 91` \u2014 over 12 occurrences that's 60+ days of drift; a monthly clean booked for the 1st will land on the 31st-ish of month 11. Users will not notice until the calendar shows the wrong date.",
+        "fix": "Use real calendar arithmetic: setMonth(+1) for monthly, setMonth(+3) for quarterly. Keep day-of-month constant with clamp for short months. The +14, +7, +42, etc. weekly variants are fine."
+      },
+      {
+        "title": "weekJobsWithDay rebuilds on every weekJobs reference change but isn't memoised against contents",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:2271-2285",
+        "detail": "weekJobs is recomputed when allJobs identity changes (DataContext refetch). weekJobsWithDay then maps it. Each render in Week view re-instantiates the array. Then WeekView's `useMemo(jobsByDay, [filteredJobs])` triggers because filteredJobs depends on jobs reference. Not catastrophic but the entire chain rebuilds on every parent render of the StatStrip count-up animation.",
+        "fix": "Stabilise allJobs in DataContext (return same reference if no change), or merge the .map(day) step into the weekJobs useMemo so there's one fewer link in the chain."
+      },
+      {
+        "title": "Search filter uses outdated `searchLower` captured outside useMemo deps",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:2262-2302",
+        "detail": "`const searchLower = search.toLowerCase()` is computed at the top of every render, then several useMemos reference `searchLower` but only declare `search` in their dep list (with eslint-disable). It works because `search` changes \u21d2 render \u21d2 new searchLower \u21d2 new useMemo. But the eslint-disable hides that monthJobs has `[allJobs, viewDate, search]` while quarterJobs deps don't include search (line 2304-2312) \u2014 meaning Quarter view doesn't react to search. Cross-view inconsistency.",
+        "fix": "Either apply search uniformly across all views' useMemos, or strip search from all of them and apply it once at headerJobs derivation. Drop the eslint-disable lines and let the linter catch missing deps."
+      },
+      {
+        "title": "isLive check duplicated and inconsistent",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/Scheduler.jsx:2207-2211, src/pages/RoutePlanner.jsx:747",
+        "detail": "Scheduler: `isLive = Boolean(user) && !isDemoUser` (user id 'demo-user' is treated as not-live). RoutePlanner: `isLive = Boolean(user)` (treats demo-user as live \u2192 would call real Supabase). If demo-user has a session, RoutePlanner will hit Supabase under demo creds.",
+        "fix": "Move isDemoUser/isLive into AuthContext so all tabs agree. RoutePlanner currently inserts real routes/mileage for the demo user account."
+      }
+    ]
+  },
+  {
+    "tab": "Schedule",
+    "dimension": "security-gdpr",
+    "findings": [
+      {
+        "title": "team_members RLS policy missing WITH CHECK clause",
+        "severity": "HIGH",
+        "file": "supabase/migrations/013_autobooking_foundation.sql:52",
+        "detail": "`CREATE POLICY \"team_members_owner\" ON public.team_members FOR ALL USING (business_id = auth.uid());` has no WITH CHECK. With FOR ALL and no WITH CHECK the USING clause is reused for writes, but the policy itself does not constrain INSERT/UPDATE of `business_id` against another user's value. Combined with the fact that `business_id` here references `profiles(id)` and is treated as `auth.uid()` (not the canonical `my_business_id()` model used by jobs/customer_rounds), an authenticated user can INSERT a team_member with their own auth.uid() \u2014 fine \u2014 but the inconsistency means non-owner staff in a multi-user business literally cannot see ANY team_members (RLS forbids it), which silently breaks the Scheduler's staff dropdown for Britannia's 1500-staff org.",
+        "fix": "Rewrite to `business_id = my_business_id()` (or add a membership table check) with explicit `WITH CHECK (business_id = my_business_id())` to match the model used for jobs, customer_rounds, customers. Migrate existing rows.",
+        "effort": "M"
+      },
+      {
+        "title": "No role-based RLS \u2014 staff can read every customer's address and price across the whole business",
+        "severity": "HIGH",
+        "file": "supabase/migrations/007_cadi_foundations.sql:149",
+        "detail": "Jobs/customers/customer_rounds policies are flat `business_id = my_business_id()` \u2014 any authenticated user in the business gets full CRUD on every job (price, notes, address, postcode) and every customer record. There is no `staff vs owner` differentiation. For Britannia's 1500-employee deployment this means any cleaner can read the entire customer book, mark any job complete, change prices, or delete jobs. UK-GDPR Article 5(1)(f) (integrity & confidentiality) and Article 32 (appropriate access control) require least-privilege.",
+        "fix": "Add a role column to a membership table and split policies: `jobs_staff_read` limited to rows where `assignee_ids @> array[auth.uid()]`; `jobs_owner_all` for owners/managers. Same for customers (staff sees only customers they have an assigned job for).",
+        "effort": "L"
+      },
+      {
+        "title": "Duplicate/competing jobs table definition and RLS model",
+        "severity": "MED",
+        "file": "supabase/migrations/003_missing_tables.sql:80",
+        "detail": "003_missing_tables.sql creates `jobs` with policy `jobs_owner_all` keyed on `owner_id = auth.uid()`. 007_cadi_foundations.sql also creates `jobs` (`create table if not exists`) with policy `jobs_business_all` keyed on `business_id = my_business_id()`. Postgres RLS combines multiple permissive policies with OR \u2014 if both survived the migration history, ANY row owned by the user OR in their business is visible, and the schema becomes ambiguous. If 003 ran first and the policy was never dropped, owners may still hold rows via owner_id that bypass `business_id` checks.",
+        "fix": "Audit live DB with `select policyname, cmd, qual, with_check from pg_policies where tablename='jobs'`. Drop the stale `jobs_owner_all` policy explicitly and document the canonical RLS in a new migration.",
+        "effort": "S"
+      },
+      {
+        "title": "Customer PII exfiltrated to Google Maps without consent",
+        "severity": "HIGH",
+        "file": "src/pages/Scheduler.jsx:799",
+        "detail": "`window.open(https://www.google.com/maps/dir/${postcodes.join('/')}, ...)` and the equivalent `<a href={googleMapsUrl}>` in RoutePlanner.jsx:877,1009,1014 send every customer's postcode (often pinning to a single residential property in low-density areas) to Google. The Referer header also leaks the originating Cadi URL, which on the New Job flow contains `?customer=<NAME>` (line 2225). This is a cross-border (UK\u2192US) transfer of personal data with no DPA, no consent UI, and no record in the privacy notice. UK-GDPR Articles 13, 28, 44 are engaged.",
+        "fix": "(a) Add a consent toggle in business settings before enabling external map links; (b) set `referrerPolicy=\"no-referrer\"` on the <a> and use noopener; (c) document Google as a sub-processor in the privacy notice; (d) consider an in-app map using a UK/EU provider (Ordnance Survey, HERE EU) for default.",
+        "effort": "M"
+      },
+      {
+        "title": "Customer name placed in URL query string",
+        "severity": "MED",
+        "file": "src/pages/Scheduler.jsx:2225",
+        "detail": "`searchParams.get('customer')` \u2014 the customer name is passed via `?customer=NAME` to pre-fill the New Job modal. URL params land in browser history, server access logs, and the Referer header on any subsequent navigation (including the Google Maps click immediately above). Customer name is personal data under UK-GDPR.",
+        "fix": "Pass the prefill via router state (`navigate(path, { state: { customer } })`) instead of query string; or clear the param synchronously before any external link can be clicked.",
+        "effort": "S"
+      },
+      {
+        "title": "Hardcoded postcode-to-coordinate table silently falls back to London centroid \u2014 bad HMRC mileage records",
+        "severity": "MED",
+        "file": "src/pages/RoutePlanner.jsx:51",
+        "detail": "`getCoords` returns `[51.505,-0.09]` (London centroid) for any postcode not in the hardcoded SW/SE/W/EC/WC/N/NW/E table. Distances are then computed against that centroid and written to `mileage_logs` as the user's HMRC claim. Users outside central London will submit materially incorrect mileage to HMRC (offence under HMRC record-keeping rules; also misleads the user). The on-screen disclaimer at line 609 is buried.",
+        "fix": "Use a real postcode lookup (postcodes.io is free and UK-hosted) and refuse to log mileage when fallback is used. Surface a per-leg warning if a postcode was not resolved.",
+        "effort": "M"
+      },
+      {
+        "title": "Drag-to-reorder overwrites real start_hour times with fake 0.01h increments",
+        "severity": "LOW",
+        "file": "src/pages/Scheduler.jsx:834",
+        "detail": "`updateJob(id, { start_hour: baseHour + i * 0.01 })` persists synthetic times (gaps of <1 minute) when a user drags to reorder. Real scheduled appointment times are destroyed in the DB. Not a security bug but corrupts the business record \u2014 relevant for VAT/MTD evidence and customer dispute resolution.",
+        "fix": "Add a separate `sort_order` integer column for drag-order; never mutate `start_hour` from a drag.",
+        "effort": "S"
+      },
+      {
+        "title": "Mileage_logs and saved_routes are owner-only; non-owner staff invisible",
+        "severity": "MED",
+        "file": "supabase/migrations/003_missing_tables.sql:149",
+        "detail": "`saved_routes_owner_all` and `mileage_logs_owner_all` both gate on `owner_id = auth.uid()`. In a multi-driver business (Britannia: many vehicles) only the owner can see their own routes/mileage; other drivers will see empty UI with no error. This is inconsistent with the business_id model used for jobs and is a silent data-isolation failure (drivers may double-log mileage). Also: when a staff member is removed, ON DELETE CASCADE on auth.users would wipe their HMRC mileage records \u2014 HMRC requires retention for 6 years after the tax year.",
+        "fix": "Switch to business_id model, add a `driver_user_id` column, and replace cascade with `SET NULL` for the mileage_logs FK so records survive staff deletion.",
+        "effort": "M"
+      },
+      {
+        "title": "No data subject access / erasure path from Schedule tab",
+        "severity": "MED",
+        "file": "src/pages/Scheduler.jsx",
+        "detail": "UK-GDPR Articles 15 (access) and 17 (erasure) require the data controller to action subject requests. Customers are stored across jobs, customer_rounds, customers, and free-text `notes` fields on jobs. There is no admin tool to (a) export everything tied to a customer or (b) hard-delete or anonymise on request. Soft-delete only via `status='cancelled'` leaves PII (name, address, postcode, notes) indefinitely.",
+        "fix": "Add a customer-level 'Export & forget' action that returns JSON of all jobs/rounds/notes and either anonymises PII (`name='[redacted]'`, addresses null) or hard-deletes after retaining the legally required fields for tax/HMRC. Log every export to an audit table.",
+        "effort": "L"
+      },
+      {
+        "title": "No audit trail of who viewed / edited customer or job records",
+        "severity": "MED",
+        "file": "supabase/migrations/007_cadi_foundations.sql:113",
+        "detail": "`jobs` and `customers` have no row-level audit log. For 1500-staff Britannia deployment, GDPR Article 32 (security) and the ICO's expectations on accountability require knowing who accessed customer PII and price data. Without this, insider misuse (cleaner sells customer list) cannot be detected or evidenced.",
+        "fix": "Add an `access_log` table written via a trigger or via the existing `job_events` table; record SELECT-after-search at the app layer for customer lookup (Scheduler.jsx:1878).",
+        "effort": "L"
+      },
+      {
+        "title": "team_members table contains staff PII (email, phone) under permissive RLS",
+        "severity": "MED",
+        "file": "supabase/migrations/013_autobooking_foundation.sql:35",
+        "detail": "team_members stores `email` and `phone` (staff personal data) but the RLS policy is FOR ALL \u2014 meaning every authenticated user matching `business_id = auth.uid()` can read every colleague's contact details. In Britannia this is fine for the owner but excessive once staff log in (no read-only / no-PII-projection split).",
+        "fix": "Create a SECURITY DEFINER view `team_members_public` exposing only id, first_name, last_name, is_active, and grant SELECT on that to non-owner roles. Reserve direct SELECT on team_members for owners/managers.",
+        "effort": "M"
+      },
+      {
+        "title": "No XSS or SQL-injection vectors found",
+        "severity": "OPPORTUNITY",
+        "file": "src/pages/Scheduler.jsx",
+        "detail": "All user-supplied strings (customer, notes, service) are rendered via JSX text interpolation \u2014 no dangerouslySetInnerHTML, no innerHTML, no SQL string interpolation. Supabase client uses parameterised queries throughout. Search and prefill are kept client-side.",
+        "fix": "No action needed. Keep current pattern; add ESLint rule `react/no-danger` to prevent regressions.",
+        "effort": "S"
+      }
+    ]
+  },
+  {
+    "tab": "Schedule",
+    "dimension": "AI feature opportunities",
+    "findings": [
+      {
+        "title": "Natural-language schedule editor (\"Move Mrs Patel to Thursday and swap crew B with crew C on Tuesday\")",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "detail": "Trigger: a chat input pinned to the Schedule header (or AskCadi already mounted) accepting free-text commands like 'shift everything on Friday by 30 mins, swap Jake and Mel after 1pm, and slot the new Britannia office visit somewhere sensible Wednesday morning'. Claude (Sonnet) receives the current day/week jobs JSON, crew roster, and customer access constraints; outputs a structured JSON patch (array of {jobId, changes:{date,start_hour,crewId,staffIds}}) plus a human summary of conflicts ('Mrs Patel only allows Tues/Thurs \u2014 kept her on Thursday'). UI shows a diff preview with Apply/Undo. Wow factor: every competitor (Squeegee, Aworka, Jobber) forces drag-drop one job at a time; Cadi takes a sentence and rewrites the week. Data deps: jobs, customers (access windows, preferred days), staff, crews. Model: Sonnet (multi-constraint reasoning). Compounds with Customers tab (access prefs) and Staff tab (availability/holiday).",
+        "fix": "Add NLScheduleCommand component above day grid, post {prompt, scheduleSnapshot, constraints} to edge function ai-schedule-edit, return JSON patch, render ScheduleDiffModal with Apply button calling updateJob in batch."
+      },
+      {
+        "title": "Auto-fill empty slots from the unassigned/round backlog",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "detail": "Trigger: 'Fill day' button on Day view when a crew has >60 min of gap, or a banner 'Crew B has 2h spare \u2014 auto-fill?'. Claude (Sonnet) receives gap windows per crew, the rounds backlog (next-due recurring customers), postcodes for current jobs adjacent to the gap, and crew skill tags. Outputs a ranked list of suggested fills with reasoning ('Mr Davies is due tomorrow but lives 4 min from Crew B's 11:00 stop \u2014 pull him forward'). User clicks Apply All or cherry-picks. Wow factor: turns dead time into revenue automatically \u2014 Pinnacle/Deputy can't do this because they don't know customer geography or due dates. Data deps: jobs.start_hour/duration, rounds (next_due), customers.postcode, crews. Model: Sonnet. Compounds with Rounds + Customers + Route Planner.",
+        "fix": "ai-schedule-fill edge function returning [{jobCandidate, reason, confidence}], render as suggestion cards in the gap on day grid."
+      },
+      {
+        "title": "Conflict & risk detector with proactive nudges",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "detail": "Trigger: passive \u2014 runs on every job mutation; surfaces as a small amber chip on day/week view ('3 risks \u2014 review'). Claude (Haiku, cheap) ingests the day's schedule + staff holiday + customer notes ('do not arrive before 10am', 'dog in garden Tuesdays') + weather (exterior jobs) and emits a list {jobId, riskType, severity, suggestedFix}. Examples: 'Window clean at 14 Park Rd scheduled in 80% rain probability', 'Jake is on holiday Thursday but assigned to 3 jobs', 'Two jobs overlap on Crew C 11:00\u201311:40'. Wow factor: catches the \u00a3200 mistake before it happens \u2014 no competitor cross-checks weather + holidays + customer notes. Data deps: jobs, staff.holiday/absence, customers.notes, weather API, hr_settings. Model: Haiku. Compounds with Staff tab (holiday engine already built) and Customers.",
+        "fix": "ai-schedule-risks edge function on cron + on-write trigger; render ScheduleRiskPanel that opens drawer to fix each."
+      },
+      {
+        "title": "Smart recurrence inference from a single job",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "detail": "Trigger: when creating a new job in the modal, after entering customer + service, an inline AI suggestion: 'Looks like a 4-weekly clean \u2014 based on similar \u00a345 residential jobs in your book they usually recur every 28 days on the same weekday. Apply?'. Claude (Haiku) gets {newJob, last 50 jobs for similar service/price band, customer history if existing}, returns {recurrence: '4-weekly', dayOfWeek: 'Tue', confidence, reasoning}. Wow factor: removes the most common data-entry mistake (one-off vs recurring) \u2014 Squeegee makes you tick boxes manually. Data deps: jobs history, services, customers. Model: Haiku. Compounds with Services + Customers.",
+        "fix": "Add useEffect in job-create modal calling ai-recurrence-suggest after customer+service selected; show pill above recurrence dropdown."
+      },
+      {
+        "title": "Route-optimised day re-sequencer (one-tap)",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "detail": "Trigger: 'Optimise day' button on the Day view per crew, and a 'Optimise all crews' on the stat strip. Claude (Sonnet) gets the crew's jobs with postcodes, durations, customer access windows, and home_postcode start point. Outputs a re-ordered start_hour array plus expected mileage saved and time saved ('save 38 min and 14 miles \u2014 Mrs Patel still inside 10\u201312 window'). Wow factor: Jobber's route optimiser is bolt-on $20/mo and ignores access windows; Cadi does it inline, respects constraints, and explains the trade-offs in English. Data deps: jobs, customers (access windows), profiles.home_postcode, plus Google Maps distance matrix. Model: Sonnet (for explaining trade-offs); could use OR-tools deterministic + Claude for narration. Compounds with Route Planner tab.",
+        "fix": "ai-optimise-route edge function; render OptimisePreviewModal with before/after timeline; Apply calls batch updateJob."
+      },
+      {
+        "title": "Voice/text capture: 'Add Mrs Henderson 2pm Friday, regular conservatory, \u00a335'",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "detail": "Trigger: floating mic + text bar 'Quick add' on Day/Week views. Claude (Haiku) parses one-line natural input into {customer (match existing or create), service (match from services list), date, start_hour, duration, price, recurrence}. Shows confirm card ('Found Mrs Henderson at 22 Oak Lane \u2014 use her?'). Wow factor: at scale (Britannia 1500 staff, hundreds of admins) saving 30 seconds per job is huge; voice means it works while driving between jobs. Data deps: customers, services. Model: Haiku. Compounds with ServiceChat parser (already Haiku-ready) and CustomerImport.",
+        "fix": "QuickAddBar component \u2192 ai-parse-job edge fn \u2192 addJobAndSyncCustomer."
+      },
+      {
+        "title": "Weekly pre-brief generator for crews ('Tomorrow's run-sheet')",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "detail": "Trigger: 'Send brief' button on Day view (also auto-fires at 6pm via cron). For each crew, Claude (Haiku) generates a plain-English SMS/email/push: 'Hi Jake \u2014 7 jobs tomorrow, start 8:30 at Mrs Patel. Watch out: 11 Oak Lane wants side gate not front, Mrs Davies cancelled Friday so swap to Mr Singh. Total 6.5h, 22 miles.' Wow factor: BrightHR sends generic shift reminders; this synthesises customer notes + route + changes since last visit. Data deps: jobs, customers.notes, staff contacts, change log. Model: Haiku. Compounds with Staff tab (My Pay/My Schedule in StaffDashboard).",
+        "fix": "ai-crew-brief edge fn called from button + scheduled-tasks daily 18:00; deliver via existing notification rails."
+      },
+      {
+        "title": "Revenue gap analyser on Quarter view",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "detail": "Trigger: 'Why is week 7 dipping?' button on the 13-week revenue bar chart, plus passive insight chips beneath each bar. Claude (Sonnet) receives the 13 weeks of jobs/revenue/completion + historical baseline + bank holidays + staff absence + cancellation reasons. Outputs 3-bullet insight: 'Week 7 down \u00a3620 because: (1) 2 commercial jobs deferred to wk 8 by Britannia, (2) Crew C lost 1.5 days holiday, (3) 4 residential cancellations clustered on Tuesday \u2014 weather (storm Henk).' Wow factor: turns the chart from vanity metric into a coachable answer \u2014 no scheduler competitor does causal analysis. Data deps: jobs, cancellations, staff.absence, weather history. Model: Sonnet. Compounds with Payroll (labour cost) and Quarter reporting.",
+        "fix": "ai-quarter-insights edge fn \u2192 InsightCard under the bar chart on click."
+      },
+      {
+        "title": "Customer-side reschedule negotiator (auto-replies)",
+        "severity": "OPPORTUNITY",
+        "effort": "L",
+        "detail": "Trigger: a customer texts/emails 'Can we move next Tuesday?'. Inbox chip on Schedule says '3 reschedule requests'. Claude (Sonnet) reads the message, the customer's preferences, current crew availability for the next 14 days, and proposes 2\u20133 alternative slots that respect crew route logic and customer's historical day-of-week pattern. Drafts the reply for one-click send. Wow factor: this is the single biggest admin time-sink for cleaning firms and nobody automates it well. Data deps: inbox/email integration, jobs, customers, crews. Model: Sonnet. Compounds with Front Desk + Customers + Schedule.",
+        "fix": "ai-reschedule-negotiator edge fn + new RescheduleInbox panel + email/SMS webhook ingestion."
+      },
+      {
+        "title": "End-of-day completion summariser + invoice trigger",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "detail": "Trigger: when last job of the day flips to 'complete', a modal asks 'Wrap up Tuesday?'. Claude (Haiku) summarises the day: completed/missed/notes-added jobs, total revenue, mileage, hours per crew, customers needing invoice/follow-up, and drafts the entries for RoutePlanner mileage log and any 'follow-up needed' tasks. One click pushes invoices to billing queue and mileage to the log. Wow factor: collapses 20 minutes of admin into one confirm \u2014 competitors leave each step in a separate screen. Data deps: jobs, RoutePlanner mileage rows, invoicing queue. Model: Haiku. Compounds with RoutePlanner, Invoices, Customers.",
+        "fix": "Add EodWrapUpModal triggered on last-complete; ai-eod-summary edge fn; Apply calls batch inserts to mileage_log + invoices_queue."
+      }
+    ]
+  },
+  {
+    "tab": "Customers",
+    "dimension": "UX gaps and wow-moment opportunities",
+    "findings": [
+      {
+        "title": "Dead 'Call' and 'Add note' quick actions sit alongside working buttons",
+        "detail": "Customers.jsx:1761-1766 \u2014 In the Overview tab's 2x2 quick action grid, the 'Call' and 'Add note' buttons render identically to the working 'Send message' / 'Book job' buttons but have no onClick handler. A real cleaner standing in the van will tap Call expecting tel: to fire. Silence breaks trust on first contact.",
+        "fix": "Wire Call to `tel:${customer.phone}` (with disabled state + 'No phone on file' affordance matching the email pattern in MessageComposer at 913-921). Wire Add note to open an inline note appender that prepends timestamped lines to customer.notes \u2014 bonus: voice-to-text via the Web Speech API would be a genuine 'wow' for cleaners with wet/gloved hands.",
+        "severity": "HIGH",
+        "effort": "S",
+        "file": "src/pages/Customers.jsx:1761-1766"
+      },
+      {
+        "title": "'Customer portal' teaser appears in two places with no path forward",
+        "detail": "Customers.jsx:1518-1527 shows a 'Coming soon' chip on the profile header, and Customers.jsx:706-708 shows a 'Portal ready' dot on every large-density card. Both are dead. The 'Portal ready' label actively misleads \u2014 it implies a state the user can act on. On first use a cleaner will hover, click, and find nothing.",
+        "fix": "Either (a) hide entirely until the portal ships behind a feature flag, or (b) convert to a waitlist CTA ('Be first to try it') that captures intent so you have a launch list. Drop 'Portal ready' from the card \u2014 it's noise without action.",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Customers.jsx:706-708, 1518-1527"
+      },
+      {
+        "title": "Hardcoded staff PINs in source code \u2014 security illusion, not security",
+        "detail": "Customers.jsx:945-950 defines VAULT_STAFF with plaintext PINs '1234' / '5678' / '0000'. Every user of Cadi shares these PINs. The vault writes both data and the access log to localStorage (Customers.jsx:1014, 965-967), so it's per-device only \u2014 staff using the iPad won't see what the manager logged on the laptop. Britannia-scale (1500 staff) cannot use this at all. The visual promise (lock icon, 4-digit pad, auto-lock countdown, access log) sets a security expectation the implementation doesn't keep.",
+        "fix": "Move PINs to a Supabase `staff` table tied to owner_id; verify server-side via edge function; store vault contents encrypted in DB so they sync across devices and survive a wiped browser. Until then, label the vault honestly ('Quick-access codes, this device only') so a manager doesn't assume it's audited.",
+        "severity": "CRITICAL",
+        "effort": "L",
+        "file": "src/pages/Customers.jsx:945-1024"
+      },
+      {
+        "title": "Vault unlocks for ANY valid PIN \u2014 no identity, log is anonymous-by-design",
+        "detail": "Customers.jsx:1001-1024 \u2014 verifyPin matches the entered code against the staff array and logs whoever owns that PIN. There's no 'who is using this device' step. If Tom borrows Emma's phone and types his PIN, the log is correct; if anyone reads Emma's PIN off a sticker by the van keys, the log records Emma. The 30s auto-lock + countdown bar (1178-1188) is a beautiful micro-interaction wrapped around an essentially shared secret.",
+        "fix": "Pair PIN with a staff selector ('Who's looking?') before showing the keypad, OR move to per-staff magic-link auth so the PIN is just a re-auth prompt. Show the staff name on the unlock bar (currently just '\ud83d\udd13 Unlocked' at 1170-1174) so social-pressure deters PIN sharing.",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "src/pages/Customers.jsx:1001-1024, 1170-1196"
+      },
+      {
+        "title": "AI suggestions hide the most valuable insight \u2014 the \u00a3 on the table",
+        "detail": "Customers.jsx:1884-1915 renders suggestions as priority-tagged cards inside the customer detail. The cards show +\u00a3amount per suggestion (1902) but the LIST itself surfaces only '\ud83d\udca1 {title}' in tiny amber text (686, 625). A cleaner scanning 80 customers cannot see which 5 are worth \u00a31k+ in unbooked upsells. This is Cadi's most defensible feature and it's whispered.",
+        "fix": "On the list row (large + medium density), replace 'Portal ready' with the highest-value suggestion's \u00a3 figure as a chip: '\u00a3250 opportunity'. Add a dashboard-style banner above the list: 'You have \u00a3840 in suggested upsells across 12 customers \u2014 review \u2192' that filters to sortBy='urgent'. This is the daily-open hook.",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "src/pages/Customers.jsx:680-708, 1873-1916"
+      },
+      {
+        "title": "Empty 'Message history' is a missed loop \u2014 messages sent never come back",
+        "detail": "Customers.jsx:1942-1948 hardcodes a placeholder 'No messages logged yet. Send your first message above \u2014 it will appear here.' But MessageComposer at 911-921 only opens a `mailto:` link or copies to clipboard \u2014 nothing is persisted. The promise is broken on first send. Compare to Jobber/ServiceM8 where every comms touchpoint is timeline'd.",
+        "fix": "When 'Send email' or 'Copy text' fires (912-927), insert a row into a `customer_messages` table with type/subject/body/timestamp. Show them as a timeline. For real wow: detect Gmail/Outlook replies via SES/forwarding so the conversation threads automatically.",
+        "severity": "HIGH",
+        "effort": "L",
+        "file": "src/pages/Customers.jsx:911-934, 1942-1948"
+      },
+      {
+        "title": "Sort/filter UI is dense and uses three competing patterns",
+        "detail": "Customers.jsx:2463-2613 \u2014 within ~150 lines the header stacks: segment pill-tabs (2464-2484), status filter chips (2487-2501), search (2540-2568), horizontal job-type chip scroller (2571-2587), and two native <select> dropdowns for status+sort (2590-2611). Status appears TWICE (chips and select). On a phone this is a wall of controls before you see a single customer. The pretty design has buried the table.",
+        "fix": "Collapse into one Filter pill that opens a sheet (segment + status + type + sort in one place), with active filters shown as removable chips inline with the search bar. Surface only sort (with sensible default = 'Urgent first') and the search bar by default. Remove the duplicate status select.",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "src/pages/Customers.jsx:2463-2613"
+      },
+      {
+        "title": "Default sort is alphabetical \u2014 buries the money",
+        "detail": "Customers.jsx:2309 initialises `sortBy='name'`. The urgent-scored sort (2381-2389) exists and is the killer view \u2014 but you must discover it via a dropdown labelled 'Sort: Urgent first'. A cleaner opens the tab and sees Aaron Adams at the top instead of 'Margaret \u2014 \u00a3250 roof treatment due'.",
+        "fix": "Default to 'urgent' if any customer has urgent/high suggestions, else 'recent'. Save the user's last choice. This is one line of code that changes what Cadi feels like.",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Customers.jsx:2309, 2378-2389"
+      },
+      {
+        "title": "GoCardless card always rendered even with zero context for new users",
+        "detail": "Customers.jsx:1957-2038 \u2014 the Direct Debit card appears on EVERY customer detail regardless of whether the user has connected GoCardless at the account level. A free-tier owner who's never heard of GoCardless sees a 'Set up GoCardless \u2192' button, clicks, and the edge function (1395-1408) will fail with an opaque error. There's no explainer of what GoCardless IS, what it costs, or why a UK cleaner would want it (vs SumUp / Stripe / bank transfer).",
+        "fix": "Gate the card behind a 'GoCardless connected' account flag. For unconnected users show a one-time educational card: 'Get paid automatically \u2014 \u00a30.20 + 1% per Direct Debit, no chasing'. The wow moment is the FIRST payment auto-collecting \u2014 surface a notification when the first \u00a3 lands.",
+        "severity": "MED",
+        "effort": "M",
+        "file": "src/pages/Customers.jsx:1957-2038"
+      },
+      {
+        "title": "Star rating in header is a tap-trap \u2014 easy to set 1-star by accident",
+        "detail": "Customers.jsx:1483-1485 puts a 5-star clickable rating directly under the customer name in the header. There's no confirm, no undo toast, and onChange writes immediately to the DB (StarRating at 505-513 \u2192 onUpdateCustomer). A scrolling finger on mobile WILL hit a star. Worse, the rating is visible on every list row when set (693-697), so it looks like a customer rating of YOU.",
+        "fix": "Move to the Overview body section, label it 'Your private rating of this customer' (it currently has zero label \u2014 Customers.jsx:1484), and add an undo toast when changed. Or make it click-to-edit instead of one-tap.",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Customers.jsx:500-516, 1483-1485, 693-697"
+      },
+      {
+        "title": "Add Customer modal lacks the highest-leverage field: 'How did they find you?'",
+        "detail": "Customers.jsx:2260-2263 has a free-text 'Source' input ('Referral, leaflet\u2026'). Free text means you can never aggregate. A 5-second dropdown ('Referral / Google / Checkatrade / Facebook / Leaflet / Repeat / Walk-by / Other') would unlock a Marketing tab later that says 'Your last 30 customers came from: Checkatrade 12, Referral 9...'. Genuine cleaner gold.",
+        "fix": "Convert Source to a select + 'Add custom'. Then add a stat to the header strip (2520-2537): 'Top source this month: Referrals (9)'. That's the wow moment \u2014 Cadi tells them where their growth actually comes from.",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "file": "src/pages/Customers.jsx:2259-2263"
+      },
+      {
+        "title": "AddCustomer modal misses inline postcode \u2192 address lookup",
+        "detail": "Customers.jsx:2208-2230 \u2014 five separate address inputs (line1/line2/town/county/postcode). UK cleaners are used to Getaddress.io / Postcoder where typing a postcode autofills the rest. Compared to Squeegee / CleanerPlanner this feels old-school. First-time experience: typing 'Chestnut Cottage, Long Sutton Road, Long Sutton, Lincolnshire, PE12 9AB' five times in a day.",
+        "fix": "Add a postcode-first lookup at the top of the address section ('Enter postcode \u2192 pick address'). Use a free tier of getaddress.io or ideal-postcodes. This is THE delight moment for UK SMB onboarding \u2014 competitors don't all do it.",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "src/pages/Customers.jsx:2208-2230"
+      },
+      {
+        "title": "Empty state for a fresh account is bland \u2014 wastes the moment of arrival",
+        "detail": "Customers.jsx:2658-2679 \u2014 'Add your first customer' with a \ud83d\udc65 emoji, two buttons. A cleaner who's just signed up to Cadi after seeing the marketing site is at peak attention here. Compare to Linear's empty states which show a sample card. Cadi could offer 'Try with sample data (Margaret, Greenfield, David) \u2192' so the user sees suggestions / vault / messaging working in 5 seconds.",
+        "fix": "Add a third button: 'See how it works with sample customers'. Seed 5-10 demo customers tagged demo=true (the DEMO_CUSTOMERS array at lines 234-381 is still in the file as a comment \u2014 resurrect it). Add a one-click 'Clear sample data' when they're ready.",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "src/pages/Customers.jsx:2658-2679, 234-382"
+      },
+      {
+        "title": "Import wizard celebrates loudly but the user lands on a list they don't understand",
+        "detail": "CustomerImport.jsx:930-960 \u2014 the StepDone screen has confetti, count-up animation, 24 confetti pieces. This is the strongest 'wow' in the whole tab. But once dismissed (Customers.jsx:2766-2778) the user lands on a now-densely-populated list with no orientation. The work of teaching them the new view (segments / suggestions / urgency) is dropped at the highest-attention moment.",
+        "fix": "After import, auto-select sortBy='urgent' so the highest-opportunity customer is the first row. Add a one-time coachmark on the first suggestion card: 'Margaret has a \u00a3250 roof treatment due \u2014 tap to draft the message'. Convert confetti energy into the first money-making action.",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "src/components/CustomerImport.jsx:930-1000, src/pages/Customers.jsx:2762-2779"
+      },
+      {
+        "title": "Suggestions never disappear \u2014 no way to dismiss or snooze",
+        "detail": "Customers.jsx:52-193 generateSuggestions is pure-functional from customer state. If you've sent Margaret a deep-clean offer and she said no, the suggestion regenerates every render \u2014 guilt-inducing and noisy. The 'Send win-back' action (1906-1911) opens the composer but doesn't mark the suggestion as actioned anywhere. Within a month every customer card is screaming.",
+        "fix": "Add a `customer_suggestion_state` table or jsonb column with dismissed/snoozed/sent timestamps keyed on suggestion type. Filter at 189-192. Show 'Snoozed (3)' as a collapsible footer. Bonus: ask 'How did it go?' a week after sending \u2014 feeds a real outcome dataset.",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "src/pages/Customers.jsx:52-193, 1906-1911"
+      },
+      {
+        "title": "Accessibility: archive/PIN buttons reveal only on :hover, invisible on touch",
+        "detail": "Customers.jsx:573-585 / 639-651 / 713-725 \u2014 all three densities wrap the red X archive button in `opacity-0 group-hover:opacity-100`. On any touch device there is no hover state, so the button effectively doesn't exist until first tap reveals it (or doesn't, depending on the browser). The 'Coming soon' chip at 1518-1527 also has no role/label for screen readers.",
+        "fix": "Use focus-within + always-show on touch (`pointer:coarse` media query) or move archive into a row-level overflow menu. Add aria-label='Remove {name}' to the button. This affects every list interaction.",
+        "severity": "HIGH",
+        "effort": "S",
+        "file": "src/pages/Customers.jsx:573-585, 639-651, 713-725"
+      },
+      {
+        "title": "Accessibility: native modals trap nothing \u2014 Escape, focus loop, aria-modal all missing",
+        "detail": "MessageComposer (Customers.jsx:786-937), AddCustomerModal (2115-2295) and CustomerImport's ModalShell (404-432) are plain divs with no role='dialog', no aria-modal, no Escape-to-close handler, no focus trap, no initial focus. A keyboard user can tab out of the modal into the underlying page. Screen reader announces nothing on open.",
+        "fix": "Wrap with a single Modal primitive (you already need it for the duplication noted in the dead-ends report) that handles role='dialog', aria-modal='true', Escape, focus-trap, and restoration of focus to the trigger on close. Standard Radix Dialog or HeadlessUI Dialog drops this in.",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "src/pages/Customers.jsx:786-937, 2115-2295; src/components/CustomerImport.jsx:404-432"
+      },
+      {
+        "title": "Accessibility: emoji-only sub-tab label for the most sensitive section",
+        "detail": "Customers.jsx:1547 \u2014 the SecureVault sub-tab renders as just '\ud83d\udd12' with no text label or aria-label, while every other tab is a readable word ('overview', 'history' etc). A screen reader user will hear 'lock' or nothing depending on platform. The most security-sensitive part of the UI is the least labelled.",
+        "fix": "Always show 'Secure' next to the icon, or add aria-label='Secure vault'. Same applies to the \ud83d\udd12 emoji used for the 'at limit' state at 2458.",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Customers.jsx:1547, 2458"
+      },
+      {
+        "title": "Accessibility + colour-only state in many badges",
+        "detail": "StatusBadge (477-481) and PriorityBadge (485-497) communicate state via colour + a single character ('\u25cf' / '\u25cc' / '\u26a0'). Customer card uses a tiny coloured dot (568) as the sole status indicator in compact density. The amber 'urgent' pulse (559) is the only signal that a customer needs attention. Colour-blind users (~8% of male cleaners) lose meaning.",
+        "fix": "Always pair colour with text and shape. In compact view, replace the dot with the first letter of status ('A'/'L'/'R') in a coloured pill. Use border-style not just colour for urgent rows.",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Customers.jsx:471-497, 559, 568"
+      },
+      {
+        "title": "Wow opportunity: postcode clustering / 'Are you near them today?'",
+        "detail": "Customer list has postcode on every row (681, 617, 562) but never uses it to help the cleaner physically. A real cleaner's day is route-driven. None of the three competitors named (Pinnacle, Deputy, BrightHR) do customer-CRM AND route awareness in one screen. Cadi already has lifetime value + postcode + last_job_date.",
+        "fix": "Add a 'Near today's jobs' filter that takes the user's scheduled jobs (already in jobs table per dataModel) and shows lapsed/at-risk customers whose postcode prefix matches. One-tap message: 'I'm in SW4 tomorrow \u2014 want me to pop in for the windows?'. This is the single feature that would make Cadi viral on the UK cleaning Facebook groups.",
+        "severity": "OPPORTUNITY",
+        "effort": "L",
+        "file": "src/pages/Customers.jsx (new feature)"
+      },
+      {
+        "title": "Wow opportunity: vault unlock should auto-populate the cleaner's day",
+        "detail": "Today the vault is per-customer and locked. A cleaner with 8 jobs today has to drill in, unlock, read, drive, repeat. The auto-lock countdown (Customers.jsx:1170-1196) is delightful UI but wrong workflow.",
+        "fix": "Add a 'Today's access' panel on the cleaner's home screen: one PIN entry unlocks the day's stops in order with key/alarm/gate codes ready. Auto-lock between stops. This is the moment cleaners would screenshot and share \u2014 'my app literally hands me the keys for the day'.",
+        "severity": "OPPORTUNITY",
+        "effort": "L",
+        "file": "src/pages/Customers.jsx:940-1269 (new cross-feature)"
+      }
+    ]
+  },
+  {
+    "tab": "customers",
+    "dimension": "duplication-dead-ends-state-management",
+    "findings": [
+      {
+        "title": "Dead button: 'Call' has no onClick handler",
+        "severity": "HIGH",
+        "file": "src/pages/Customers.jsx:1761-1763",
+        "detail": "Confirmed. The Quick action 'Call' button in CustomerDetail renders with no onClick \u2014 clicks are silently swallowed. On mobile this should dial via tel:; on desktop it should at least copy the number or open a contact.",
+        "fix": "Replace with <a href={`tel:${customer.phone}`}> or onClick that triggers navigator.clipboard.writeText(customer.phone) and a toast. Hide the button entirely when !customer.phone.",
+        "effort": "S"
+      },
+      {
+        "title": "Dead button: 'Add note' has no onClick handler",
+        "severity": "HIGH",
+        "file": "src/pages/Customers.jsx:1764-1766",
+        "detail": "Confirmed. No handler \u2014 the user gets no feedback. Customers.notes is editable via the Edit modal, so the entry point exists but this shortcut just dies.",
+        "fix": "Wire onClick to open the AddCustomerModal in edit mode focused on the notes field, or add an inline note composer that calls onUpdateCustomer with appended text + timestamp.",
+        "effort": "S"
+      },
+      {
+        "title": "'Customer portal' invite is a non-interactive 'Coming soon' badge",
+        "severity": "MED",
+        "file": "src/pages/Customers.jsx:1518-1527",
+        "detail": "Confirmed \u2014 purely cosmetic div, not even a disabled button. Misleads users into thinking the feature is shipping. Adds visual noise on every detail view.",
+        "fix": "Either remove until the portal lands, or wire a real waitlist CTA (logs interest to a feature_requests table). Don't ship vapor UI in production.",
+        "effort": "S"
+      },
+      {
+        "title": "Archive confirm UI duplicated 3x across density modes",
+        "severity": "MED",
+        "file": "src/pages/Customers.jsx:573-585, 639-651, 713-725",
+        "detail": "Confirmed: the same {confirmArchive ? <yes/no row> : <x button>} block is copy-pasted across compact/medium/large with only sizing tweaks (w-7 vs w-8 vs w-6). Bug-fix surface multiplies by 3.",
+        "fix": "Extract <ArchiveAffordance size='sm'|'md'|'lg' onArchive={...} confirm={confirmArchive} setConfirm={setConfirmArchive} /> and reuse. Saves ~40 LOC and prevents drift.",
+        "effort": "S"
+      },
+      {
+        "title": "GlassCard background+grid texture duplicated inline in 3 modals",
+        "severity": "MED",
+        "file": "src/pages/Customers.jsx:410-427, 787-802, 2117-2131; src/components/CustomerImport.jsx:408-418",
+        "detail": "Confirmed. MessageComposer, AddCustomerModal, SecureVault locked card, and CustomerImport ModalShell all re-implement the gradient + grid texture overlay inline rather than reusing GlassCard. Any tweak to the design system has to be applied in 4 places.",
+        "fix": "Promote GlassCard (and a ModalShell wrapper that adds the fixed inset overlay + close button) to src/components/ui/. Replace inline implementations.",
+        "effort": "M"
+      },
+      {
+        "title": "Hardcoded staff PINs in VAULT_STAFF \u2014 fake security",
+        "severity": "CRITICAL",
+        "file": "src/pages/Customers.jsx:945-950",
+        "detail": "VAULT_STAFF is a hardcoded array with PINs '1234', '5678', '0000' shipped in the client bundle. Any user can View Source on the deployed app and read every PIN. The 'Secure Vault' protects nothing. The comment 'Manager override PIN \u2014 change in Settings' is misleading \u2014 there is no Settings wiring.",
+        "fix": "Move PIN verification server-side: hash PINs in the staff table, call a verify_vault_pin edge function that returns a short-lived unlock token. Store vault data in DB (RLS) not localStorage. The current localStorage approach also means access logs are easily wiped and never reach the manager.",
+        "effort": "L"
+      },
+      {
+        "title": "Vault data and access log stored in localStorage, not DB",
+        "severity": "HIGH",
+        "file": "src/pages/Customers.jsx:965-976, 1014, 1027",
+        "detail": "vaultDataKey/logKey writes to localStorage. Access logs the manager is told they can see are local to the device that did the viewing \u2014 manager on a different machine sees nothing. Data also lost on cache clear / browser switch.",
+        "fix": "Persist customer_vault and vault_access_log to Supabase with RLS scoped to ownerId. The edge function that verifies PIN should also append the audit row server-side so it can't be tampered with.",
+        "effort": "L"
+      },
+      {
+        "title": "god-component: Customers.jsx is 2782 lines with 6+ components defined",
+        "severity": "HIGH",
+        "file": "src/pages/Customers.jsx",
+        "detail": "Single file holds: JOB_TYPES, generateSuggestions, generateMessage, generateAIMessage, GlassCard, SL, Chip, Alert, StatusBadge, PriorityBadge, StarRating, CustomerRow (3 density variants), MessageComposer, SecureVault, CustomerDetail, AddCustomerModal, root CustomerTab. CustomerDetail alone is ~500 LOC with 5 sub-tabs (overview/history/suggestions/messages/secure) plus GoCardless logic. Reviewing or testing is impractical.",
+        "fix": "Split into src/pages/customers/ with: ui/{GlassCard,Chip,Alert,StatusBadge,PriorityBadge,StarRating}.jsx, CustomerRow.jsx (one component, density prop), CustomerDetail/{index.jsx,OverviewTab,HistoryTab,SuggestionsTab,MessagesTab,SecureVaultTab,GoCardlessPanel}.jsx, MessageComposer.jsx, AddCustomerModal.jsx, suggestions.js (rules engine), messageTemplates.js. Root file drops to <400 LOC.",
+        "effort": "L"
+      },
+      {
+        "title": "god-component: CustomerDetail mixes 5 unrelated concerns",
+        "severity": "HIGH",
+        "file": "src/pages/Customers.jsx:1307-2090",
+        "detail": "CustomerDetail owns: suggestions memo, rounds fetch, surveys fetch, jobs+invoices fetch, GoCardless mutation handlers (sync, mandate, collect, mandate-sync), edit modal, vault rendering, tab routing. ~15 useState + 4 useEffect in one component. Any tab change re-renders everything; GoCardless state survives even when the user is on the History tab.",
+        "fix": "Split per-tab components, each owning its own data fetching via custom hooks (useCustomerJobs, useCustomerSurveys, useGoCardless). Pass customer as prop. Move GC logic into a useGoCardless(customerId) hook.",
+        "effort": "L"
+      },
+      {
+        "title": "Effect chain: 3 separate useEffects refetch on every customer.id change without coordination",
+        "severity": "MED",
+        "file": "src/pages/Customers.jsx:1330-1349, 1345-1349, 1355-1382",
+        "detail": "Three independent useEffects keyed on customer.id each cancel/refetch separately. Switching customers fires: surveys query, rounds query, jobs+invoices Promise.all. No loading coordination \u2014 UI flashes empty states inconsistently. The surveys effect at 1330 also doesn't refetch when customer changes from non-commercial to commercial.",
+        "fix": "Consolidate with react-query/SWR (already a Supabase app \u2014 install @tanstack/react-query). Failing that, a single useCustomerDetailData(customerId, isCommercial) hook returning {jobs, invoices, surveys, rounds, loading}. Stops the cascade of conditional renders.",
+        "effort": "M"
+      },
+      {
+        "title": "Errors swallowed silently in 3 effects \u2014 user sees nothing",
+        "severity": "HIGH",
+        "file": "src/pages/Customers.jsx:1333-1334, 1347, 1377-1379, 2333",
+        "detail": "listSurveysForCustomer, listRoundsForCustomer, jobs/invoices Promise.all, and listOpenSurveys all .catch(() => {}). If the DB query fails (RLS misconfig, network), the user sees stale/empty UI with no indication anything is wrong. The jobs catch only sets allJobs=[], indistinguishable from 'no jobs'.",
+        "fix": "Capture error into state: catch(err => { if (!cancelled) setError(err); }). Render an inline error banner with retry. At minimum log to a telemetry sink. Same fix needed in surveysLoaded effect at 2333.",
+        "effort": "S"
+      },
+      {
+        "title": "surveysLoaded flag never resets \u2014 stale data after import or new survey",
+        "severity": "MED",
+        "file": "src/pages/Customers.jsx:2317-2334",
+        "detail": "useEffect only loads openSurveys once (gated by surveysLoaded). After the user creates a survey, archives a customer, or imports new commercial customers, the strip at 2616 shows stale data until full page reload. Also: switching segmentFilter away and back never refetches.",
+        "fix": "Drop the surveysLoaded flag, instead key the effect on segmentFilter and add a refresh function passed to children (mirrors refreshCustomers/refreshJobs). Or move openSurveys into DataContext.",
+        "effort": "S"
+      },
+      {
+        "title": "Prop drilling: onUpdateCustomer/onDeleteCustomer/ownerId threaded through 4 layers",
+        "severity": "LOW",
+        "file": "src/pages/Customers.jsx:2713-2721, 1307, 1454, 1484",
+        "detail": "DataContext already exists and owns customers. CustomerTab pulls addCustomer/updateCustomer/deleteCustomer from useData then re-passes them as props to CustomerDetail, which re-passes to AddCustomerModal and StarRating. Each component could useData() directly.",
+        "fix": "Have CustomerDetail / AddCustomerModal / SecureVault consume useData() and useAuth() directly rather than receiving callbacks. Removes ~6 props per component and eliminates the risk of forgetting to wire a callback.",
+        "effort": "S"
+      },
+      {
+        "title": "useEffect at 1345 + 1355 race when customer.id changes rapidly",
+        "severity": "LOW",
+        "file": "src/pages/Customers.jsx:1345-1382",
+        "detail": "Both effects use a local cancelled flag, which works, but they don't share an AbortController so the underlying Supabase requests still run to completion and consume bandwidth/quota.",
+        "fix": "Use AbortController and pass signal to supabase queries (or rely on react-query). For now acceptable, but worth flagging given users click-spamming the customer list.",
+        "effort": "S"
+      },
+      {
+        "title": "handleStartSurvey uses alert() for error feedback",
+        "severity": "MED",
+        "file": "src/pages/Customers.jsx:1342",
+        "detail": "Native alert() is jarring, blocks the thread, can't be styled, and is invisible in many mobile webviews. Inconsistent with the inline Alert component used elsewhere in this file.",
+        "fix": "Use the existing <Alert type='red'> inline near the survey CTA, or a toast. Mirror the gcError pattern (state + render banner).",
+        "effort": "S"
+      },
+      {
+        "title": "generateAIMessage assumes data.content[0].text shape without validation",
+        "severity": "MED",
+        "file": "src/pages/Customers.jsx:401-405",
+        "detail": "If the edge function returns a different shape (e.g. an error wrapped in data instead of error, or content=[]), this returns '' silently and the composer replaces the user's text with empty. The UI shows no failure \u2014 user thinks AI ran but produced blank.",
+        "fix": "Validate: if (!data?.content?.[0]?.text) throw new Error('AI returned empty response'). The MessageComposer catch at 773 already handles thrown errors via setAiError.",
+        "effort": "S"
+      },
+      {
+        "title": "MessageComposer catch swallows error details",
+        "severity": "LOW",
+        "file": "src/pages/Customers.jsx:773-775",
+        "detail": "catch { setAiError('Couldn't generate message \u2014 check your connection.') } discards the actual error. If it's a rate-limit or auth issue, the user gets misleading advice to check their connection.",
+        "fix": "catch (err) { setAiError(err.message || 'Couldn't generate message'); console.error('AI generate failed', err); }",
+        "effort": "S"
+      },
+      {
+        "title": "GoCardless mutations: no optimistic UI rollback, success state never auto-clears",
+        "severity": "LOW",
+        "file": "src/pages/Customers.jsx:1410-1445",
+        "detail": "gcSuccess banner is set on success but there's no useEffect to clear it on customer change \u2014 sticks around after navigating to a different customer. Also onUpdateCustomer is fire-and-forget; if it throws, UI shows success but DB never updated.",
+        "fix": "Reset gcSuccess/gcError when customer.id changes (useEffect dependency). Await onUpdateCustomer and only set success once it resolves.",
+        "effort": "S"
+      },
+      {
+        "title": "Static templates + AI generation are not unified",
+        "severity": "LOW",
+        "file": "src/pages/Customers.jsx:195-231, 384-406",
+        "detail": "Templates are inline strings while AI uses a prompt. Adding a new message type (e.g. 'thank you after job') means editing both the templates object and the MESSAGE_TYPES list. AI 'personalise' button doesn't even use the template body as a starting point.",
+        "fix": "Centralise message types in a config array: [{ id, label, subject(customer), body(customer), aiPrompt(customer) }]. Composer picks from one source. AI generator augments the static body rather than replacing.",
+        "effort": "M"
+      },
+      {
+        "title": "Search filter rebuilds the list 3+ times before sorting",
+        "severity": "LOW",
+        "file": "src/pages/Customers.jsx:2336-2392",
+        "detail": "filtered useMemo creates a new array via .filter four times, then [...list].sort once more. For thousands of customers (the stated design target) this is wasteful. Stats useMemo at 2395 then filters the unfiltered customers array three more times.",
+        "fix": "Single pass: reduce/for-loop once over customers, push to bucket arrays for stats (active/lapsed/at-risk) and filtered. Keep useMemo deps the same. Only meaningful at >2k records.",
+        "effort": "M"
+      },
+      {
+        "title": "py-2.5 rounded-xl border button class repeated ~30+ times",
+        "severity": "OPPORTUNITY",
+        "file": "src/pages/Customers.jsx",
+        "detail": "Confirmed via skim. The 'bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] ... rounded-xl' pattern is everywhere. Tailwind makes this tolerable but a single tweak to the design system is a 30+ site edit.",
+        "fix": "Extract <Button variant='ghost'|'primary'|'danger' size='sm'|'md'> into src/components/ui/Button.jsx. Bonus: enforces a11y (type='button' default, disabled handling, focus ring).",
+        "effort": "M"
+      }
+    ]
+  },
+  {
+    "dimension": "security_gdpr",
+    "tab": "Customers",
+    "findings": [
+      {
+        "title": "Hardcoded shared PINs gate sensitive access codes; PII stored in localStorage",
+        "severity": "CRITICAL",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx",
+        "detail": "SecureVault (lines 940-1030) uses a hardcoded VAULT_STAFF array with PINs '1234', '5678' and a manager override '0000'. Anyone with the page open can read the PINs from the bundle and unlock. Worse, key codes / alarm codes / gate codes / access notes are persisted to localStorage via key `cadi_vault_${ownerId}_${customer.id}` (line 955, 966, 1027) in plain text, so any XSS or shared device exposes property-access credentials for every customer. The access log is also localStorage-only (line 956, 1014), so the 'audit trail visible to manager' is trivially editable/erasable by the staff member and never reaches the server. This is a serious physical-security breach vector (alarm/key/gate codes leak) and a UK GDPR Article 32 failing (no appropriate technical measures).",
+        "fix": "Move vault data to a server table with RLS scoped to business_id, encrypt at rest with a per-business KMS key, gate access through Supabase Auth roles (not client PINs), and write the access log via an edge function so it cannot be tampered with from the client.",
+        "effort": "L"
+      },
+      {
+        "title": "No hard delete / right-to-erasure path \u2014 'Remove customer' is a soft archive",
+        "severity": "HIGH",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/lib/db/customersDb.js",
+        "detail": "Customers.jsx wires both onArchive and onDeleteCustomer to DataContext.deleteCustomer (Customers.jsx lines 2702, 2719) and the UI copy explicitly says 'Their data is kept' (line 1279). The DB layer only flips status='archived' (customersDb.js lines 72-81). UK GDPR Article 17 (right to erasure) requires actual deletion on data-subject request. There is also no export-my-data flow (Article 15/20 SAR) visible in the Customers tab or import wizard, and no consent capture when importing third-party data (e.g. CleanerPlanner CSVs contain names/addresses/phones \u2014 there is no lawful-basis prompt).",
+        "fix": "Add a true hard-delete RPC (cascade jobs/invoices/rounds/surveys for that customer or anonymise the FK rows), expose it from the detail panel as a separate 'Delete forever' action, add a 'Download my data' CSV/JSON export per-customer, and add an import consent checkbox confirming the operator has lawful basis for the source data.",
+        "effort": "L"
+      },
+      {
+        "title": "Customers table RLS uses owner_id only \u2014 no staff/role membership policy",
+        "severity": "HIGH",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/supabase/schema.sql:115-117",
+        "detail": "customers_owner_all is the only policy on public.customers and gates on owner_id = auth.uid(). Newer tables (customer_rounds, site_surveys, jobs in 007) use business_id = my_business_id() which supports membership/staff via the businesses helper. That mismatch means: (1) any staff invited via the membership system cannot read customers at all under the strict reading, OR (2) if the app uses the owner's session/service-role anywhere, role gating is invisible to RLS. There is no policy distinguishing owner vs cleaner roles for fields like notes, address, phone, lifetime_value \u2014 a junior cleaner with DB access sees everything. No role check appears in customersDb.js either.",
+        "fix": "Replace customers_owner_all with two policies: (a) customers_business_full for owner / full_access_member using is_full_access_member(business_id), (b) customers_business_limited for cleaner role restricting columns (use a view) \u2014 name, address, access notes only for jobs they are assigned to. Backfill business_id on customers and drop owner_id-based gating.",
+        "effort": "L"
+      },
+      {
+        "title": "Overlapping RLS policies on public.jobs widen access (owner_id OR business_id)",
+        "severity": "HIGH",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/supabase/migrations/003_missing_tables.sql:80",
+        "detail": "Migration 003 line 79-80 creates jobs_owner_all (owner_id = auth.uid()). Migration 007 line 148-150 creates jobs_business_all (business_id = my_business_id()) on the same table. Postgres OR-combines permissive policies, so a row is visible if EITHER predicate matches. If a row is ever inserted with owner_id set to a user who is no longer a member of the business (e.g. left/transferred), or business_id null but owner_id set, the row leaks via the owner policy. Same risk exists on invoices (003 line 33: invoices_owner_all) which is shown in Customers detail (Customers.jsx line 1367-1372) \u2014 invoices have no business_id policy at all and no role gating.",
+        "fix": "Drop jobs_owner_all once business_id is backfilled. Add invoices_business_all (business_id = my_business_id()) and drop invoices_owner_all. Add an integrity trigger that requires business_id NOT NULL on insert.",
+        "effort": "M"
+      },
+      {
+        "title": "Customer name leaked in URL query string",
+        "severity": "MED",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx:2420",
+        "detail": "handleBookJob navigates to `/scheduler?customer=${encodeURIComponent(customer.name)}`. URLs end up in browser history, server access logs, Sentry breadcrumbs, analytics referers, and any third-party script loaded on /scheduler. Customer names are personal data under UK GDPR. Same pattern is benign for `/survey/${survey.id}` (UUID) but the name should not be in querystring.",
+        "fix": "Pass customer id (UUID) instead \u2014 /scheduler?customerId=... \u2014 and resolve the name client-side from DataContext.",
+        "effort": "S"
+      },
+      {
+        "title": "Full customer PII rows written to console.error on import failure",
+        "severity": "MED",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/CustomerImport.jsx:1436",
+        "detail": "doImport logs `console.error('Import row failed:', err?.message, data)` where `data` is the full mapped customer object (name, email, phone, address, notes). Same pattern logs customer.name at lines 1335 and 1364. If Sentry/PostHog/console-piping is ever added (and it's standard in SaaS to forward console errors), this becomes a third-country data export. Even without, shared-screen support sessions or developer-tools screenshots leak the data.",
+        "fix": "Log only the row index and err.message; never log payload fields. If sampling is needed for debugging, hash the email and redact phone/address.",
+        "effort": "S"
+      },
+      {
+        "title": "Customer name, notes and service history sent to AI generation endpoint without consent capture",
+        "severity": "MED",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx:389-402",
+        "detail": "generateAIMessage interpolates customer.name, customer.notes, services, and dates into a prompt and posts to the `ai-generate` edge function (presumably Anthropic). Free-text notes commonly contain special-category data (health info, vulnerable adult notes, key holder details). UK GDPR requires (a) a DPA with the processor (Anthropic \u2014 check), (b) appropriate lawful basis for processing through a third country, (c) a privacy notice telling customers their data is sent to an AI vendor. There is no UI surface telling the operator or end customer.",
+        "fix": "Add a per-business AI feature toggle (off by default), redact common patterns (keysafe digits, health terms) before send, and update the privacy notice to disclose the processor.",
+        "effort": "M"
+      },
+      {
+        "title": "PII import wizard has no source-consent attestation or audit record",
+        "severity": "MED",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/CustomerImport.jsx",
+        "detail": "The wizard accepts CSV/XLSX of names, emails, phones, addresses, balances (lines 7-12, 19-41) and bulk upserts via upsertCustomer without recording the lawful basis, source, or the date of consent. UK GDPR Article 30 requires controllers to document processing activities \u2014 and where the import is from a competing vendor (Squeegee, CleanerPlanner, Aworka) the operator should attest they have rights to migrate. Imports also do not create a `data_provenance` record for SAR responses ('where did you get my data from').",
+        "fix": "Add a 1-click attestation step in the wizard storing { source, attested_by_user_id, attested_at, file_hash, row_count } into a new `customer_import_audits` table with business-scoped RLS. Surface in privacy/SAR flow.",
+        "effort": "M"
+      },
+      {
+        "title": "pending_customers stored on server for over-cap free users without retention policy",
+        "severity": "LOW",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/CustomerImport.jsx:1441",
+        "detail": "When a Lite user exceeds LITE_CAP=30 customers, the overflow PII is stored via storePendingCustomers (line 1441) into pending_customers table (migration 008 line 152). There is no documented retention/auto-purge schedule; a user who never upgrades leaves customer PII parked indefinitely. UK GDPR Article 5(1)(e) (storage limitation) requires a defined retention.",
+        "fix": "Add a Postgres scheduled job (or trigger) that deletes pending_customers rows older than e.g. 90 days, and disclose the retention in the upgrade-cap modal.",
+        "effort": "S"
+      },
+      {
+        "title": "No CSV-injection sanitisation on import",
+        "severity": "LOW",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/CustomerImport.jsx",
+        "detail": "Imported fields (name, notes, address) are accepted verbatim and stored. If an operator later exports customers to CSV (no export exists yet but is required for SAR/Article 20), values starting with =, +, -, @ become formula-injection payloads in Excel. No risk to current XSS surface (React escapes by default and no dangerouslySetInnerHTML was found), but worth pre-empting for the export feature.",
+        "fix": "Prefix any cell starting with =, +, -, @ with a single quote in CSV export; alternatively reject those characters at the start of imported text fields.",
+        "effort": "S"
+      }
+    ]
+  },
+  {
+    "tab": "Customers",
+    "dimension": "ai_features",
+    "findings": [
+      {
+        "title": "Natural-language customer search & filter ('show me lapsed residentials in BS7 worth >\u00a3500')",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx",
+        "detail": "Trigger: a sparkle button inside the existing search bar (line ~2380 area where search/filter state lives) toggles 'Ask Cadi' mode. User types free-form: 'commercial customers I haven't seen in 6 months who paid by DD' or 'top 10 by LTV in Bath area'. Claude (Haiku) returns a structured filter spec {status, segment, postcodePrefix, ltvMin, lastJobBefore, sort} which the existing client-side filter pipeline applies \u2014 no new query layer needed. Wow: ServiceM8/Jobber force users to memorise 6 dropdown combos; Cadi turns the whole filter bar into a one-line prompt and chains across segment+postcode+LTV+recency in ways the current UI can't even express. Compounds: same NL-filter shell can be reused on Jobs, Invoices, Staff. Data: customers only (already in memory).",
+        "fix": "Add NL\u2192filter-spec edge function call; map JSON spec onto existing useMemo filter chain around line 2390."
+      },
+      {
+        "title": "Churn / at-risk prediction with reasoning, not rules",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx",
+        "detail": "Trigger: replaces/augments the 'urgency' sort and the rules-based generateSuggestions() block at lines 47\u2013190. A nightly batch (or on-open) sends each customer a compact JSON profile {frequency, lastJobDays, avgInterval, cancellations, paymentLateness, ratingTrend, notesText} to Sonnet. Output: churnRisk 0-1 + 1-sentence reason ('Skipped last 2 fortnightly slots and notes mention moving house \u2014 likely churning'). Surfaces as a red Chip on customer card and feeds the 'urgent' sort. Wow: current engine is hardcoded thresholds; Sonnet reads the free-text notes field (which contains the actual signal \u2014 'mentioned baby due', 'house on the market') that no rules engine can parse. Massive moat vs Jobber/ServiceM8. Data: customers + jobs + invoices + notes. Cost: batch once/day at ~1k tokens each = pennies per 1000 customers.",
+        "fix": "New edge function ai-churn-score; cache score+reason on customers table (add columns churn_score, churn_reason, churn_scored_at)."
+      },
+      {
+        "title": "Smart customer dedupe & merge during import",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/CustomerImport.jsx",
+        "detail": "Trigger: step 3 (preview) of the import wizard. Before commit, Haiku is sent the incoming rows + a candidate list of existing customers matched by fuzzy name/postcode. Returns: {action: 'merge'|'create'|'skip', mergeTargetId, mergedFields, reason} per row. UI shows 'We think Sarah Jones, 12 Oak Rd = existing Sarah J. at 12 Oak Road \u2014 merge?'. Wow: importing from CleanerPlanner/Squeegee/Aworka is the #1 churn killer when switching providers \u2014 competitors dump duplicates and the user spends 3 days cleaning up. Cadi does it in 30 seconds. Data: existing customers list + import rows. Pair with column-mapper auto-detect (same call).",
+        "fix": "Inject AI dedup pass between mapping (step 3) and commit (step 4) in CustomerImport.jsx."
+      },
+      {
+        "title": "Auto-column-mapping for unknown CSV formats",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/CustomerImport.jsx",
+        "detail": "Trigger: when source = 'Other / unknown' or detected headers don't match a known template. Haiku gets the header row + 3 sample rows + the target schema (name, address, postcode, phone, email, frequency, price, last_job_date). Returns a mapping JSON + confidence. Wow: today the user has to manually map 12 columns from a weird CSV; with Haiku it's pre-filled with 95% accuracy. Even Squeegee doesn't do this. Data: just the parsed CSV in memory. Reusable on Jobs/Invoices import.",
+        "fix": "Add a 'Suggest mapping' button in step 3 that calls ai-generate with a tight JSON schema prompt."
+      },
+      {
+        "title": "Conversational customer creation ('Add Mrs Patel, 14 Elm St BS8, fortnightly \u00a325, key in vault')",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx",
+        "detail": "Trigger: '+ Add customer' button opens a chat input INSTEAD of the modal (mirrors the ServiceChat pattern already shipped per memory). One sentence in \u2192 fully populated customer + first scheduled job + vault entry. Sonnet parses to structured fields, asks 1 clarifying Q if needed, then offers 'Book first clean Tues?'. Wow: matches the conversational-onboarding voice of the product. Cuts add-customer from 90s of form-filling to one sentence. Voice input on mobile = unbeatable on the van. Data: customers, customer_rounds, jobs, secure_vault tables. Compounds with ServiceChat & SchedulerChat.",
+        "fix": "Reuse ServiceChat scaffold; new edge function ai-parse-customer."
+      },
+      {
+        "title": "Per-customer upsell briefing card (uses Services tab catalogue)",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx",
+        "detail": "Trigger: 'Suggestions' tab in customer detail panel (line ~1874). Today it shows rules-based generic suggestions. Replace with Sonnet call that joins this customer's job history + notes + segment with the user's actual Services catalogue (oven clean \u00a355, gutter clear \u00a385, etc.) and produces 2-3 ranked upsells with cash value and the exact opener line ('Hi Sarah, noticed it's been 8 months since your last oven clean \u2014 \u00a355, slot Thurs?'). Wow: rules engine doesn't know what services the business actually offers; this does. The message is one tap away (already wired to MessageComposer). Data: customers + jobs + services + notes. Compounds Customers \u00d7 Services \u00d7 Schedule.",
+        "fix": "New ai-customer-upsell edge function; surface in existing Suggestions tab."
+      },
+      {
+        "title": "Notes summariser & relationship memory",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx",
+        "detail": "Trigger: top of customer Overview tab \u2014 a 'Relationship summary' callout. Haiku takes the running notes field + last 10 job notes + complaint history and returns a 2-line digest: 'Mrs Patel \u2014 prefers Tues mornings, allergic to bleach, husband works nights (be quiet), tipped at Christmas. Last issue: missed bin day Apr 2026 \u2014 resolved.' Wow: the notes field today is a wall of text nobody re-reads; this turns institutional knowledge into a glance. Critical for Britannia's 1500-staff scale where the cleaner today is not the cleaner last month. Data: customers.notes + jobs.notes. Cache in customers.ai_summary, regenerate on note change.",
+        "fix": "Edge function ai-customer-summary; trigger on note save (debounced)."
+      },
+      {
+        "title": "Win-back campaign builder (multi-customer batch)",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx",
+        "detail": "Trigger: when 'lapsed' filter is active, a 'Win back all (N)' button appears above the list. Sonnet generates personalised win-back messages for each lapsed customer in one batch call, grouped by why they likely lapsed (price-sensitive, scheduling clash, complaint, ghosted). User reviews in a table, edits any, hits 'Send all' (SMS/email). Wow: every CRM has a 'send template' button; nobody segments the WHY of lapsing or personalises by job history. Cadi turns a dead list into \u00a3\u00a3\u00a3. Data: lapsed customers, last job, last invoice, any complaint notes. Compounds with Messaging tab.",
+        "fix": "Bulk edge function ai-winback-batch; new modal mounted from Customers list toolbar."
+      },
+      {
+        "title": "Predicted next-clean & 'price is wrong' detector",
+        "severity": "OPPORTUNITY",
+        "effort": "L",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx",
+        "detail": "Trigger: small AI badge on customer card if either (a) their stated frequency doesn't match actual job cadence ('says fortnightly, actually 23-day average \u2014 drift') or (b) their price is >15% below median for similar properties in the user's book. Sonnet (or even deterministic stats + Haiku for the message) flags it on the overview tab with a 'Review pricing' CTA. Wow: cleaners systematically undercharge long-term customers because raising prices feels awkward \u2014 Cadi gives them the data + the script. This is real money found in seconds. Data: customers + jobs + invoices (all in DB). Compounds with Pricing/Services and the upcoming AI Pricing engine.",
+        "fix": "Batch job nightly; store flags on customers; render badge in card render path."
+      },
+      {
+        "title": "Secure-vault entry parsing from photo / paste",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Customers.jsx",
+        "detail": "Trigger: in the Secure tab, 'Add from photo/text' alongside the manual form. User pastes 'Keysafe round side of garage, code 4471, dog is friendly but barks, bin day Weds black' or uploads a photo of a note. Sonnet (vision) extracts {accessType, code, location, hazards, binDay, petInfo} into structured vault rows. Wow: cleaners get access info via WhatsApp/scribbled notes \u2014 nobody types it in cleanly. This makes vault adoption frictionless. Data: secure_vault table; Sonnet with vision. Reusable on Onboarding ('paste the welcome pack').",
+        "fix": "Add upload/paste affordance to vault tab; route through ai-generate with vision."
+      }
+    ]
+  },
+  {
+    "tab": "Services",
+    "dimension": "UX",
+    "findings": [
+      {
+        "title": "Add button skips the catalogue picker entirely \u2014 forces every new user into a chat",
+        "severity": "HIGH",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:1152",
+        "detail": "`openAdd = () => setChatSession({ context: 'add_new' })` means the prominent top-right \"Add a service\" button (line 1254) AND the dashed \"Add a service\" card (line 1336) and the empty-state CTA (line 1321) all launch ServiceChat. The Catalogue picker (CatalogueModal) is only reachable via the chat's \"Use form instead\" link, which then routes to `setCatalogueOpen(true)` (line 1393). A cleaner who already knows they want \"Oven Clean, Carpet Clean, Inside Windows\" has to type each one in a chat conversation rather than tapping three chips. Real friction: chat is slower for known-quantity tasks. Offer a split button (\"Chat with Cadi\" vs \"Pick from list\") or open catalogue first with a \"Build it with Cadi\" secondary action.",
+        "fix": "Make first interaction a chooser: catalogue + chat side by side, or a split button on the header."
+      },
+      {
+        "title": "First-visit + onboarding seed + attention banner can stack and dominate the viewport",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:1264-1293",
+        "detail": "On a brand-new account with onboarding services seeded, the user could see: (1) the first-visit blue banner (line 1264), (2) the amber pricing-attention banner (line 1277), and (3) the auto-opened ServiceChat modal (line 1125) \u2014 all on first paint. The chat covers the page so they never see the banners until they close it, then get hit with both. Sequence them, or suppress the banners while chat is open.",
+        "fix": "Hide the two banners while chatSession is non-null; show a single contextual banner after chat closes."
+      },
+      {
+        "title": "\"Edit with Cadi\" is the only edit option in the card menu \u2014 no fast inline edit",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "src/pages/Services.jsx:981-983",
+        "detail": "The card kebab menu has only \"Edit with Cadi\", Duplicate, Delete (lines 981-989). To change a single price tier, a cleaner must enter a chat, navigate to edit_menu, pick Pricing, retype the entire matrix. There's no \"Edit fields\" (form) shortcut on the card. Add a second item \"Quick edit\" that opens the form modal directly, or surface price-cells as click-to-edit inline on the card.",
+        "fix": "Add 'Quick edit' option in kebab menu that opens ServiceModal in edit mode; or inline-editable price chip."
+      },
+      {
+        "title": "Pricing matrix has no per-frequency multiplier \u2014 a real cleaner's biggest unmet need",
+        "severity": "HIGH",
+        "effort": "L",
+        "file": "src/pages/Services.jsx:62-67, 736-760",
+        "detail": "DEFAULT_SIZE_TIERS captures one price per bedroom, and Frequency is just checkboxes for what's allowed. Real UK domestic cleaners almost always charge differently for weekly vs fortnightly vs one-off (deep clean premium). The schema supports `pricing_matrix` but there's no UI to say \"2 bed weekly \u00a345, 2 bed fortnightly \u00a355, 2 bed one-off \u00a375\". Front Desk will quote the same price regardless of frequency \u2014 losing margin on one-offs and undercutting on regulars. PricingSettings.jsx has a FreqModifiersEditor but it lives in a separate module and isn't joined to the per-service matrix.",
+        "fix": "Add a frequency multiplier toggle in the size matrix (e.g. one-off +50%, fortnightly +20%) inline in the Services form."
+      },
+      {
+        "title": "Locked \"Profit margin tracking \u2014 unlock with Pro\" on every card is misleading",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:1021-1024",
+        "detail": "Memory says pricing is single tier \u00a329/mo, no Pro tier. The lock-with-Pro tease is a dead end \u2014 clicking does nothing, and there's no Pro tier to upgrade to. This will confuse and annoy new users immediately on the most prominent card real estate.",
+        "fix": "Remove the locked teaser, or wire it to a 'coming soon' affordance / waitlist toggle. If it's marketing-only, link it to a feature roadmap page."
+      },
+      {
+        "title": "No undo on delete despite an irreversible warning",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "src/pages/Services.jsx:1199-1212, 898-919",
+        "detail": "DeleteModal warns \"This can't be undone\" (line 904) and `deleteService` is called immediately on confirm (line 1203). The toast just says \"X removed\" with no undo action. A common SaaS pattern is a 5-second \"Undo\" toast that soft-deletes. For a small business owner who may delete the wrong service while bulk-cleaning their menu, this is genuinely dangerous data loss.",
+        "fix": "Implement soft delete (deleted_at column) with a 5-10s Undo action button on the toast."
+      },
+      {
+        "title": "Toast component lacks ARIA live region and dismiss control",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:1061-1071",
+        "detail": "The Toast component (line 1067) has no `role=\"status\"` / `aria-live=\"polite\"` so screen readers won't announce \"X added to your menu\". It also auto-dismisses at 3.5s with no manual close or pause. Users on mobile with cognitive or reading delays will miss key confirmations like the import message at line 1127.",
+        "fix": "Add role=\"status\" aria-live=\"polite\", a close button, and pause-on-hover."
+      },
+      {
+        "title": "Radio-style pricing picker uses fake radios with sr-only inputs and no keyboard group semantics",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:651-663",
+        "detail": "PRICING_TYPES are rendered as <label> wrapping a custom div + sr-only radio (line 659). The whole row is clickable but tab focus lands on the hidden radio with no visible focus ring (since it's `sr-only`). A keyboard-only user can't see which option is focused. Also no `role=\"radiogroup\"` on the container.",
+        "fix": "Add visible focus styles tied to :focus-visible on the visual circle, wrap in role=radiogroup with aria-labelledby."
+      },
+      {
+        "title": "Checkbox replacement <button> for frequency options has no aria-pressed or role",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:744-758",
+        "detail": "Frequency \"checkboxes\" are <button> elements (line 747) with no `aria-pressed` or `role=\"checkbox\"` + `aria-checked`. Screen reader users hear \"button\" with no indication of state. Same pattern repeats for Active toggle (line 834), Site visit toggle (line 855), service area toggle (line 770).",
+        "fix": "Add role=switch + aria-checked for the toggles, role=checkbox + aria-checked for the multi-select."
+      },
+      {
+        "title": "NumberInput allows step=0.01 but provides no decimal-keyboard hints on mobile",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:259-275",
+        "detail": "`<input type=\"number\" step=\"0.01\">` on iOS Safari brings up the number pad without a decimal key. UK cleaners on phones will struggle to type \u00a345.50. Use `inputMode=\"decimal\"` and `pattern=\"[0-9]*\\.?[0-9]*\"`. Also no thousands separator on the display, and putting price 1234 vs 12.34 is easy to fat-finger.",
+        "fix": "Add inputMode=decimal, pattern, and consider a blur-time format pass."
+      },
+      {
+        "title": "Empty state examples are static text not actionable",
+        "severity": "OPPORTUNITY",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:1032-1056",
+        "detail": "EmptyState says \"Examples: regular domestic clean, deep clean, end of tenancy\" as plain text. These could be tap-to-add chips that pre-fill the chat or catalogue, removing a step. WOW moment opportunity: 'Tap one to add it instantly'.",
+        "fix": "Render examples as <button> chips that call openCustomAdd with the name prefilled."
+      },
+      {
+        "title": "Service catalogue lacks UK-specific pricing benchmarks \u2014 biggest wow moment missed",
+        "severity": "OPPORTUNITY",
+        "effort": "L",
+        "file": "src/pages/Services.jsx:23-42, 488-514",
+        "detail": "When a cleaner picks \"End of Tenancy\" from the catalogue, Cadi knows from training data + Britannia-scale Cadi customers that the UK median is ~\u00a318-22/hr or \u00a3180-280 for a 2-bed. The catalogue could show 'Typical UK price: \u00a3200 for 2 bed (based on cleaners in your postcode)' next to each chip. No competitor does this. The mapper notes seed creates services with `pricing_type: 'custom'` (line 1167) \u2014 every catalogue add is a blank price waiting for the user. Instead, suggest a default based on postcode/region/competitor scrape, which the user accepts or overrides.",
+        "fix": "Add 'Smart suggest pricing' button after catalogue add: shows regional median + lets user accept/customise."
+      },
+      {
+        "title": "Site-visit toggle copy is good \u2014 but no way to write a custom \"we'll be in touch\" message",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:845-864",
+        "detail": "The toggle says Front Desk \"will collect contact details and request a visit\" but there's no field for the message that gets sent or what details to collect. Power-users (commercial cleaners) need to control this \u2014 every commercial enquiry needs Sq ft / floors / visit dates etc.",
+        "fix": "When site_visit_required=true, show a textarea for custom intake questions and an SMS/email template snippet."
+      },
+      {
+        "title": "Description fields are plain text, but inclusions/exclusions deserve list UI",
+        "severity": "MED",
+        "effort": "M",
+        "file": "src/pages/Services.jsx:701-718",
+        "detail": "description_included and description_excluded are textareas. ServiceChat already parses these into arrays (parseIncEx, ServiceChat.jsx:164-184) then re-joins as `included.join(', ')` (line 820). A bulleted-list editor would (a) match Front Desk's quote format, (b) prevent the comma-joining mess when a description itself contains a comma (e.g. \"hoovering, including under furniture\"), and (c) feel more like a checklist a cleaner builds for staff.",
+        "fix": "Replace textarea with chip/tag editor for inclusions and exclusions \u2014 also makes ServiceChat parsing reversible."
+      },
+      {
+        "title": "Quick mode label is invisible / hidden affordance",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/components/ServiceChat.jsx:1220-1230",
+        "detail": "The Quick/Thorough toggle pill at the top of the chat (line 1223) is small grey text, easy to miss. The user might spend 7 turns answering thorough questions without realising they can flip to quick. Surface this as an explicit choice in the welcome bubble: 'Do you want the quick version (3 questions) or the thorough version (7)?'",
+        "fix": "Promote mode choice to a welcome-step button selection rather than a hidden header toggle."
+      },
+      {
+        "title": "No 'Save and reuse pricing' \u2014 wow moment for setting up multiple sizes once",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "src/pages/Services.jsx:279-333",
+        "detail": "A residential cleaner with Weekly Clean, Fortnightly Clean, Deep Clean all uses the same 1-bed/2-bed/3-bed size matrix with different prices. Right now they re-enter labels every time. Add a \"Use my standard size tiers\" template that auto-loads labels (saved once at business profile level), so they only fill in prices. Same for hourly rate inheritance across services.",
+        "fix": "Persist user's size tier labels and hourly rate as defaults in profile; offer 'Copy pricing from another service' button in form."
+      },
+      {
+        "title": "Front Desk preview button doesn't reveal the magic",
+        "severity": "OPPORTUNITY",
+        "effort": "M",
+        "file": "src/pages/Services.jsx:1247-1252",
+        "detail": "\"Try Front Desk\" is a great moment, but it's just a button labelled the same in every state. Could become a sticky 'Front Desk is ready to quote 5 services \ud83d\udc4b' chip after services are added \u2014 or animate the customer-facing widget in a corner peek when the user saves their first priced service. This is the moment Cadi proves ROI; right now the user has to remember to click it.",
+        "fix": "After first priced service saved, auto-show a 2-line peek of Front Desk simulating a customer quote with that service."
+      },
+      {
+        "title": "Modal trap: no focus management on open, no escape key handler",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:580-893",
+        "detail": "ServiceModal, CatalogueModal, DeleteModal, ServiceChat all open without focusing the close button or first interactive element, and there's no Escape key listener that calls onClose. Keyboard users have to tab through everything underneath to dismiss.",
+        "fix": "Add focus-trap (useEffect setting focus on mount) and document-level Escape handler in each modal."
+      },
+      {
+        "title": "No bulk operations \u2014 can't activate/deactivate/delete multiple services at once",
+        "severity": "MED",
+        "effort": "M",
+        "file": "src/pages/Services.jsx:1323-1342",
+        "detail": "A seasonal cleaner who turns off Gutter Clearance Oct-Mar has to toggle each gutter-related service one at a time. The grid has no checkbox/select-all/bulk-actions row. For a business with 30+ services (Britannia scale), this is hours of work.",
+        "fix": "Add multi-select mode with bulk active/inactive/delete/category-move."
+      },
+      {
+        "title": "Color contrast on placeholder + helper text likely fails WCAG AA",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:227, 238, 595-598",
+        "detail": "Helper text uses `text-[rgba(153,197,255,0.5)]` on dark navy bg (line 227) and placeholders use 0.3 alpha (line 238). At 30% opacity on #040810 background these will fail the 4.5:1 contrast ratio required for body text. The subtitle at line 598 (`rgba(153,197,255,0.5)`) is critical context (\"This is what Front Desk quotes from\") that low-vision users may miss.",
+        "fix": "Bump opacity to 0.7+ for helper/subtitle and 0.5 minimum for placeholders, verify with contrast checker."
+      },
+      {
+        "title": "Modal scroll-locked body \u2014 no overflow handling for very long forms on mobile",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:581-583",
+        "detail": "ServiceModal uses `max-h-[92vh]` with inner overflow-y-auto. On small phones in landscape, the footer buttons can get pushed below visible area when the body content + accordion expansions exceed available height. No sticky save bar.",
+        "fix": "Make footer sticky-bottom inside a flex column container or add iOS safe-area-inset padding."
+      },
+      {
+        "title": "localStorage flags will surprise users on shared devices",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:1121, 1145-1149",
+        "detail": "`cadi_services_chat_opened` and `cadi_services_visited` are written to localStorage, meaning if a cleaner logs out and a different user logs in on the same device, the second user won't see the first-visit banner or auto-chat. For a husband-wife cleaning business sharing an iPad, this is a real bug.",
+        "fix": "Scope these flags to user_id (use a Set keyed by user id) or store in profiles.setup_data."
+      }
+    ]
+  },
+  {
+    "tab": "Services",
+    "dimension": "code-quality",
+    "findings": [
+      {
+        "title": "AI photo analysis is permanently broken (dead-end stub)",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/components/PricingCalculator.jsx:273-278, 331-437",
+        "detail": "analysePhoto() unconditionally throws 'AI photo analysis coming soon'. The entire PhotoCapture component still exists (lines 331-437) with full result-rendering UI for an object shape that can never arrive. The 'Coming soon' placeholder is shown when no preview exists (line 371), but if a user does upload, handle() at line 340 will run, hit the throw, and surface 'Couldn't analyse the photo' (line 349) \u2014 making it look like a transient error rather than an unimplemented feature. NOTE: this is in PricingCalculator (used by /Calculator and TrainingStaff), not the Services tab itself.",
+        "fix": "Either (a) delete PhotoCapture entirely until the edge function is built and just keep the 'Coming soon' static card, or (b) disable the file input so handle() can never run. Do not leave a broken throw behind a try/catch that masks it as a generic failure."
+      },
+      {
+        "title": "PhotoCapture 'Apply AI prices' button has dead-end onClick",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/components/PricingCalculator.jsx:428",
+        "detail": "`onClick={() => onResult ? () => onResult(result) : undefined}` \u2014 when onResult IS defined this returns a function instead of calling it (the outer arrow returns the inner arrow without invoking). So even if AI analysis worked, clicking 'Apply AI prices' would do nothing. Confirmed verbatim.",
+        "fix": "Replace with `onClick={onResult ? () => onResult(result) : undefined}` and `disabled={!onResult}`. Or just call `onResult?.(result)` directly."
+      },
+      {
+        "title": "Service catalogue duplicated across 4 files with diverging keys",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "src/pages/Services.jsx:23-42, src/components/PricingConversation.jsx:8-31, src/components/PricingSandbox.jsx:6-29, src/components/PricingSettings.jsx:15-44",
+        "detail": "Confirmed. Services.jsx lists user-facing names ('Weekly Clean', 'Deep Clean', 'End of Tenancy'); the three Pricing* files list a separate keyed taxonomy ('regular_clean', 'deep_clean', 'end_of_tenancy_clean'). The two namespaces don't map to each other \u2014 a service added via Services.jsx as 'Weekly Clean' has no link to a pricing_rules row keyed 'regular_clean'. PricingSandbox.jsx and PricingConversation.jsx have IDENTICAL ALL_SERVICES arrays (lines 6-29 vs 8-31), pure copy-paste. This is the root data-model fracture in the Services area.",
+        "fix": "Decide on ONE source of truth. Either (a) drive everything off the services DB table (let users name their own services, key pricing_rules off service.id rather than a static key), or (b) extract `src/lib/catalogue.js` exporting one canonical list and have all four files import from it. PricingConversation.jsx and PricingSandbox.jsx should share the array immediately \u2014 that's a 5-minute change with zero risk."
+      },
+      {
+        "title": "Pricing-method/frequency vocabulary duplicated 3\u00d7 with mismatched keys",
+        "severity": "HIGH",
+        "effort": "M",
+        "file": "src/pages/Services.jsx:52-59,69-76, src/components/PricingSettings.jsx:46-58, src/components/ServiceChat.jsx:186-197",
+        "detail": "Services.jsx PRICING_TYPES uses values per_size/hourly/fixed/per_sqm/per_room/custom. PricingSettings.jsx METHOD_META uses per_bedroom/per_bedroom_bathroom/per_sqm/per_hour/flat_rate_by_size/flat_rate_fixed/site_visit_required \u2014 completely different keys. ServiceChat.jsx parsePricing produces yet a third set: per_sqm/hourly/per_size/fixed/custom (Services-style). So a rule created in PricingConversation (per_bedroom) is invisible to Services.jsx's pricing summary code. Frequency keys also diverge: Services/ServiceChat use frequency_one_off/weekly/fortnightly/monthly/quarterly/annually; PricingSettings uses one_off/weekly/fortnightly/four_weekly/monthly (no quarterly/annual; adds four_weekly).",
+        "fix": "Reconcile to a single enum in `src/lib/pricingMethods.js` and a single frequency enum in `src/lib/frequencies.js`. Add a one-shot migration to remap legacy values. Until then, document that Services.jsx (services table) and PricingSettings.jsx (pricing_rules table) are two separate pricing systems \u2014 this should be loud in CLAUDE.md."
+      },
+      {
+        "title": "PricingCalculator.jsx is a 4,415-line god component",
+        "severity": "HIGH",
+        "effort": "XL",
+        "file": "src/components/PricingCalculator.jsx",
+        "detail": "Single file contains: profit math (calcProfit, priceForMargin), formatting helpers, the broken AI photo stub, PhotoCapture, ProfitWaterfall, AddOnSection, StaffSelector, SavedQuotesList, QuoteSummary, ResidentialTab (state at lines 813-822 \u2014 10+ useStates), CommercialTab (lines 1274-1289 \u2014 15+ useStates), ExteriorTab (lines 2095-2109 \u2014 13+ useStates), shared Card/Chip/Alert/PillRow primitives, plus GInput/GSection/GColHeader/GCard duplicate primitives. Three tab components each manage their own saved-quotes list, customer search, target margin, hourly rate input \u2014 same patterns reimplemented three times.",
+        "fix": "Split per-tab into src/components/pricing-calculator/ResidentialTab.jsx, CommercialTab.jsx, ExteriorTab.jsx with a shared hooks/usePricingTab.js for the common state (hourlyRate, targetMargin, savedQuotes, customer). Move calcProfit/priceForMargin to src/lib/profitEngine.js. Move shared UI to src/components/ui/. Realistic 2-3 day refactor; do it before adding any more pricing surface."
+      },
+      {
+        "title": "Services.jsx is 1,406 lines \u2014 page + 6 sub-components in one file",
+        "severity": "MED",
+        "effort": "M",
+        "file": "src/pages/Services.jsx",
+        "detail": "Contains the Services page, ServiceModal (huge form ~600 lines), DeleteModal, ServiceCard, EmptyState, Toast, plus 4 module-level constant blocks. ServiceModal alone has FREQ_OPTIONS, accordion sections for inclusions/exclusions/pricing notes/frequency/service area/materials/private notes/active toggle/site visit \u2014 it's its own page-sized component. The chat flow (ServiceChat) is already extracted; the form should be too.",
+        "fix": "Extract src/pages/services/ServiceModal.jsx, ServiceCard.jsx, DeleteModal.jsx, EmptyState.jsx, Toast.jsx. Move the constants (CATEGORIES, PRICING_TYPES, DEFAULT_SIZE_TIERS, FREQ_OPTIONS, EMPTY_FORM, SERVICE_CATALOGUE) to src/lib/services/constants.js so they can be imported by both Services.jsx and ServiceChat.jsx (which currently can't see them)."
+      },
+      {
+        "title": "ServiceChat.jsx is 1,304 lines with 18+ steps inlined in renderInput",
+        "severity": "MED",
+        "effort": "M",
+        "file": "src/components/ServiceChat.jsx",
+        "detail": "renderInput() is a giant if/else ladder over step states. Every step's input UI, microcopy, and transition logic is jammed into one component. The parsing helpers (parsePricing/extractBedPrices/parseDuration/parseIncEx/parseFrequency/parseNoteCategory at lines 21-200) are pure functions that should be extracted and unit-tested \u2014 they're regex-driven parsers for currency/durations/frequencies and have zero tests today.",
+        "fix": "Extract src/lib/services/chatParsers.js with parsePricing/parseDuration/etc. and add unit tests (these are the highest-bug-risk code in the area \u2014 silent misparse = wrong price in user's catalogue). Optionally split renderInput into per-step components in src/components/service-chat/steps/."
+      },
+      {
+        "title": "Services.load() refetches on every user/navigate change with seeding side effect",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:1092-1150",
+        "detail": "useEffect(() => { load(); ... }, [load]) and load is `useCallback(..., [navigate, user])`. user from AuthContext is often a new object reference on every auth event/render in many setups \u2014 would cause repeat seed attempts. Worse, the seeding branch (lines 1106-1131) hits profiles, calls seedServicesFromOnboarding, re-lists, sets state, and EARLY-RETURNS before setLoading(false) cleanup is reached... actually the finally clause runs, but the early return skips setAttentionCount/setServices(all) \u2014 fine. The real bug: if load runs twice concurrently (user updates mid-flight), seedServicesFromOnboarding could be called twice and double-seed.",
+        "fix": "Add an `isMounted` ref or AbortController; gate the seed branch behind a `seededRef.current` so it can only run once per mount. Depend on `user?.id` only, not the whole user object."
+      },
+      {
+        "title": "Toast pattern swallows error details \u2014 all failures map to 'Something went wrong'",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:1172-1175, 1189-1197, 1199-1211, 1214-1221",
+        "detail": "handleCatalogueAdd, handleDuplicate, handleDeleteConfirm, handleToggleActive all catch errors and show the same generic toast. The catch in handleToggleActive doesn't even log (line 1218 `catch (e) {`). Users hitting an RLS violation, a network failure, a constraint error all see the same string. The catch at line 1207 also doesn't log. Only handleCatalogueAdd logs to console.",
+        "fix": "Centralize via `reportError(action, e)` that console.errors with action context AND surfaces a toast. Consider Sentry/PostHog capture \u2014 these are silent in production today."
+      },
+      {
+        "title": "PricingConversation save: silent failure on archive query and addons insert",
+        "severity": "HIGH",
+        "effort": "S",
+        "file": "src/components/PricingConversation.jsx:327-332, 364",
+        "detail": "The archive update at line 327-332 has no error check \u2014 if it fails (e.g. RLS), the code continues and inserts a new active row, producing TWO active rules for the same service. Same at line 364: `await supabase.from('pricing_addons').insert(addonRows)` \u2014 return value is destructured and ignored, errors are silently swallowed inside the same try block that succeeds with setSaved(true).",
+        "fix": "Destructure { error } from both calls and throw on failure: `const { error: archiveErr } = await supabase.from(...).update(...); if (archiveErr) throw archiveErr;` and same for addons. Or wrap pricing_rule + pricing_addons writes in a Postgres function for transactional integrity."
+      },
+      {
+        "title": "ServiceChat save catch logs nothing",
+        "severity": "MED",
+        "effort": "S",
+        "file": "src/components/ServiceChat.jsx:576-580, 230",
+        "detail": "`.catch(() => { setSaving(false); addMessage('cadi', 'My fault \u2014 something didn't save\u2026'); })` \u2014 the error object is discarded entirely. The earlier `} catch {` at line 230 (in a parser) also discards. In production this means a saveService failure (RLS, constraint, network) leaves zero trace for debugging.",
+        "fix": "`.catch(e => { console.error('[ServiceChat] save failed', e?.message, e?.code, e); ... })`. Same for line 230."
+      },
+      {
+        "title": "PricingCalculator QuoteSummary catch swallows save error",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/components/PricingCalculator.jsx:724",
+        "detail": "`} catch {` with no logging in the save handler \u2014 same pattern. User sees an error status but you get no diagnostics.",
+        "fix": "Capture and log `e?.message` plus an error code if Supabase, even if you don't show it to the user."
+      },
+      {
+        "title": "localStorage flags used for first-visit and first-setup chat state",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/pages/Services.jsx:1121-1128, 1143-1149",
+        "detail": "`cadi_services_chat_opened` and `cadi_services_visited` keys are global per browser, not per user. If two users share a browser (uncommon but happens for cleaning businesses where owner + admin share a laptop), the second user gets no onboarding chat. Also no cleanup on logout \u2014 values persist forever.",
+        "fix": "Either key by user.id (`cadi_services_chat_opened_${user.id}`) or store the flag on the profiles table (e.g. setup_data.services_chat_opened) so it follows the user."
+      },
+      {
+        "title": "Three frequency vocabularies cannot be reconciled at the DB level",
+        "severity": "HIGH",
+        "effort": "L",
+        "file": "src/pages/Services.jsx (services table) vs src/components/PricingSettings.jsx (pricing_rules.frequency_modifiers)",
+        "detail": "services table uses boolean columns frequency_one_off/weekly/fortnightly/monthly/quarterly/annually. pricing_rules.frequency_modifiers uses numeric keys one_off/weekly/fortnightly/four_weekly/monthly. So a service offered 'quarterly' has nowhere in pricing_rules to express a quarterly modifier; a pricing rule with a 'four_weekly' modifier maps to no service-level frequency flag. Front Desk quoting against this will silently fall through to base price or default modifiers.",
+        "fix": "Agree on canonical set (recommend: one_off, weekly, fortnightly, four_weekly, monthly, quarterly, annually). Migrate services table to a single jsonb `frequencies` column or add the missing booleans, and add the missing modifier slots to pricing_rules. Audit the quote engine for silent-fallback paths."
+      },
+      {
+        "title": "AI chat history grows unbounded on every send",
+        "severity": "LOW",
+        "effort": "S",
+        "file": "src/components/PricingConversation.jsx:287-304",
+        "detail": "sendMessage builds `nextHistory = [...messages, newUserMsg]` and POSTs the entire transcript every turn. After 20-30 turns this is significant token spend per message on Haiku and slow on mobile. No truncation, no summarisation.",
+        "fix": "Cap at last N messages (e.g. 12) when building apiMessages; or summarise older turns into a single system note after every 10 messages."
+      }
+    ]
+  },
+  {
+    "tab": "services",
+    "dimension": "security_compliance",
+    "findings": [
+      {
+        "title": "my_business_id() locks staff out and provides no role separation",
+        "severity": "HIGH",
+        "file": "supabase/migrations/007_cadi_foundations.sql:75-78, :402-404; 008_phase1_services_onboarding.sql:66-68",
+        "detail": "my_business_id() resolves business via `businesses.owner_user_id = auth.uid()` only. Consequences: (a) staff/cleaners signed into the org return NULL and cannot read services at all (Front Desk/staff dashboards break for them); (b) there is NO role check distinguishing owner vs staff \u2014 any user whose auth.uid matches owner_user_id has full CRUD on services, pricing_rules, pricing_addons including read/write of `private_notes` (which the UI explicitly labels as owner-only at Services.jsx:822). Britannia (1500 PAYE staff) cannot enforce least privilege with this model.",
+        "fix": "Replace my_business_id() with a membership table (business_members(user_id, business_id, role)) and add per-policy role checks. Restrict UPDATE/DELETE and SELECT of `private_notes` to role in ('owner','manager'). Split RLS into per-action policies (SELECT vs INSERT/UPDATE/DELETE).",
+        "effort": "L"
+      },
+      {
+        "title": "`private_notes` exposed via the same RLS policy as quotable fields",
+        "severity": "HIGH",
+        "file": "supabase/migrations/008_phase1_services_onboarding.sql:67-68; src/pages/Services.jsx:815-823",
+        "detail": "UI tells the user 'Only you can see this' for private_notes (cost data, supplier costs, job memories). But the table has a single `for all using (business_id = my_business_id())` policy \u2014 any user the DB treats as the owner sees this column. There is no column-level grant, no view, and no role gate. If staff accounts are ever added to the same business in future (which the Britannia roadmap requires), this becomes a confidentiality breach versus the in-UI promise.",
+        "fix": "Move private_notes to a separate table services_private(business_id, service_id, notes) with a stricter policy, or build a `services_public` view that excludes the column for non-owner roles. Update the UI copy to match real behaviour until then.",
+        "effort": "M"
+      },
+      {
+        "title": "Free-text service fields (name, descriptions, pricing_notes, private_notes) sent to Anthropic as a third party without consent flow",
+        "severity": "HIGH",
+        "file": "src/components/ServiceChat.jsx:212-233 (parse-service-nlp); src/components/PricingConversation.jsx:266-310 (ai-generate); supabase/functions/parse-service-nlp/index.ts; supabase/functions/ai-generate/index.ts",
+        "detail": "User-typed content from the Services tab is forwarded to Anthropic (a US/EU sub-processor) through the parse-service-nlp and ai-generate edge functions. There is no consent banner, no sub-processor list shown to the user, and no opt-out. Under UK GDPR Art 13/14 + Art 28 the controller must (a) disclose Anthropic as a processor, (b) have a DPA in place, and (c) flag this in the privacy policy. private_notes may include staff/supplier names which is processed-data about identified individuals.",
+        "fix": "Add Anthropic to the public sub-processor list, add a one-time disclosure modal the first time chat is used, document the DPA, and strip private_notes from any payload that goes to the model (it is never needed for NLP parsing).",
+        "effort": "M"
+      },
+      {
+        "title": "Error and PII logging via console.error in production bundle",
+        "severity": "MED",
+        "file": "src/pages/Services.jsx:1137, 1173; src/components/PricingCalculator.jsx:4325, 4339; supabase/functions/parse-service-nlp/index.ts:155, 161, 176",
+        "detail": "console.error calls run in production and surface in browser devtools / any front-end log shipper (Sentry/etc) that hooks console. The edge function logs Anthropic responses on parse failure (line 176 `console.error('Failed to parse Haiku response:', text)`) which can include the user's free-text input verbatim \u2014 this gets persisted in Supabase function logs (a separate retention surface). Under GDPR this is incidental processing that needs to be documented or scrubbed.",
+        "fix": "Route client errors through a single logger that redacts message bodies; in parse-service-nlp, log only the response status and a hash of the input, not the raw text.",
+        "effort": "S"
+      },
+      {
+        "title": "No DELETE / data-export hook for services data on account closure",
+        "severity": "MED",
+        "file": "supabase/migrations/008_phase1_services_onboarding.sql:9-62",
+        "detail": "services has `on delete cascade` from businesses, which covers account-deletion, but there is no user-facing export endpoint for the services menu + pricing data (UK GDPR Art 15 right of access, Art 20 portability). Pricing/service catalogue arguably qualifies as the controller's business data rather than personal data, but private_notes can include identifiable references (staff names, supplier contacts) so an export route is needed.",
+        "fix": "Add a 'Download my data' action that exports services + pricing_rules + pricing_addons as JSON/CSV, and document the deletion path in the privacy policy.",
+        "effort": "M"
+      },
+      {
+        "title": "Client trusts numeric inputs as parseFloat without bounds",
+        "severity": "LOW",
+        "file": "src/pages/Services.jsx:113-116, 118-153",
+        "detail": "numericField uses parseFloat with no max/precision/sign clamp. Negative prices, NaN/Infinity slip through to the DB as numeric. Not a security issue per se (RLS still scopes the row) but the DB has no CHECK constraints either \u2014 a typo creates negative quotes Front Desk will then offer to customers.",
+        "fix": "Add CHECK (price >= 0) on price columns in a migration; clamp client-side too.",
+        "effort": "S"
+      },
+      {
+        "title": "localStorage flags used for first-visit gating \u2014 trivially bypassable but not a security boundary",
+        "severity": "LOW",
+        "file": "src/pages/Services.jsx:1121-1128, 1145-1149",
+        "detail": "`cadi_services_chat_opened` and `cadi_services_visited` are stored in localStorage. Not exploitable, but worth noting the chat auto-trigger on first setup will re-fire if the user clears storage \u2014 not a privacy issue but flagged for completeness.",
+        "fix": "Move first-visit state to `onboarding_progress` or a profile column if it ever guards anything sensitive.",
+        "effort": "S"
+      },
+      {
+        "title": "No XSS via dangerouslySetInnerHTML \u2014 confirmed clean",
+        "severity": "OPPORTUNITY",
+        "file": "src/pages/Services.jsx; src/components/ServiceChat.jsx; src/components/Pricing*.jsx",
+        "detail": "Grep confirms zero dangerouslySetInnerHTML usage across the audited files. All user input rendered via React's text interpolation, which auto-escapes. No SQL string interpolation observed; all DB access goes via Supabase parameterised client methods. No PII in URLs (no IDs, no query strings carry customer/owner data on the Services tab).",
+        "fix": "No change required \u2014 keep the rule by adding an ESLint rule react/no-danger to lock it in.",
+        "effort": "S"
+      }
+    ]
+  },
+  {
+    "tab": "Services",
+    "dimension": "ai_opportunities",
+    "findings": [
+      {
+        "title": "Market-rate pricing intelligence with local benchmarks",
+        "detail": "(a) Trigger: 'Check my prices' button on each service card AND a banner on Services tab when prices haven't been reviewed in 90+ days. Also surfaced inside ServiceChat when user proposes a price ('Is \u00a318/hr right for my area?'). (b) Claude (Sonnet): given service type, postcode/region from business profile, frequency, duration, materials, and the user's customer base avg-job-value from invoices table \u2014 returns a recommended range with reasoning ('In LS postcodes, EOT cleans average \u00a3180-\u00a3240 for a 3-bed; you're at \u00a3150 which is 22% below median. Three options: raise to \u00a3195, add a deep-clean upsell tier, or keep as a market-entry loss leader'). Pulls from web search for competitor rates if user opts in. (c) Wow: competitors (Squeegee, Aworka, CleanGuru) ship static rate cards. Cadi gives a reasoned, postcode-aware recommendation that factors in the user's own job history. Plus it explains the 'why' \u2014 pricing psychology and competitor positioning. (d) Tables: services, business_profile (postcode), invoices (historical job values), customers (count/density by area). Optional: WebSearch tool for live competitor scraping. (e) M. (f) Sonnet \u2014 needs reasoning over multiple data sources and nuanced output.",
+        "severity": "OPPORTUNITY",
+        "effort": "M"
+      },
+      {
+        "title": "Profitability X-ray per service",
+        "detail": "(a) Trigger: 'Profit check' tab inside each service edit modal, plus a Services dashboard widget 'Your most/least profitable services'. (b) Claude (Sonnet): inputs are service definition (price, duration, materials cost, equipment notes), staff_payroll data (avg hourly cost incl. NI/pension), historical jobs from schedule for this service, supply_costs estimate. Output: gross margin %, break-even calculation, and prose like 'Your weekly domestic clean is technically \u00a325/hr revenue but after Sarah's \u00a314.50 fully-loaded cost, travel time between jobs (avg 18min from postcode pattern), and \u00a32.30 supplies \u2014 your real margin is \u00a34.20/hr or 17%. Two of your services lose money once you factor travel.' Suggests price hikes, route batching, or service retirement. (c) Wow: nobody in cleaning SaaS does this. Field-service tools show revenue, not true unit economics. This is the killer 'oh shit' moment for owners. (d) Tables: services, staff (wage_rate, employment_type), schedule/jobs, invoices, payroll_runs, business_profile. Heavy cross-tab compounding \u2014 uses Staff + Schedule + Customers. (e) L. (f) Sonnet \u2014 multi-step reasoning, financial calculations, narrative output.",
+        "severity": "OPPORTUNITY",
+        "effort": "L"
+      },
+      {
+        "title": "AI service-menu gap detector from customer requests",
+        "detail": "(a) Trigger: passive banner 'You've turned away \u00a3X of work this quarter \u2014 see why' on Services tab. Click to see Claude's analysis. (b) Claude (Haiku for ingestion, Sonnet for synthesis): scans front_desk_messages, lost_leads table, calculator_quotes that didn't convert, and customer notes for service requests that don't match any active service ('carpet clean', 'oven', 'Airbnb turnaround', 'gutter clearance'). Outputs ranked list: 'You've had 14 requests for one-off deep cleans in the last 60 days and 9 for oven cleaning \u2014 neither is in your menu. Estimated missed revenue: \u00a32,800. Want me to draft these services?' One-click adds them via ServiceChat. (c) Wow: turns Front Desk's passive lead capture into a strategic menu coach. Competitors require manual review of lost leads. (d) Tables: front_desk_messages, leads, calculator_quotes, customers, services. Compounds Front Desk + Calculator + Services. (e) M. (f) Haiku for the keyword extraction pass, Sonnet for synthesis and pricing suggestions.",
+        "severity": "OPPORTUNITY",
+        "effort": "M"
+      },
+      {
+        "title": "Frequency optimizer \u2014 push customers up the ladder",
+        "detail": "(a) Trigger: 'Upsell opportunities' card on Services tab and per-service 'Who could move to weekly?' button. (b) Claude (Sonnet): given a service like 'Fortnightly domestic' \u2014 scans customers on that service, their job history (cancellations, last-minute add-ons, complaint notes), and similar customers on weekly. Output: prioritized customer list with a tailored upsell message draft per customer ('Mrs Patel \u2014 fortnightly for 14 months, twice added oven clean last-minute, premium postcode. Suggested script: \"We've noticed you've added extras the last two visits \u2014 would a weekly visit at \u00a3X save you hassle?\"'). One-tap sends via SMS/email integration. (c) Wow: cleaning businesses leave huge ARPU on the table because owners don't have time to think customer-by-customer. Claude does it for them with personalized scripts. (d) Tables: customers, services, schedule, invoices, communications. Compounds Customers + Services + Schedule. (e) M. (f) Sonnet \u2014 needs nuanced customer analysis and persuasive copy.",
+        "severity": "OPPORTUNITY",
+        "effort": "M"
+      },
+      {
+        "title": "Dynamic description rewriter for conversion",
+        "detail": "(a) Trigger: 'Polish for Front Desk' button on each service description field, plus auto-suggest on save if description is <20 words or generic. Also surfaced as 'A/B test this service' on Services list \u2014 split-tests two descriptions on Front Desk and reports which converts. (b) Claude (Haiku for drafts, Sonnet for A/B analysis): inputs are raw description, service type, included/excluded items, target customer (from business_profile.brand_voice), and conversion data from Front Desk. Outputs 3 polished variants optimized for trust, urgency, or value framing \u2014 with reasoning per variant. (c) Wow: turns Services tab into a marketing tool. Competitors treat descriptions as plain text. (d) Tables: services, business_profile, front_desk_quotes (for conversion tracking). (e) S for rewriter, M for A/B layer. (f) Haiku for generation, Sonnet for the conversion-analysis layer.",
+        "severity": "OPPORTUNITY",
+        "effort": "S"
+      },
+      {
+        "title": "Conversational bulk pricing review ('Cadi, raise all my prices 8%')",
+        "detail": "(a) Trigger: extension of ServiceChat \u2014 natural language commands like 'put my exterior services up 5%', 'add a \u00a315 weekend surcharge to all one-offs', 'create a winter discount on gutter clearance until March', 'match my prices to inflation since last review'. Also a 'Yearly price review' wizard launched from Services dashboard. (b) Claude (Sonnet): parses intent, identifies affected services, computes new prices, drafts a customer-comms email explaining the increase (UK-tone, references CPI if requested), and surfaces a preview/confirm step before writing. Stores price history for rollback. (c) Wow: cleaning owners dread price hikes \u2014 Claude handles the math, the comms, and the courage. Competitors require row-by-row editing. (d) Tables: services, price_history (new), customers (for comms list), business_profile. Add a service_price_history table. (e) M. (f) Sonnet \u2014 needs intent parsing + drafting + transactional safety.",
+        "severity": "OPPORTUNITY",
+        "effort": "M"
+      },
+      {
+        "title": "Auto-build full service menu from a competitor URL or photo",
+        "detail": "(a) Trigger: in ServiceChat first-setup AND a 'Import from competitor' button on empty Services tab. User pastes a competitor's website URL, a PDF price list, or even a photo of their old printed menu. (b) Claude (Sonnet + vision for photos, WebFetch for URLs): scrapes/OCRs the service list, normalizes into Cadi's schema (category, pricing_method, frequency, included/excluded), shows a diff/review screen ('Found 9 services. I've marked 3 as commercial \u2014 confirm?'), and bulk-creates with one click. For competitor scrape, suggests differentiators ('They charge per room, you could undercut with per_size hourly'). (c) Wow: removes the single biggest onboarding blocker for switchers from Squeegee/Aworka. Demo-day moment. (d) Tables: services, service_catalogue (templates), business_profile. Tools: WebFetch, Read (for PDFs/images). (e) M. (f) Sonnet with vision.",
+        "severity": "OPPORTUNITY",
+        "effort": "M"
+      },
+      {
+        "title": "Smart service bundling and package builder",
+        "detail": "(a) Trigger: 'Suggest bundles' on Services tab once user has 5+ services. Also appears in Calculator when customer adds two related services. (b) Claude (Sonnet): given full service menu + historical co-occurrence in invoices ('weekly clean + oven appears in 31% of quotes'), suggests named bundles ('Move-In Ready: deep clean + oven + carpet \u2014 \u00a3X with 12% saving'). Drafts marketing copy, sets bundle pricing logic, and creates the bundle as a service. (c) Wow: AOV uplift without owner thinking. Competitors have no concept of bundles built from data. (d) Tables: services, invoices (line items), calculator_quotes. Requires invoice_items granularity. (e) M. (f) Sonnet.",
+        "severity": "OPPORTUNITY",
+        "effort": "M"
+      },
+      {
+        "title": "Service health monitor \u2014 drift, gaps, and stale items",
+        "detail": "(a) Trigger: persistent 'Services health' badge on tab (green/amber/red). Click for Claude-generated audit. (b) Claude (Haiku for checks, Sonnet for narrative): runs nightly job checking \u2014 services with no jobs in 90 days, services with high cancellation rate, services missing pricing, services with descriptions shorter than menu siblings, services with margin below threshold, services priced identically (suggests differentiation). Returns a prioritized owner punch-list with one-tap fixes. (c) Wow: the Services tab gradually rots in every cleaning business. Nobody else nags about it with intelligence. (d) Tables: services, schedule, invoices, payroll. Cron job + edge function. (e) S for checks, M for the narrative layer. (f) Haiku for checks, Sonnet for the weekly digest.",
+        "severity": "OPPORTUNITY",
+        "effort": "S"
+      },
+      {
+        "title": "Quote-to-service feedback loop ('this quote wasn't in your menu')",
+        "detail": "(a) Trigger: automatic \u2014 every time PricingCalculator or Front Desk generates a quote using 'custom' pricing or manual overrides, Claude logs it and surfaces a Services-tab banner: 'You've manually quoted 7 jobs this month that don't match a service. Want me to formalize them?' (b) Claude (Sonnet): clusters the manual quotes ('5 of these are end-of-tenancy variations, 2 are post-construction'), proposes new services with median price + suggested description from the quote notes. One-click adds them to the menu. (c) Wow: the menu evolves with the business automatically. Owners typically realize 6 months later they've been quoting the same custom job 40 times. (d) Tables: calculator_quotes, front_desk_quotes, services. Cross-tab: Calculator + Front Desk + Services. (e) M. (f) Sonnet for clustering + naming.",
+        "severity": "OPPORTUNITY",
+        "effort": "M"
+      }
+    ]
+  }
+]

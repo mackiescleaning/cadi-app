@@ -1,0 +1,335 @@
+[
+  {
+    "tab": "Schedule (Scheduler tab)",
+    "summary": "The Schedule tab is a comprehensive glassmorphism-redesigned job scheduler for the Cadi cleaning business SaaS. It provides 5 interactive views (Day, Week, Month, Quarter, Rounds) with live job management, crew-based filtering, and drag-to-reorder functionality. The Day view is the hero interface showing per-crew swim lanes on a 20-minute time grid with colour-coded job types (residential green, commercial blue, exterior orange).",
+    "features": [
+      "5 scheduler views (Day/Week/Month/Quarter/Rounds)",
+      "Per-crew swim lanes with 20-minute granularity",
+      "Drag-to-reorder jobs with real-time start_hour persistence",
+      "Colour-coded job types (residential/commercial/exterior/site_visit)",
+      "Status tracking (scheduled/in-progress/complete/unassigned)",
+      "Stat strip showing total jobs, revenue, completion counts",
+      "Type + crew filters with dynamic pill UI",
+      "Job creation modal with service picker, recurrence scheduling, staff assignment",
+      "Job drawer with status updater, notes editor, delete confirmation",
+      "Mobile day-strip quick navigation",
+      "Week view with overlapping job layout engine",
+      "Month view calendar grid with job dots and revenue per day",
+      "Quarter view with 13-week revenue bar chart and completion tracking",
+      "Rounds view for imported recurring customer rounds with schedule info",
+      "Search by customer name or postcode",
+      "Route button to Google Maps for incomplete jobs in Day view",
+      "Live Supabase sync with realtime updates",
+      "Demo mode for unauthenticated users"
+    ],
+    "dataModel": [
+      "jobs (id, owner_id, customer_id, customer, date, start_hour, duration_hrs, type, service, price, status, assignee, assignees, notes, postcode, address_line1, address_line2, town, county, recurrence, source)",
+      "customer_rounds (id, business_id, customer_id, round_name, schedule, price_per_visit, due_date, account_status, notes)",
+      "team_members (id, first_name, last_name, work_pattern, is_active)",
+      "customers (id, name, postcode, address_line1, address_line2)",
+      "saved_routes (for route planner integration)",
+      "mileage_logs (for route planner integration)"
+    ],
+    "connections": [
+      "DataContext (useData hook) provides live jobs, customers, CRUD handlers (addJobAndSyncCustomer, updateJob, deleteJob)",
+      "AuthContext (useAuth hook) for user authentication and profile data (service types, home postcode)",
+      "AskCadi component for AI assistant integration",
+      "RoutePlanner tab receives jobs and handles mileage logging",
+      "CustomerImport component can navigate to Scheduler",
+      "App.jsx mounts at /scheduler route and lazy-loads SchedulerPreview demo at /scheduler-preview"
+    ],
+    "deadEnds": [
+      {
+        "what": "Rounds view 'Schedule' button",
+        "where": "Scheduler.jsx line 2139-2142 (onScheduleRound) \u2014 pre-fills new job modal with round.roundName but no multi-job batch creation or auto-assign logic"
+      },
+      {
+        "what": "Week view 'job.day' field assumption",
+        "where": "Scheduler.jsx line 948 (WeekView) \u2014 jobsByDay[j.day] assumes day 0-6 but never validates j.day exists"
+      },
+      {
+        "what": "Month/Quarter views are read-only",
+        "where": "Scheduler.jsx lines 1143-1382 \u2014 no edit/delete buttons, only view and navigate to Day view"
+      },
+      {
+        "what": "Crew filter 'crewFilter === \"__unassigned__\"' logic",
+        "where": "Scheduler.jsx line 752 \u2014 unused, crewFilter shows derived crew IDs only, not '__unassigned__' button"
+      },
+      {
+        "what": "Search feature (line 2222) only active in view header",
+        "where": "Scheduler.jsx line 2352-2357 \u2014 hidden on mobile (hidden md:block), no mobile search UI"
+      },
+      {
+        "what": "Add stop modal in RoutePlanner (line 1042) has no cancel/close handler outside the modal",
+        "where": "RoutePlanner.jsx \u2014 relies on onClose callback but no external dismiss mechanism"
+      }
+    ],
+    "duplicates": [
+      {
+        "what": "Job colour theming (TYPE constants)",
+        "files": [
+          "Scheduler.jsx lines 33-66",
+          "SchedulerPreview.jsx lines 12-37",
+          "RoutePlanner.jsx lines 185-194"
+        ],
+        "comment": "Identical colour schemes repeated; could extract to shared constant file"
+      },
+      {
+        "what": "Status labels and styles (STATUS_STYLES, STATUS_LABELS)",
+        "files": [
+          "Scheduler.jsx lines 68-80",
+          "StatusChip/StatusBadge components"
+        ],
+        "comment": "Hardcoded in Scheduler; could move to a shared enum"
+      },
+      {
+        "what": "Modal template (GCard + top border gradient)",
+        "files": [
+          "AddStopModal (RoutePlanner.jsx line 340)",
+          "SaveRouteModal (RoutePlanner.jsx line 420)",
+          "NewJobModal (Scheduler.jsx ~1635)"
+        ],
+        "comment": "Same glassmorphism structure and header layout repeated"
+      },
+      {
+        "what": "Time formatting functions",
+        "files": [
+          "Scheduler.jsx (fmtTime, fmtTime12, hourToTime)",
+          "RoutePlanner.jsx (no 12h formatter)"
+        ],
+        "comment": "fmtTime duplicated; 12h variant only in Scheduler"
+      },
+      {
+        "what": "Job filtering logic (type + crew)",
+        "files": [
+          "Scheduler.jsx DayView line 748-756",
+          "Scheduler.jsx WeekView line 954-962"
+        ],
+        "comment": "Identical filter logic in two view components"
+      }
+    ],
+    "fileSizes": [
+      {
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Scheduler.jsx",
+        "lines": 2449
+      },
+      {
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/SchedulerPreview.jsx",
+        "lines": 462
+      },
+      {
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/RoutePlanner.jsx",
+        "lines": 1046
+      }
+    ]
+  },
+  {
+    "tab": "Customers",
+    "summary": "CRM dashboard for managing cleaning business customers with profile view, AI-powered upsell suggestions, secure vault for access codes, direct debit integration, and bulk import wizard. Built to scale from 10 to 10,000+ records using client-side filtering; free tier capped at 30 customers, Pro unlimited.",
+    "features": [
+      "Customer list with density-aware rendering (large/medium/compact by customer count)",
+      "Search by name, postcode, email, notes (instant client-side)",
+      "Filter by status (active/lapsed/at-risk/archived), segment (commercial/residential/exterior), job type (12 types)",
+      "Sort by name, lifetime value, last job date, or urgency (AI-scored)",
+      "AI suggestion engine: upsells, cross-sells, win-back reminders, lapsed customer recovery (rules-based, no API calls for speed)",
+      "Customer detail panel: overview, job history, invoices, suggestions, message templates, secure vault",
+      "Add/edit customer modal with frequency, status, segment, notes, star rating",
+      "Message composer with template library (win-back, reminder, upsell offers, AI personalization via Claude API)",
+      "Secure vault (PIN-protected access codes storage with staff access logging, auto-lock 30s)",
+      "GoCardless Direct Debit integration: sync customer, create mandate link, collect payments",
+      "Commercial customer surveys (link to /survey route)",
+      "Customer import wizard: CSV/Excel from QuickBooks, CleanerPlanner, Squeegee, Aworka, Jobber, ServiceM8, Google Sheets (4-step: source \u2192 upload \u2192 column map \u2192 preview \u2192 done)",
+      "Bulk import job scheduling from CleanerPlanner/Squeegee: auto-detects format, maps rounds, schedules across 4-month window",
+      "Plan enforcement: free tier limits to 30 customers, upgrade modal on cap",
+      "Archived customer view (soft delete)",
+      "Portal invite CTA (stub: 'Coming soon')",
+      "Archive/remove button with confirmation"
+    ],
+    "dataModel": [
+      "customers (Supabase): id, owner_id, name, email, phone, address_line1/2, town, county, postcode, frequency, status (active/lapsed/at-risk/archived), tags, notes, source, rating, service_types, last_job_date, next_job_date, lifetime_value, due_date, job_reference, customer_reference, schedule, customer_balance, price_per_visit, round_name, account_status, segment (residential/commercial/exterior/unsegmented), segment_source",
+      "customer_rounds (Supabase): id, business_id, customer_id, job_reference, round_name, schedule, price_per_visit, due_date, account_status, notes",
+      "jobs (Supabase): id, owner_id, customer_id, customer, address (line1/2, town, county, postcode), date, start_hour, duration_hrs, type (residential/exterior/commercial), service, price, status, assignee, assignees, assignee_ids, recurrence, notes, source, created_at",
+      "invoices (Supabase): id, customer_id, invoice_num, date, status (draft/sent/paid/overdue), lines (array), paid_at, payment_method",
+      "surveys (Supabase): id, customer_id, status (capturing/structured/quoted/archived), created_at, customers (join)"
+    ],
+    "connections": [
+      "DataContext (useData hook): reads/writes customers, triggers addCustomer/updateCustomer/deleteCustomer, refreshCustomers/refreshJobs",
+      "AuthContext (useAuth hook): retrieves user.id for owner_id",
+      "usePlan hook: isPro, customerLimit flags for free/pro tier enforcement",
+      "Supabase client: direct queries for jobs, invoices, surveys (customer detail); edge function for AI message generation (ai-generate), GoCardless API (gocardless-api)",
+      "customersDb.js: listCustomers, upsertCustomer, archiveCustomer",
+      "customerRoundsDb.js: listRoundsForCustomer, bulkInsertRounds, deleteRoundsForCustomer, updateRound",
+      "jobsDb.js: bulkCreateJobs (for import)",
+      "surveyDb.js: createSurvey, listSurveysForCustomer, listOpenSurveys",
+      "Router: navigates to /scheduler (book job), /survey/{id} (commercial surveys)",
+      "CustomerImport component (sibling): imports customers from CSV/Excel, returns via onImported/onViewScheduler callbacks"
+    ],
+    "deadEnds": [
+      {
+        "what": "Customer portal invite button: 'Coming soon' \u2014 no onclick, no link",
+        "where": "src/pages/Customers.jsx:1519-1526"
+      },
+      {
+        "what": "Quick action: 'Call' button with no onClick handler",
+        "where": "src/pages/Customers.jsx:1761-1763"
+      },
+      {
+        "what": "Quick action: 'Add note' button with no onClick handler",
+        "where": "src/pages/Customers.jsx:1764-1766"
+      }
+    ],
+    "duplicates": [
+      {
+        "what": "Archive confirmation logic repeated 3 times (full card, medium card, compact card density)",
+        "files": [
+          "src/pages/Customers.jsx:573-585 (compact CustomerRow)",
+          "src/pages/Customers.jsx:639-651 (medium CustomerRow)",
+          "src/pages/Customers.jsx:713-725 (large CustomerRow)"
+        ]
+      },
+      {
+        "what": "GlassCard background + grid texture pattern copy-pasted across modals",
+        "files": [
+          "src/pages/Customers.jsx:410-427 (component def)",
+          "src/pages/Customers.jsx:787-802 (MessageComposer modal)",
+          "src/pages/Customers.jsx:2117-2131 (AddCustomerModal)",
+          "src/components/CustomerImport.jsx:408-418 (ModalShell)"
+        ]
+      },
+      {
+        "what": "PIN pad keypad logic (Secure Vault: unlock numpad, verify PIN against VAULT_STAFF array) \u2014 hardcoded staff PINs",
+        "files": [
+          "src/pages/Customers.jsx:945-1024 (SecureVault PIN entry and verification)"
+        ]
+      },
+      {
+        "what": "Button styling for py-2.5 + rounded-xl + border + transition appears 30+ times (not componentized)",
+        "files": [
+          "src/pages/Customers.jsx (throughout CustomerDetail, CustomerRow, modals)"
+        ]
+      },
+      {
+        "what": "Message template generation: static templates + AI generation via generateMessage() and generateAIMessage()",
+        "files": [
+          "src/pages/Customers.jsx:195-231 (static templates)",
+          "src/pages/Customers.jsx:385-406 (AI via Claude API)"
+        ]
+      }
+    ],
+    "fileSizes": [
+      {
+        "file": "src/pages/Customers.jsx",
+        "lines": 2782
+      },
+      {
+        "file": "src/components/CustomerImport.jsx",
+        "lines": 1574
+      }
+    ]
+  },
+  {
+    "tab": "Services",
+    "summary": "Services tab is the core service menu editor in the Cadi cleaning SaaS, allowing business owners to define, price, and manage their service offerings across residential, exterior, and commercial categories. It integrates with Front Desk for quoting, uses a Supabase backend for persistence, and provides both a conversational AI builder (ServiceChat) and traditional form interface for service configuration.",
+    "features": [
+      "Service CRUD (create, read, update, delete, duplicate)",
+      "Multi-category organization (Residential, Exterior, Commercial)",
+      "Dynamic pricing configuration with six pricing methods (per_size, hourly, fixed, per_sqm, per_room, custom)",
+      "Service catalogue quick-add from predefined templates",
+      "Inline active/inactive toggle with toast notifications",
+      "Conditional pricing warnings (yellow alert when pricing missing)",
+      "Frequency options (one-off, weekly, fortnightly, monthly, quarterly, annually)",
+      "Conversational AI service builder (Cadi) with quick/thorough modes",
+      "Service duplication feature",
+      "First-visit banner explaining service menu importance",
+      "Attention banner tracking services needing pricing",
+      "Front Desk preview mode",
+      "Service area override (default vs custom postcodes)",
+      "Materials & equipment notes field",
+      "Private notes field",
+      "Site visit required toggle",
+      "Description included/excluded fields",
+      "Pricing notes for Front Desk contextualization"
+    ],
+    "dataModel": [
+      "services (Supabase table) \u2014 primary table with fields: id, category, name, description_included, description_excluded, pricing_type, pricing_matrix, price_hourly_rate, price_hourly_minimum_hours, price_fixed_basic, price_fixed_standard, price_fixed_premium, price_per_sqm, price_per_sqm_minimum, price_per_room, price_per_bathroom, pricing_notes, duration_value, duration_unit, frequency_one_off, frequency_weekly, frequency_fortnightly, frequency_monthly, frequency_quarterly, frequency_annually, service_area_uses_default, service_area_custom, materials_equipment_notes, private_notes, is_active, site_visit_required, display_order, created_at",
+      "profiles (Supabase, referenced for seeding) \u2014 setup_data.services and setup_data.custom_service during first setup"
+    ],
+    "connections": [
+      "Front Desk preview (FrontDeskPreview component) \u2014 shows how this service menu will appear to customers",
+      "ServiceChat (conversational builder) \u2014 alternative interface to form-based service creation; can edit existing services or build new ones",
+      "Settings page (Settings.jsx imports PricingSettings) \u2014 separate pricing rule configuration system for pricing_rules and pricing_addons tables (not directly Services, but related)",
+      "Onboarding flow (seedServicesFromOnboarding via setup_data) \u2014 auto-imports services selected during signup if user has no services yet",
+      "Calculator tab (PricingCalculator) \u2014 consumes services for quick-quote UI on residential/commercial/exterior pricing"
+    ],
+    "deadEnds": [
+      {
+        "what": "AI photo analysis (analysePhoto function)",
+        "where": "PricingCalculator.jsx:276\u2013278 throws Error('AI photo analysis coming soon'); UI shows 'Coming soon' button at line 371"
+      },
+      {
+        "what": "PhotoCapture component onClick handler",
+        "where": "PricingCalculator.jsx:428 \u2014 button onClick={() => onResult ? () => onResult(result) : undefined} has dead-end branch when onResult is undefined"
+      }
+    ],
+    "duplicates": [
+      {
+        "what": "Service listing/filtering logic",
+        "files": [
+          "Services.jsx:1229\u20131232 (byCategory, countByCategory, visible filters)",
+          "PricingSettings.jsx:56\u201358 (RESIDENTIAL_METHODS, EXTERIOR_METHODS, COMMERCIAL_METHODS constants define allowed pricing methods by category twice)"
+        ]
+      },
+      {
+        "what": "Frequency option rendering",
+        "files": [
+          "Services.jsx:738\u2013760 (frequency checkboxes in form modal)",
+          "ServiceChat.jsx:1070\u20131080 (frequency input in chat)",
+          "PricingSettings.jsx:348\u2013383 (FreqModifiersEditor with same frequency keys)"
+        ]
+      },
+      {
+        "what": "Service catalogue (predefined services list)",
+        "files": [
+          "Services.jsx:23\u201342 (SERVICE_CATALOGUE object with residential/exterior/commercial)",
+          "PricingConversation.jsx:8\u201331 (ALL_SERVICES array, nearly identical structure)",
+          "PricingSandbox.jsx:6\u201329 (ALL_SERVICES array, duplicated again)",
+          "PricingSettings.jsx:15\u201344 (SERVICES object, third duplication of same service list)"
+        ]
+      },
+      {
+        "what": "Pricing type definitions",
+        "files": [
+          "Services.jsx:52\u201359 (PRICING_TYPES array)",
+          "PricingConversation.jsx:47\u201354 (system prompt hardcodes pricing methods)",
+          "PricingSettings.jsx:46\u201354 (METHOD_META constants with labels/descriptions)"
+        ]
+      }
+    ],
+    "fileSizes": [
+      {
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/pages/Services.jsx",
+        "lines": 1406
+      },
+      {
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/ServiceChat.jsx",
+        "lines": 1304
+      },
+      {
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/PricingCalculator.jsx",
+        "lines": 4415
+      },
+      {
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/PricingConversation.jsx",
+        "lines": 532
+      },
+      {
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/PricingSandbox.jsx",
+        "lines": 442
+      },
+      {
+        "file": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints/src/components/PricingSettings.jsx",
+        "lines": 934
+      }
+    ]
+  }
+]

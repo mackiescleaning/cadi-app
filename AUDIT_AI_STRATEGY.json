@@ -1,0 +1,253 @@
+{
+  "killerFeatures": [
+    {
+      "name": "Profitability X-ray with route + customer context",
+      "why": "Only Cadi has all three: services (price, duration, materials), customers (postcode density, access windows, frequency drift) and schedule (actual durations, travel time between jobs, crew wage cost). Competitors show revenue; Cadi shows true \u00a3/hr per service per customer per crew - and explains why the Tuesday domestic round loses money once travel and Sarah's NI-loaded wage are factored. Squeegee/Aworka/Jobber literally cannot compute this because they don't own payroll + route + service catalogue in one schema.",
+      "spec": "Nightly Sonnet batch joins services x jobs x payroll x customers x route mileage. Outputs per-service margin %, per-customer margin %, and a per-crew/day P&L. Surfaces as: (a) red/amber chip on Service cards, (b) 'real margin \u00a34.20/hr' line on customer detail, (c) Quarter-view causal insight ('Week 7 dip = 2 unprofitable Britannia jobs + Crew C holiday'). One-tap actions: 'Raise price', 'Re-route', 'Retire service', 'Move customer to weekly'. Edge fn ai-profit-xray; caches scores on services.margin_score, customers.margin_score."
+    },
+    {
+      "name": "Conversational operations bar (NL edit across schedule + customers + services)",
+      "why": "Requires a unified intent parser that can resolve 'Mrs Patel' (customers), 'fortnightly oven clean' (services) and 'Thursday morning' (schedule) in one sentence, plus enforce cross-tab constraints (access windows, crew skills, recurrence rules). Every competitor splits these into separate screens; nobody has a single graph of all three. Mirrors the conversational onboarding/ServiceChat voice already shipped, so it feels native not bolted-on.",
+      "spec": "One pinned input ('Ask Cadi'). Sonnet receives compact snapshots of all three domains + recent context. Returns {intent, entities, proposedPatch, clarifyingQ?, confidence}. Patches render as diff modals (ScheduleDiff / CustomerDiff / ServiceDiff) before Apply. Handles: 'Move Mrs Patel to Thursday', 'Raise all exteriors 5% and draft the customer email', 'Show lapsed BS7 residentials worth >\u00a3500', 'Add Mrs Henderson 2pm Friday regular conservatory \u00a335'. Reuses ServiceChat parser scaffold."
+    },
+    {
+      "name": "Causal revenue + churn engine ('why is week 7 down')",
+      "why": "Joins free-text customer notes ('mentioned baby due', 'house on market') with schedule cancellations, weather, staff holiday, payroll cost, and service margin to give a narrated cause-of-revenue-change. Rules engines (everyone else) can't read notes; pure ML can't explain. Sonnet over the joined graph does both. This is the 'oh shit' demo moment - turns the vanity 13-week bar chart into a coachable answer and pre-empts churn before the customer ghosts.",
+      "spec": "Nightly job scores each customer (churn_score + churn_reason) and each week (revenue_delta_reason). Surfaces as: (a) red chip on customer card, (b) InsightCard under Quarter bar chart, (c) auto-generated win-back batch grouped by lapse-cause with personalised drafts. Edge fns ai-churn-score + ai-quarter-insights. New columns customers.churn_score/reason/scored_at."
+    }
+  ],
+  "commandBar": {
+    "summary": "A single pinned input at the top of the app ('Ask Cadi...') that accepts free-text or voice. Sonnet classifies intent into one of ~10 verbs (schedule.edit, schedule.fill, schedule.optimise, customer.find, customer.add, customer.message, service.price, service.add, service.bundle, insight.explain), extracts entities by name-matching against live customers/services/staff snapshots, and returns a structured patch + human summary. Every action renders as a diff/preview modal with Apply/Undo - never a blind write. Falls back to a clarifying question when confidence <0.7. Same component reused on every tab; tab context is passed as a hint to bias routing.",
+    "exampleUtterances": [
+      "Move Mrs Patel to Thursday and swap Jake and Mel after 1pm",
+      "Fill Crew B's gap tomorrow morning from the round backlog",
+      "Show me lapsed residentials in BS7 worth more than \u00a3500",
+      "Add Mrs Henderson, 22 Oak Lane, fortnightly conservatory \u00a335, key in vault",
+      "Raise all my exterior services 5% and draft the customer email",
+      "Why is week 7 revenue down?",
+      "Win back everyone I've not seen in 90 days",
+      "Optimise tomorrow's route for Crew C, keep Mrs Patel's 10-12 window",
+      "Check my prices against the LS postcode market",
+      "Wrap up today - push invoices and log mileage"
+    ],
+    "routingLogic": "Step 1 (Haiku, ~200 tokens): classify intent + extract entity strings. Step 2: resolve entities against live snapshots (customers by fuzzy name/postcode, services by name, staff by first name). Step 3 (Sonnet for multi-constraint verbs schedule.edit/optimise/explain/price; Haiku for parse-only verbs add/find/message-draft): produce structured patch JSON + reasoning + confidence. Step 4: render verb-specific diff modal (ScheduleDiffModal, CustomerDiffModal, ServiceDiffModal, InsightCard, MessageReviewTable). Step 5: Apply runs the existing mutation paths (updateJob, addCustomer, updateService) inside a transaction; failure rolls back and re-prompts. Telemetry: log {intent, confidence, applied, edited_before_apply} to tune prompts."
+  },
+  "roadmap": [
+    {
+      "phase": "Phase 1 - Quick wins (week 1-3)",
+      "feature": "Conflict & risk detector (schedule, passive amber chip)",
+      "model": "Haiku",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 1 - Quick wins (week 1-3)",
+      "feature": "Smart recurrence inference on job create",
+      "model": "Haiku",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 1 - Quick wins (week 1-3)",
+      "feature": "Voice/text Quick Add ('Add Mrs Henderson 2pm Friday...')",
+      "model": "Haiku",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 1 - Quick wins (week 1-3)",
+      "feature": "Auto-column-mapping for unknown CSV imports",
+      "model": "Haiku",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 1 - Quick wins (week 1-3)",
+      "feature": "Customer notes summariser / relationship memory",
+      "model": "Haiku",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 1 - Quick wins (week 1-3)",
+      "feature": "End-of-day wrap-up + invoice trigger",
+      "model": "Haiku",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 1 - Quick wins (week 1-3)",
+      "feature": "Service description rewriter (Polish for Front Desk)",
+      "model": "Haiku",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 1 - Quick wins (week 1-3)",
+      "feature": "Service health monitor (nightly checks + digest)",
+      "model": "Haiku + Sonnet digest",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 1 - Quick wins (week 1-3)",
+      "feature": "Weekly crew pre-brief generator (cron 18:00)",
+      "model": "Haiku",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 1 - Quick wins (week 1-3)",
+      "feature": "Secure-vault entry parsing from paste/photo",
+      "model": "Sonnet (vision)",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 2 - Command bar + cross-tab parsers (week 4-7)",
+      "feature": "Cadi AI command bar (intent router + diff modals)",
+      "model": "Haiku classify + Sonnet patch",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 2 - Command bar + cross-tab parsers (week 4-7)",
+      "feature": "Natural-language schedule editor",
+      "model": "Sonnet",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 2 - Command bar + cross-tab parsers (week 4-7)",
+      "feature": "NL customer search & filter",
+      "model": "Haiku",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 2 - Command bar + cross-tab parsers (week 4-7)",
+      "feature": "Conversational customer creation (ServiceChat pattern)",
+      "model": "Sonnet",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 2 - Command bar + cross-tab parsers (week 4-7)",
+      "feature": "Smart dedupe & merge during import",
+      "model": "Haiku",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 2 - Command bar + cross-tab parsers (week 4-7)",
+      "feature": "Auto-fill empty schedule slots from backlog",
+      "model": "Sonnet",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 2 - Command bar + cross-tab parsers (week 4-7)",
+      "feature": "Conversational bulk pricing review",
+      "model": "Sonnet",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 2 - Command bar + cross-tab parsers (week 4-7)",
+      "feature": "Auto-build menu from competitor URL/PDF/photo",
+      "model": "Sonnet (vision + WebFetch)",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Route-optimised day re-sequencer with narration",
+      "model": "OR-tools + Sonnet narration",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Churn / at-risk prediction with reasoning",
+      "model": "Sonnet (nightly batch)",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Per-customer upsell briefing card",
+      "model": "Sonnet",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Market-rate pricing intelligence",
+      "model": "Sonnet + WebSearch",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Service-menu gap detector from lost leads",
+      "model": "Haiku ingest + Sonnet synth",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Frequency optimiser (fortnightly -> weekly upsell)",
+      "model": "Sonnet",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Quote-to-service feedback loop (cluster manual quotes)",
+      "model": "Sonnet",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Predicted next-clean & 'price is wrong' detector",
+      "model": "stats + Haiku message",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Win-back campaign builder (batch by lapse-cause)",
+      "model": "Sonnet (batched)",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Smart service bundling from invoice co-occurrence",
+      "model": "Sonnet",
+      "effort": "M"
+    },
+    {
+      "phase": "Phase 3 - Intelligence layer (week 8-12)",
+      "feature": "Revenue gap analyser on Quarter view",
+      "model": "Sonnet",
+      "effort": "S"
+    },
+    {
+      "phase": "Phase 4 - Moat features (week 13-20)",
+      "feature": "Profitability X-ray (cross services + payroll + route + customers)",
+      "model": "Sonnet (nightly)",
+      "effort": "L"
+    },
+    {
+      "phase": "Phase 4 - Moat features (week 13-20)",
+      "feature": "Customer-side reschedule negotiator (auto-reply drafts)",
+      "model": "Sonnet",
+      "effort": "L"
+    },
+    {
+      "phase": "Phase 4 - Moat features (week 13-20)",
+      "feature": "A/B testing layer for service descriptions on Front Desk",
+      "model": "Sonnet (analysis)",
+      "effort": "M"
+    },
+    {
+      "phase": "Cost ceiling (target per user / month)",
+      "feature": "Haiku features (8 passive + on-write): ~600k tokens/user/mo",
+      "model": "Haiku @ ~$0.80/M out",
+      "effort": "~\u00a30.40/user/mo"
+    },
+    {
+      "phase": "Cost ceiling (target per user / month)",
+      "feature": "Sonnet nightly batches (churn, profit, insights, gap): ~1.5M tokens/user/mo cached",
+      "model": "Sonnet w/ prompt caching",
+      "effort": "~\u00a32.20/user/mo"
+    },
+    {
+      "phase": "Cost ceiling (target per user / month)",
+      "feature": "Sonnet interactive (command bar, schedule edits, pricing): ~800k tokens/user/mo",
+      "model": "Sonnet",
+      "effort": "~\u00a31.80/user/mo"
+    },
+    {
+      "phase": "Cost ceiling (target per user / month)",
+      "feature": "Total AI COGS target on \u00a329/mo tier",
+      "model": "blended",
+      "effort": "<\u00a34.50/user/mo (~15% of ARPU), hard cap \u00a36"
+    }
+  ]
+}
