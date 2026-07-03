@@ -53,6 +53,7 @@ export default function GrowthTab({ customer, suggestions = [], onMessage }) {
 
   const [expandedKey, setExpandedKey] = useState(null);
   const [draft, setDraft]             = useState(null); // { id, subject, body }
+  const [draftSaved, setDraftSaved]   = useState(false);
   const [busyId, setBusyId]           = useState(null);
   const [winningId, setWinningId]     = useState(null);
   const [winValue, setWinValue]       = useState("");
@@ -94,6 +95,25 @@ export default function GrowthTab({ customer, suggestions = [], onMessage }) {
       setError(`Plan generation failed: ${e.message}`);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const draftIsDirty = (row) =>
+    draft?.id === row.id &&
+    (draft.subject !== (row.subject ?? "") || draft.body !== (row.body ?? ""));
+
+  // Edited drafts persist on blur (and via the explicit Save button) so
+  // closing the drawer never loses a rewrite.
+  const saveDraft = async (row) => {
+    if (!draftIsDirty(row)) return;
+    try {
+      await updateOutreachDraft(row.id, { subject: draft.subject, body: draft.body });
+      setOutreach((prev) => prev.map((o) =>
+        o.id === row.id ? { ...o, subject: draft.subject, body: draft.body } : o));
+      setDraftSaved(true);
+      setTimeout(() => setDraftSaved(false), 2000);
+    } catch (e) {
+      setError(`Draft save failed: ${e.message}`);
     }
   };
 
@@ -188,8 +208,9 @@ export default function GrowthTab({ customer, suggestions = [], onMessage }) {
             </p>
           ) : !plan ? (
             <p className="text-xs text-[rgba(153,197,255,0.5)] leading-relaxed">
-              No plan yet. Cadi will study this customer's history against your service list, pick the upsells and
-              annual services most likely to land, and pre-write the emails — you just approve and send.
+              No plan yet. Cadi reads this customer's job history, notes, tags, prices and frequency — plus your
+              own service list — then picks the upsells and annual services most likely to land and pre-writes
+              the emails. You just approve and send. The more you fill in on their profile, the sharper the plan.
             </p>
           ) : (
             <>
@@ -244,15 +265,29 @@ export default function GrowthTab({ customer, suggestions = [], onMessage }) {
                             <input
                               value={draft?.subject ?? ""}
                               onChange={(e) => setDraft((d) => ({ ...d, subject: e.target.value }))}
+                              onBlur={() => saveDraft(row)}
                               className={`w-full ${inputCls}`}
                               placeholder="Subject"
                             />
                             <textarea
                               value={draft?.body ?? ""}
                               onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
+                              onBlur={() => saveDraft(row)}
                               rows={5}
                               className={`w-full resize-none ${inputCls}`}
                             />
+                            <div className="flex items-center justify-end h-4">
+                              {draftIsDirty(row) ? (
+                                <button
+                                  onClick={() => saveDraft(row)}
+                                  className="text-[10px] font-bold text-[#99c5ff] hover:text-white transition-colors"
+                                >
+                                  Save draft
+                                </button>
+                              ) : draftSaved ? (
+                                <span className="text-[10px] font-bold text-emerald-300">Draft saved ✓</span>
+                              ) : null}
+                            </div>
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleSend(row)}

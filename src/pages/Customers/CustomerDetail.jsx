@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { listRoundsForCustomer } from "../../lib/db/customerRoundsDb";
 import { createSurvey, listSurveysForCustomer } from "../../lib/db/surveyDb";
@@ -28,6 +28,20 @@ export default function CustomerDetail({ customer, onMessage, onClose, onBookJob
 
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Everything in this drawer saves the moment it's changed — there is no
+  // save button by design. The flash pill makes that visible, because
+  // silent auto-save reads as "not saved" to users.
+  const [savedFlash, setSavedFlash] = useState(false);
+  const savedTimer = useRef(null);
+  const saveCustomer = (id, patch) => {
+    const result = onUpdateCustomer?.(id, patch);
+    clearTimeout(savedTimer.current);
+    setSavedFlash(true);
+    savedTimer.current = setTimeout(() => setSavedFlash(false), 1800);
+    return result;
+  };
+  useEffect(() => () => clearTimeout(savedTimer.current), []);
   const [rounds, setRounds] = useState([]);
   const [openSurveys, setOpenSurveys] = useState([]);
   const [surveyLoading, setSurveyLoading] = useState(false);
@@ -45,7 +59,7 @@ export default function CustomerDetail({ customer, onMessage, onClose, onBookJob
     const stamp = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
     const entry = `[${stamp}] ${text}`;
     const merged = customer.notes ? `${entry}\n${customer.notes}` : entry;
-    try { await onUpdateCustomer?.(customer.id, { notes: merged }); }
+    try { await saveCustomer(customer.id, { notes: merged }); }
     finally { setNoteSaving(false); setNoteDraft(""); setNoteOpen(false); }
   };
 
@@ -182,7 +196,7 @@ export default function CustomerDetail({ customer, onMessage, onClose, onBookJob
           customer={customer}
           onClose={() => setShowEdit(false)}
           onSave={(updated) => {
-            onUpdateCustomer?.(customer.id, updated);
+            saveCustomer(customer.id, updated);
             setShowEdit(false);
           }}
         />
@@ -210,10 +224,17 @@ export default function CustomerDetail({ customer, onMessage, onClose, onBookJob
               <p className="font-black text-xl text-white">{customer.name}</p>
               <p className="text-xs text-[#99c5ff] mt-0.5">{customer.postcode} · {customer.frequency}</p>
               <div className="mt-1.5">
-                <StarRating value={customer.rating || 0} onChange={(r) => onUpdateCustomer?.(customer.id, { rating: r })} size="sm" />
+                <StarRating value={customer.rating || 0} onChange={(r) => saveCustomer(customer.id, { rating: r })} size="sm" />
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <span
+                className={`text-[10px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/25 rounded-lg px-2 py-0.5 transition-opacity duration-300 ${
+                  savedFlash ? "opacity-100" : "opacity-0 pointer-events-none"
+                }`}
+              >
+                ✓ Saved
+              </span>
               <StatusBadge status={customer.status} />
               <button
                 onClick={() => setShowEdit(true)}
@@ -304,7 +325,7 @@ export default function CustomerDetail({ customer, onMessage, onClose, onBookJob
                   return (
                     <button
                       key={value}
-                      onClick={() => onUpdateCustomer?.(customer.id, { segment: value, segmentSource: 'owner_set' })}
+                      onClick={() => saveCustomer(customer.id, { segment: value, segmentSource: 'owner_set' })}
                       className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl border text-[10px] font-bold transition-all ${
                         active
                           ? "bg-[#1f48ff]/20 border-[#1f48ff]/50 text-white"
@@ -450,7 +471,7 @@ export default function CustomerDetail({ customer, onMessage, onClose, onBookJob
                       onClick={() => {
                         const current = customer.serviceTypes || [];
                         const next = active ? current.filter(s => s !== jt.id) : [...current, jt.id];
-                        onUpdateCustomer?.(customer.id, { serviceTypes: next });
+                        saveCustomer(customer.id, { serviceTypes: next });
                       }}
                       className={`px-2.5 py-1 text-xs font-bold border rounded-lg transition-all ${
                         active
@@ -674,7 +695,7 @@ export default function CustomerDetail({ customer, onMessage, onClose, onBookJob
               return (
                 <button
                   key={opt.key}
-                  onClick={() => onUpdateCustomer?.(customer.id, { billing_mode: opt.key })}
+                  onClick={() => saveCustomer(customer.id, { billing_mode: opt.key })}
                   className={`w-full text-left px-3 py-2.5 rounded-xl border transition-all ${
                     active
                       ? 'border-[#1f48ff] bg-[rgba(31,72,255,0.12)]'
