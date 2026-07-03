@@ -11,6 +11,7 @@ import {
 } from '../lib/db/thirtyDayPlanDb';
 import { supabase } from '../lib/supabase';
 import { usePlan } from '../hooks/usePlan';
+import WeekOneMoneyLog from './WeekOneMoneyLog';
 
 // ── Phase 1 step definitions ──────────────────────────────────────────────────
 
@@ -77,6 +78,31 @@ const PHASE2_STEPS = [
     cta: 'Read my report',
     path: '/reports',
   },
+];
+
+// Lite overrides — open banking is Pro/Max-only, so on Lite the first Phase 2
+// step becomes a manual money log (same step_key, different presentation).
+// The upgrade pitch lives inside the modal and the step copy.
+const LITE_PHASE2_OVERRIDES = {
+  connect_open_banking: {
+    title: "Log last week's money",
+    incompleteSub: 'Tell Cadi what came in and went out last week — five minutes, rough numbers are fine. On Pro, your bank feeds this in automatically.',
+    inProgressSub: 'Good start — a couple more entries gives Cadi enough to work with.',
+    completeSub: () => 'Money logged. On Pro, Cadi reads your bank and does this for you — no typing.',
+    cta: 'Log my week',
+    ctaDone: 'Add more',
+    path: null, // opens the money-log modal instead of navigating
+  },
+  financial_walkthrough: {
+    blockedSub: 'Log some money first — Cadi needs your numbers to do this properly.',
+  },
+};
+
+const LITE_PHASE2_SUBHEADS = [
+  "Time to see what's really going on. Phase 2 starts with your money.",
+  'Money logged. Ready for the walkthrough whenever you are.',
+  'Walkthrough done. Your first weekly report lands Monday morning.',
+  '',
 ];
 
 // ── Phase 3 step definitions ──────────────────────────────────────────────────
@@ -430,7 +456,7 @@ function daysUntilNextMonday() {
 
 export default function ThirtyDayPlan({ onRefresh }) {
   const navigate = useNavigate();
-  const { isPro, canUseOperationsManager } = usePlan();
+  const { isPro, canUseOperationsManager, canUseOpenBanking } = usePlan();
   const [loading, setLoading]               = useState(true);
   const [progress, setProgress]             = useState(null);
   const [p1Steps, setP1Steps]               = useState([]);
@@ -445,6 +471,10 @@ export default function ThirtyDayPlan({ onRefresh }) {
   const [bankStatus, setBankStatus]         = useState(null);
   const [latestReport, setLatestReport]     = useState(null);
   const [walkInProgress, setWalkInProgress] = useState(null);
+  // Lite path: manual money-log modal + how many entries they've logged.
+  // Open banking is Pro/Max — Lite users type last week's money in instead.
+  const [showMoneyLog, setShowMoneyLog]         = useState(false);
+  const [manualMoneyCount, setManualMoneyCount] = useState(0);
   // Lets the user flick back to a completed phase to revisit steps (e.g. re-run the walkthrough).
   // null = follow the natural current phase. 1/2/3 = pinned to that phase view.
   const [viewPhaseOverride, setViewPhaseOverride] = useState(null);
@@ -490,7 +520,8 @@ export default function ThirtyDayPlan({ onRefresh }) {
         const { data: biz } = await supabase
           .from('businesses').select('id').eq('owner_user_id', session.user.id).single();
 
-        const [bankConn, walkRow, reportRow] = await Promise.all([
+        const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+        const [bankConn, walkRow, reportRow, manualCountRes] = await Promise.all([
           supabase.from('bank_connections')
             .select('id, bank_name, account_last_4, last_sync_at, is_active')
             .eq('is_active', true).order('connected_at', { ascending: false }).limit(1).maybeSingle()
@@ -505,13 +536,21 @@ export default function ThirtyDayPlan({ onRefresh }) {
             .eq('business_id', biz?.id)
             .order('week_starting', { ascending: false }).limit(1).maybeSingle()
             .then(r => r.data),
+          // Lite path: recent manual money entries stand in for a bank feed
+          supabase.from('money_entries')
+            .select('*', { count: 'exact', head: true })
+            .gte('date', fourteenDaysAgo)
+            .then(r => r.count ?? 0),
         ]);
 
         setBankStatus(bankConn);
         setLatestReport(reportRow);
+        setManualMoneyCount(manualCountRes);
         if (walkRow && !walkRow.completed_at) setWalkInProgress(walkRow);
 
-        const bankConnected  = !!(bankConn?.last_sync_at);
+        // The step is about Cadi having money data — a synced bank feed
+        // (Pro/Max) or 3+ recent manual entries (Lite) both satisfy it.
+        const bankConnected   = !!(bankConn?.last_sync_at) || manualCountRes >= 3;
         const walkthroughDone = !!(walkRow?.completed_at);
         const reportViewed    = !!(reportRow?.viewed_at);
 
@@ -583,12 +622,20 @@ export default function ThirtyDayPlan({ onRefresh }) {
 
   const getStepObj = (steps, key) => steps.find(s => s.step_key === key);
 
+  // Lite users get the manual money-log presentation of Phase 2 step 1
+  const phase2Defs = canUseOpenBanking
+    ? PHASE2_STEPS
+    : PHASE2_STEPS.map(d => LITE_PHASE2_OVERRIDES[d.key] ? { ...d, ...LITE_PHASE2_OVERRIDES[d.key] } : d);
+
   // Derive Phase 2 step sub-text and CTA
   function phase2StepSub(def, stepRow) {
     const status = stepRow?.status ?? 'available';
     if (status === 'completed') return def.completeSub(stepRow?.metadata);
 
     if (def.key === 'connect_open_banking') {
+      if (!canUseOpenBanking) {
+        return manualMoneyCount > 0 ? def.inProgressSub : def.incompleteSub;
+      }
       if (bankStatus?.is_active && !bankStatus?.last_sync_at) return def.inProgressSub;
       return def.incompleteSub;
     }
@@ -700,10 +747,10 @@ export default function ThirtyDayPlan({ onRefresh }) {
   const showPhase3 = phase2Done && effectivePhase >= 3;
   const showPhase2 = phase1Done && effectivePhase === 2;
   const isRevisiting = viewPhaseOverride !== null && viewPhaseOverride < currentPhase;
-  const activeStepDefs  = showPhase3 ? PHASE3_STEPS : showPhase2 ? PHASE2_STEPS : PHASE1_STEPS;
+  const activeStepDefs  = showPhase3 ? PHASE3_STEPS : showPhase2 ? phase2Defs : PHASE1_STEPS;
   const activeStepRows  = showPhase3 ? p3Steps      : showPhase2 ? p2Steps      : p1Steps;
   const activeDone      = showPhase3 ? p3Done        : showPhase2 ? p2Done       : p1Done;
-  const subheadArr      = showPhase3 ? PHASE3_SUBHEADS : showPhase2 ? PHASE2_SUBHEADS : PHASE1_SUBHEADS;
+  const subheadArr      = showPhase3 ? PHASE3_SUBHEADS : showPhase2 ? (canUseOpenBanking ? PHASE2_SUBHEADS : LITE_PHASE2_SUBHEADS) : PHASE1_SUBHEADS;
   const subhead         = subheadArr[Math.min(activeDone, 3)];
 
   return (
@@ -828,7 +875,12 @@ export default function ThirtyDayPlan({ onRefresh }) {
                         ? 'bg-white/2 border border-white/5 opacity-50'
                         : 'bg-white/4 border border-[rgba(153,197,255,0.1)] hover:bg-white/8 hover:border-[rgba(79,120,255,0.3)] cursor-pointer'
                     }`}
-                    onClick={() => clickable && navigate(path)}
+                    onClick={() => {
+                      if (!clickable) return;
+                      // Lite money-log step has no route — it opens the modal
+                      if (path) navigate(path);
+                      else if (def.key === 'connect_open_banking') setShowMoneyLog(true);
+                    }}
                   >
                     <StepDot status={disabled ? 'locked' : status} />
                     <div className="flex-1 min-w-0">
@@ -931,6 +983,15 @@ export default function ThirtyDayPlan({ onRefresh }) {
           </>
         )}
       </div>
+
+      {/* Lite money-log modal — closing it re-syncs the plan so the step
+          completes the moment 3+ entries exist */}
+      {showMoneyLog && (
+        <WeekOneMoneyLog
+          onClose={() => { setShowMoneyLog(false); load(); }}
+          onLogged={(n) => setManualMoneyCount(c => Math.max(c, n))}
+        />
+      )}
 
       {/* Celebration modals */}
       {showCelebration && celebrationStats && celebrationPhase === 1 && (

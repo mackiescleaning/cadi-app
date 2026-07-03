@@ -11,6 +11,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { usePlan } from '../hooks/usePlan';
 
 const BG   = 'min-h-screen bg-gradient-to-br from-[#0a0f1e] via-[#0d1530] to-[#0a1628]';
 const CARD = 'mx-auto max-w-lg w-full';
@@ -164,6 +165,7 @@ function BankPicker({ onPick, loading, onCancel }) {
 
 export default function BankingSettings() {
   const navigate      = useNavigate();
+  const { canUseOpenBanking } = usePlan();
   const [step,    setStep]    = useState('intro'); // 'intro' | 'picker'
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
@@ -200,6 +202,35 @@ export default function BankingSettings() {
       setError(err.message ?? 'Something went wrong — please try again.');
       setLoading(false);
     }
+  }
+
+  // Open banking is Pro/Max — every Yapily consent costs money, so Lite users
+  // get the upgrade pitch instead of the connect flow. They log money manually
+  // via the 30-day plan's money-log step. (Gate sits after all hooks.)
+  if (!canUseOpenBanking) {
+    return (
+      <div className={`${BG} flex items-center justify-center p-4`}>
+        <div className={`${CARD} bg-white/4 border border-white/10 rounded-2xl p-8 text-center`}>
+          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-[#4f78ff]/15 border border-[#4f78ff]/30 flex items-center justify-center text-2xl">🏦</div>
+          <h1 className="text-xl font-black text-white mb-2">Bank feeds are a Pro feature</h1>
+          <p className="text-sm text-white/55 leading-relaxed mb-6">
+            On Pro, Cadi connects securely to your bank (read-only, FCA-regulated Open Banking) and logs
+            every transaction automatically — income matched to invoices, expenses categorised, your books
+            always up to date. No typing, ever.
+          </p>
+          <button
+            onClick={() => navigate('/upgrade')}
+            className="w-full py-3 rounded-xl bg-[#1f48ff] text-white text-sm font-black hover:bg-[#3a5eff] transition-colors mb-2">
+            See what Pro unlocks — £39/mo
+          </button>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="w-full py-2.5 rounded-xl text-white/40 text-xs font-bold hover:text-white/70 transition-colors">
+            For now, I'll log my money by hand
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

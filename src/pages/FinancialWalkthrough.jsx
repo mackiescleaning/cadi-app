@@ -321,7 +321,7 @@ export default function FinancialWalkthrough() {
           <p className="text-white/50 text-sm mb-6 max-w-sm mx-auto leading-relaxed">
             {generating
               ? 'This usually takes under a minute.'
-              : "I need to look through the last 60 days of your bank account before we walk through it together. Make sure your bank's connected in the Money tab, then tap below."}
+              : "I need to look through the last 60 days of your money before we walk through it together. Bank connected or money logged in Cadi — either works. Tap below when you're ready."}
           </p>
           {generateError && (
             <p className="text-rose-300 text-xs mb-4 max-w-sm mx-auto">{generateError}</p>

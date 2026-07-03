@@ -241,7 +241,8 @@ async function computeMetrics(
     { count: jobs },
     { data: invoiceRows },
     { count: newCustomers },
-    { data: txRows },
+    { data: bankTxRows },
+    { data: manualRows },
   ] = await Promise.all([
     sb.from("jobs").select("*", { count: "exact", head: true })
       .eq("owner_id", userId).gte("start_time", weekStart).lt("start_time", weekEnd),
@@ -251,7 +252,22 @@ async function computeMetrics(
       .eq("owner_id", userId).gte("created_at", weekStart).lt("created_at", weekEnd),
     sb.from("transactions").select("amount, category")
       .eq("business_id", businessId).gte("transaction_date", weekStart).lt("transaction_date", weekEnd),
+    // Manual money entries — the Lite path (no open banking). Invoice mirrors
+    // (invoice_id set) are excluded: that income is already reported via `revenue`.
+    sb.from("money_entries").select("amount, category, kind")
+      .eq("owner_id", userId).is("invoice_id", null)
+      .gte("date", weekStart).lt("date", weekEnd),
   ]);
+
+  // Normalise manual entries into the bank-transaction shape (income positive,
+  // expenses negative) so every metric below sees one combined stream.
+  const txRows = [
+    ...(bankTxRows ?? []),
+    ...((manualRows ?? []).map((m: { amount: number; category: string | null; kind: string }) => ({
+      amount:   m.kind === "expense" ? -Math.abs(Number(m.amount) || 0) : Math.abs(Number(m.amount) || 0),
+      category: m.category ?? (m.kind === "expense" ? "other" : "income"),
+    }))),
+  ];
 
   const revenue = (invoiceRows ?? []).reduce((sum: number, inv: { lines: Array<{ rate: number; qty: number }> }) =>
     sum + (inv.lines ?? []).reduce((s: number, l: { rate: number; qty: number }) => s + (l.rate ?? 0) * (l.qty ?? 1), 0), 0);
@@ -427,11 +443,19 @@ serve(async (req: Request) => {
 
       let generated = 0;
       for (const biz of (businesses ?? [])) {
-        // Check bank connection exists
+        // A report needs money data from EITHER source: an active bank
+        // connection (Pro/Max) or recent manual money entries (Lite — logged
+        // via the 30-day plan's money-log step).
         const { data: conn } = await sb
           .from("bank_connections").select("id")
           .eq("business_id", biz.id).eq("is_active", true).limit(1).maybeSingle();
-        if (!conn) continue;
+        if (!conn) {
+          const since = new Date(Date.now() - 14 * 86400000).toISOString().split("T")[0];
+          const { count: manualCount } = await sb
+            .from("money_entries").select("*", { count: "exact", head: true })
+            .eq("owner_id", biz.owner_user_id).gte("date", since);
+          if (!manualCount) continue;
+        }
 
         try {
           const id = await processOneBusiness(sb, { ...biz, owner_id: biz.owner_user_id }, weekStart);

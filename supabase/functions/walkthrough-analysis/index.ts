@@ -364,16 +364,47 @@ serve(async (req: Request) => {
       const connectedDate = conn?.connected_at?.split("T")[0] ?? fromDate;
       const periodStart   = connectedDate > fromDate ? connectedDate : fromDate;
 
-      // Fetch transactions for the period
-      const { data: txs } = await sb
-        .from("transactions")
-        .select("id, amount, category, transaction_date, description, merchant_name, matched_invoice_id, matched_customer_id, is_business")
-        .eq("business_id", businessId)
-        .gte("transaction_date", periodStart)
-        .eq("is_hidden", false)
-        .order("transaction_date", { ascending: false });
+      // Fetch transactions for the period — bank feed plus manual money
+      // entries, normalised to the same shape. Lite users have no bank
+      // connection; their walkthrough runs entirely off manual entries.
+      const [{ data: txs }, { data: manualEntries }] = await Promise.all([
+        sb.from("transactions")
+          .select("id, amount, category, transaction_date, description, merchant_name, matched_invoice_id, matched_customer_id, is_business")
+          .eq("business_id", businessId)
+          .gte("transaction_date", periodStart)
+          .eq("is_hidden", false)
+          .order("transaction_date", { ascending: false }),
+        sb.from("money_entries")
+          .select("id, amount, category, kind, date, client, notes, invoice_id, customer_id")
+          .eq("owner_id", user.id)
+          .gte("date", periodStart)
+          .order("date", { ascending: false }),
+      ]);
 
-      const allTxs = (txs ?? []) as Tx[];
+      const bankTxs = (txs ?? []) as Tx[];
+      // With a bank feed, invoice-mirror entries (invoice_id set) duplicate
+      // the matched bank credit — skip them. Without one, mirrors ARE the
+      // invoice income and must count.
+      const manualTxs = ((manualEntries ?? []) as Array<{
+        id: string; amount: number; category: string | null; kind: string;
+        date: string; client: string | null; notes: string | null;
+        invoice_id: string | null; customer_id: string | null;
+      }>)
+        .filter((m) => bankTxs.length === 0 || !m.invoice_id)
+        .map((m) => ({
+          id:                  m.id,
+          amount:              m.kind === "expense" ? -Math.abs(Number(m.amount) || 0) : Math.abs(Number(m.amount) || 0),
+          category:            m.category ?? (m.kind === "expense" ? "other" : "income"),
+          transaction_date:    m.date,
+          description:         m.notes ?? m.client ?? "Manual entry",
+          merchant_name:       m.client ?? "Manual entry",
+          matched_invoice_id:  m.invoice_id,
+          matched_customer_id: m.customer_id,
+          is_business:         true,
+        })) as Tx[];
+
+      const allTxs = [...bankTxs, ...manualTxs]
+        .sort((a, b) => (b.transaction_date < a.transaction_date ? -1 : 1));
       const periodDays = Math.round(
         (new Date(today).getTime() - new Date(periodStart).getTime()) / 86400000,
       ) || 1;
