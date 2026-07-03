@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Send, Plus, Search, MapPin, ChevronRight, Loader2, AlertCircle,
-  Award, X, CheckCircle2,
+  Send, Plus, Search, MapPin, ChevronRight, Loader2,
+  Award, X, CheckCircle2, MessageCircleQuestion,
 } from 'lucide-react';
 import {
   listFmListings,
@@ -11,16 +11,16 @@ import {
   awardListing,
   closeListing,
   getMyFmOrganisation,
+  listListingQuestionsFm,
+  postListingAnswer,
   LISTING_STATUS,
   FORMAT_LABEL,
   TIER_LABEL,
   TIER_COLOR,
 } from '../../lib/db/fmOpsDb';
-import { FM_OPS_TOKENS } from '../../components/fm-ops/FmOpsLayout';
-
-const { NAVY, INK, SUB, MUTE, LINE, PAPER, ACCENT } = FM_OPS_TOKENS;
-const SOFT  = '#f1f5f9';
-const GREEN = '#16a34a';
+import {
+  blueCanvas, glassDark, primaryButton, ghostButton, ON_DARK, HOVER_LIFT, FM_POP as POP,
+} from '../../lib/connectTheme';
 
 const STATUS_TABS = [
   { id: 'live',     label: 'Live'      },
@@ -36,12 +36,29 @@ const FREQ_LABEL = {
   quarterly: 'Quarterly', annual: 'Annual', one_off: 'One-off',
 };
 
+// LISTING_STATUS db colours are for light surfaces — brighten for navy.
+const STATUS_POP = {
+  draft:   'rgba(255,255,255,0.55)',
+  open:    POP.blue,
+  bidding: POP.orange,
+  awarded: POP.green,
+  closed:  'rgba(255,255,255,0.40)',
+};
+const statusPop = (s) => STATUS_POP[s] || 'rgba(255,255,255,0.55)';
+
+const DRAWER_BG = 'linear-gradient(180deg, #071041 0%, #030925 100%)';
+const CELL = { background: 'rgba(255,255,255,0.06)', border: `1px solid ${ON_DARK.line}` };
+
 function StatusPill({ status }) {
-  const m = LISTING_STATUS[status] || { label: status, color: SUB };
+  const m = LISTING_STATUS[status] || { label: status };
+  const c = statusPop(status);
+  const hex = c.startsWith('#');
   return (
     <span style={{
-      fontSize: 10, fontWeight: 800, color: m.color,
-      background: `${m.color}14`, padding: '3px 8px', borderRadius: 999,
+      fontSize: 10, fontWeight: 800, color: c,
+      background: hex ? `${c}1f` : 'rgba(255,255,255,0.08)',
+      border: `1px solid ${hex ? `${c}42` : 'rgba(255,255,255,0.16)'}`,
+      padding: '3px 9px', borderRadius: 999,
       whiteSpace: 'nowrap', letterSpacing: '0.04em', textTransform: 'uppercase',
     }}>{m.label}</span>
   );
@@ -49,74 +66,77 @@ function StatusPill({ status }) {
 
 function TierBadge({ tier }) {
   if (!tier) return null;
-  const colour = TIER_COLOR[tier] || MUTE;
+  const colour = TIER_COLOR[tier] || 'rgba(255,255,255,0.45)';
+  const hex = colour.startsWith('#');
   return (
     <span style={{
       fontSize: 9, fontWeight: 800, color: colour,
-      background: `${colour}15`, border: `1px solid ${colour}30`,
+      background: hex ? `${colour}22` : 'rgba(255,255,255,0.08)',
+      border: `1px solid ${hex ? `${colour}45` : 'rgba(255,255,255,0.16)'}`,
       padding: '2px 7px', borderRadius: 999,
     }}>{TIER_LABEL[tier] ?? tier}</span>
   );
 }
 
-function FitBar({ value, label, color = ACCENT }) {
+function FitBar({ value, label, color = POP.orange }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10 }}>
-      <span style={{ color: SUB, fontWeight: 700, width: 64 }}>{label}</span>
-      <div style={{ flex: 1, height: 4, background: SOFT, borderRadius: 2, overflow: 'hidden' }}>
+      <span style={{ color: ON_DARK.muted, fontWeight: 700, width: 64 }}>{label}</span>
+      <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.12)', borderRadius: 2, overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, value))}%`, background: color }} />
       </div>
-      <span style={{ color: INK, fontWeight: 800, width: 28, textAlign: 'right' }}>{value}</span>
+      <span style={{ color: ON_DARK.primary, fontWeight: 800, width: 28, textAlign: 'right' }}>{value}</span>
     </div>
   );
 }
 
 // ─── Listing card ───────────────────────────────────────────────────────────
 function ListingCard({ listing, onOpen }) {
-  const m = LISTING_STATUS[listing.status] || { color: SUB };
+  const pop = statusPop(listing.status);
   const vs = listing.visit_spec;
   return (
     <button
       onClick={onOpen}
+      className={HOVER_LIFT}
       style={{
-        background: PAPER, border: `1px solid ${LINE}`,
-        borderLeft: `4px solid ${m.color}`, borderRadius: 12,
-        padding: 14, cursor: 'pointer', textAlign: 'left',
+        ...glassDark({ radius: 16, padding: 14 }),
+        borderLeft: `4px solid ${pop}`,
+        cursor: 'pointer', textAlign: 'left',
         display: 'flex', flexDirection: 'column', gap: 10,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: ON_DARK.muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
           #{listing.id.slice(0, 8)}
         </span>
         <StatusPill status={listing.status} />
       </div>
       <div>
-        <div style={{ fontSize: 14, fontWeight: 900, color: INK, marginBottom: 2 }}>
+        <div style={{ fontSize: 14, fontWeight: 900, color: ON_DARK.primary, marginBottom: 3 }}>
           {vs?.site?.name ?? 'Site'}
         </div>
-        <div style={{ fontSize: 11, color: SUB }}>
+        <div style={{ fontSize: 11, color: ON_DARK.secondary }}>
           <MapPin size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />
           {vs?.site?.postcode ?? ''} · {FREQ_LABEL[vs?.frequency] ?? vs?.frequency} · {vs?.scope}
         </div>
         {vs?.contract?.name && (
-          <div style={{ fontSize: 10, color: MUTE, marginTop: 4 }}>{vs.contract.name}</div>
+          <div style={{ fontSize: 10, color: ON_DARK.muted, marginTop: 4 }}>{vs.contract.name}</div>
         )}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-        <div style={{ background: SOFT, borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: INK }}>£{listing.target_price}</div>
-          <div style={{ fontSize: 9, color: SUB, fontWeight: 700 }}>target</div>
+        <div style={{ ...CELL, borderRadius: 8, padding: '6px 8px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: ON_DARK.primary }}>£{listing.target_price}</div>
+          <div style={{ fontSize: 9, color: ON_DARK.muted, fontWeight: 700 }}>target</div>
         </div>
-        <div style={{ background: SOFT, borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: NAVY }}>{listing.bidCount}</div>
-          <div style={{ fontSize: 9, color: SUB, fontWeight: 700 }}>bids</div>
+        <div style={{ ...CELL, borderRadius: 8, padding: '6px 8px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: listing.bidCount ? POP.orange : ON_DARK.primary }}>{listing.bidCount}</div>
+          <div style={{ fontSize: 9, color: ON_DARK.muted, fontWeight: 700 }}>bids</div>
         </div>
-        <div style={{ background: SOFT, borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: SUB }}>
+        <div style={{ ...CELL, borderRadius: 8, padding: '6px 8px', textAlign: 'center' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: ON_DARK.secondary }}>
             {FORMAT_LABEL[listing.format] ?? listing.format}
           </div>
-          <div style={{ fontSize: 9, color: SUB, fontWeight: 700 }}>format</div>
+          <div style={{ fontSize: 9, color: ON_DARK.muted, fontWeight: 700 }}>format</div>
         </div>
       </div>
     </button>
@@ -177,40 +197,49 @@ function NewListingDrawer({ fmOrg, onClose, onPublished }) {
     }
   };
 
+  const inputStyle = {
+    width: '100%', padding: '8px 10px', fontSize: 13,
+    border: `1px solid ${ON_DARK.lineHi}`, borderRadius: 10,
+    background: 'rgba(255,255,255,0.08)', color: ON_DARK.primary, outline: 'none',
+    colorScheme: 'dark',
+  };
+  const sectionLabel = { fontSize: 10, fontWeight: 800, color: ON_DARK.muted, letterSpacing: '0.08em', textTransform: 'uppercase' };
+
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)',
+      position: 'fixed', inset: 0, background: 'rgba(1,4,25,0.55)',
+      backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
       display: 'flex', justifyContent: 'flex-end', zIndex: 50,
     }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{
-        width: 560, maxWidth: '92vw', background: PAPER,
-        borderLeft: `1px solid ${LINE}`, padding: '24px 28px',
-        overflowY: 'auto', boxShadow: '-12px 0 40px rgba(15,23,42,0.18)',
+        width: 560, maxWidth: '92vw', background: DRAWER_BG,
+        borderLeft: `1px solid ${ON_DARK.lineHi}`, padding: '24px 28px',
+        overflowY: 'auto', boxShadow: '-16px 0 60px rgba(0,0,0,0.55)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 900, color: INK }}>New listing</div>
-            <div style={{ fontSize: 12, color: SUB, marginTop: 4 }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: ON_DARK.primary }}>New listing</div>
+            <div style={{ fontSize: 12, color: ON_DARK.secondary, marginTop: 5 }}>
               Pick an unassigned visit spec and publish it to your network.
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTE, padding: 4 }}>
-            <X size={18} />
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.08)', border: `1px solid ${ON_DARK.line}`, borderRadius: 9, cursor: 'pointer', color: ON_DARK.secondary, padding: 6, display: 'flex' }}>
+            <X size={16} />
           </button>
         </div>
 
         {!selectedSpec && (
           <>
-            <div style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+            <div style={{ ...sectionLabel, marginBottom: 8 }}>
               Pick a visit spec
             </div>
             {loadingSpecs && (
-              <div style={{ padding: 24, textAlign: 'center', fontSize: 11, color: SUB }}>
-                <Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite', display: 'block', margin: '0 auto 6px' }} /> Loading unassigned specs…
+              <div style={{ padding: 24, textAlign: 'center', fontSize: 11, color: ON_DARK.muted }}>
+                <Loader2 size={16} color={ON_DARK.secondary} style={{ animation: 'spin 0.8s linear infinite', display: 'block', margin: '0 auto 6px' }} /> Loading unassigned specs…
               </div>
             )}
             {!loadingSpecs && specs.length === 0 && (
-              <div style={{ padding: 24, background: PAPER, border: `1.5px dashed ${LINE}`, borderRadius: 10, fontSize: 12, color: SUB, textAlign: 'center' }}>
+              <div style={{ padding: 24, border: '1.5px dashed rgba(255,255,255,0.16)', borderRadius: 12, fontSize: 12, color: ON_DARK.muted, textAlign: 'center', lineHeight: 1.6 }}>
                 No unassigned visit specs. Create a contract first or send an assigned spec back to "unassigned" from its detail page.
               </div>
             )}
@@ -220,20 +249,20 @@ function NewListingDrawer({ fmOrg, onClose, onPublished }) {
                   key={s.id}
                   onClick={() => pickSpec(s)}
                   style={{
-                    background: PAPER, border: `1px solid ${LINE}`,
-                    borderRadius: 10, padding: 12, textAlign: 'left', cursor: 'pointer',
+                    background: 'rgba(255,255,255,0.06)', border: `1px solid ${ON_DARK.lineHi}`,
+                    borderRadius: 12, padding: 12, textAlign: 'left', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 12,
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: INK }}>{s.site?.name ?? 'Site'}</div>
-                    <div style={{ fontSize: 10, color: SUB, marginTop: 2 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: ON_DARK.primary }}>{s.site?.name ?? 'Site'}</div>
+                    <div style={{ fontSize: 10, color: ON_DARK.muted, marginTop: 2 }}>
                       {s.contract?.name && <>{s.contract.name} · </>}
                       {FREQ_LABEL[s.frequency] ?? s.frequency} · {s.scope}
                     </div>
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: INK }}>£{s.price_per_visit}</div>
-                  <ChevronRight size={14} color={MUTE} />
+                  <div style={{ fontSize: 13, fontWeight: 900, color: ON_DARK.primary }}>£{s.price_per_visit}</div>
+                  <ChevronRight size={14} color={ON_DARK.faint} />
                 </button>
               ))}
             </div>
@@ -242,14 +271,17 @@ function NewListingDrawer({ fmOrg, onClose, onPublished }) {
 
         {selectedSpec && (
           <>
-            <div style={{ background: SOFT, padding: 12, borderRadius: 10, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              background: 'rgba(255,255,255,0.06)', border: `1px solid ${ON_DARK.line}`,
+              padding: 12, borderRadius: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10,
+            }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: INK }}>{selectedSpec.site?.name}</div>
-                <div style={{ fontSize: 10, color: SUB, marginTop: 2 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: ON_DARK.primary }}>{selectedSpec.site?.name}</div>
+                <div style={{ fontSize: 10, color: ON_DARK.muted, marginTop: 2 }}>
                   {FREQ_LABEL[selectedSpec.frequency] ?? selectedSpec.frequency} · {selectedSpec.scope}
                 </div>
               </div>
-              <button onClick={() => setSelectedSpec(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: SUB, fontWeight: 700 }}>change</button>
+              <button onClick={() => setSelectedSpec(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: POP.blue, fontWeight: 700 }}>change</button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
@@ -259,23 +291,19 @@ function NewListingDrawer({ fmOrg, onClose, onPublished }) {
                 { k: 'ceiling_price', l: 'Ceiling £', placeholder: '230' },
               ].map(f => (
                 <div key={f.k}>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>{f.l}</div>
+                  <div style={{ ...sectionLabel, marginBottom: 4 }}>{f.l}</div>
                   <input
                     type="number" min="0" placeholder={f.placeholder}
                     value={fields[f.k]}
                     onChange={e => setFields(prev => ({ ...prev, [f.k]: e.target.value }))}
-                    style={{
-                      width: '100%', padding: '8px 10px', fontSize: 13,
-                      border: `1px solid ${LINE}`, borderRadius: 8,
-                      background: PAPER, color: INK, outline: 'none',
-                    }}
+                    style={inputStyle}
                   />
                 </div>
               ))}
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>Visibility</div>
+              <div style={{ ...sectionLabel, marginBottom: 6 }}>Visibility</div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {[
                   { v: 'elite',    l: 'Elite ≥93' },
@@ -286,10 +314,10 @@ function NewListingDrawer({ fmOrg, onClose, onPublished }) {
                   const a = fields.visibility === o.v;
                   return (
                     <button key={o.v} onClick={() => setFields(p => ({ ...p, visibility: o.v }))} style={{
-                      fontSize: 11, padding: '6px 10px', borderRadius: 6, flex: 1,
-                      border: `1px solid ${a ? ACCENT : LINE}`,
-                      background: a ? `${ACCENT}10` : PAPER,
-                      color: a ? ACCENT : INK,
+                      fontSize: 11, padding: '7px 10px', borderRadius: 9, flex: 1,
+                      border: `1px solid ${a ? 'rgba(251,146,60,0.45)' : ON_DARK.line}`,
+                      background: a ? 'rgba(251,146,60,0.14)' : 'rgba(255,255,255,0.04)',
+                      color: a ? POP.orange : ON_DARK.secondary,
                       fontWeight: a ? 800 : 600, cursor: 'pointer',
                     }}>{o.l}</button>
                   );
@@ -299,33 +327,36 @@ function NewListingDrawer({ fmOrg, onClose, onPublished }) {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>Bid window</div>
+                <div style={{ ...sectionLabel, marginBottom: 4 }}>Bid window</div>
                 <select
                   value={fields.bid_window_hours}
                   onChange={e => setFields(p => ({ ...p, bid_window_hours: Number(e.target.value) }))}
-                  style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: `1px solid ${LINE}`, borderRadius: 8, background: PAPER }}
+                  style={{ ...inputStyle, cursor: 'pointer' }}
                 >
-                  <option value={24}>24h</option>
-                  <option value={72}>72h</option>
-                  <option value={168}>7 days</option>
+                  <option value={24} style={{ color: '#010a4f' }}>24h</option>
+                  <option value={72} style={{ color: '#010a4f' }}>72h</option>
+                  <option value={168} style={{ color: '#010a4f' }}>7 days</option>
                 </select>
               </div>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>Award rule</div>
+                <div style={{ ...sectionLabel, marginBottom: 4 }}>Award rule</div>
                 <select
                   value={fields.award_rule}
                   onChange={e => setFields(p => ({ ...p, award_rule: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: `1px solid ${LINE}`, borderRadius: 8, background: PAPER }}
+                  style={{ ...inputStyle, cursor: 'pointer' }}
                 >
-                  <option value="best_fit">Best fit (auto)</option>
-                  <option value="lowest_price">Lowest bid</option>
-                  <option value="manual">Manual</option>
+                  <option value="best_fit" style={{ color: '#010a4f' }}>Best fit (auto)</option>
+                  <option value="lowest_price" style={{ color: '#010a4f' }}>Lowest bid</option>
+                  <option value="manual" style={{ color: '#010a4f' }}>Manual</option>
                 </select>
               </div>
             </div>
 
             {error && (
-              <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 14, fontSize: 12, color: '#b91c1c' }}>
+              <div style={{
+                padding: 12, borderRadius: 12, marginBottom: 14, fontSize: 12,
+                background: 'rgba(220,38,38,0.16)', border: '1px solid rgba(248,113,113,0.40)', color: '#fecaca',
+              }}>
                 {error}
               </div>
             )}
@@ -333,9 +364,9 @@ function NewListingDrawer({ fmOrg, onClose, onPublished }) {
               onClick={publish}
               disabled={busy}
               style={{
-                width: '100%', background: busy ? MUTE : ACCENT, color: 'white', border: 'none',
-                borderRadius: 8, padding: '12px 18px', fontSize: 13, fontWeight: 800,
-                cursor: busy ? 'not-allowed' : 'pointer',
+                ...primaryButton(),
+                width: '100%',
+                cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}
             >
@@ -351,6 +382,118 @@ function NewListingDrawer({ fmOrg, onClose, onPublished }) {
 }
 
 // ─── Listing detail (bids ranked) ──────────────────────────────────────────
+// ── Q&A thread panel (FM view — sees author names) ───────────────────────
+function QaPanel({ listingId, listingStatus }) {
+  const [qa,       setQa]       = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [text,     setText]     = useState('');
+  const [sending,  setSending]  = useState(false);
+  const [error,    setError]    = useState(null);
+
+  const locked = !['open', 'bidding'].includes(listingStatus);
+
+  async function load() {
+    setLoading(true); setError(null);
+    try { setQa(await listListingQuestionsFm(listingId)); }
+    catch (e) { setError(e.message || String(e)); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [listingId]);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!text.trim()) return;
+    setSending(true); setError(null);
+    try {
+      const { ok, data } = await postListingAnswer({ listingId, body: text.trim() });
+      if (!ok) throw new Error(data?.error || 'Send failed');
+      setText('');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div style={{ ...glassDark({ radius: 14, padding: 14 }), marginBottom: 14 }}>
+      <div style={{ fontSize: 10, fontWeight: 800, color: ON_DARK.muted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <MessageCircleQuestion size={11} /> Bidder questions
+        <span style={{ fontSize: 9, color: ON_DARK.faint, fontWeight: 700, letterSpacing: 0, textTransform: 'none' }}>
+          · you see names · they see each other anonymously
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10, maxHeight: 240, overflowY: 'auto' }}>
+        {loading && <div style={{ fontSize: 11, color: ON_DARK.faint, fontStyle: 'italic' }}>Loading…</div>}
+        {!loading && qa.length === 0 && (
+          <div style={{ fontSize: 12, color: ON_DARK.muted, fontStyle: 'italic', padding: '4px 0' }}>
+            No questions yet — subs will post here before bidding.
+          </div>
+        )}
+        {qa.map(m => {
+          const isFm = m.author_role === 'fm';
+          return (
+            <div key={m.id} style={{ display: 'flex', justifyContent: isFm ? 'flex-end' : 'flex-start' }}>
+              <div style={{
+                maxWidth: '82%', padding: '8px 11px', borderRadius: 12,
+                background: isFm ? 'linear-gradient(180deg, #d64510 0%, #C2410C 100%)' : 'rgba(79,120,255,0.14)',
+                color:      isFm ? 'white' : ON_DARK.primary,
+                border:     isFm ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(79,120,255,0.30)',
+                fontSize: 12, lineHeight: 1.45, whiteSpace: 'pre-wrap',
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.85, marginBottom: 4 }}>
+                  {isFm ? 'You' : m.authorName} · {new Date(m.created_at).toLocaleString()}
+                </div>
+                {m.body}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {error && (
+        <div style={{
+          padding: 8, marginBottom: 8, borderRadius: 8, fontSize: 11,
+          background: 'rgba(220,38,38,0.16)', border: '1px solid rgba(248,113,113,0.40)', color: '#fecaca',
+        }}>{error}</div>
+      )}
+
+      {locked ? (
+        <div style={{ fontSize: 11, color: ON_DARK.faint, fontStyle: 'italic', padding: '6px 0' }}>
+          Q&A is closed — listing is no longer accepting bids.
+        </div>
+      ) : (
+        <form onSubmit={submit} style={{ display: 'flex', gap: 6 }}>
+          <input
+            type="text" value={text} onChange={e => setText(e.target.value)}
+            placeholder="Answer bidders — everyone bidding sees your reply"
+            disabled={sending} maxLength={2000}
+            style={{
+              flex: 1, padding: '8px 10px', borderRadius: 10, border: `1px solid ${ON_DARK.lineHi}`,
+              fontSize: 12, color: ON_DARK.primary, outline: 'none', fontFamily: 'inherit',
+              background: 'rgba(255,255,255,0.08)',
+            }}
+          />
+          <button
+            type="submit" disabled={!text.trim() || sending}
+            style={{
+              ...primaryButton({ size: 'sm' }),
+              opacity: text.trim() ? 1 : 0.45,
+              cursor: text.trim() ? 'pointer' : 'not-allowed',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}>
+            {sending
+              ? <Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} />
+              : <><Send size={11} /> Reply</>}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 function ListingDetail({ listingId, onClose, onChanged }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -394,22 +537,26 @@ function ListingDetail({ listingId, onClose, onChanged }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)',
+      position: 'fixed', inset: 0, background: 'rgba(1,4,25,0.55)',
+      backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
       display: 'flex', justifyContent: 'flex-end', zIndex: 50,
     }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{
-        width: 640, maxWidth: '94vw', background: PAPER,
-        borderLeft: `1px solid ${LINE}`, padding: '24px 28px',
-        overflowY: 'auto', boxShadow: '-12px 0 40px rgba(15,23,42,0.18)',
+        width: 640, maxWidth: '94vw', background: DRAWER_BG,
+        borderLeft: `1px solid ${ON_DARK.lineHi}`, padding: '24px 28px',
+        overflowY: 'auto', boxShadow: '-16px 0 60px rgba(0,0,0,0.55)',
       }}>
         {loading && (
-          <div style={{ padding: 40, textAlign: 'center', fontSize: 12, color: SUB, fontWeight: 700 }}>
-            <Loader2 size={20} style={{ animation: 'spin 0.8s linear infinite', display: 'block', margin: '0 auto 8px' }} /> Loading listing…
+          <div style={{ padding: 40, textAlign: 'center', fontSize: 12, color: ON_DARK.muted, fontWeight: 700 }}>
+            <Loader2 size={20} color={ON_DARK.secondary} style={{ animation: 'spin 0.8s linear infinite', display: 'block', margin: '0 auto 8px' }} /> Loading listing…
             <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
         {!loading && (!data || error) && (
-          <div style={{ padding: 18, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 12, color: '#b91c1c', fontSize: 13 }}>
+          <div style={{
+            padding: 18, borderRadius: 14, fontSize: 13,
+            background: 'rgba(220,38,38,0.16)', border: '1px solid rgba(248,113,113,0.40)', color: '#fecaca',
+          }}>
             {error || 'Listing not found.'}
           </div>
         )}
@@ -417,19 +564,19 @@ function ListingDetail({ listingId, onClose, onChanged }) {
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                   <StatusPill status={data.status} />
                   <TierBadge tier={data.visibility !== 'open' ? data.visibility : null} />
-                  <span style={{ fontSize: 10, color: MUTE }}>#{data.id.slice(0, 8)}</span>
+                  <span style={{ fontSize: 10, color: ON_DARK.faint }}>#{data.id.slice(0, 8)}</span>
                 </div>
-                <div style={{ fontSize: 17, fontWeight: 900, color: INK }}>{data.visit_spec?.site?.name}</div>
-                <div style={{ fontSize: 11, color: SUB, marginTop: 4 }}>
+                <div style={{ fontSize: 17, fontWeight: 900, color: ON_DARK.primary }}>{data.visit_spec?.site?.name}</div>
+                <div style={{ fontSize: 11, color: ON_DARK.secondary, marginTop: 5 }}>
                   <MapPin size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />
                   {data.visit_spec?.site?.postcode} · {FREQ_LABEL[data.visit_spec?.frequency] ?? data.visit_spec?.frequency} · {data.visit_spec?.scope}
                 </div>
               </div>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTE, padding: 4 }}>
-                <X size={18} />
+              <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.08)', border: `1px solid ${ON_DARK.line}`, borderRadius: 9, cursor: 'pointer', color: ON_DARK.secondary, padding: 6, display: 'flex' }}>
+                <X size={16} />
               </button>
             </div>
 
@@ -440,26 +587,30 @@ function ListingDetail({ listingId, onClose, onChanged }) {
                 { l: 'Ceiling', v: data.ceiling_price != null ? `£${data.ceiling_price}` : '—' },
                 { l: 'Bids',    v: data.bids.length },
               ].map(k => (
-                <div key={k.l} style={{ background: SOFT, borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 14, fontWeight: 900, color: INK }}>{k.v}</div>
-                  <div style={{ fontSize: 9, color: SUB, fontWeight: 700, marginTop: 2 }}>{k.l}</div>
+                <div key={k.l} style={{ ...CELL, borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: ON_DARK.primary }}>{k.v}</div>
+                  <div style={{ fontSize: 9, color: ON_DARK.muted, fontWeight: 700, marginTop: 2 }}>{k.l}</div>
                 </div>
               ))}
             </div>
 
             {data.status !== 'awarded' && data.status !== 'closed' && (
               <button onClick={handleClose} style={{
-                fontSize: 11, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fca5a5',
-                borderRadius: 6, padding: '5px 10px', cursor: 'pointer', marginBottom: 14,
+                fontSize: 11, fontWeight: 700, color: POP.red,
+                background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(248,113,113,0.35)',
+                borderRadius: 9, padding: '5px 11px', cursor: 'pointer', marginBottom: 14,
               }}>Close listing</button>
             )}
 
-            <div style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+            {/* Q&A thread — bidders' questions + your public answers */}
+            <QaPanel listingId={listingId} listingStatus={data.status} />
+
+            <div style={{ fontSize: 10, fontWeight: 800, color: ON_DARK.muted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
               Bids ranked by {data.award_rule === 'lowest_price' ? 'price' : 'best fit'}
             </div>
 
             {data.bids.length === 0 && (
-              <div style={{ padding: 24, background: PAPER, border: `1.5px dashed ${LINE}`, borderRadius: 10, fontSize: 12, color: SUB, textAlign: 'center' }}>
+              <div style={{ padding: 24, border: '1.5px dashed rgba(255,255,255,0.16)', borderRadius: 12, fontSize: 12, color: ON_DARK.muted, textAlign: 'center' }}>
                 No bids yet. Cadi is auto-matching subs — first bid usually arrives within 1 hour.
               </div>
             )}
@@ -468,52 +619,55 @@ function ListingDetail({ listingId, onClose, onChanged }) {
               {data.bids.map((bid, i) => {
                 const isTop = i === 0 && data.status !== 'awarded';
                 const isWinner = bid.status === 'accepted';
-                const fitColour = bid.fit >= 90 ? GREEN : bid.fit >= 80 ? '#3b82f6' : bid.fit >= 70 ? '#fbbf24' : '#ef4444';
+                const fitColour = bid.fit >= 90 ? POP.green : bid.fit >= 80 ? POP.blue : bid.fit >= 70 ? POP.amber : POP.red;
                 return (
                   <div key={bid.id} style={{
-                    background: isWinner ? `${GREEN}06` : isTop ? `${GREEN}03` : PAPER,
-                    border: `1px solid ${isWinner ? GREEN : isTop ? `${GREEN}25` : LINE}`,
-                    borderRadius: 10, padding: 12, position: 'relative',
+                    background: isWinner ? 'rgba(52,211,153,0.10)' : isTop ? 'rgba(52,211,153,0.05)' : 'rgba(255,255,255,0.05)',
+                    border: `1px solid ${isWinner ? 'rgba(52,211,153,0.50)' : isTop ? 'rgba(52,211,153,0.30)' : ON_DARK.line}`,
+                    borderRadius: 12, padding: 12, position: 'relative',
                   }}>
                     {isWinner && (
                       <span style={{
                         position: 'absolute', top: -8, left: 12,
                         fontSize: 9, fontWeight: 900, letterSpacing: '0.1em',
-                        color: 'white', background: GREEN, padding: '3px 8px', borderRadius: 999,
+                        color: '#01120b', background: POP.green, padding: '3px 8px', borderRadius: 999,
                       }}>✓ AWARDED</span>
                     )}
                     {isTop && !isWinner && (
                       <span style={{
                         position: 'absolute', top: -8, left: 12,
                         fontSize: 9, fontWeight: 900, letterSpacing: '0.1em',
-                        color: 'white', background: GREEN, padding: '3px 8px', borderRadius: 999,
+                        color: '#01120b', background: POP.green, padding: '3px 8px', borderRadius: 999,
                       }}>BEST FIT</span>
                     )}
                     <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr 90px 120px', gap: 12, alignItems: 'center' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                          <span style={{ fontSize: 13, fontWeight: 800, color: INK }}>{bid.subName}</span>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: ON_DARK.primary }}>{bid.subName}</span>
                           <TierBadge tier={bid.subTier} />
                         </div>
-                        <div style={{ fontSize: 10, color: SUB }}>
-                          Score <strong style={{ color: INK }}>{bid.subScore}</strong>
+                        <div style={{ fontSize: 10, color: ON_DARK.muted }}>
+                          Score <strong style={{ color: ON_DARK.primary }}>{bid.subScore}</strong>
                           {bid.subRegion ? <> · {bid.subRegion}</> : null}
                           {' · '}cap {bid.subCapacity}
                         </div>
                         {bid.note && (
-                          <div style={{ fontSize: 10, color: SUB, marginTop: 6, fontStyle: 'italic', padding: '4px 8px', background: SOFT, borderRadius: 6 }}>"{bid.note}"</div>
+                          <div style={{
+                            fontSize: 10, color: ON_DARK.secondary, marginTop: 6, fontStyle: 'italic',
+                            padding: '4px 8px', background: 'rgba(255,255,255,0.06)', borderRadius: 8,
+                          }}>"{bid.note}"</div>
                         )}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                         <FitBar label="Price"    value={data.floor_price && data.target_price && data.target_price > data.floor_price
                           ? Math.max(60, 100 - Math.round(((Number(bid.bid_price) - Number(data.floor_price)) / (Number(data.target_price) - Number(data.floor_price))) * 50))
-                          : 90} color={ACCENT} />
-                        <FitBar label="Score"    value={bid.subScore} color={GREEN} />
+                          : 90} color={POP.orange} />
+                        <FitBar label="Score"    value={bid.subScore} color={POP.green} />
                         <FitBar label="Capacity" value={Math.min(100, bid.subCapacity * 10)} color="#a78bfa" />
                       </div>
                       <div>
-                        <div style={{ fontSize: 18, fontWeight: 900, color: INK, lineHeight: 1 }}>£{bid.bid_price}</div>
-                        <div style={{ fontSize: 10, color: SUB, marginTop: 2 }}>per visit</div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: ON_DARK.primary, lineHeight: 1 }}>£{bid.bid_price}</div>
+                        <div style={{ fontSize: 10, color: ON_DARK.muted, marginTop: 2 }}>per visit</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{
@@ -523,15 +677,18 @@ function ListingDetail({ listingId, onClose, onChanged }) {
                           fontSize: 13, fontWeight: 900, color: fitColour,
                           marginBottom: 6,
                         }}>{bid.fit}</div>
-                        <div style={{ fontSize: 9, color: SUB, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>fit</div>
+                        <div style={{ fontSize: 9, color: ON_DARK.muted, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>fit</div>
                         {!isWinner && data.status !== 'awarded' && data.status !== 'closed' && bid.status === 'submitted' && (
                           <button
                             onClick={() => handleAward(bid)}
                             disabled={!!awarding}
                             style={{
                               fontSize: 11, fontWeight: 800, color: 'white',
-                              background: isTop ? GREEN : ACCENT, border: 'none',
-                              borderRadius: 7, padding: '6px 12px',
+                              background: isTop
+                                ? 'linear-gradient(180deg, #10b981 0%, #047857 100%)'
+                                : 'linear-gradient(180deg, #d64510 0%, #C2410C 100%)',
+                              border: '1px solid rgba(255,255,255,0.15)',
+                              borderRadius: 8, padding: '6px 12px',
                               cursor: awarding ? 'not-allowed' : 'pointer',
                               width: '100%',
                               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
@@ -542,10 +699,10 @@ function ListingDetail({ listingId, onClose, onChanged }) {
                           </button>
                         )}
                         {bid.status === 'lost' && (
-                          <span style={{ fontSize: 10, fontWeight: 700, color: MUTE }}>not awarded</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: ON_DARK.faint }}>not awarded</span>
                         )}
                         {bid.status === 'withdrawn' && (
-                          <span style={{ fontSize: 10, fontWeight: 700, color: MUTE }}>withdrawn</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: ON_DARK.faint }}>withdrawn</span>
                         )}
                       </div>
                     </div>
@@ -556,10 +713,11 @@ function ListingDetail({ listingId, onClose, onChanged }) {
 
             {data.status === 'awarded' && (
               <div style={{
-                marginTop: 14, padding: 12, background: `${GREEN}10`, border: `1px solid ${GREEN}30`,
-                borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#065f46',
+                marginTop: 14, padding: 12, borderRadius: 12,
+                background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.35)',
+                display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: ON_DARK.secondary,
               }}>
-                <CheckCircle2 size={16} color={GREEN} />
+                <CheckCircle2 size={16} color={POP.green} />
                 <span>Awarded {data.awarded_at ? `on ${new Date(data.awarded_at).toLocaleDateString()}` : ''}. A scheduled job has been created.</span>
               </div>
             )}
@@ -620,132 +778,155 @@ export default function FmOpsMarketplace() {
   }, [listings]);
 
   return (
-    <div>
-      <div style={{
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-        marginBottom: 20, paddingBottom: 14, borderBottom: `1px solid ${LINE}`,
-      }}>
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 900, color: INK, letterSpacing: '-0.01em' }}>Marketplace</div>
-          <div style={{ fontSize: 12, color: SUB, marginTop: 4 }}>
-            Your published listings, ranked bids, and award flow. Cadi auto-matches the top subs per listing.
+    <div style={{ ...blueCanvas(), margin: '-28px -32px', padding: '34px 36px 56px' }}>
+      <div style={{ maxWidth: 1240, margin: '0 auto' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 22 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 11,
+                background: 'rgba(251,146,60,0.20)', color: POP.orange,
+                border: '1px solid rgba(251,146,60,0.40)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}><Send size={17} /></div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.22em', textTransform: 'uppercase', color: ON_DARK.muted }}>
+                FM Operations · Marketplace
+              </div>
+            </div>
+            <h1 style={{ fontSize: 26, fontWeight: 900, letterSpacing: '-0.02em', color: ON_DARK.primary, margin: 0 }}>
+              Listings, bids &amp; <span style={{ color: POP.orange }}>awards</span>
+            </h1>
+            <div style={{ fontSize: 12.5, color: ON_DARK.secondary, marginTop: 6, maxWidth: 560 }}>
+              Your published listings, ranked bids, and award flow. Cadi auto-matches the top subs per listing.
+            </div>
+          </div>
+          <button
+            onClick={() => setNewOpen(true)}
+            className={HOVER_LIFT}
+            style={{ ...primaryButton(), display: 'inline-flex', alignItems: 'center', gap: 7 }}
+          >
+            <Plus size={14} /> New listing
+          </button>
+        </div>
+
+        {/* Toolbar */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 18, flexWrap: 'wrap' }}>
+          <div style={{
+            ...glassDark({ radius: 12 }),
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 12px', flex: 1, maxWidth: 340, minWidth: 200,
+          }}>
+            <Search size={13} color={ON_DARK.faint} />
+            <input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search by site or contract…"
+              style={{ border: 'none', outline: 'none', flex: 1, fontSize: 12, color: ON_DARK.primary, background: 'transparent' }}
+            />
+          </div>
+          <div style={{ ...glassDark({ radius: 12 }), display: 'flex', gap: 4, padding: 4, flexWrap: 'wrap' }}>
+            {STATUS_TABS.map(t => {
+              const count = counts[t.id];
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  style={{
+                    fontSize: 11, fontWeight: 700, padding: '6px 11px', borderRadius: 9,
+                    background: active ? 'rgba(251,146,60,0.22)' : 'transparent',
+                    color: active ? '#fff' : ON_DARK.muted,
+                    border: active ? '1px solid rgba(251,146,60,0.40)' : '1px solid transparent',
+                    cursor: 'pointer', transition: 'background 150ms ease, color 150ms ease',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  {t.label}
+                  {count != null && count > 0 && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 800,
+                      background: active ? POP.orange : 'rgba(255,255,255,0.10)',
+                      color: active ? '#01120b' : ON_DARK.secondary,
+                      padding: '1px 6px', borderRadius: 999,
+                    }}>{count}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
-        <button
-          onClick={() => setNewOpen(true)}
-          style={{
-            background: ACCENT, color: 'white', border: 'none',
-            borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 800,
-            display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-          }}
-        >
-          <Plus size={13} /> New listing
-        </button>
-      </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          background: PAPER, border: `1px solid ${LINE}`, borderRadius: 8,
-          padding: '6px 10px', flex: 1, maxWidth: 320, minWidth: 200,
-        }}>
-          <Search size={12} color={MUTE} />
-          <input
-            value={q}
-            onChange={e => setQ(e.target.value)}
-            placeholder="Search by site or contract…"
-            style={{ border: 'none', outline: 'none', flex: 1, fontSize: 12, color: INK, background: 'transparent' }}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: 4, background: PAPER, border: `1px solid ${LINE}`, borderRadius: 8, padding: 4 }}>
-          {STATUS_TABS.map(t => {
-            const count = counts[t.id];
-            return (
+        {loading && (
+          <div style={{ padding: 60, textAlign: 'center', fontSize: 12, color: ON_DARK.muted, fontWeight: 700 }}>
+            <Loader2 size={20} color={ON_DARK.secondary} style={{ animation: 'spin 0.8s linear infinite', display: 'block', margin: '0 auto 10px' }} /> Loading listings…
+            <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div style={{
+            padding: 18, borderRadius: 14, fontSize: 13,
+            background: 'rgba(220,38,38,0.16)', border: '1px solid rgba(248,113,113,0.40)', color: '#fecaca',
+          }}>
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && filtered.length === 0 && (
+          <div style={{ padding: '44px 24px', borderRadius: 18, border: '1.5px dashed rgba(255,255,255,0.16)', textAlign: 'center' }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: 14,
+              background: 'rgba(251,146,60,0.16)', color: POP.orange, border: '1px solid rgba(251,146,60,0.35)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px',
+            }}>
+              <Send size={24} />
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: ON_DARK.primary, marginBottom: 6 }}>
+              {listings.length === 0 ? 'No listings yet' : 'Nothing matches this filter'}
+            </div>
+            <div style={{ fontSize: 12, color: ON_DARK.muted, maxWidth: 400, margin: '0 auto 18px', lineHeight: 1.6 }}>
+              {listings.length === 0
+                ? 'Publish unassigned visit specs to your network — Cadi auto-matches the best subs and routes bids back to you.'
+                : 'Try a different status tab to see other listings.'}
+            </div>
+            {listings.length === 0 && fmOrg && (
               <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                style={{
-                  fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 6,
-                  background: tab === t.id ? `${ACCENT}12` : 'transparent',
-                  color: tab === t.id ? ACCENT : SUB,
-                  border: 'none', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                }}
+                onClick={() => setNewOpen(true)}
+                className={HOVER_LIFT}
+                style={{ ...primaryButton(), display: 'inline-flex', alignItems: 'center', gap: 7 }}
               >
-                {t.label}
-                {count != null && count > 0 && (
-                  <span style={{ fontSize: 9, fontWeight: 800, background: tab === t.id ? ACCENT : SOFT, color: tab === t.id ? 'white' : SUB, padding: '1px 6px', borderRadius: 999 }}>{count}</span>
-                )}
+                <Plus size={14} /> New listing
               </button>
-            );
-          })}
-        </div>
+            )}
+          </div>
+        )}
+
+        {!loading && !error && filtered.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+            {filtered.map(l => (
+              <ListingCard key={l.id} listing={l} onOpen={() => setOpenId(l.id)} />
+            ))}
+          </div>
+        )}
+
+        {openId && (
+          <ListingDetail
+            listingId={openId}
+            onClose={() => setOpenId(null)}
+            onChanged={load}
+          />
+        )}
+
+        {newOpen && fmOrg && (
+          <NewListingDrawer
+            fmOrg={fmOrg}
+            onClose={() => setNewOpen(false)}
+            onPublished={load}
+          />
+        )}
       </div>
-
-      {loading && (
-        <div style={{ padding: 40, textAlign: 'center', fontSize: 12, color: SUB, fontWeight: 700 }}>
-          <Loader2 size={20} style={{ animation: 'spin 0.8s linear infinite', display: 'block', margin: '0 auto 8px' }} /> Loading listings…
-          <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
-        </div>
-      )}
-
-      {!loading && error && (
-        <div style={{ padding: 18, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 12, color: '#b91c1c', fontSize: 13 }}>
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && filtered.length === 0 && (
-        <div style={{ padding: 40, background: PAPER, border: `1.5px dashed ${LINE}`, borderRadius: 14, textAlign: 'center' }}>
-          <div style={{ width: 52, height: 52, borderRadius: 13, background: `${ACCENT}10`, color: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-            <Send size={24} />
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: INK, marginBottom: 6 }}>
-            {listings.length === 0 ? 'No listings yet' : 'Nothing matches this filter'}
-          </div>
-          <div style={{ fontSize: 12, color: SUB, marginBottom: 18, maxWidth: 400, margin: '0 auto 18px' }}>
-            {listings.length === 0
-              ? 'Publish unassigned visit specs to your network — Cadi auto-matches the best subs and routes bids back to you.'
-              : 'Try a different status tab to see other listings.'}
-          </div>
-          {listings.length === 0 && fmOrg && (
-            <button
-              onClick={() => setNewOpen(true)}
-              style={{
-                background: ACCENT, color: 'white', border: 'none',
-                borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 800, cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-              }}
-            >
-              <Plus size={13} /> New listing
-            </button>
-          )}
-        </div>
-      )}
-
-      {!loading && !error && filtered.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-          {filtered.map(l => (
-            <ListingCard key={l.id} listing={l} onOpen={() => setOpenId(l.id)} />
-          ))}
-        </div>
-      )}
-
-      {openId && (
-        <ListingDetail
-          listingId={openId}
-          onClose={() => setOpenId(null)}
-          onChanged={load}
-        />
-      )}
-
-      {newOpen && fmOrg && (
-        <NewListingDrawer
-          fmOrg={fmOrg}
-          onClose={() => setNewOpen(false)}
-          onPublished={load}
-        />
-      )}
     </div>
   );
 }

@@ -90,7 +90,8 @@ const FmOpsContractors = lazy(() => import('./pages/fm-ops/FmOpsContractors'));
 const FmOpsMarketplace = lazy(() => import('./pages/fm-ops/FmOpsMarketplace'));
 const FmOpsSchedule    = lazy(() => import('./pages/fm-ops/FmOpsSchedule'));
 const FmOpsApproval    = lazy(() => import('./pages/fm-ops/FmOpsApproval'));
-const FmOpsAccounts    = lazy(() => import('./pages/fm-ops/FmOpsAccounts'));
+const FmOpsAccounts         = lazy(() => import('./pages/fm-ops/FmOpsAccounts'));
+const FmOpsAccountsSettings = lazy(() => import('./pages/fm-ops/FmOpsAccountsSettings'));
 const FmOpsTeam        = lazy(() => import('./pages/fm-ops/FmOpsTeam'));
 const AdminFmApplications = lazy(() => import('./pages/AdminFmApplications'));
 
@@ -191,7 +192,8 @@ function App() {
           <Route path="marketplace" element={<FmOpsMarketplace />} />
           <Route path="schedule"    element={<FmOpsSchedule />} />
           <Route path="approval"    element={<FmOpsApproval />} />
-          <Route path="accounts"    element={<FmOpsAccounts />} />
+          <Route path="accounts"            element={<FmOpsAccounts />} />
+          <Route path="accounts/settings"   element={<FmOpsAccountsSettings />} />
           <Route path="team"        element={<FmOpsTeam />} />
         </Route>
 

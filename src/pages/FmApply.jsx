@@ -45,6 +45,10 @@ export default function FmApply() {
     regions_covered: [], sites_managed: '', current_subs: '', current_software: '',
     contact_name: '', contact_role: '', contact_email: '', contact_phone: '',
     why_cadi: '',
+    // Honeypot — real users leave this empty (input is off-screen +
+    // aria-hidden). Bots populating every field trigger silent-success
+    // in the fm-application-submit function.
+    hp_website2: '',
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -234,6 +238,23 @@ export default function FmApply() {
               )}
             </div>
           )}
+
+          {/* Honeypot — off-screen + aria-hidden so real users never see or
+              tab into it. Bots that auto-fill every field will fill this too
+              and get silently trapped by the fm-application-submit function. */}
+          <input
+            type="text"
+            name="website2"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            value={form.hp_website2}
+            onChange={e => set('hp_website2', e.target.value)}
+            style={{
+              position: 'absolute', left: '-10000px', top: 'auto',
+              width: 1, height: 1, overflow: 'hidden',
+            }}
+          />
 
           {/* Footer */}
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 24, paddingTop: 18, borderTop: `1px solid ${LINE}` }}>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ChevronLeft, MapPin, Send, Loader2, AlertCircle, Users, Plus,
+  ChevronLeft, MapPin, Send, Loader2,
 } from 'lucide-react';
 import {
   getContract,
@@ -12,36 +12,53 @@ import {
   getMyFmOrganisation,
   CONTRACT_STATUS,
 } from '../../lib/db/fmOpsDb';
-import { FM_OPS_TOKENS } from '../../components/fm-ops/FmOpsLayout';
+import {
+  blueCanvas, glassDark, ghostButton, ON_DARK, FM_POP as POP,
+} from '../../lib/connectTheme';
 
-const { NAVY, INK, SUB, MUTE, LINE, PAPER, ACCENT } = FM_OPS_TOKENS;
-const SOFT  = '#f1f5f9';
-const GREEN = '#16a34a';
-
+// Status → bright accents for the dark canvas.
+const CONTRACT_POP = {
+  mobilising: POP.amber,
+  active:     POP.green,
+  paused:     'rgba(255,255,255,0.55)',
+  closed:     'rgba(255,255,255,0.40)',
+};
 const SPEC_STATUS = {
-  unassigned:  { label: 'Unassigned',  color: '#a16207' },
-  assigned:    { label: 'Assigned',    color: GREEN     },
-  marketplace: { label: 'On marketplace', color: ACCENT },
-  active:      { label: 'Active',      color: NAVY      },
-  closed:      { label: 'Closed',      color: MUTE      },
+  unassigned:  { label: 'Unassigned',     pop: POP.amber  },
+  assigned:    { label: 'Assigned',       pop: POP.green  },
+  marketplace: { label: 'On marketplace', pop: POP.orange },
+  active:      { label: 'Active',         pop: POP.blue   },
+  closed:      { label: 'Closed',         pop: 'rgba(255,255,255,0.40)' },
 };
 
-function Kpi({ label, value, accent }) {
+function Pill({ label, pop }) {
+  const hex = pop.startsWith('#');
   return (
-    <div style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: 10, padding: '14px 16px' }}>
-      <div style={{ fontSize: 22, fontWeight: 900, color: accent || INK, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 11, color: SUB, fontWeight: 700, marginTop: 6 }}>{label}</div>
-    </div>
+    <span style={{
+      fontSize: 10, fontWeight: 800, color: pop,
+      background: hex ? `${pop}1f` : 'rgba(255,255,255,0.08)',
+      border: `1px solid ${hex ? `${pop}42` : 'rgba(255,255,255,0.16)'}`,
+      padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap',
+    }}>{label}</span>
   );
 }
 
-function StatusPill({ status, map }) {
-  const m = map[status] || { label: status, color: SUB };
+function MetaChip({ children }) {
   return (
     <span style={{
-      fontSize: 10, fontWeight: 800, color: m.color,
-      background: `${m.color}14`, padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap',
-    }}>{m.label}</span>
+      fontSize: 10, fontWeight: 700, color: ON_DARK.secondary,
+      background: 'rgba(255,255,255,0.08)', border: `1px solid ${ON_DARK.line}`,
+      padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap',
+    }}>{children}</span>
+  );
+}
+
+function Kpi({ label, value, pop }) {
+  return (
+    <div style={{ ...glassDark({ radius: 14, padding: '14px 16px' }) }}>
+      <div style={{ fontSize: 22, fontWeight: 900, color: pop || ON_DARK.primary, lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 11, color: ON_DARK.muted, fontWeight: 700, marginTop: 7 }}>{label}</div>
+    </div>
   );
 }
 
@@ -132,166 +149,181 @@ export default function FmOpsContractDetail() {
     };
   }, [contract, grouped]);
 
+  const canvas = { ...blueCanvas(), margin: '-28px -32px', padding: '34px 36px 56px' };
+  const backBtn = (
+    <button onClick={() => navigate('/fm-ops/contracts')} style={{
+      ...ghostButton({ size: 'sm', onDark: true }),
+      display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 18,
+    }}>
+      <ChevronLeft size={12} /> Contracts
+    </button>
+  );
+
   if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: 'center', fontSize: 12, color: SUB, fontWeight: 700 }}>
-        <Loader2 size={20} style={{ animation: 'spin 0.8s linear infinite', display: 'block', margin: '0 auto 8px' }} /> Loading contract…
-        <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+      <div style={canvas}>
+        <div style={{ maxWidth: 1240, margin: '0 auto', padding: 60, textAlign: 'center', fontSize: 12, color: ON_DARK.muted, fontWeight: 700 }}>
+          <Loader2 size={20} color={ON_DARK.secondary} style={{ animation: 'spin 0.8s linear infinite', display: 'block', margin: '0 auto 10px' }} /> Loading contract…
+          <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+        </div>
       </div>
     );
   }
 
   if (error || !contract) {
     return (
-      <div>
-        <button onClick={() => navigate('/fm-ops/contracts')} style={{ background: PAPER, color: SUB, border: `1px solid ${LINE}`, borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 14 }}>
-          <ChevronLeft size={12} /> Contracts
-        </button>
-        <div style={{ padding: 18, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 12, color: '#b91c1c', fontSize: 13 }}>
-          {error || 'Contract not found.'}
+      <div style={canvas}>
+        <div style={{ maxWidth: 1240, margin: '0 auto' }}>
+          {backBtn}
+          <div style={{
+            padding: 18, borderRadius: 14, fontSize: 13,
+            background: 'rgba(220,38,38,0.16)', border: '1px solid rgba(248,113,113,0.40)', color: '#fecaca',
+          }}>
+            {error || 'Contract not found.'}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
-      {/* Header */}
-      <button onClick={() => navigate('/fm-ops/contracts')} style={{
-        background: PAPER, color: SUB, border: `1px solid ${LINE}`,
-        borderRadius: 8, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
-        display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 14,
-      }}>
-        <ChevronLeft size={12} /> Contracts
-      </button>
+    <div style={canvas}>
+      <div style={{ maxWidth: 1240, margin: '0 auto' }}>
+        {backBtn}
 
-      <div style={{
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-        marginBottom: 20, paddingBottom: 14, borderBottom: `1px solid ${LINE}`, gap: 16,
-      }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <StatusPill status={contract.status} map={CONTRACT_STATUS} />
-            {contract.end_client?.name && (
-              <span style={{ fontSize: 10, fontWeight: 700, color: SUB, background: SOFT, padding: '3px 8px', borderRadius: 999 }}>
-                {contract.end_client.name}
-              </span>
-            )}
-            {contract.work_type && (
-              <span style={{ fontSize: 10, fontWeight: 700, color: SUB, background: SOFT, padding: '3px 8px', borderRadius: 999 }}>
-                {contract.work_type}
-              </span>
-            )}
-          </div>
-          <div style={{ fontSize: 20, fontWeight: 900, color: INK, letterSpacing: '-0.01em' }}>{contract.name}</div>
-          <div style={{ fontSize: 12, color: SUB, marginTop: 4 }}>
-            {contract.starts_on ? `Started ${new Date(contract.starts_on).toLocaleDateString()}` : 'No start date'} · created {new Date(contract.created_at).toLocaleDateString()}
-          </div>
-        </div>
-      </div>
-
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 18 }}>
-        <Kpi label="Sites in scope"   value={summary.siteCount}  accent={INK}    />
-        <Kpi label="Visit specs"      value={summary.specCount}  accent={INK}    />
-        <Kpi label="Assigned to subs" value={summary.assigned}   accent={GREEN}  />
-        <Kpi label="On marketplace"   value={summary.market}     accent={ACCENT} />
-        <Kpi label="Per-cycle value"  value={`£${summary.totalValue}`} accent={NAVY} />
-      </div>
-
-      {/* Sites + specs */}
-      {grouped.length === 0 && (
-        <div style={{ padding: 30, background: PAPER, border: `1.5px dashed ${LINE}`, borderRadius: 12, textAlign: 'center', fontSize: 13, color: SUB }}>
-          This contract has no sites yet.
-        </div>
-      )}
-
-      {grouped.map(({ site, specs }) => (
-        <div key={site?.id ?? 'no-site'} style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '12px 16px',
-            background: `${NAVY}05`, borderBottom: `1px solid ${LINE}`,
-          }}>
-            <MapPin size={14} color={NAVY} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 900, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {site?.name ?? 'Untitled site'}
-              </div>
-              <div style={{ fontSize: 10, color: SUB, marginTop: 1 }}>
-                {[site?.postcode, site?.address].filter(Boolean).join(' · ') || '—'}
-              </div>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+          marginBottom: 22, gap: 16, flexWrap: 'wrap',
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+              <Pill
+                label={(CONTRACT_STATUS[contract.status] || { label: contract.status }).label}
+                pop={CONTRACT_POP[contract.status] || 'rgba(255,255,255,0.55)'}
+              />
+              {contract.end_client?.name && <MetaChip>{contract.end_client.name}</MetaChip>}
+              {contract.work_type && <MetaChip>{contract.work_type}</MetaChip>}
+            </div>
+            <h1 style={{ fontSize: 26, fontWeight: 900, color: ON_DARK.primary, letterSpacing: '-0.02em', margin: 0 }}>{contract.name}</h1>
+            <div style={{ fontSize: 12, color: ON_DARK.muted, marginTop: 6 }}>
+              {contract.starts_on ? `Started ${new Date(contract.starts_on).toLocaleDateString()}` : 'No start date'} · created {new Date(contract.created_at).toLocaleDateString()}
             </div>
           </div>
-          <div style={{ padding: 12 }}>
-            {specs.map((s, i) => {
-              const assignedSub = subs.find(x => x.id === s.assigned_sub_user_id);
-              const busy = busyIds.has(s.id);
-              return (
-                <div key={s.id} style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1.4fr 1fr 1fr 1.4fr',
-                  gap: 10, alignItems: 'center',
-                  padding: '10px 12px', borderRadius: 8,
-                  background: SOFT, marginBottom: i < specs.length - 1 ? 6 : 0,
-                }}>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: INK }}>{s.frequency} · {s.scope}</div>
-                    {s.access_notes && <div style={{ fontSize: 10, color: SUB, marginTop: 2 }}>{s.access_notes}</div>}
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: INK }}>£{s.price_per_visit}</div>
-                  <div>
-                    <StatusPill status={s.status} map={SPEC_STATUS} />
-                    {assignedSub && (
-                      <div style={{ fontSize: 10, color: SUB, marginTop: 3 }}>→ {assignedSub.name}</div>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
-                    {busy && <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite', color: SUB }} />}
-                    {!busy && (
-                      <>
-                        <select
-                          value={s.assigned_sub_user_id ?? ''}
-                          onChange={e => handleAssign(s.id, e.target.value || null)}
-                          disabled={s.status === 'marketplace'}
-                          style={{
-                            padding: '5px 8px', fontSize: 11,
-                            border: `1px solid ${LINE}`, borderRadius: 6,
-                            background: s.status === 'marketplace' ? SOFT : PAPER,
-                            color: s.status === 'marketplace' ? MUTE : INK,
-                            cursor: s.status === 'marketplace' ? 'not-allowed' : 'pointer',
-                          }}
-                        >
-                          <option value="">Assign sub…</option>
-                          {subs.map(sub => (
-                            <option key={sub.id} value={sub.id}>{sub.name}{sub.region ? ` · ${sub.region}` : ''}</option>
-                          ))}
-                        </select>
-                        {s.status !== 'marketplace' && (
-                          <button
-                            onClick={() => handleToMarket(s)}
+        </div>
+
+        {/* KPIs */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginBottom: 22 }}>
+          <Kpi label="Sites in scope"   value={summary.siteCount} />
+          <Kpi label="Visit specs"      value={summary.specCount} />
+          <Kpi label="Assigned to subs" value={summary.assigned}   pop={POP.green}  />
+          <Kpi label="On marketplace"   value={summary.market}     pop={POP.orange} />
+          <Kpi label="Per-cycle value"  value={`£${summary.totalValue}`} pop={POP.blue} />
+        </div>
+
+        {/* Sites + specs */}
+        {grouped.length === 0 && (
+          <div style={{ padding: 34, borderRadius: 18, border: '1.5px dashed rgba(255,255,255,0.16)', textAlign: 'center', fontSize: 13, color: ON_DARK.muted }}>
+            This contract has no sites yet.
+          </div>
+        )}
+
+        {grouped.map(({ site, specs }) => (
+          <div key={site?.id ?? 'no-site'} style={{ ...glassDark({ radius: 18 }), marginBottom: 14, overflow: 'hidden' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '13px 18px',
+              background: 'rgba(79,120,255,0.10)', borderBottom: `1px solid ${ON_DARK.line}`,
+            }}>
+              <MapPin size={14} color={POP.blue} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: ON_DARK.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {site?.name ?? 'Untitled site'}
+                </div>
+                <div style={{ fontSize: 10, color: ON_DARK.muted, marginTop: 2 }}>
+                  {[site?.postcode, site?.address].filter(Boolean).join(' · ') || '—'}
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: 12 }}>
+              {specs.map((s, i) => {
+                const assignedSub = subs.find(x => x.id === s.assigned_sub_user_id);
+                const busy = busyIds.has(s.id);
+                const onMarket = s.status === 'marketplace';
+                return (
+                  <div key={s.id} style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1.4fr 1fr 1fr 1.4fr',
+                    gap: 10, alignItems: 'center',
+                    padding: '11px 13px', borderRadius: 12,
+                    background: 'rgba(255,255,255,0.05)', border: `1px solid ${ON_DARK.line}`,
+                    marginBottom: i < specs.length - 1 ? 7 : 0,
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: ON_DARK.primary }}>{s.frequency} · {s.scope}</div>
+                      {s.access_notes && <div style={{ fontSize: 10, color: ON_DARK.muted, marginTop: 3 }}>{s.access_notes}</div>}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: ON_DARK.primary }}>£{s.price_per_visit}</div>
+                    <div>
+                      <Pill
+                        label={(SPEC_STATUS[s.status] || { label: s.status }).label}
+                        pop={(SPEC_STATUS[s.status] || { pop: 'rgba(255,255,255,0.55)' }).pop}
+                      />
+                      {assignedSub && (
+                        <div style={{ fontSize: 10, color: ON_DARK.secondary, marginTop: 4 }}>→ {assignedSub.name}</div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
+                      {busy && <Loader2 size={13} color={ON_DARK.secondary} style={{ animation: 'spin 0.8s linear infinite' }} />}
+                      {!busy && (
+                        <>
+                          <select
+                            value={s.assigned_sub_user_id ?? ''}
+                            onChange={e => handleAssign(s.id, e.target.value || null)}
+                            disabled={onMarket}
                             style={{
-                              fontSize: 11, fontWeight: 700,
-                              background: `${ACCENT}10`, color: ACCENT,
-                              border: `1px solid ${ACCENT}30`, borderRadius: 6,
-                              padding: '5px 9px', cursor: 'pointer',
-                              display: 'flex', alignItems: 'center', gap: 4,
+                              padding: '6px 9px', fontSize: 11, fontWeight: 600,
+                              border: `1px solid ${onMarket ? ON_DARK.line : ON_DARK.lineHi}`,
+                              borderRadius: 8,
+                              background: 'rgba(255,255,255,0.10)',
+                              color: onMarket ? ON_DARK.faint : ON_DARK.primary,
+                              cursor: onMarket ? 'not-allowed' : 'pointer',
+                              outline: 'none',
                             }}
                           >
-                            <Send size={11} /> Market
-                          </button>
-                        )}
-                      </>
-                    )}
+                            <option value="" style={{ color: '#010a4f' }}>Assign sub…</option>
+                            {subs.map(sub => (
+                              <option key={sub.id} value={sub.id} style={{ color: '#010a4f' }}>
+                                {sub.name}{sub.region ? ` · ${sub.region}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {!onMarket && (
+                            <button
+                              onClick={() => handleToMarket(s)}
+                              style={{
+                                fontSize: 11, fontWeight: 700,
+                                background: 'rgba(251,146,60,0.14)', color: POP.orange,
+                                border: '1px solid rgba(251,146,60,0.35)', borderRadius: 8,
+                                padding: '6px 10px', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', gap: 4,
+                              }}
+                            >
+                              <Send size={11} /> Market
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
 
-      <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+        <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+      </div>
     </div>
   );
 }

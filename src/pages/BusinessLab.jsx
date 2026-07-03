@@ -17,9 +17,11 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { TrendingUp } from "lucide-react";
 import FirstVisitCoach from "../components/FirstVisitCoach";
 import { supabase } from "../lib/supabase";
 import { getCurrentUserId } from "../lib/db/authDb";
+import { greenCanvas, glassDark, CONNECT_RADII, ON_DARK } from "../lib/connectTheme";
 
 // ─── Goals coach (first-visit) ────────────────────────────────────────────────
 const AMBITIONS = [
@@ -37,8 +39,8 @@ function BusinessLabGoalsCoach() {
   const [targetDate, setTargetDate]         = useState('');
   const [ambition, setAmbition]             = useState('');
 
-  const lbl = "text-[10px] font-bold uppercase tracking-wider text-[#1f48ff]";
-  const inp = "w-full bg-white border border-[#1f48ff]/15 rounded-lg px-3 py-2 text-sm text-[#010a4f] focus:outline-none focus:border-[#1f48ff]/50";
+  const lbl = "text-[10px] font-bold uppercase tracking-wider text-[#059669]";
+  const inp = "w-full bg-white border border-[#059669]/15 rounded-lg px-3 py-2 text-sm text-[#010a4f] focus:outline-none focus:border-[#059669]/50";
 
   const persist = async () => {
     setSaving(true);
@@ -121,8 +123,8 @@ function BusinessLabGoalsCoach() {
                 <button key={a.id} type="button" onClick={() => setAmbition(on ? '' : a.id)}
                   className={`text-[12px] font-bold px-3 py-1.5 rounded-full border transition-colors ${
                     on
-                      ? 'bg-[#1f48ff] text-white border-[#1f48ff]'
-                      : 'bg-[#f0f4ff] text-[#010a4f] border-[#1f48ff]/15 hover:border-[#1f48ff]/40'
+                      ? 'bg-[#059669] text-white border-[#059669]'
+                      : 'bg-[#f0f4ff] text-[#010a4f] border-[#059669]/15 hover:border-[#059669]/40'
                   }`}>
                   {a.label}
                 </button>
@@ -182,7 +184,7 @@ const pct  = n => `${Math.round(+n)}%`;
 // ─── Shared UI (dark glassmorphism) ───────────────────────────────────────────
 const Card = ({ children, className = "" }) =>
   <div className={`relative overflow-hidden rounded-xl border border-[rgba(153,197,255,0.12)] ${className}`}
-    style={{ background: 'linear-gradient(145deg, #010a4f 0%, #05124a 50%, #0d1e78 100%)' }}>
+    style={{ background: 'linear-gradient(145deg, #052e1c 0%, #064e3b 50%, #065f46 100%)' }}>
     <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/40 to-transparent" />
     <div className="relative">{children}</div>
   </div>;
@@ -192,7 +194,7 @@ const SL = ({ children, className = "" }) =>
 
 function Chip({ children, color = "blue" }) {
   const s = {
-    blue:"bg-[#1f48ff]/20 text-[#99c5ff] border-[#1f48ff]/30", green:"bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
+    blue:"bg-[#059669]/20 text-[#99c5ff] border-[#059669]/30", green:"bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
     warn:"bg-amber-500/15 text-amber-400 border-amber-500/25", red:"bg-red-500/15 text-red-400 border-red-500/25",
     navy:"bg-white/10 text-white border-white/20", sky:"bg-[#99c5ff]/10 text-[#99c5ff] border-[#99c5ff]/20",
     gray:"bg-white/5 text-[rgba(153,197,255,0.5)] border-white/10", orange:"bg-orange-500/15 text-orange-400 border-orange-500/25",
@@ -201,7 +203,7 @@ function Chip({ children, color = "blue" }) {
 }
 
 function Alert({ type = "blue", children }) {
-  const s = { warn:"bg-amber-500/10 border-amber-500/25 text-amber-300", green:"bg-emerald-500/10 border-emerald-500/25 text-emerald-300", blue:"bg-[#1f48ff]/10 border-[#1f48ff]/25 text-[#99c5ff]", gold:"bg-yellow-500/10 border-yellow-500/25 text-yellow-300" };
+  const s = { warn:"bg-amber-500/10 border-amber-500/25 text-amber-300", green:"bg-emerald-500/10 border-emerald-500/25 text-emerald-300", blue:"bg-[#059669]/10 border-[#059669]/25 text-[#99c5ff]", gold:"bg-yellow-500/10 border-yellow-500/25 text-yellow-300" };
   const icons = { warn:"!", green:"✓", blue:"i", gold:"→" };
   return (
     <div className={`flex gap-3 p-3 border text-sm leading-relaxed rounded-xl ${s[type]}`}>
@@ -220,7 +222,7 @@ function Slider({ label, value, min, max, step, onChange, display, hint }) {
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
         onChange={e => onChange(parseFloat(e.target.value))}
-        className="w-full accent-[#1f48ff]" />
+        className="w-full accent-[#059669]" />
       {hint && <p className="text-xs text-[rgba(153,197,255,0.35)]">{hint}</p>}
     </div>
   );
@@ -228,7 +230,7 @@ function Slider({ label, value, min, max, step, onChange, display, hint }) {
 
 function RStat({ label, value, accent = "text-white", sub }) {
   return (
-    <div className="rounded-xl border border-[rgba(153,197,255,0.1)] p-3" style={{ background: 'linear-gradient(135deg, #05124a 0%, #0d1e78 100%)' }}>
+    <div className="rounded-xl border border-[rgba(134,239,172,0.14)] p-3" style={{ background: 'linear-gradient(135deg, #064e3b 0%, #047857 100%)' }}>
       <SL className="mb-1">{label}</SL>
       <p className={`text-xl font-black tabular-nums ${accent}`}>{value}</p>
       {sub && <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">{sub}</p>}
@@ -238,7 +240,7 @@ function RStat({ label, value, accent = "text-white", sub }) {
 
 function WFRow({ label, value, pctOf, color, bold = false, indent = false }) {
   const barPct = Math.max(Math.min((Math.abs(value) / Math.max(pctOf, 1)) * 100, 100), 1);
-  const colorMap = { blue:"bg-[#1f48ff]", green:"bg-emerald-500", red:"bg-red-500", amber:"bg-amber-500", navy:"bg-white/20", gray:"bg-white/10" };
+  const colorMap = { blue:"bg-[#059669]", green:"bg-emerald-500", red:"bg-red-500", amber:"bg-amber-500", navy:"bg-white/20", gray:"bg-white/10" };
   return (
     <div className={`flex items-center gap-3 py-2 ${indent?"pl-4":""} ${bold?"border-t border-[rgba(153,197,255,0.1)] pt-3 mt-1":""}`}>
       <span className={`text-xs w-36 shrink-0 ${bold?"font-semibold text-white":"text-[rgba(153,197,255,0.5)]"}`}>{label}</span>
@@ -323,7 +325,7 @@ function HireTool({ accounts }) {
         </Card>
 
         <div className="grid grid-cols-2 gap-3">
-          <RStat label="They generate"     value={fmt(calc.monthlyRev)}              accent="text-brand-blue"  sub="per month" />
+          <RStat label="They generate"     value={fmt(calc.monthlyRev)}              accent="text-[#10b981]"  sub="per month" />
           <RStat label="Total monthly cost" value={fmt(calc.monthlyWage+calc.empNI)}  accent="text-red-500"     sub="wage + employer NI" />
           <RStat label="Gross profit"        value={fmt(calc.gross)}                   accent={calc.gross>0?"text-white":"text-red-500"} />
           <RStat label="Break-even rate"     value={`£${calc.breakEvenRate.toFixed(2)}/hr`} accent="text-amber-600" sub="minimum to cover cost" />
@@ -403,7 +405,7 @@ function StructureTool({ accounts }) {
 
         {/* Side by side */}
         <div className="grid grid-cols-2 gap-3">
-          <Card className="overflow-hidden border-t-2 border-t-brand-blue">
+          <Card className="overflow-hidden border-t-2 border-t-[#10b981]">
             <div className="px-4 py-3 bg-[rgba(153,197,255,0.04)] border-b border-[rgba(153,197,255,0.08)]"><SL>Sole trader</SL></div>
             <div className="divide-y divide-gray-100">
               {[["Income tax",fmt(calc.st.basic+calc.st.higher),"text-red-500"],["Class 4 NI",fmt(calc.st.ni),"text-red-500"],["Total tax",fmt(calc.st.total),"text-amber-600",true],["Take-home",fmt(calc.st.takeHome),"text-emerald-600",true]].map(([l,v,c,bold])=>(
@@ -541,7 +543,7 @@ function PriceTool({ accounts }) {
       <div className="flex gap-0 border-b border-[rgba(153,197,255,0.12)]">
         {TABS.map(t => (
           <button key={t.id} onClick={()=>setActiveTab(t.id)}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all -mb-px ${activeTab===t.id?"border-brand-blue text-brand-blue":"border-transparent text-[rgba(153,197,255,0.6)] hover:text-white"}`}>
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all -mb-px ${activeTab===t.id?"border-[#10b981] text-[#10b981]":"border-transparent text-[rgba(153,197,255,0.6)] hover:text-white"}`}>
             {t.label}
           </button>
         ))}
@@ -574,7 +576,7 @@ function PriceTool({ accounts }) {
             </Card>
 
             <div className="grid grid-cols-2 gap-3">
-              <RStat label="New price"        value={fmt(calc.newPrice)}       accent="text-brand-blue" sub={`up from ${fmt(currentPrice)}`} />
+              <RStat label="New price"        value={fmt(calc.newPrice)}       accent="text-[#10b981]" sub={`up from ${fmt(currentPrice)}`} />
               <RStat label="Clients lost"      value={`${calc.clientsLost}`}   accent={calc.clientsLost>4?"text-red-500":"text-amber-600"} sub="estimated" />
               <RStat label="Revenue now"       value={fmt(calc.currentAnnual)} accent="text-[rgba(153,197,255,0.6)]" sub="annual" />
               <RStat label="Revenue after"     value={fmt(calc.newAnnual)}     accent={calc.newAnnual>calc.currentAnnual?"text-emerald-600":"text-red-500"} sub="annual" />
@@ -608,7 +610,7 @@ function PriceTool({ accounts }) {
                   <div className="space-y-2">
                     {Object.entries(PRICE_TEMPLATES).map(([id, t]) => (
                       <button key={id} onClick={()=>setTemplate(id)}
-                        className={`w-full text-left px-3 py-2.5 border rounded-sm text-sm transition-colors ${template===id?"bg-[#1f48ff] text-white border-[#1f48ff]":"bg-white text-gray-700 border-[rgba(153,197,255,0.12)] hover:border-brand-blue"}`}>
+                        className={`w-full text-left px-3 py-2.5 border rounded-sm text-sm transition-colors ${template===id?"bg-[#059669] text-white border-[#059669]":"bg-white text-gray-700 border-[rgba(153,197,255,0.12)] hover:border-[#10b981]"}`}>
                         <p className={`font-semibold ${template===id?"text-white":"text-white"}`}>{t.label}</p>
                       </button>
                     ))}
@@ -625,7 +627,7 @@ function PriceTool({ accounts }) {
                   <SL className="mb-0">Message preview</SL>
                   <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">Subject: {tmpl.subject}</p>
                 </div>
-                <button onClick={copyMessage} className={`px-3 py-1.5 text-xs font-bold border rounded-sm transition-colors ${copied?"bg-emerald-50 text-emerald-700 border-emerald-200":"bg-white text-[rgba(153,197,255,0.5)] border-[rgba(153,197,255,0.12)] hover:border-brand-blue hover:text-brand-blue"}`}>
+                <button onClick={copyMessage} className={`px-3 py-1.5 text-xs font-bold border rounded-sm transition-colors ${copied?"bg-emerald-50 text-emerald-700 border-emerald-200":"bg-white text-[rgba(153,197,255,0.5)] border-[rgba(153,197,255,0.12)] hover:border-[#10b981] hover:text-[#10b981]"}`}>
                   {copied ? "Copied" : "Copy"}
                 </button>
               </div>
@@ -651,7 +653,7 @@ function PriceTool({ accounts }) {
                 { step:"6", title:"Log who you've told", body:"Use the customer tracker to tag clients as 'price rise sent' and 'price rise accepted'. You'll want to know who's on the new rate before the date arrives." },
               ].map(({ step, title, body }) => (
                 <div key={step} className="flex items-start gap-4 px-4 py-4">
-                  <div className="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{step}</div>
+                  <div className="w-7 h-7 rounded-full bg-[#064e3b] text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{step}</div>
                   <div>
                     <p className="text-sm font-semibold text-white mb-0.5">{title}</p>
                     <p className="text-sm text-[rgba(153,197,255,0.6)] leading-relaxed">{body}</p>
@@ -747,10 +749,10 @@ function ServiceTool({ accounts }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-[rgba(153,197,255,0.06)]">
           {SERVICE_PRESETS.map((p, i) => (
             <button key={i} onClick={() => loadPreset(i)}
-              className={`text-left p-4 transition-colors ${activePreset===i?"bg-brand-navy text-white":"bg-white hover:bg-[rgba(153,197,255,0.04)]"}`}>
+              className={`text-left p-4 transition-colors ${activePreset===i?"bg-[#064e3b] text-white":"bg-white hover:bg-[rgba(153,197,255,0.04)]"}`}>
               <p className={`text-sm font-semibold mb-1 ${activePreset===i?"text-white":"text-white"}`}>{p.name}</p>
-              <p className={`text-xs leading-relaxed ${activePreset===i?"text-brand-skyblue":"text-[rgba(153,197,255,0.4)]"}`}>{p.desc}</p>
-              <p className={`text-xs font-bold mt-2 ${activePreset===i?"text-brand-skyblue":"text-brand-blue"}`}>
+              <p className={`text-xs leading-relaxed ${activePreset===i?"text-[#86efac]":"text-[rgba(153,197,255,0.4)]"}`}>{p.desc}</p>
+              <p className={`text-xs font-bold mt-2 ${activePreset===i?"text-[#86efac]":"text-[#10b981]"}`}>
                 {fmt(p.jobsPerMonth*p.pricePerJob)}/mo new revenue
               </p>
             </button>
@@ -802,8 +804,8 @@ function ServiceTool({ accounts }) {
 // ─── TOOL 05: Most valuable hour ─────────────────────────────────────────────
 const DEFAULT_SERVICES = [
   { id:1, name:"Regular clean",   jobs:12, price:65,  hrs:2.0, color:"bg-emerald-500" },
-  { id:2, name:"Deep clean",      jobs:3,  price:120, hrs:3.5, color:"bg-brand-blue"  },
-  { id:3, name:"Commercial",      jobs:4,  price:150, hrs:4.0, color:"bg-brand-navy"  },
+  { id:2, name:"Deep clean",      jobs:3,  price:120, hrs:3.5, color:"bg-[#10b981]"  },
+  { id:3, name:"Commercial",      jobs:4,  price:150, hrs:4.0, color:"bg-[#064e3b]"  },
   { id:4, name:"Window clean",    jobs:6,  price:65,  hrs:1.5, color:"bg-amber-500"   },
   { id:5, name:"Oven clean",      jobs:2,  price:65,  hrs:1.5, color:"bg-orange-500"  },
 ];
@@ -847,7 +849,7 @@ function MostValuableHourTool({ accounts }) {
         <Card className="overflow-hidden">
           <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
             <SL>Your work mix</SL>
-            <button onClick={addService} className="text-xs font-bold text-brand-blue hover:underline">+ Add service</button>
+            <button onClick={addService} className="text-xs font-bold text-[#10b981] hover:underline">+ Add service</button>
           </div>
           <div className="divide-y divide-gray-100">
             {services.map(s => (
@@ -857,9 +859,9 @@ function MostValuableHourTool({ accounts }) {
                   {editing === s.id ? (
                     <input type="text" value={s.name} onChange={e=>updateService(s.id,"name",e.target.value)}
                       onBlur={()=>setEditing(null)} autoFocus
-                      className="flex-1 text-sm font-semibold text-white border-0 border-b border-brand-blue focus:outline-none bg-transparent" />
+                      className="flex-1 text-sm font-semibold text-white border-0 border-b border-[#10b981] focus:outline-none bg-transparent" />
                   ) : (
-                    <button onClick={()=>setEditing(s.id)} className="text-sm font-semibold text-white hover:text-brand-blue flex-1 text-left">{s.name}</button>
+                    <button onClick={()=>setEditing(s.id)} className="text-sm font-semibold text-white hover:text-[#10b981] flex-1 text-left">{s.name}</button>
                   )}
                   <button onClick={()=>removeService(s.id)} className="text-gray-300 hover:text-red-400 text-xs ml-auto">✕</button>
                 </div>
@@ -876,8 +878,8 @@ function MostValuableHourTool({ accounts }) {
 
       {/* Right — ranking */}
       <div className="space-y-4">
-        <Card className="overflow-hidden border-t-2 border-t-brand-navy">
-          <div className="px-4 py-3 bg-brand-navy text-white flex items-center justify-between">
+        <Card className="overflow-hidden border-t-2 border-t-[#064e3b]">
+          <div className="px-4 py-3 bg-[#064e3b] text-white flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-widest">Ranked by actual hourly rate</p>
             <Chip color="sky">£{Math.round(avgRate)}/hr avg</Chip>
           </div>
@@ -922,7 +924,7 @@ function MostValuableHourTool({ accounts }) {
         </Card>
 
         {top && bottom && ranked.length > 1 && (
-          <Card className="p-4 border-l-4 border-l-brand-blue">
+          <Card className="p-4 border-l-4 border-l-[#10b981]">
             <SL className="mb-2">The opportunity</SL>
             <p className="text-sm text-gray-700 leading-relaxed">
               <strong>{top.name}</strong> earns you <strong>£{Math.round(top.ratePerHr)}/hr</strong>. {bottom.name} earns £{Math.round(bottom.ratePerHr)}/hr.
@@ -934,7 +936,7 @@ function MostValuableHourTool({ accounts }) {
         <div className="grid grid-cols-3 gap-3">
           <RStat label="Monthly revenue" value={fmt(totalRev)}            accent="text-white" />
           <RStat label="Monthly hours"   value={`${totalHrs.toFixed(0)}hrs`} accent="text-white" />
-          <RStat label="Average rate"    value={`£${Math.round(avgRate)}/hr`} accent="text-brand-blue" />
+          <RStat label="Average rate"    value={`£${Math.round(avgRate)}/hr`} accent="text-[#10b981]" />
         </div>
       </div>
     </div>
@@ -943,8 +945,8 @@ function MostValuableHourTool({ accounts }) {
 
 // ─── TOOL 06: Org chart builder ───────────────────────────────────────────────
 const ROLE_DEFS = {
-  owner:   { label:"Owner / Director", color:"border-t-brand-navy",  avatarBg:"bg-brand-navy/10 text-white",    rate:0     },
-  manager: { label:"Operations Mgr",   color:"border-t-brand-blue",  avatarBg:"bg-blue-100 text-brand-blue",         rate:18    },
+  owner:   { label:"Owner / Director", color:"border-t-[#064e3b]",  avatarBg:"bg-[#064e3b]/10 text-white",    rate:0     },
+  manager: { label:"Operations Mgr",   color:"border-t-[#10b981]",  avatarBg:"bg-blue-100 text-[#10b981]",         rate:18    },
   lead:    { label:"Team Lead",         color:"border-t-emerald-500", avatarBg:"bg-emerald-100 text-emerald-700",     rate:15    },
   cleaner: { label:"Cleaner",           color:"border-t-amber-500",   avatarBg:"bg-amber-100 text-amber-700",         rate:12.50 },
   admin:   { label:"Admin / Office",   color:"border-t-purple-400",  avatarBg:"bg-purple-100 text-purple-700",       rate:14    },
@@ -1049,7 +1051,7 @@ function OrgTool({ accounts }) {
       <div className="flex gap-0 border-b border-[rgba(153,197,255,0.12)]">
         {[{id:"chart",label:"Org chart"},{id:"presets",label:"Preset structures"},{id:"finance",label:"Financial breakdown"}].map(t=>(
           <button key={t.id} onClick={()=>{setActiveView(t.id);setSelected(null);}}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all -mb-px ${activeView===t.id?"border-brand-blue text-brand-blue":"border-transparent text-[rgba(153,197,255,0.6)] hover:text-white"}`}>
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all -mb-px ${activeView===t.id?"border-[#10b981] text-[#10b981]":"border-transparent text-[rgba(153,197,255,0.6)] hover:text-white"}`}>
             {t.label}
           </button>
         ))}
@@ -1059,7 +1061,7 @@ function OrgTool({ accounts }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {ORG_PRESETS.map((p,i) => (
             <button key={i} onClick={()=>{loadPreset(i);setActiveView("chart");}}
-              className="text-left border border-[rgba(153,197,255,0.12)] rounded-sm p-4 hover:border-brand-blue hover:bg-blue-50/30 transition-colors">
+              className="text-left border border-[rgba(153,197,255,0.12)] rounded-sm p-4 hover:border-[#10b981] hover:bg-blue-50/30 transition-colors">
               <p className="text-sm font-bold text-white mb-1">{p.name}</p>
               <p className="text-xs text-[rgba(153,197,255,0.4)] mb-3">{p.tiers.flat().length} people · {p.tiers.length} tier{p.tiers.length!==1?"s":""}</p>
               <p className="text-sm font-semibold text-emerald-600">{p.revenue}</p>
@@ -1095,7 +1097,7 @@ function OrgTool({ accounts }) {
                         const isSel = selected === p.id;
                         return (
                           <div key={p.id} onClick={()=>setSelected(isSel?null:p.id)}
-                            className={`w-36 border-t-2 ${def.color} border border-[rgba(153,197,255,0.12)] rounded-sm bg-white p-3 cursor-pointer transition-all ${isSel?"ring-2 ring-brand-blue shadow-sm":""}`}>
+                            className={`w-36 border-t-2 ${def.color} border border-[rgba(153,197,255,0.12)] rounded-sm bg-white p-3 cursor-pointer transition-all ${isSel?"ring-2 ring-[#10b981] shadow-sm":""}`}>
                             <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold mx-auto mb-2 ${def.avatarBg}`}>
                               {initials || "?"}
                             </div>
@@ -1111,12 +1113,12 @@ function OrgTool({ accounts }) {
                       })}
                       {/* Add to this tier */}
                       {addingTo === ti ? (
-                        <div className="w-36 border-2 border-dashed border-brand-blue rounded-sm bg-blue-50/30 p-2">
-                          <p className="text-xs font-bold text-brand-blue text-center mb-2">Add role</p>
+                        <div className="w-36 border-2 border-dashed border-[#10b981] rounded-sm bg-blue-50/30 p-2">
+                          <p className="text-xs font-bold text-[#10b981] text-center mb-2">Add role</p>
                           <div className="space-y-1">
                             {Object.entries(ROLE_DEFS).filter(([k])=>k!=="owner"&&k!=="vacant").map(([id,def])=>(
                               <button key={id} onClick={()=>addPersonToTier(ti,id)}
-                                className="w-full text-xs py-1 px-2 bg-white border border-[rgba(153,197,255,0.12)] rounded-sm hover:border-brand-blue hover:text-brand-blue text-[rgba(153,197,255,0.5)] text-left transition-colors">
+                                className="w-full text-xs py-1 px-2 bg-white border border-[rgba(153,197,255,0.12)] rounded-sm hover:border-[#10b981] hover:text-[#10b981] text-[rgba(153,197,255,0.5)] text-left transition-colors">
                                 {def.label}
                               </button>
                             ))}
@@ -1125,7 +1127,7 @@ function OrgTool({ accounts }) {
                         </div>
                       ) : (
                         <button onClick={()=>setAddingTo(ti)}
-                          className="w-36 border-2 border-dashed border-[rgba(153,197,255,0.12)] rounded-sm flex flex-col items-center justify-center gap-1 py-4 hover:border-brand-blue hover:text-brand-blue text-gray-300 transition-colors">
+                          className="w-36 border-2 border-dashed border-[rgba(153,197,255,0.12)] rounded-sm flex flex-col items-center justify-center gap-1 py-4 hover:border-[#10b981] hover:text-[#10b981] text-gray-300 transition-colors">
                           <span className="text-lg leading-none">+</span>
                           <span className="text-xs font-semibold">Add role</span>
                         </button>
@@ -1137,12 +1139,12 @@ function OrgTool({ accounts }) {
                 <div className="flex flex-col items-center mt-2">
                   <div className="w-px h-5 bg-gray-300" />
                   {addingTo === "new" ? (
-                    <div className="border-2 border-dashed border-brand-blue rounded-sm bg-blue-50/30 p-3 w-52">
-                      <p className="text-xs font-bold text-brand-blue text-center mb-2">Add a new tier</p>
+                    <div className="border-2 border-dashed border-[#10b981] rounded-sm bg-blue-50/30 p-3 w-52">
+                      <p className="text-xs font-bold text-[#10b981] text-center mb-2">Add a new tier</p>
                       <div className="space-y-1">
                         {Object.entries(ROLE_DEFS).filter(([k])=>k!=="owner"&&k!=="vacant").map(([id,def])=>(
                           <button key={id} onClick={()=>addNewTier(id)}
-                            className="w-full text-xs py-1 px-2 bg-white border border-[rgba(153,197,255,0.12)] rounded-sm hover:border-brand-blue hover:text-brand-blue text-[rgba(153,197,255,0.5)] text-left transition-colors">
+                            className="w-full text-xs py-1 px-2 bg-white border border-[rgba(153,197,255,0.12)] rounded-sm hover:border-[#10b981] hover:text-[#10b981] text-[rgba(153,197,255,0.5)] text-left transition-colors">
                             {def.label}
                           </button>
                         ))}
@@ -1151,7 +1153,7 @@ function OrgTool({ accounts }) {
                     </div>
                   ) : (
                     <button onClick={()=>setAddingTo("new")}
-                      className="px-4 py-2 border-2 border-dashed border-[rgba(153,197,255,0.12)] rounded-sm text-xs font-bold text-[rgba(153,197,255,0.4)] hover:border-brand-blue hover:text-brand-blue transition-colors">
+                      className="px-4 py-2 border-2 border-dashed border-[rgba(153,197,255,0.12)] rounded-sm text-xs font-bold text-[rgba(153,197,255,0.4)] hover:border-[#10b981] hover:text-[#10b981] transition-colors">
                       + Add tier below
                     </button>
                   )}
@@ -1179,7 +1181,7 @@ function OrgTool({ accounts }) {
           <div className="space-y-4">
             {selectedPerson ? (
               <Card className="overflow-hidden">
-                <div className="px-4 py-3 bg-brand-navy text-white flex items-center justify-between">
+                <div className="px-4 py-3 bg-[#064e3b] text-white flex items-center justify-between">
                   <p className="text-sm font-bold">{selectedPerson.name}</p>
                   <button onClick={()=>{removePerson(selectedPerson.id);}} className="text-xs text-red-300 hover:text-red-100 font-bold">Remove</button>
                 </div>
@@ -1298,28 +1300,51 @@ export default function BusinessLabTab({ accountsData, onNavigate: onNavigatePro
   const active = TOOLS.find(t => t.id === activeTool);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#010a4f] via-[#05124a] to-[#0d1e78] relative">
+    <div className="-mx-4 md:-mx-8 -my-6 relative" style={greenCanvas()}>
       {/* Grid texture */}
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
-        style={{ backgroundImage: "linear-gradient(rgba(153,197,255,0.5) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,0.5) 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
+      <div className="absolute inset-0 opacity-[0.04] pointer-events-none"
+        style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.5) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.5) 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
 
-      <div className="relative max-w-4xl mx-auto px-4 py-6 space-y-4">
+      <div className="relative max-w-5xl mx-auto px-4 md:px-8 pt-6 pb-28 space-y-5 z-10">
 
         {/* First-visit goals coach */}
         <BusinessLabGoalsCoach />
 
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-0.5">Cadi</p>
-            <h2 className="text-2xl font-black text-white">Business Lab</h2>
-            <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">Six tools that answer the questions every growing cleaner actually has</p>
-          </div>
-          <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)]">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${accountsData?"bg-emerald-400 animate-pulse":"bg-[rgba(153,197,255,0.3)]"}`} />
-            <div>
-              <p className="text-xs font-bold text-white">{accountsData?"Live from accounts":"Estimates"}</p>
-              <p className="text-[10px] text-[rgba(153,197,255,0.4)]">{accounts.ytdIncome > 0 ? `${fmt(accounts.ytdIncome)}/yr · ` : ""}{Math.round(accounts.taxRate*100)}% tax</p>
+        {/* Hero */}
+        <div className="relative overflow-hidden"
+          style={{
+            ...glassDark({ radius: CONNECT_RADII.xl, blur: 20 }),
+            background: `
+              radial-gradient(120% 80% at 100% 0%, rgba(52, 211, 153, 0.30) 0%, transparent 55%),
+              radial-gradient(60% 60% at 0% 100%, rgba(1, 10, 79, 0.30) 0%, transparent 60%),
+              rgba(255,255,255,0.04)
+            `,
+          }}>
+          <div className="relative px-6 md:px-9 py-7 md:py-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="inline-flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-xl flex items-center justify-center"
+                  style={{ background: '#059669', boxShadow: '0 8px 20px -6px rgba(5,150,105,0.6)' }}>
+                  <TrendingUp size={13} className="text-white" strokeWidth={2.5} />
+                </div>
+                <span className="text-[10px] font-black tracking-[0.28em] text-white/70 uppercase">Business Lab</span>
+              </div>
+              <h1 className="text-white mb-2"
+                style={{ fontSize: 26, fontWeight: 900, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                Six tools for the{' '}
+                <span style={{ color: '#86efac' }}>questions that matter.</span>
+              </h1>
+              <p className="text-white/70 text-[14px] leading-relaxed max-w-2xl">
+                Hire, price, restructure, add a service — every answer verdict-first, before the numbers. {currentTaxYearLabel()} UK rates.
+              </p>
+            </div>
+            <div className="shrink-0 flex items-center gap-2 px-4 py-3 rounded-2xl"
+              style={{ ...glassDark({ radius: CONNECT_RADII.md, strong: true }) }}>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${accountsData?"bg-emerald-400 animate-pulse":"bg-white/30"}`} />
+              <div>
+                <p className="text-xs font-black text-white leading-none">{accountsData?"Live from accounts":"Estimates"}</p>
+                <p className="text-[10px] text-white/50 mt-1">{accounts.ytdIncome > 0 ? `${fmt(accounts.ytdIncome)}/yr · ` : ""}{Math.round(accounts.taxRate*100)}% tax</p>
+              </div>
             </div>
           </div>
         </div>
@@ -1329,7 +1354,7 @@ export default function BusinessLabTab({ accountsData, onNavigate: onNavigatePro
           {TOOLS.map(t => (
             <button key={t.id} onClick={()=>setActiveTool(t.id)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap shrink-0 ${
-                activeTool===t.id ? "bg-[#1f48ff] text-white shadow-lg shadow-[#1f48ff]/30" : "text-[rgba(153,197,255,0.5)] hover:text-white"
+                activeTool===t.id ? "bg-[#059669] text-white shadow-lg shadow-[#059669]/30" : "text-[rgba(153,197,255,0.5)] hover:text-white"
               }`}>
               <span className="hidden sm:inline">{t.label}</span>
               <span className="sm:hidden">{t.label.split(" ")[0]}</span>

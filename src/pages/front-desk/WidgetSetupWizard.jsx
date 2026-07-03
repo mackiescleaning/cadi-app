@@ -2,7 +2,7 @@
 // 5-step setup wizard for the Cadi widget — writes to widget_configs
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Check, ChevronRight, ChevronLeft, X, Copy, Play,
   Home, Grid, Building2, Mail, Bell, MessageSquare,
@@ -10,6 +10,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { useBusinessId } from '../../hooks/useBusinessId';
 import FrontDeskPreview from '../../components/FrontDeskPreview';
+import { FD_GOLD, FD_BLUE, FD_SKY, ON_DARK, fdCard, fdCanvas } from '../../lib/frontDeskTheme';
 
 const WIDGET_URL = 'https://widget.cadi.cleaning/widget.js';
 
@@ -76,6 +77,10 @@ const TONE_PRESETS = [
   },
 ];
 
+const cardCls = "rounded-2xl overflow-hidden";
+const inputBase = "text-white placeholder:text-[rgba(153,197,255,0.3)] focus:outline-none transition-colors";
+const inputStyle = { background: 'rgba(255,255,255,0.06)', border: `1px solid ${ON_DARK.lineHi}`, colorScheme: 'dark' };
+
 // ─── Step 1 — Sectors ─────────────────────────────────────────────────────────
 
 function StepSectors({ modes, setModes }) {
@@ -85,10 +90,10 @@ function StepSectors({ modes, setModes }) {
     );
   }
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
-      <div className="px-6 py-5 border-b border-gray-100">
-        <h2 className="text-lg font-black text-[#010a4f]">What sectors do you cover?</h2>
-        <p className="text-sm text-gray-400 mt-1">
+    <div className={cardCls} style={fdCard({ radius: 18 })}>
+      <div className="px-6 py-5" style={{ borderBottom: `1px solid ${ON_DARK.line}` }}>
+        <h2 className="text-lg font-black text-white">What sectors do you cover?</h2>
+        <p className="text-sm mt-1" style={{ color: ON_DARK.muted }}>
           Your widget will only show the conversation flows relevant to your business. Tick all that apply.
         </p>
       </div>
@@ -99,31 +104,28 @@ function StepSectors({ modes, setModes }) {
             <button
               key={id}
               onClick={() => toggle(id)}
-              className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
-                active
-                  ? 'border-[#1f48ff] bg-[#f0f4ff]'
-                  : 'border-gray-100 hover:border-[#99c5ff]/40 hover:bg-gray-50'
-              }`}
+              className="w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all"
+              style={active
+                ? { borderColor: FD_BLUE, background: `${FD_BLUE}18` }
+                : { borderColor: ON_DARK.line, background: 'rgba(255,255,255,0.02)' }}
             >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                active ? 'bg-[#1f48ff]' : 'bg-gray-100'
-              }`}>
-                <Icon size={18} className={active ? 'text-white' : 'text-gray-400'} />
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: active ? FD_BLUE : 'rgba(255,255,255,0.06)' }}>
+                <Icon size={18} style={{ color: active ? '#ffffff' : ON_DARK.faint }} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-bold ${active ? 'text-[#1f48ff]' : 'text-[#010a4f]'}`}>{title}</p>
-                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{desc}</p>
+                <p className="text-sm font-bold" style={{ color: active ? FD_SKY : '#ffffff' }}>{title}</p>
+                <p className="text-xs mt-0.5 leading-relaxed" style={{ color: ON_DARK.muted }}>{desc}</p>
               </div>
-              <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border-2 transition-colors ${
-                active ? 'bg-[#1f48ff] border-[#1f48ff]' : 'border-gray-300'
-              }`}>
+              <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 border-2 transition-colors"
+                style={active ? { background: FD_BLUE, borderColor: FD_BLUE } : { borderColor: ON_DARK.lineHi }}>
                 {active && <Check size={12} className="text-white" />}
               </div>
             </button>
           );
         })}
         {modes.length === 0 && (
-          <p className="text-xs text-red-500 px-1">Select at least one sector to continue.</p>
+          <p className="text-xs text-red-400 px-1">Select at least one sector to continue.</p>
         )}
       </div>
     </div>
@@ -134,18 +136,19 @@ function StepSectors({ modes, setModes }) {
 
 function StepBasics({ businessName, setBusinessName, ownerName, setOwnerName, serviceArea, setServiceArea, responseWindow, setResponseWindow }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
-      <div className="px-6 py-5 border-b border-gray-100">
-        <h2 className="text-lg font-black text-[#010a4f]">A bit about your business</h2>
-        <p className="text-sm text-gray-400 mt-1">
+    <div className={cardCls} style={fdCard({ radius: 18 })}>
+      <div className="px-6 py-5" style={{ borderBottom: `1px solid ${ON_DARK.line}` }}>
+        <h2 className="text-lg font-black text-white">A bit about your business</h2>
+        <p className="text-sm mt-1" style={{ color: ON_DARK.muted }}>
           Cadi uses this to introduce itself correctly and set expectations with your customers.
         </p>
       </div>
       <div className="p-6 space-y-5">
         <label className="block">
-          <span className="text-xs font-bold text-[#010a4f] uppercase tracking-widest">Business name</span>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: FD_SKY }}>Business name</span>
           <input
-            className="mt-1.5 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:border-[#1f48ff] transition-colors"
+            className={`mt-1.5 w-full rounded-xl px-3.5 py-2.5 text-sm ${inputBase}`}
+            style={inputStyle}
             placeholder="e.g. Mackies Cleaning"
             value={businessName}
             onChange={e => setBusinessName(e.target.value)}
@@ -153,10 +156,11 @@ function StepBasics({ businessName, setBusinessName, ownerName, setOwnerName, se
         </label>
 
         <label className="block">
-          <span className="text-xs font-bold text-[#010a4f] uppercase tracking-widest">Your first name</span>
-          <p className="text-xs text-gray-400 mt-0.5 mb-1.5">Used when Cadi says "the team will be in touch with [name]"</p>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: FD_SKY }}>Your first name</span>
+          <p className="text-xs mt-0.5 mb-1.5" style={{ color: ON_DARK.faint }}>Used when Cadi says "the team will be in touch with [name]"</p>
           <input
-            className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:border-[#1f48ff] transition-colors"
+            className={`w-full rounded-xl px-3.5 py-2.5 text-sm ${inputBase}`}
+            style={inputStyle}
             placeholder="e.g. Chris"
             value={ownerName}
             onChange={e => setOwnerName(e.target.value)}
@@ -164,10 +168,11 @@ function StepBasics({ businessName, setBusinessName, ownerName, setOwnerName, se
         </label>
 
         <label className="block">
-          <span className="text-xs font-bold text-[#010a4f] uppercase tracking-widest">Service area</span>
-          <p className="text-xs text-gray-400 mt-0.5 mb-1.5">Where do you work? Postcodes, towns, or a description.</p>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: FD_SKY }}>Service area</span>
+          <p className="text-xs mt-0.5 mb-1.5" style={{ color: ON_DARK.faint }}>Where do you work? Postcodes, towns, or a description.</p>
           <textarea
-            className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:border-[#1f48ff] transition-colors resize-none"
+            className={`w-full rounded-xl px-3.5 py-2.5 text-sm resize-none ${inputBase}`}
+            style={inputStyle}
             placeholder="e.g. Cardiff, Newport, Vale of Glamorgan — or CF10, CF11, NP10"
             rows={2}
             value={serviceArea}
@@ -176,22 +181,24 @@ function StepBasics({ businessName, setBusinessName, ownerName, setOwnerName, se
         </label>
 
         <div>
-          <span className="text-xs font-bold text-[#010a4f] uppercase tracking-widest">How fast do you respond?</span>
-          <p className="text-xs text-gray-400 mt-0.5 mb-2">Cadi tells customers when to expect a call or email from you.</p>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: FD_SKY }}>How fast do you respond?</span>
+          <p className="text-xs mt-0.5 mb-2" style={{ color: ON_DARK.faint }}>Cadi tells customers when to expect a call or email from you.</p>
           <div className="grid grid-cols-2 gap-2">
-            {RESPONSE_WINDOWS.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setResponseWindow(value)}
-                className={`text-left px-3.5 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
-                  responseWindow === value
-                    ? 'border-[#1f48ff] bg-[#f0f4ff] text-[#1f48ff]'
-                    : 'border-gray-100 text-gray-600 hover:border-[#99c5ff]/40'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+            {RESPONSE_WINDOWS.map(({ value, label }) => {
+              const active = responseWindow === value;
+              return (
+                <button
+                  key={value}
+                  onClick={() => setResponseWindow(value)}
+                  className="text-left px-3.5 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                  style={active
+                    ? { borderColor: FD_BLUE, background: `${FD_BLUE}18`, color: FD_SKY }
+                    : { borderColor: ON_DARK.line, color: ON_DARK.secondary }}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -204,10 +211,10 @@ function StepBasics({ businessName, setBusinessName, ownerName, setOwnerName, se
 function StepTone({ tonePreset, setTonePreset, neverSay, setNeverSay, neverSayInput, setNeverSayInput, addNeverSay }) {
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-100">
-          <h2 className="text-lg font-black text-[#010a4f]">How should Cadi sound?</h2>
-          <p className="text-sm text-gray-400 mt-1">Pick the tone that fits your brand. You can change this any time.</p>
+      <div className={cardCls} style={fdCard({ radius: 18 })}>
+        <div className="px-6 py-5" style={{ borderBottom: `1px solid ${ON_DARK.line}` }}>
+          <h2 className="text-lg font-black text-white">How should Cadi sound?</h2>
+          <p className="text-sm mt-1" style={{ color: ON_DARK.muted }}>Pick the tone that fits your brand. You can change this any time.</p>
         </div>
         <div className="p-4 space-y-2.5">
           {TONE_PRESETS.map(({ id, title, desc, example }) => {
@@ -216,37 +223,36 @@ function StepTone({ tonePreset, setTonePreset, neverSay, setNeverSay, neverSayIn
               <button
                 key={id}
                 onClick={() => setTonePreset(id)}
-                className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                  active
-                    ? 'border-[#1f48ff] bg-[#f0f4ff]'
-                    : 'border-gray-100 hover:border-[#99c5ff]/40 hover:bg-gray-50'
-                }`}
+                className="w-full text-left p-4 rounded-xl border-2 transition-all"
+                style={active
+                  ? { borderColor: FD_BLUE, background: `${FD_BLUE}18` }
+                  : { borderColor: ON_DARK.line, background: 'rgba(255,255,255,0.02)' }}
               >
                 <div className="flex items-center justify-between mb-1.5">
-                  <p className={`text-sm font-bold ${active ? 'text-[#1f48ff]' : 'text-[#010a4f]'}`}>{title}</p>
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                    active ? 'border-[#1f48ff]' : 'border-gray-300'
-                  }`}>
-                    {active && <div className="w-2 h-2 rounded-full bg-[#1f48ff]" />}
+                  <p className="text-sm font-bold" style={{ color: active ? FD_SKY : '#ffffff' }}>{title}</p>
+                  <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center"
+                    style={{ borderColor: active ? FD_BLUE : ON_DARK.lineHi }}>
+                    {active && <div className="w-2 h-2 rounded-full" style={{ background: FD_BLUE }} />}
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 leading-relaxed mb-2">{desc}</p>
-                <p className="text-xs text-gray-400 italic leading-relaxed bg-gray-50 px-3 py-2 rounded-lg">{example}</p>
+                <p className="text-xs leading-relaxed mb-2" style={{ color: ON_DARK.muted }}>{desc}</p>
+                <p className="text-xs italic leading-relaxed px-3 py-2 rounded-lg" style={{ color: ON_DARK.faint, background: 'rgba(255,255,255,0.04)' }}>{example}</p>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-bold text-[#010a4f]">Words or phrases to avoid</h3>
-          <p className="text-xs text-gray-400 mt-0.5">Optional. Cadi will never use these. Type one and press Enter.</p>
+      <div className={cardCls} style={fdCard({ radius: 18 })}>
+        <div className="px-6 py-4" style={{ borderBottom: `1px solid ${ON_DARK.line}` }}>
+          <h3 className="text-sm font-bold text-white">Words or phrases to avoid</h3>
+          <p className="text-xs mt-0.5" style={{ color: ON_DARK.faint }}>Optional. Cadi will never use these. Type one and press Enter.</p>
         </div>
         <div className="p-4 space-y-3">
           <div className="flex gap-2">
             <input
-              className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2 text-sm text-[#010a4f] focus:outline-none focus:border-[#1f48ff] transition-colors"
+              className={`flex-1 rounded-xl px-3.5 py-2 text-sm ${inputBase}`}
+              style={inputStyle}
               placeholder="e.g. cheap, bargain, amazing..."
               value={neverSayInput}
               onChange={e => setNeverSayInput(e.target.value)}
@@ -254,7 +260,8 @@ function StepTone({ tonePreset, setTonePreset, neverSay, setNeverSay, neverSayIn
             />
             <button
               onClick={addNeverSay}
-              className="px-4 py-2 text-sm font-bold text-[#1f48ff] border border-[#1f48ff]/30 rounded-xl hover:bg-[#1f48ff]/5 transition-colors"
+              className="px-4 py-2 text-sm font-bold rounded-xl transition-colors"
+              style={{ color: FD_SKY, border: `1px solid ${FD_BLUE}4d` }}
             >
               Add
             </button>
@@ -262,9 +269,10 @@ function StepTone({ tonePreset, setTonePreset, neverSay, setNeverSay, neverSayIn
           {neverSay.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {neverSay.map(phrase => (
-                <span key={phrase} className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#f0f4ff] text-[#1f48ff] text-xs font-semibold rounded-full border border-[#1f48ff]/20">
+                <span key={phrase} className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full"
+                  style={{ background: `${FD_BLUE}18`, color: FD_SKY, border: `1px solid ${FD_BLUE}33` }}>
                   {phrase}
-                  <button onClick={() => setNeverSay(p => p.filter(x => x !== phrase))} className="hover:text-red-500 transition-colors">
+                  <button onClick={() => setNeverSay(p => p.filter(x => x !== phrase))} className="hover:text-red-400 transition-colors">
                     <X size={11} />
                   </button>
                 </span>
@@ -283,7 +291,8 @@ function Toggle({ enabled, onChange }) {
   return (
     <button
       onClick={() => onChange(!enabled)}
-      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-[#1f48ff]' : 'bg-gray-200'}`}
+      className="relative w-11 h-6 rounded-full transition-colors flex-shrink-0"
+      style={{ background: enabled ? FD_BLUE : 'rgba(255,255,255,0.12)' }}
     >
       <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0'}`} />
     </button>
@@ -292,31 +301,32 @@ function Toggle({ enabled, onChange }) {
 
 function StepNotifications({ notifyEmail, setNotifyEmail, notifyEmailAddress, setNotifyEmailAddress, secondEmail, setSecondEmail }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
-      <div className="px-6 py-5 border-b border-gray-100">
-        <h2 className="text-lg font-black text-[#010a4f]">How do you want to be notified?</h2>
-        <p className="text-sm text-gray-400 mt-1">
+    <div className={cardCls} style={fdCard({ radius: 18 })}>
+      <div className="px-6 py-5" style={{ borderBottom: `1px solid ${ON_DARK.line}` }}>
+        <h2 className="text-lg font-black text-white">How do you want to be notified?</h2>
+        <p className="text-sm mt-1" style={{ color: ON_DARK.muted }}>
           Every time Cadi captures a lead, we'll ping you straight away so you can follow up fast.
         </p>
       </div>
-      <div className="divide-y divide-gray-100">
+      <div className="divide-y" style={{ borderColor: ON_DARK.line }}>
         {/* Email */}
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#f0f4ff] flex items-center justify-center">
-                <Mail size={16} className="text-[#1f48ff]" />
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${FD_BLUE}18` }}>
+                <Mail size={16} style={{ color: FD_SKY }} />
               </div>
               <div>
-                <p className="text-sm font-bold text-[#010a4f]">Email</p>
-                <p className="text-xs text-gray-400">Lead card sent to your inbox</p>
+                <p className="text-sm font-bold text-white">Email</p>
+                <p className="text-xs" style={{ color: ON_DARK.faint }}>Lead card sent to your inbox</p>
               </div>
             </div>
             <Toggle enabled={notifyEmail} onChange={setNotifyEmail} />
           </div>
           {notifyEmail && (
             <input
-              className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:border-[#1f48ff] transition-colors"
+              className={`w-full rounded-xl px-3.5 py-2.5 text-sm ${inputBase}`}
+              style={inputStyle}
               placeholder="your@email.com"
               type="email"
               value={notifyEmailAddress}
@@ -328,14 +338,15 @@ function StepNotifications({ notifyEmail, setNotifyEmail, notifyEmailAddress, se
         {/* Second recipient */}
         <div className="px-6 py-4">
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#f0f4ff] flex items-center justify-center shrink-0 mt-0.5">
-              <Bell size={16} className="text-[#1f48ff]" />
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5" style={{ background: `${FD_BLUE}18` }}>
+              <Bell size={16} style={{ color: FD_SKY }} />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-bold text-[#010a4f] mb-0.5">Second recipient</p>
-              <p className="text-xs text-gray-400 mb-2">CC someone else on every lead — e.g. a business partner or VA</p>
+              <p className="text-sm font-bold text-white mb-0.5">Second recipient</p>
+              <p className="text-xs mb-2" style={{ color: ON_DARK.faint }}>CC someone else on every lead — e.g. a business partner or VA</p>
               <input
-                className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-[#010a4f] focus:outline-none focus:border-[#1f48ff] transition-colors"
+                className={`w-full rounded-xl px-3.5 py-2.5 text-sm ${inputBase}`}
+                style={inputStyle}
                 placeholder="optional@email.com"
                 type="email"
                 value={secondEmail}
@@ -347,12 +358,16 @@ function StepNotifications({ notifyEmail, setNotifyEmail, notifyEmailAddress, se
 
         {/* SMS coming soon */}
         <div className="px-6 py-4 flex items-center gap-3 opacity-50">
-          <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-            <MessageSquare size={16} className="text-gray-400" />
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <MessageSquare size={16} style={{ color: ON_DARK.faint }} />
           </div>
           <div>
-            <p className="text-sm font-bold text-gray-500">SMS <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400">Coming soon</span></p>
-            <p className="text-xs text-gray-400">Text notification within seconds of a lead coming in</p>
+            <p className="text-sm font-bold" style={{ color: ON_DARK.secondary }}>
+              SMS
+              <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                style={{ background: 'rgba(255,255,255,0.06)', color: ON_DARK.faint }}>Coming soon</span>
+            </p>
+            <p className="text-xs" style={{ color: ON_DARK.faint }}>Text notification within seconds of a lead coming in</p>
           </div>
         </div>
       </div>
@@ -366,22 +381,23 @@ function StepInstall({ snippet, copied, onCopy, businessId }) {
   const [showPreview, setShowPreview] = useState(false);
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-100">
-          <h2 className="text-lg font-black text-[#010a4f]">Add to your website</h2>
-          <p className="text-sm text-gray-400 mt-1">
-            Paste this single line before the <code className="font-mono text-[#1f48ff]">&lt;/body&gt;</code> tag on every page.
+      <div className={cardCls} style={fdCard({ radius: 18 })}>
+        <div className="px-6 py-5" style={{ borderBottom: `1px solid ${ON_DARK.line}` }}>
+          <h2 className="text-lg font-black text-white">Add to your website</h2>
+          <p className="text-sm mt-1" style={{ color: ON_DARK.muted }}>
+            Paste this single line before the <code className="font-mono" style={{ color: FD_SKY }}>&lt;/body&gt;</code> tag on every page.
           </p>
         </div>
         <div className="p-6">
           <div className="relative mb-4">
-            <div className="rounded-xl bg-[#010a4f] px-4 py-3 pr-20 font-mono text-xs text-[#99c5ff] break-all leading-relaxed">
+            <div className="rounded-xl px-4 py-3 pr-20 font-mono text-xs break-all leading-relaxed" style={{ background: '#010a4f', color: FD_SKY }}>
               {snippet}
             </div>
             <button
               onClick={onCopy}
               disabled={!businessId}
-              className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-[#1f48ff] rounded-lg hover:bg-[#3a5eff] transition-colors disabled:opacity-40"
+              className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-lg hover:brightness-110 transition-all disabled:opacity-40"
+              style={{ background: FD_BLUE }}
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
               {copied ? 'Copied!' : 'Copy'}
@@ -393,25 +409,26 @@ function StepInstall({ snippet, copied, onCopy, businessId }) {
               { icon: '🎯', label: 'Right flow', desc: 'Residential, exterior or commercial — your visitor chooses' },
               { icon: '🎨', label: 'Your brand', desc: 'Business name, tone and service area all set' },
             ].map(f => (
-              <div key={f.label} className="p-3 rounded-xl bg-[#f8faff] border border-[#e8eeff]">
+              <div key={f.label} className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${ON_DARK.line}` }}>
                 <div className="text-lg mb-1">{f.icon}</div>
-                <p className="text-xs font-bold text-[#010a4f]">{f.label}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{f.desc}</p>
+                <p className="text-xs font-bold text-white">{f.label}</p>
+                <p className="text-xs mt-0.5" style={{ color: ON_DARK.faint }}>{f.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 p-5 flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 p-5" style={{ ...fdCard({ radius: 18 }), display: 'flex' }}>
         <div>
-          <p className="text-sm font-bold text-[#010a4f]">Try it before you go live</p>
-          <p className="text-xs text-gray-400 mt-0.5">See exactly what your customers will see</p>
+          <p className="text-sm font-bold text-white">Try it before you go live</p>
+          <p className="text-xs mt-0.5" style={{ color: ON_DARK.faint }}>See exactly what your customers will see</p>
         </div>
         <button
           onClick={() => setShowPreview(true)}
           disabled={!businessId}
-          className="shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-[#1f48ff] rounded-xl hover:bg-[#3a5eff] transition-colors disabled:opacity-40"
+          className="shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white rounded-xl hover:brightness-110 transition-all disabled:opacity-40"
+          style={{ background: FD_BLUE }}
         >
           <Play size={13} />
           Preview widget
@@ -428,7 +445,14 @@ function StepInstall({ snippet, copied, onCopy, businessId }) {
 export default function WidgetSetupWizard() {
   const navigate    = useNavigate();
   const businessId  = useBusinessId();
-  const [step, setStep]   = useState(1);
+  const [searchParams] = useSearchParams();
+  // Deep-link support — the Sales Manager setup checklist links straight
+  // into a specific step (?step=3) instead of always starting at 1.
+  const initialStep = (() => {
+    const n = parseInt(searchParams.get('step'), 10);
+    return n >= 1 && n <= STEPS.length ? n : 1;
+  })();
+  const [step, setStep]   = useState(initialStep);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -542,18 +566,20 @@ export default function WidgetSetupWizard() {
   const canNext = step === 1 ? modes.length > 0 : true;
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div style={fdCanvas()} className="-mx-4 md:-mx-8 -mt-6 -mb-24 md:-mb-6">
+    <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 space-y-6">
 
       {/* Page header */}
       <div>
         <button
           onClick={() => navigate('/front-desk/sales-manager')}
-          className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-[#010a4f] transition-colors mb-3"
+          className="flex items-center gap-1.5 text-xs font-semibold transition-colors mb-3 hover:text-white"
+          style={{ color: ON_DARK.faint }}
         >
           <ChevronLeft size={14} /> Sales Manager
         </button>
-        <h1 className="text-2xl font-black text-[#010a4f]">Widget setup</h1>
-        <p className="text-sm text-gray-400 mt-1">Get your Cadi widget live in 5 steps.</p>
+        <h1 className="text-2xl font-black text-white">Widget setup</h1>
+        <p className="text-sm mt-1" style={{ color: ON_DARK.muted }}>Get your Cadi widget live in 5 steps.</p>
       </div>
 
       {/* Step indicator */}
@@ -561,19 +587,22 @@ export default function WidgetSetupWizard() {
         {STEPS.map((s, i) => (
           <div key={s.id} className="flex items-center" style={{ flex: i < STEPS.length - 1 ? '1' : undefined }}>
             <div className="flex items-center gap-2 shrink-0">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                step > s.id  ? 'bg-emerald-500 text-white' :
-                step === s.id ? 'bg-[#1f48ff] text-white'   :
-                'bg-gray-100 text-gray-400'
-              }`}>
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                style={
+                  step > s.id  ? { background: '#34d399', color: '#010a4f' } :
+                  step === s.id ? { background: FD_BLUE, color: '#ffffff' } :
+                  { background: 'rgba(255,255,255,0.06)', color: ON_DARK.faint }
+                }
+              >
                 {step > s.id ? <Check size={12} /> : s.id}
               </div>
-              <span className={`text-xs font-semibold hidden sm:inline ${step === s.id ? 'text-[#010a4f]' : 'text-gray-400'}`}>
+              <span className="text-xs font-semibold hidden sm:inline" style={{ color: step === s.id ? '#ffffff' : ON_DARK.faint }}>
                 {s.label}
               </span>
             </div>
             {i < STEPS.length - 1 && (
-              <div className={`flex-1 h-px mx-3 ${step > s.id ? 'bg-emerald-300' : 'bg-gray-200'}`} />
+              <div className="flex-1 h-px mx-3" style={{ background: step > s.id ? 'rgba(52,211,153,0.4)' : ON_DARK.line }} />
             )}
           </div>
         ))}
@@ -620,19 +649,22 @@ export default function WidgetSetupWizard() {
         <button
           onClick={() => setStep(s => s - 1)}
           disabled={step === 1}
-          className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-gray-400 hover:text-[#010a4f] disabled:opacity-0 transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold disabled:opacity-0 transition-colors hover:text-white"
+          style={{ color: ON_DARK.faint }}
         >
           <ChevronLeft size={16} /> Back
         </button>
         <button
           onClick={handleNext}
           disabled={!canNext || saving}
-          className="flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-[#1f48ff] rounded-xl hover:bg-[#3a5eff] disabled:opacity-40 transition-colors"
+          className="flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white rounded-xl hover:brightness-110 disabled:opacity-40 transition-all"
+          style={{ background: FD_BLUE }}
         >
           {saving ? 'Saving…' : step === STEPS.length ? 'Finish setup' : 'Next'}
           {!saving && <ChevronRight size={16} />}
         </button>
       </div>
+    </div>
     </div>
   );
 }

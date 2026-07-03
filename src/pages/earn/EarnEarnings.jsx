@@ -1,22 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  PoundSterling, TrendingUp, Clock, CheckCircle2, AlertCircle, Building2,
+  PoundSterling, AlertCircle, Building2, Loader2,
 } from 'lucide-react';
 import { listMyConnectInvoices } from '../../lib/db/connectDb';
+import {
+  CONNECT_COLORS, CONNECT_RADII, ON_DARK,
+  glassDark, navyCanvas, HOVER_LIFT,
+} from '../../lib/connectTheme';
 
-const ORANGE = '#C2410C';
-const GREEN  = '#16a34a';
-const PURPLE = '#7c3aed';
-const NAVY   = '#010a4f';
+const ORANGE = '#ffb08a';  // softened orange for accent on navy
+const GREEN  = '#22c55e';
+const PURPLE = '#c084fc';
+const BLUE   = '#7ea3ff';
+const AMBER  = '#fbbf24';
 
 function fmtDate(s) {
   if (!s) return '—';
   return new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
-
 function fmtMoney(n) {
   return `£${Number(n ?? 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
+
+const SUBLABEL = {
+  fontSize: 10, fontWeight: 800, color: ON_DARK.muted,
+  letterSpacing: '0.20em', textTransform: 'uppercase',
+};
 
 export default function EarnEarnings() {
   const [invoices, setInvoices] = useState([]);
@@ -50,7 +59,6 @@ export default function EarnEarnings() {
       const isMonth = dt && dt >= monthStart;
       const isYear  = dt && dt >= yearStart;
 
-      // Earned counts approved+ (drafts also count as earned but not paid)
       if (['draft','submitted','exported','paid'].includes(inv.status)) {
         if (isYear)  earnedYtd   += total;
         if (isMonth) earnedMonth += total;
@@ -73,11 +81,10 @@ export default function EarnEarnings() {
       if (inv.status === 'paid' && inv.paid_at && new Date(inv.paid_at) >= monthStart) cur.paid += total;
       perFm.set(fmId, cur);
 
-      // Activity timeline — last 10 events
-      if (inv.status === 'paid' && inv.paid_at)            recent.push({ e: `Marked paid · ${fmtMoney(total)} · ${inv.reference ?? inv.id.slice(0,8)}`, d: inv.paid_at, c: GREEN });
-      else if (inv.status === 'exported' && inv.exported_at) recent.push({ e: `Exported to FM accounts · ${fmtMoney(total)}`, d: inv.exported_at, c: '#3b82f6' });
-      else if (inv.status === 'submitted' && inv.submitted_at) recent.push({ e: `Submitted invoice · ${fmtMoney(total)}`, d: inv.submitted_at, c: PURPLE });
-      else if (inv.status === 'draft')                       recent.push({ e: `Approved · invoice draft ready · ${fmtMoney(total)}`, d: inv.created_at, c: NAVY });
+      if (inv.status === 'paid' && inv.paid_at)              recent.push({ e: `Marked paid · ${fmtMoney(total)} · ${inv.reference ?? inv.id.slice(0,8)}`, d: inv.paid_at, c: GREEN });
+      else if (inv.status === 'exported' && inv.exported_at) recent.push({ e: `Exported to FM accounts · ${fmtMoney(total)}`,                              d: inv.exported_at, c: BLUE });
+      else if (inv.status === 'submitted' && inv.submitted_at) recent.push({ e: `Submitted invoice · ${fmtMoney(total)}`,                                  d: inv.submitted_at, c: PURPLE });
+      else if (inv.status === 'draft')                        recent.push({ e: `Approved · invoice draft ready · ${fmtMoney(total)}`,                     d: inv.created_at, c: ORANGE });
     }
 
     recent.sort((a, b) => new Date(b.d) - new Date(a.d));
@@ -93,98 +100,156 @@ export default function EarnEarnings() {
   }, [invoices]);
 
   return (
-    <div style={{ background: '#f8faff', minHeight: '100%', padding: '1.25rem', fontFamily: "'Satoshi','Inter',sans-serif" }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #e2e8f0' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <PoundSterling size={18} color={ORANGE} />
-            <h1 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0 }}>Earnings</h1>
-          </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            Status mirrors what FM accounts mark in their export file.
+    <div className="-mx-4 md:-mx-8 -my-6 relative" style={navyCanvas()}>
+      <div className="absolute inset-0 pointer-events-none opacity-40"
+        style={{ background: 'radial-gradient(60% 40% at 30% 100%, rgba(255,255,255,0.05) 0%, transparent 60%)' }} />
+
+      <div className="relative max-w-5xl mx-auto px-4 md:px-8 pt-6 pb-28 space-y-5 z-10">
+
+        {/* ─── HERO ──────────────────────────────────────────────────── */}
+        <div className="relative overflow-hidden"
+          style={{
+            ...glassDark({ radius: CONNECT_RADII.xl, blur: 20 }),
+            background: `
+              radial-gradient(120% 80% at 100% 0%, rgba(194, 65, 12, 0.28) 0%, transparent 55%),
+              radial-gradient(60% 60% at 0% 100%, rgba(79, 120, 255, 0.20) 0%, transparent 60%),
+              rgba(255,255,255,0.04)
+            `,
+          }}>
+          <div className="relative px-6 md:px-9 py-7 md:py-8">
+            <div className="inline-flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 rounded-xl flex items-center justify-center"
+                style={{ background: CONNECT_COLORS.orange, boxShadow: '0 8px 20px -6px rgba(194,65,12,0.6)' }}>
+                <PoundSterling size={13} color="#ffffff" strokeWidth={2.5} />
+              </div>
+              <span className="text-[10px] font-black tracking-[0.28em] text-white/60 uppercase">Earnings</span>
+            </div>
+            <h1 className="text-white mb-2"
+              style={{ fontSize: 26, fontWeight: 900, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+              Every pound,{' '}
+              <span style={{ color: '#ffb08a' }}>tracked to source.</span>
+            </h1>
+            <p className="text-white/60 text-[14px] leading-relaxed max-w-2xl">
+              Status mirrors what FM accounts mark in their export file — draft, submitted, exported, paid.
+            </p>
           </div>
         </div>
+
+        {error && (
+          <div style={{
+            padding: '12px 14px', borderRadius: CONNECT_RADII.md,
+            background: 'rgba(220,38,38,0.14)', border: '1px solid rgba(220,38,38,0.35)',
+            color: '#fca5a5', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <AlertCircle size={14} /> {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ ...glassDark({ padding: 40, radius: CONNECT_RADII.lg }), textAlign: 'center', color: ON_DARK.muted, fontSize: 12 }}>
+            <Loader2 size={18} className="mx-auto mb-2"
+              style={{ animation: 'connectSpin 0.8s linear infinite' }} />
+            Loading…
+            <style>{`@keyframes connectSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+          </div>
+        ) : (
+          <>
+            {/* ─── KPI STRIP ──────────────────────────────────────── */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }} className="md:!grid-cols-4">
+              {[
+                { label: 'Earned · this month', value: fmtMoney(totals.earnedMonth), color: GREEN  },
+                { label: 'Pending payment',      value: fmtMoney(totals.pending),      color: AMBER  },
+                { label: 'Paid · this month',    value: fmtMoney(totals.paidThisMonth), color: '#ffffff' },
+                { label: 'Earned · YTD',         value: fmtMoney(totals.earnedYtd),    color: PURPLE },
+              ].map(({ label, value, color }) => (
+                <div key={label} className={HOVER_LIFT}
+                  style={{ ...glassDark({ padding: 16, radius: CONNECT_RADII.lg, strong: true }) }}>
+                  <div style={{ ...SUBLABEL, marginBottom: 8 }}>{label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 900, color, lineHeight: 1, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ─── PER-FM BREAKDOWN ──────────────────────────────── */}
+            <div style={{ ...glassDark({ padding: 20, radius: CONNECT_RADII.xl, strong: true }) }}>
+              <div style={{ ...SUBLABEL, marginBottom: 14 }}>Per-FM breakdown</div>
+              {totals.perFm.length === 0 ? (
+                <div style={{ fontSize: 12, color: ON_DARK.muted, textAlign: 'center', padding: 24 }}>
+                  Earnings show here as soon as a job is approved.
+                </div>
+              ) : (
+                <div>
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr',
+                    padding: '0 0 10px', ...SUBLABEL,
+                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  }}>
+                    <span>FM</span>
+                    <span>Earned · 30d</span>
+                    <span>Pending</span>
+                    <span>Paid · 30d</span>
+                  </div>
+                  {totals.perFm.map((f, i) => (
+                    <div key={f.id} style={{
+                      display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr',
+                      padding: '14px 0',
+                      borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)',
+                      alignItems: 'center',
+                    }}>
+                      <span style={{
+                        color: '#ffffff', fontWeight: 900, fontSize: 13,
+                        display: 'flex', alignItems: 'center', gap: 8,
+                      }}>
+                        <Building2 size={12} color={ON_DARK.muted} /> {f.name}
+                      </span>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: '#ffffff', fontVariantNumeric: 'tabular-nums' }}>
+                        {fmtMoney(f.earned)}
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: AMBER, fontVariantNumeric: 'tabular-nums' }}>
+                        {fmtMoney(f.pending)}
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: GREEN, fontVariantNumeric: 'tabular-nums' }}>
+                        {fmtMoney(f.paid)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ─── ACTIVITY TIMELINE ─────────────────────────────── */}
+            <div style={{ ...glassDark({ padding: 20, radius: CONNECT_RADII.xl, strong: true }) }}>
+              <div style={{ ...SUBLABEL, marginBottom: 14 }}>Recent payment activity</div>
+              {totals.recent.length === 0 ? (
+                <div style={{ fontSize: 12, color: ON_DARK.muted, textAlign: 'center', padding: 24 }}>
+                  No activity yet.
+                </div>
+              ) : (
+                totals.recent.map((a, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '11px 0',
+                    borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)',
+                    fontSize: 12,
+                  }}>
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: a.c, boxShadow: `0 0 0 4px ${a.c}22`,
+                      flexShrink: 0,
+                    }} />
+                    <span style={{ color: '#ffffff', fontWeight: 700, flex: 1 }}>{a.e}</span>
+                    <span style={{ color: ON_DARK.faint, fontSize: 11, minWidth: 60, textAlign: 'right' }}>
+                      {fmtDate(a.d)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
       </div>
-
-      {error && (
-        <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', fontSize: 12, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <AlertCircle size={14} /> {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>Loading…</div>
-      ) : (
-        <>
-          {/* KPI strip */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 14 }}>
-            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: GREEN, lineHeight: 1 }}>{fmtMoney(totals.earnedMonth)}</div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginTop: 4 }}>Earned · this month</div>
-            </div>
-            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: ORANGE, lineHeight: 1 }}>{fmtMoney(totals.pending)}</div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginTop: 4 }}>Pending payment</div>
-            </div>
-            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: NAVY, lineHeight: 1 }}>{fmtMoney(totals.paidThisMonth)}</div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginTop: 4 }}>Paid · this month</div>
-            </div>
-            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: PURPLE, lineHeight: 1 }}>{fmtMoney(totals.earnedYtd)}</div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginTop: 4 }}>Earned · YTD</div>
-            </div>
-          </div>
-
-          {/* Per-FM breakdown */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>Per-FM breakdown</div>
-            {totals.perFm.length === 0 ? (
-              <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', padding: 20 }}>
-                Earnings show here as soon as a job is approved.
-              </div>
-            ) : (
-              totals.perFm.map((f, i) => (
-                <div key={f.id} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', padding: '10px 0', borderTop: i > 0 ? '1px solid #f1f5f9' : 'none', alignItems: 'center', fontSize: 12 }}>
-                  <span style={{ color: '#0f172a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Building2 size={11} color="#64748b" /> {f.name}
-                  </span>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>{fmtMoney(f.earned)}</div>
-                    <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700 }}>earned · 30d</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 900, color: ORANGE }}>{fmtMoney(f.pending)}</div>
-                    <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700 }}>pending</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 900, color: GREEN }}>{fmtMoney(f.paid)}</div>
-                    <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700 }}>paid · 30d</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Activity timeline */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: 14 }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>Recent payment activity</div>
-            {totals.recent.length === 0 ? (
-              <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', padding: 20 }}>
-                No activity yet.
-              </div>
-            ) : (
-              totals.recent.map((a, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i > 0 ? '1px solid #f1f5f9' : 'none', fontSize: 11 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: a.c }} />
-                  <span style={{ color: '#0f172a', fontWeight: 700, flex: 1 }}>{a.e}</span>
-                  <span style={{ color: '#94a3b8', fontSize: 10, minWidth: 60, textAlign: 'right' }}>{fmtDate(a.d)}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }

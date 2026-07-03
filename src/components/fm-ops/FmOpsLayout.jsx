@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, ClipboardList, Users, Send, Calendar,
-  CheckCircle2, Receipt, ChevronLeft, Building2, LogOut, UserPlus,
+  CheckCircle2, Receipt, Building2, LogOut, UserPlus,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -86,14 +86,16 @@ export default function FmOpsLayout() {
 
   return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex' }}>
-      {/* Sidebar */}
+      {/* Sidebar — enterprise blue shell; melts into the FM page canvas */}
       <aside style={{
-        width: 240, background: NAVY, color: 'white',
+        width: 240, color: 'white',
+        background: 'linear-gradient(180deg, #030b3e 0%, #020730 60%, #010418 100%)',
+        borderRight: '1px solid rgba(255,255,255,0.07)',
         display: 'flex', flexDirection: 'column',
         position: 'sticky', top: 0, height: '100vh',
       }}>
         <div style={{ padding: '22px 22px 18px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.55)' }}>CADI · FM OPS</div>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.20em', color: 'rgba(255,255,255,0.50)' }}>CADI · FM OPS</div>
           <div style={{ fontSize: 15, fontWeight: 900, color: 'white', marginTop: 6, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {orgName ?? 'Your organisation'}
           </div>
@@ -106,11 +108,14 @@ export default function FmOpsLayout() {
               to={`/fm-ops/${path}`}
               style={({ isActive }) => ({
                 display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 12px', borderRadius: 8,
+                padding: '9px 12px', borderRadius: 9,
                 fontSize: 12.5, fontWeight: 700,
-                color: isActive ? 'white' : 'rgba(255,255,255,0.7)',
-                background: isActive ? `${ACCENT}` : 'transparent',
+                color: isActive ? 'white' : 'rgba(255,255,255,0.66)',
+                background: isActive ? 'rgba(79,120,255,0.22)' : 'transparent',
+                border: isActive ? '1px solid rgba(79,120,255,0.35)' : '1px solid transparent',
+                boxShadow: isActive ? '0 4px 14px -6px rgba(79,120,255,0.5)' : 'none',
                 textDecoration: 'none',
+                transition: 'background 150ms ease, color 150ms ease',
               })}
             >
               <Icon size={14} />
@@ -121,23 +126,12 @@ export default function FmOpsLayout() {
 
         <div style={{ padding: '12px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <button
-            onClick={() => navigate('/dashboard')}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 12px', background: 'rgba(255,255,255,0.06)',
-              color: 'rgba(255,255,255,0.7)', border: 'none', borderRadius: 8,
-              fontSize: 11, fontWeight: 700, cursor: 'pointer',
-            }}
-          >
-            <ChevronLeft size={12} /> Back to Cadi
-          </button>
-          <button
             onClick={async () => { await supabase.auth.signOut(); navigate('/login'); }}
             style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 8,
               padding: '8px 12px', background: 'transparent',
-              color: 'rgba(255,255,255,0.45)', border: 'none', borderRadius: 8,
-              fontSize: 11, fontWeight: 700, cursor: 'pointer', marginTop: 4,
+              color: 'rgba(255,255,255,0.45)', border: 'none', borderRadius: 9,
+              fontSize: 11, fontWeight: 700, cursor: 'pointer',
             }}
           >
             <LogOut size={12} /> Sign out
@@ -145,8 +139,8 @@ export default function FmOpsLayout() {
         </div>
       </aside>
 
-      {/* Main */}
-      <main style={{ flex: 1, padding: '28px 32px', maxWidth: 1280 }}>
+      {/* Main — pages bleed the canvas edge-to-edge with negative margins */}
+      <main style={{ flex: 1, minWidth: 0, padding: '28px 32px' }}>
         <Outlet />
       </main>
     </div>

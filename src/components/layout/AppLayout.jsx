@@ -56,6 +56,7 @@ const NAV_SECTIONS = [
     id: 'earn',
     label: 'Connect to more work',
     items: [
+      { path: '/connect',              label: 'Dashboard',        icon: LayoutDashboard, end: true },
       { path: '/connect/marketplace',  label: 'Marketplace',      icon: ShoppingBag   },
       { path: '/connect/pipeline',     label: 'Current Work',     icon: GitBranch     },
       { path: '/connect/completion',   label: 'Work Completion',  icon: CheckSquare   },
@@ -381,12 +382,12 @@ export default function AppLayout() {
         {/* Section items */}
         {isOpen && (
           <div className="mt-0.5 space-y-0.5 pl-2">
-            {section.items.map(({ path, label, icon: Icon, comingSoon, badge }) => {
+            {section.items.map(({ path, label, icon: Icon, comingSoon, badge, end }) => {
               const badgeCount = badge === 'pendingActions' ? pendingActions : 0;
               const locked = isTabLocked(path);
               const guide  = TAB_GUIDES[path];
               const isHovered = hoveredNav === path;
-              const isActive  = location.pathname.startsWith(path);
+              const isActive  = end ? location.pathname === path : location.pathname.startsWith(path);
 
               return (
                 <div
@@ -397,6 +398,7 @@ export default function AppLayout() {
                 >
                   <NavLink
                     to={comingSoon ? '/connect' : path}
+                    end={end}
                     onClick={(e) => {
                       if (comingSoon) { e.preventDefault(); navigate('/connect'); return; }
                       handleNavClick(path, e);

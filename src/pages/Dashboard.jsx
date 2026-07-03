@@ -59,9 +59,11 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useCountUp } from "../hooks/useCountUp";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useData } from "../context/DataContext";
 import { useCleanProData } from "../hooks/useCleanProData";
 import { supabase } from "../lib/supabase";
 import { createMoneyEntry } from "../lib/db/moneyDb";
+import { listOpenMarketplaceListings } from "../lib/db/connectDb";
 import { listLeaderboard, upsertMyEntry, deleteMyEntry } from "../lib/db/leaderboardDb";
 import AskCadi from "../components/AskCadi";
 import CadiWordmark from "../components/CadiWordmark";
@@ -127,6 +129,25 @@ const DEMO_FEED = [
   { id: 4, icon: "!",  bg: "bg-red-100",       title: "Harrington invoice overdue",        sub: "£85 · 3 days past due",               time: "Auto"  },
   { id: 5, icon: "🚐", bg: "bg-amber-100",     title: "Route logged — 18.4 miles",         sub: "£8.28 HMRC claim · 5 stops",          time: "Yest." },
 ];
+
+// Deterministic demo money entries — 90 days of believable cleaner income so
+// the Money Confidence hero looks alive in demo mode / screenshots.
+const DEMO_MONEY_ENTRIES = (() => {
+  const out = [];
+  const today = new Date();
+  for (let i = 0; i < 90; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dow = d.getDay();
+    if (dow === 0) continue; // Sundays off
+    const base = dow === 6 ? 140 : 280;
+    const wobble = ((i * 37) % 120) - 60;
+    const iso = d.toISOString().split('T')[0];
+    out.push({ id: `demo-inc-${i}`, kind: 'income', amount: Math.max(80, base + wobble), date: iso });
+    if (i % 4 === 0) out.push({ id: `demo-exp-${i}`, kind: 'expense', amount: 35 + ((i * 13) % 45), date: iso });
+  }
+  return out;
+})();
 
 // ─── Health score engine ──────────────────────────────────────────────────────
 // Fully transparent — every point source is labelled
@@ -303,6 +324,411 @@ function Chip({ children, color = "blue" }) {
     orange: "bg-orange-50 text-orange-700 border-orange-200",
   };
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-bold border ${s[color]}`}>{children}</span>;
+}
+
+// ─── Money Confidence hero ─────────────────────────────────────────────────────
+// Front-of-stage. One glance answers: what came in, what went out, what I kept,
+// and am I on pace — switchable between today / this week / this month.
+const DASH_CARD_BG = 'linear-gradient(135deg, #040810 0%, #06103c 50%, #080d28 100%)';
+
+function isoOf(d) { return d.toISOString().split('T')[0]; }
+function mondayOf(d) {
+  const r = new Date(d);
+  const day = r.getDay();
+  r.setDate(r.getDate() + (day === 0 ? -6 : 1 - day));
+  r.setHours(0, 0, 0, 0);
+  return r;
+}
+
+function buildMoneyView(entries, period) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const income = {}; const expense = {};
+  (entries || []).forEach(e => {
+    const amt = Number(e.amount) || 0;
+    if (!e.date) return;
+    if (e.kind === 'income') income[e.date] = (income[e.date] || 0) + amt;
+    else if (e.kind === 'expense') expense[e.date] = (expense[e.date] || 0) + amt;
+  });
+  const sumRange = (map, from, to) => {
+    const f = isoOf(from), t = isoOf(to);
+    let s = 0;
+    for (const [d, v] of Object.entries(map)) if (d >= f && d <= t) s += v;
+    return s;
+  };
+
+  if (period === 'day') {
+    const bars = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      bars.push({
+        label: d.toLocaleDateString('en-GB', { weekday: 'narrow' }),
+        full: d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+        value: income[isoOf(d)] || 0,
+        current: i === 0,
+      });
+    }
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    return {
+      compareLabel: 'yesterday',
+      chartLabel: 'Last 14 days',
+      moneyIn: income[isoOf(today)] || 0,
+      prevIn: income[isoOf(yesterday)] || 0,
+      moneyOut: expense[isoOf(today)] || 0,
+      bars,
+    };
+  }
+
+  if (period === 'week') {
+    const thisMon = mondayOf(today);
+    const bars = [];
+    for (let i = 7; i >= 0; i--) {
+      const from = new Date(thisMon); from.setDate(from.getDate() - i * 7);
+      const to = new Date(from); to.setDate(to.getDate() + 6);
+      bars.push({
+        label: `${from.getDate()}/${from.getMonth() + 1}`,
+        full: `w/c ${from.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
+        value: sumRange(income, from, to),
+        current: i === 0,
+      });
+    }
+    const prevMon = new Date(thisMon); prevMon.setDate(prevMon.getDate() - 7);
+    const prevSun = new Date(thisMon); prevSun.setDate(prevSun.getDate() - 1);
+    const weekEnd = new Date(thisMon); weekEnd.setDate(weekEnd.getDate() + 6);
+    return {
+      compareLabel: 'last week',
+      chartLabel: 'Last 8 weeks',
+      moneyIn: sumRange(income, thisMon, weekEnd),
+      prevIn: sumRange(income, prevMon, prevSun),
+      moneyOut: sumRange(expense, thisMon, weekEnd),
+      bars,
+    };
+  }
+
+  // month — every month of the current tax year so far (Apr → now)
+  const nowY = today.getFullYear(); const nowM = today.getMonth();
+  const taxY = nowM >= 3 ? nowY : nowY - 1;
+  const bars = [];
+  for (let y = taxY, m = 3; y < nowY || (y === nowY && m <= nowM); m++) {
+    if (m > 11) { m = 0; y++; }
+    const from = new Date(y, m, 1); const to = new Date(y, m + 1, 0);
+    bars.push({
+      label: from.toLocaleDateString('en-GB', { month: 'short' }),
+      full: from.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+      value: sumRange(income, from, to),
+      current: y === nowY && m === nowM,
+    });
+    if (y === nowY && m === nowM) break;
+  }
+  const cur = { from: new Date(nowY, nowM, 1), to: new Date(nowY, nowM + 1, 0) };
+  const prv = { from: new Date(nowY, nowM - 1, 1), to: new Date(nowY, nowM, 0) };
+  return {
+    compareLabel: 'last month',
+    chartLabel: 'This tax year',
+    moneyIn: sumRange(income, cur.from, cur.to),
+    prevIn: sumRange(income, prv.from, prv.to),
+    moneyOut: sumRange(expense, cur.from, cur.to),
+    bars,
+  };
+}
+
+const MONEY_PERIODS = [
+  { id: 'day',   label: 'Today' },
+  { id: 'week',  label: 'Week'  },
+  { id: 'month', label: 'Month' },
+];
+
+function MoneyConfidenceHero({ entries, accounts, invoices, onLogPayment, onNavigate, onSetTarget, isLive }) {
+  const [period, setPeriod] = useState('week');
+  const view = useMemo(() => buildMoneyView(entries, period), [entries, period]);
+  const moneyInAnim = useCountUp(Math.round(view.moneyIn), 1400);
+  const kept = view.moneyIn - view.moneyOut;
+  const delta = view.prevIn > 0 ? Math.round(((view.moneyIn - view.prevIn) / view.prevIn) * 100) : null;
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 120); return () => clearTimeout(t); }, []);
+
+  // Period target derived from the annual target
+  const target = period === 'month'
+    ? accounts.monthlyTarget
+    : period === 'week'
+      ? (accounts.annualTarget || 0) / 52
+      : (accounts.annualTarget || 0) / 365;
+  const targetPct = target > 0 ? Math.min(100, Math.round((view.moneyIn / target) * 100)) : null;
+
+  // Confidence strip
+  const unpaid       = invoices.filter(i => i.status !== 'paid' && i.status !== 'draft');
+  const outstanding  = unpaid.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const overdue      = invoices.filter(i => i.status === 'overdue');
+  const overdueTotal = overdue.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const taxPct       = accounts.taxReserveTarget > 0 ? Math.round((accounts.taxReserve / accounts.taxReserveTarget) * 100) : null;
+
+  // YTD pace — projected full-year income at the current run rate
+  const now = new Date();
+  const taxStart = new Date(now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1, 3, 6);
+  const daysIn = Math.max(1, Math.round((now - taxStart) / 86400000));
+  const projected = Math.round((accounts.ytdIncome / daysIn) * 365);
+  const ytdPct = accounts.annualTarget > 0 ? Math.min(100, Math.round((accounts.ytdIncome / accounts.annualTarget) * 100)) : 0;
+  const paceAhead = accounts.annualTarget > 0 ? projected >= accounts.annualTarget : null;
+
+  const maxBar = Math.max(...view.bars.map(b => b.value), 1);
+  const hasAny = (entries || []).length > 0;
+
+  const chip = (tone) => ({
+    good:  { text: 'text-emerald-300', dot: 'bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.6)]' },
+    warn:  { text: 'text-amber-300',   dot: 'bg-amber-400 shadow-[0_0_8px_2px_rgba(251,191,36,0.6)]'  },
+    bad:   { text: 'text-red-300',     dot: 'bg-red-400 shadow-[0_0_8px_2px_rgba(239,68,68,0.6)]'     },
+    idle:  { text: 'text-[rgba(153,197,255,0.6)]', dot: 'bg-[rgba(153,197,255,0.3)]' },
+  }[tone]);
+
+  const confidence = [
+    {
+      label: 'Outstanding',
+      value: fmt(outstanding),
+      sub: outstanding > 0 ? `${unpaid.length} unpaid invoice${unpaid.length === 1 ? '' : 's'}` : 'All collected',
+      tone: outstanding > 0 ? 'warn' : 'good',
+      tab: 'invoices',
+    },
+    {
+      label: 'Overdue',
+      value: overdue.length > 0 ? fmt(overdueTotal) : 'None',
+      sub: overdue.length > 0 ? `${overdue.length} need${overdue.length === 1 ? 's' : ''} chasing` : 'Nothing past due',
+      tone: overdue.length > 0 ? 'bad' : 'good',
+      tab: 'invoices',
+    },
+    {
+      label: 'Tax reserve',
+      value: taxPct == null ? '—' : `${Math.min(999, taxPct)}%`,
+      sub: taxPct == null ? 'No tax due yet' : taxPct >= 100 ? 'Fully covered' : `${fmt(Math.max(0, accounts.taxReserveTarget - accounts.taxReserve))} to go`,
+      tone: taxPct == null ? 'idle' : taxPct >= 100 ? 'good' : taxPct >= 70 ? 'warn' : 'bad',
+      tab: 'money',
+    },
+    {
+      label: 'Year pace',
+      value: fmt(projected),
+      sub: accounts.annualTarget > 0
+        ? (paceAhead ? `Ahead — target ${fmt(accounts.annualTarget)}` : `Target ${fmt(accounts.annualTarget)} · ${ytdPct}% in`)
+        : 'Tap to set your target',
+      tone: paceAhead == null ? 'idle' : paceAhead ? 'good' : 'warn',
+      tab: 'money',
+      onClick: accounts.annualTarget > 0 ? null : onSetTarget,
+    },
+  ];
+
+  return (
+    <div
+      className="relative rounded-2xl overflow-hidden border border-[rgba(52,211,153,0.22)] h-full flex flex-col"
+      style={{ background: DASH_CARD_BG, boxShadow: '0 24px 60px -24px rgba(0,0,0,0.6)' }}
+    >
+      {/* Ambient glow */}
+      <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(52,211,153,0.14) 0%, transparent 70%)' }} />
+      <div className="absolute -bottom-20 -left-10 w-56 h-56 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(79,120,255,0.12) 0%, transparent 70%)' }} />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent" />
+
+      {/* Header */}
+      <div className="relative px-5 py-4 border-b border-[rgba(79,120,255,0.12)] flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5">
+          <div className="w-1.5 h-4 rounded-full bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.6)]" />
+          <p className="text-xs font-black uppercase tracking-[0.15em] text-emerald-300">Money confidence</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex bg-white/5 border border-white/10 rounded-xl p-0.5 gap-0.5">
+            {MONEY_PERIODS.map(p => (
+              <button
+                key={p.id}
+                onClick={() => setPeriod(p.id)}
+                className={`px-3 py-1.5 text-[11px] font-black rounded-[10px] transition-all ${
+                  period === p.id
+                    ? 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/40 shadow-[0_0_10px_rgba(52,211,153,0.25)]'
+                    : 'text-[rgba(153,197,255,0.45)] hover:text-white border border-transparent'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => onNavigate?.('money')}
+            className="text-xs font-bold text-[#4f78ff] hover:text-[#99c5ff] transition-colors whitespace-nowrap"
+          >
+            Money Tracker →
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="relative px-5 py-5 grid grid-cols-1 md:grid-cols-5 gap-6 flex-1">
+        {/* Left — the number */}
+        <div className="md:col-span-2 flex flex-col">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[rgba(153,197,255,0.45)] mb-1.5">
+            Money in · {MONEY_PERIODS.find(p => p.id === period)?.label.toLowerCase() === 'today' ? 'today' : period === 'week' ? 'this week' : 'this month'}
+          </p>
+          <div className="flex items-end gap-3 flex-wrap">
+            <p
+              className="text-5xl font-black tabular-nums text-white leading-none"
+              style={{ textShadow: '0 0 30px rgba(52,211,153,0.35)' }}
+            >
+              {fmt(moneyInAnim)}
+            </p>
+            {delta != null && (
+              <span className={`mb-1 text-[11px] font-black px-2 py-1 rounded-full border ${
+                delta >= 0
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  : 'bg-red-500/15 text-red-300 border-red-500/30'
+              }`}>
+                {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)}% vs {view.compareLabel}
+              </span>
+            )}
+          </div>
+
+          {/* In / out / kept */}
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-[rgba(153,197,255,0.5)]">Money out</span>
+              <span className="font-black tabular-nums text-amber-300">{view.moneyOut > 0 ? `−${fmt(view.moneyOut)}` : '£0'}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs border-t border-white/5 pt-2">
+              <span className="text-[rgba(153,197,255,0.5)]">Kept</span>
+              <span className={`font-black tabular-nums ${kept >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{kept < 0 ? `−${fmt(kept)}` : fmt(kept)}</span>
+            </div>
+          </div>
+
+          {/* Truly yours — the Money Confidence number. Earned minus costs minus
+              the tax that isn't really theirs. Hidden until there's income. */}
+          {(accounts.ytdIncome ?? 0) > 0 && (() => {
+            const trulyYours = Math.max(0, (accounts.ytdIncome ?? 0) - (accounts.ytdExpenses ?? 0) - (accounts.taxReserveTarget ?? 0));
+            return (
+              <div className="mt-4 px-3 py-2.5 rounded-xl border border-emerald-400/25" style={{ background: 'rgba(52,211,153,0.07)' }}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300 mb-0.5">Truly yours · this tax year</p>
+                    <p className="text-[10px] text-[rgba(153,197,255,0.5)] leading-snug">
+                      {fmt(accounts.ytdIncome)} earned − {fmt(accounts.ytdExpenses ?? 0)} costs − {fmt(accounts.taxReserveTarget ?? 0)} for tax
+                    </p>
+                  </div>
+                  <p className="text-2xl font-black tabular-nums text-emerald-300 shrink-0" style={{ textShadow: '0 0 20px rgba(52,211,153,0.4)' }}>
+                    {fmt(trulyYours)}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Target progress — or the prompt to set one */}
+          {targetPct != null ? (
+            <div className="mt-4">
+              <div className="flex justify-between text-[10px] font-bold mb-1.5">
+                <span className="text-[rgba(153,197,255,0.4)] uppercase tracking-widest">
+                  {period === 'day' ? 'Daily' : period === 'week' ? 'Weekly' : 'Monthly'} target
+                </span>
+                <span className={targetPct >= 100 ? 'text-emerald-300' : 'text-[rgba(153,197,255,0.6)]'}>
+                  {targetPct}% of {fmt(target)}
+                </span>
+              </div>
+              <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: mounted ? `${Math.min(100, targetPct)}%` : 0,
+                    transition: 'width 0.9s cubic-bezier(0.34,1.2,0.64,1) 0.2s',
+                    background: 'linear-gradient(90deg, #34d399, #059669)',
+                    boxShadow: '0 0 10px 2px rgba(52,211,153,0.4)',
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={onSetTarget}
+              className="mt-4 w-full text-left px-3 py-2.5 rounded-xl border border-dashed border-amber-400/40 transition-colors hover:bg-amber-400/10"
+              style={{ background: 'rgba(251,191,36,0.06)' }}
+            >
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-300 mb-0.5">🎯 No target set</p>
+              <p className="text-[11px] font-bold text-white leading-snug">Set your monthly target — Cadi paces every day, week and month against it.</p>
+            </button>
+          )}
+
+          {/* CTAs */}
+          <div className="flex gap-2 mt-5 md:mt-auto md:pt-5">
+            <button
+              onClick={onLogPayment}
+              className="flex-1 px-4 py-2.5 rounded-xl text-xs font-black text-white transition-all hover:brightness-110"
+              style={{ background: 'linear-gradient(180deg, #10b981 0%, #047857 100%)', boxShadow: '0 8px 20px -6px rgba(4,120,87,0.55), inset 0 1px 0 rgba(255,255,255,0.2)' }}
+            >
+              💷 Log payment
+            </button>
+            <button
+              onClick={() => onNavigate?.('money')}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-white/80 bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+            >
+              Open tracker
+            </button>
+          </div>
+        </div>
+
+        {/* Right — the chart */}
+        <div className="md:col-span-3 flex flex-col">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[rgba(153,197,255,0.4)]">{view.chartLabel}</p>
+            {!hasAny && isLive && (
+              <span className="text-[10px] font-bold text-amber-300">Log payments to light this up</span>
+            )}
+          </div>
+          <div className="flex-1 flex items-end gap-1.5 min-h-[130px]">
+            {view.bars.map((b, i) => {
+              const h = b.value > 0 ? Math.max((b.value / maxBar) * 100, 5) : 0;
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative" title={`${b.full} · ${fmt(b.value)}`}>
+                  {/* Hover value */}
+                  <div className="absolute -top-6 hidden group-hover:block whitespace-nowrap bg-white text-brand-navy text-[10px] font-black px-2 py-0.5 rounded-md shadow-xl z-10 pointer-events-none">
+                    {fmt(b.value)}
+                  </div>
+                  <div className="w-full h-[110px] flex items-end justify-center">
+                    {b.value > 0 ? (
+                      <div
+                        className="w-full max-w-[26px] rounded-t-md"
+                        style={{
+                          height: mounted ? `${h}%` : 0,
+                          transition: `height 0.6s cubic-bezier(0.34,1.4,0.64,1) ${i * 0.05}s`,
+                          background: b.current
+                            ? 'linear-gradient(180deg, #6ee7b7 0%, #059669 100%)'
+                            : 'linear-gradient(180deg, rgba(79,120,255,0.55) 0%, rgba(79,120,255,0.18) 100%)',
+                          boxShadow: b.current ? '0 0 14px 2px rgba(52,211,153,0.45)' : 'none',
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full max-w-[26px] h-1 rounded-full bg-white/5" />
+                    )}
+                  </div>
+                  <span className={`text-[9px] font-bold ${b.current ? 'text-emerald-300' : 'text-[rgba(153,197,255,0.3)]'}`}>{b.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Confidence strip */}
+      <div className="relative grid grid-cols-2 md:grid-cols-4 border-t border-[rgba(79,120,255,0.12)] divide-x divide-[rgba(79,120,255,0.08)]">
+        {confidence.map((c) => {
+          const t = chip(c.tone);
+          return (
+            <button
+              key={c.label}
+              onClick={() => { if (c.onClick) { c.onClick(); } else if (c.tab) { onNavigate?.(c.tab); } }}
+              className="px-4 py-3.5 text-left hover:bg-white/[0.03] transition-colors"
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className={`w-1.5 h-1.5 rounded-full ${t.dot}`} />
+                <p className="text-[9px] font-black uppercase tracking-widest text-[rgba(153,197,255,0.4)]">{c.label}</p>
+              </div>
+              <p className={`text-base font-black tabular-nums leading-tight ${t.text}`}>{c.value}</p>
+              <p className="text-[10px] text-[rgba(153,197,255,0.4)] mt-0.5 truncate">{c.sub}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // ─── Health score ring ─────────────────────────────────────────────────────────
@@ -603,6 +1029,278 @@ function HealthPanel({ score, scoreDelta = 0 }) {
   );
 }
 
+// ─── Module cards for the 6-panel grid ─────────────────────────────────────────
+// Shared shell — every module speaks the same dark glow-card language.
+function ModuleCard({ dot, title, headerRight, children, className = "", accentBorder }) {
+  return (
+    <div
+      className={`rounded-2xl overflow-hidden border h-full flex flex-col ${className}`}
+      style={{ background: DASH_CARD_BG, borderColor: accentBorder || 'rgba(79,120,255,0.15)' }}
+    >
+      <div className="px-4 py-3.5 border-b border-[rgba(79,120,255,0.12)] flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={`w-1.5 h-4 rounded-full shrink-0 ${dot}`} />
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#99c5ff] truncate">{title}</p>
+        </div>
+        {headerRight}
+      </div>
+      <div className="flex-1 flex flex-col min-h-0">{children}</div>
+    </div>
+  );
+}
+
+// PENDING PAYMENTS — who owes what, overdue first, one tap to chase.
+function PendingPaymentsCard({ invoices, onNavigate }) {
+  const unpaid = invoices
+    .filter(i => i.status !== 'paid' && i.status !== 'draft')
+    .sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0));
+  const total = unpaid.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const overdueCount = unpaid.filter(i => i.status === 'overdue').length;
+
+  return (
+    <ModuleCard
+      dot={overdueCount > 0 ? "bg-red-400 shadow-[0_0_8px_2px_rgba(239,68,68,0.6)]" : "bg-amber-400 shadow-[0_0_8px_2px_rgba(251,191,36,0.5)]"}
+      title="Pending payments"
+      headerRight={
+        <button onClick={() => onNavigate?.('invoices')} className="text-[11px] font-bold text-[#4f78ff] hover:text-[#99c5ff] transition-colors whitespace-nowrap">All →</button>
+      }
+    >
+      <div className="px-4 pt-3.5 pb-2">
+        <p className="text-3xl font-black tabular-nums text-white leading-none" style={{ textShadow: total > 0 ? '0 0 24px rgba(251,191,36,0.3)' : undefined }}>
+          {fmt(total)}
+        </p>
+        <p className="text-[11px] text-[rgba(153,197,255,0.45)] mt-1.5">
+          {unpaid.length === 0
+            ? 'Nothing owed — all collected 🎉'
+            : <>{unpaid.length} invoice{unpaid.length === 1 ? '' : 's'} waiting{overdueCount > 0 && <span className="text-red-300 font-bold"> · {overdueCount} overdue</span>}</>}
+        </p>
+      </div>
+      <div className="flex-1 divide-y divide-[rgba(79,120,255,0.08)] border-t border-[rgba(79,120,255,0.1)]">
+        {unpaid.slice(0, 4).map(inv => (
+          <button
+            key={inv.id}
+            onClick={() => onNavigate?.('invoices')}
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-white/[0.03] transition-colors"
+          >
+            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${inv.status === 'overdue' ? 'bg-red-400 shadow-[0_0_6px_1px_rgba(239,68,68,0.6)]' : 'bg-amber-400/60'}`} />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-white truncate">{inv.customer}</p>
+              {inv.status === 'overdue' && (
+                <p className="text-[10px] text-red-300/80">{inv.daysOverdue} day{inv.daysOverdue === 1 ? '' : 's'} overdue</p>
+              )}
+            </div>
+            <span className="text-xs font-black tabular-nums text-white shrink-0">{fmt(inv.amount)}</span>
+            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full shrink-0 ${inv.status === 'overdue' ? 'bg-red-500/20 text-red-300' : 'bg-white/5 text-[rgba(153,197,255,0.5)]'}`}>
+              {inv.status === 'overdue' ? 'Chase' : 'Sent'}
+            </span>
+          </button>
+        ))}
+        {unpaid.length === 0 && (
+          <div className="px-4 py-6 text-center">
+            <p className="text-2xl mb-1" style={{ filter: 'drop-shadow(0 0 10px rgba(52,211,153,0.6))' }}>✓</p>
+            <p className="text-xs text-[rgba(153,197,255,0.4)]">Invoices land here when they're sent.</p>
+          </div>
+        )}
+      </div>
+    </ModuleCard>
+  );
+}
+
+// SCORE — compact Cadi Score with the single next move folded in.
+function ScoreCard({ score, actions, onNavigate }) {
+  const { total, tier, tierNext, tierColor } = score;
+  const [showExplainer, setShowExplainer] = useState(false);
+  const topAction = (actions || []).find(a => a.pts > 0);
+  const tierIdx = TIERS_ORDERED.indexOf(tier);
+  const nextTier = TIERS_ORDERED[tierIdx + 1];
+
+  return (
+    <ModuleCard
+      dot="bg-[#4f78ff] shadow-[0_0_8px_2px_rgba(79,120,255,0.5)]"
+      title="Cadi Score"
+      headerRight={
+        <button onClick={() => setShowExplainer(true)} className="text-[11px] font-bold text-[#4f78ff] hover:text-[#99c5ff] transition-colors whitespace-nowrap">How? →</button>
+      }
+    >
+      <div className="px-4 py-4 flex items-center gap-4">
+        <ScoreRing score={total} size={88} />
+        <div className="min-w-0">
+          <p className={`text-lg font-black leading-tight ${tierColor}`}>{tier}</p>
+          {tierNext
+            ? <p className="text-[11px] text-[rgba(153,197,255,0.5)] mt-0.5"><span className="font-bold text-white">{tierNext - total} pts</span> to {nextTier}</p>
+            : <p className="text-[11px] text-violet-300 font-bold mt-0.5">Peak performance</p>}
+          <div className="flex items-center gap-1 mt-2">
+            {TIERS_ORDERED.map((t, i) => (
+              <div key={t} className={`rounded-full transition-all ${t === tier ? "w-5 h-1.5 bg-brand-skyblue" : tierIdx > i ? "w-1.5 h-1.5 bg-emerald-400" : "w-1.5 h-1.5 bg-white/15"}`} />
+            ))}
+          </div>
+        </div>
+      </div>
+      {topAction && (
+        <button
+          onClick={() => topAction.tab && onNavigate?.(topAction.tab)}
+          className="mt-auto mx-3 mb-3 px-3 py-2.5 rounded-xl text-left border transition-colors hover:bg-white/[0.05]"
+          style={{ background: 'rgba(251,191,36,0.07)', borderColor: 'rgba(251,191,36,0.25)' }}
+        >
+          <p className="text-[10px] font-black uppercase tracking-widest text-amber-300/80 mb-0.5">Next move · +{topAction.pts} pts</p>
+          <p className="text-[11px] font-bold text-white leading-snug line-clamp-2">{topAction.title}</p>
+        </button>
+      )}
+      {showExplainer && <ScoreExplainerModal score={score} onClose={() => setShowExplainer(false)} />}
+    </ModuleCard>
+  );
+}
+
+// SCHEDULE — today at a glance + the week's shape in miniature.
+function ScheduleCard({ weekJobs, jobsToday, onNavigate }) {
+  const done = jobsToday.filter(j => j.status === 'complete').length;
+  const nextJob = jobsToday.find(j => j.status !== 'complete');
+  const maxRev = Math.max(...weekJobs.map(d => d.revenue), 1);
+
+  return (
+    <ModuleCard
+      dot="bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.5)]"
+      title="Schedule"
+      headerRight={
+        <button onClick={() => onNavigate?.('scheduler')} className="text-[11px] font-bold text-[#4f78ff] hover:text-[#99c5ff] transition-colors whitespace-nowrap">Open →</button>
+      }
+    >
+      <div className="px-4 pt-3.5">
+        <div className="flex items-baseline gap-2">
+          <p className="text-3xl font-black tabular-nums text-white leading-none">{done}<span className="text-[rgba(153,197,255,0.35)]">/{jobsToday.length}</span></p>
+          <p className="text-[11px] text-[rgba(153,197,255,0.45)]">jobs done today</p>
+        </div>
+        {nextJob ? (
+          <div className="mt-3 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08]">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[rgba(153,197,255,0.4)] mb-0.5">Up next</p>
+            <p className="text-xs font-bold text-white truncate">{nextJob.customer} · {fmt(nextJob.price)}</p>
+            <p className="text-[10px] text-[rgba(153,197,255,0.45)] mt-0.5 truncate">{nextJob.time}{nextJob.postcode ? ` · ${nextJob.postcode}` : ''} · {nextJob.service}</p>
+          </div>
+        ) : (
+          <div className="mt-3 px-3 py-2 rounded-xl bg-emerald-500/[0.08] border border-emerald-500/20">
+            <p className="text-xs font-bold text-emerald-300">{jobsToday.length > 0 ? 'Day wrapped 🎉' : 'Nothing booked today'}</p>
+          </div>
+        )}
+      </div>
+      {/* Mini week */}
+      <div className="mt-auto px-4 pb-3.5 pt-3">
+        <div className="flex items-end gap-1 h-9">
+          {weekJobs.map(d => (
+            <div key={d.day} className="flex-1 flex flex-col items-center gap-0.5" title={`${d.day} · ${fmt(d.revenue)}`}>
+              <div className="w-full flex items-end justify-center h-6">
+                <div
+                  className="w-2.5 rounded-t-sm"
+                  style={{
+                    height: d.revenue > 0 ? `${Math.max((d.revenue / maxRev) * 100, 12)}%` : '2px',
+                    background: d.isToday
+                      ? 'linear-gradient(180deg, #99c5ff, #4f78ff)'
+                      : d.done ? 'linear-gradient(180deg, #6ee7b7, #059669)' : 'rgba(79,120,255,0.2)',
+                    boxShadow: d.isToday ? '0 0 6px 1px rgba(99,179,255,0.4)' : 'none',
+                  }}
+                />
+              </div>
+              <span className={`text-[8px] font-bold ${d.isToday ? 'text-[#99c5ff]' : 'text-[rgba(153,197,255,0.3)]'}`}>{d.day[0]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ModuleCard>
+  );
+}
+
+// MARKETPLACE — live Cadi Connect work near you. Connect-orange accent.
+const DEMO_LISTINGS = [
+  { id: 'd1', site: 'Stratstone JLR Nottingham', postcode: 'NG7', frequency: 'monthly', price: 200, status: 'bidding', fm: 'ARGO FM' },
+  { id: 'd2', site: 'Vauxhall Bedford',          postcode: 'MK42', frequency: 'monthly', price: 45,  status: 'open',    fm: 'ARGO FM' },
+  { id: 'd3', site: 'Park Retail Unit 4',        postcode: 'SW9',  frequency: 'weekly',  price: 85,  status: 'open',    fm: 'Britannia' },
+];
+
+function MarketplaceCard({ isLive, onNavigate }) {
+  const [listings, setListings] = useState(null); // null = loading
+  useEffect(() => {
+    if (!isLive) { setListings(DEMO_LISTINGS); return; }
+    let alive = true;
+    listOpenMarketplaceListings()
+      .then(rows => {
+        if (!alive) return;
+        setListings((rows || []).map(l => ({
+          id: l.id,
+          site: l.visit_spec?.site?.name ?? 'Site',
+          postcode: (l.visit_spec?.site?.postcode || '').split(' ')[0],
+          frequency: l.visit_spec?.frequency ?? '',
+          price: l.target_price,
+          status: l.status,
+          fm: l.fm_organisation?.name ?? 'FM',
+        })));
+      })
+      .catch(() => { if (alive) setListings([]); });
+    return () => { alive = false; };
+  }, [isLive]);
+
+  const live = listings ?? [];
+
+  return (
+    <ModuleCard
+      dot="bg-orange-400 shadow-[0_0_8px_2px_rgba(251,146,60,0.6)]"
+      title="Marketplace · Cadi Connect"
+      accentBorder="rgba(251,146,60,0.25)"
+      headerRight={
+        <div className="flex items-center gap-2.5">
+          {live.length > 0 && (
+            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-300 border border-orange-500/30">
+              {live.length} live
+            </span>
+          )}
+          <button onClick={() => onNavigate?.('connect')} className="text-[11px] font-bold text-orange-300 hover:text-orange-200 transition-colors whitespace-nowrap">Open marketplace →</button>
+        </div>
+      }
+    >
+      {listings === null && (
+        <div className="flex-1 flex items-center justify-center py-8">
+          <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+      {listings !== null && live.length === 0 && (
+        <div className="flex-1 flex flex-col items-center text-center gap-3 px-5 py-6">
+          <div className="text-4xl" style={{ filter: 'drop-shadow(0 0 16px rgba(251,146,60,0.5))' }}>🏗️</div>
+          <div>
+            <p className="text-sm font-black text-white">Win commercial contracts near you</p>
+            <p className="text-xs text-[rgba(153,197,255,0.5)] mt-1 leading-relaxed">FM companies post real cleaning work to Cadi Connect — browse open listings, bid, and get paid through Cadi.</p>
+          </div>
+          <button
+            onClick={() => onNavigate?.('connect')}
+            className="w-full px-4 py-2.5 rounded-xl text-xs font-black text-white transition-all hover:brightness-110"
+            style={{ background: 'linear-gradient(180deg, #d64510 0%, #C2410C 100%)', boxShadow: '0 8px 20px -6px rgba(194,65,12,0.55), inset 0 1px 0 rgba(255,255,255,0.2)' }}
+          >
+            Explore Connect
+          </button>
+        </div>
+      )}
+      {live.length > 0 && (
+        <div className="flex-1 divide-y divide-[rgba(251,146,60,0.08)]">
+          {live.slice(0, 3).map(l => (
+            <button
+              key={l.id}
+              onClick={() => onNavigate?.('connect')}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+            >
+              <div className="w-1 self-stretch rounded-full shrink-0 min-h-[30px]" style={{ background: l.status === 'bidding' ? '#fb923c' : '#4f78ff', boxShadow: `0 0 6px 1px ${l.status === 'bidding' ? 'rgba(251,146,60,0.5)' : 'rgba(79,120,255,0.5)'}` }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-white truncate">{l.site}</p>
+                <p className="text-[10px] text-[rgba(153,197,255,0.45)] mt-0.5 truncate">{l.postcode} · {l.frequency} · {l.fm}</p>
+              </div>
+              <p className="text-sm font-black tabular-nums text-white shrink-0">{fmt(l.price)}</p>
+              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 ${
+                l.status === 'bidding' ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'bg-[#4f78ff]/15 text-[#99c5ff] border border-[#4f78ff]/30'
+              }`}>{l.status}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </ModuleCard>
+  );
+}
+
 // ─── Priority actions panel ────────────────────────────────────────────────────
 function ActionsPanel({ actions, onNavigate }) {
   const needsAttention = actions.filter(a => a.pts > 0).length;
@@ -881,43 +1579,53 @@ function TodaysJobs({ jobs, onNavigate }) {
 function TeamPanel({ team, jobsToday, onNavigate }) {
   const unassigned = jobsToday.filter(j => j.status === "unassigned");
   return (
-    <Card className="overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <SL>Team today</SL>
-        <button onClick={() => onNavigate?.("scheduler")} className="text-xs font-bold text-brand-blue hover:underline">Manage →</button>
+    <div
+      className="rounded-2xl overflow-hidden border border-[rgba(79,120,255,0.15)]"
+      style={{ background: DASH_CARD_BG }}
+    >
+      <div className="px-5 py-4 border-b border-[rgba(79,120,255,0.12)] flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-1.5 h-4 rounded-full bg-[#4f78ff] shadow-[0_0_8px_2px_rgba(79,120,255,0.5)]" />
+          <p className="text-xs font-black uppercase tracking-[0.15em] text-[#99c5ff]">Team today</p>
+        </div>
+        <button onClick={() => onNavigate?.("scheduler")} className="text-xs font-bold text-[#4f78ff] hover:text-[#99c5ff] transition-colors">Manage →</button>
       </div>
       {team.length === 0 && unassigned.length === 0 && (
         <div className="px-4 py-8 text-center">
-          <p className="text-sm font-semibold text-gray-500">No team members logged yet</p>
-          <p className="text-xs text-gray-400 mt-1">Add staff in the Scheduler to see their status here.</p>
-          <button onClick={() => onNavigate?.("scheduler")} className="mt-3 px-4 py-2 text-xs font-bold text-white bg-brand-navy rounded-lg hover:bg-brand-blue transition-colors">
+          <p className="text-sm font-semibold text-white/70">No team members logged yet</p>
+          <p className="text-xs text-[rgba(153,197,255,0.4)] mt-1">Add staff in the Scheduler to see their status here.</p>
+          <button onClick={() => onNavigate?.("scheduler")} className="mt-3 px-4 py-2 text-xs font-bold text-white bg-[#4f78ff] rounded-lg hover:bg-[#3d68ff] transition-colors">
             Go to Scheduler →
           </button>
         </div>
       )}
-      <div className="divide-y divide-gray-100">
+      <div className="divide-y divide-[rgba(79,120,255,0.08)]">
         {team.map(m => (
-          <div key={m.id} className="flex items-center gap-3 px-4 py-3">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${m.color}`}>{m.initials}</div>
+          <div key={m.id} className="flex items-center gap-3 px-5 py-3">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-[#4f78ff]/20 text-[#99c5ff] border border-[#4f78ff]/30">{m.initials}</div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800">{m.name}</p>
-              <p className="text-xs text-gray-400 truncate">{m.job}</p>
+              <p className="text-sm font-bold text-white">{m.name}</p>
+              <p className="text-xs text-[rgba(153,197,255,0.45)] truncate">{m.job}</p>
             </div>
-            <Chip color={m.status === "active" ? "green" : "gray"}>{m.status === "active" ? "Active" : "Idle"}</Chip>
+            <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
+              m.status === "active"
+                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                : "bg-white/5 text-[rgba(153,197,255,0.4)] border-white/10"
+            }`}>{m.status === "active" ? "Active" : "Idle"}</span>
           </div>
         ))}
         {unassigned.map(j => (
-          <div key={j.id} className="flex items-center gap-3 px-4 py-3 bg-amber-50/40">
-            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 text-xs font-bold shrink-0">?</div>
+          <div key={j.id} className="flex items-center gap-3 px-5 py-3" style={{ background: 'linear-gradient(90deg, rgba(251,191,36,0.08) 0%, transparent 70%)' }}>
+            <div className="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300 text-xs font-bold shrink-0">?</div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-amber-800">{j.customer} · {j.time}</p>
-              <p className="text-xs text-amber-600">Unassigned — needs covering</p>
+              <p className="text-sm font-bold text-amber-200">{j.customer} · {j.time}</p>
+              <p className="text-xs text-amber-300/60">Unassigned — needs covering</p>
             </div>
-            <button onClick={() => onNavigate?.("scheduler")} className="px-2.5 py-1 bg-amber-500 text-white text-xs font-bold rounded-sm hover:bg-amber-600 transition-colors">Assign</button>
+            <button onClick={() => onNavigate?.("scheduler")} className="px-2.5 py-1.5 bg-amber-500 text-white text-xs font-black rounded-lg hover:bg-amber-400 transition-colors">Assign</button>
           </div>
         ))}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -1009,46 +1717,48 @@ function LogPaymentModal({ onClose, onConfirm }) {
   const [amount,   setAmount]   = useState("");
   const [method,   setMethod]   = useState("bank");
 
+  const inputCls = "w-full rounded-xl px-3 py-2.5 text-sm text-white bg-white/[0.07] border border-white/15 focus:outline-none focus:border-emerald-400/60 placeholder:text-white/25";
+
   return (
-    <div className="fixed inset-0 bg-brand-navy/70 z-50 flex items-end sm:items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 bg-brand-navy text-white">
-          <p className="font-bold text-sm">Log payment received</p>
-          <button onClick={onClose} className="text-brand-skyblue hover:text-white text-lg">✕</button>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ background: 'rgba(1,3,20,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+      <div className="w-full max-w-md rounded-2xl overflow-hidden border border-[rgba(52,211,153,0.25)]" style={{ background: DASH_CARD_BG, boxShadow: '0 40px 90px -30px rgba(0,0,0,0.8)' }}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-1.5 h-4 rounded-full bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.6)]" />
+            <p className="font-black text-sm text-white">Log payment received</p>
+          </div>
+          <button onClick={onClose} className="text-[rgba(153,197,255,0.4)] hover:text-white text-lg leading-none">✕</button>
         </div>
         <div className="p-5 space-y-3">
           <div>
-            <label className="block text-xs font-bold tracking-widest uppercase text-gray-400 mb-1">Customer</label>
-            <input type="text" value={customer} onChange={e => setCustomer(e.target.value)} placeholder="e.g. Johnson"
-              className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue" />
+            <label className="block text-[10px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Customer</label>
+            <input type="text" value={customer} onChange={e => setCustomer(e.target.value)} placeholder="e.g. Johnson" className={inputCls} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold tracking-widest uppercase text-gray-400 mb-1">Amount (£)</label>
-              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" step="0.01"
-                className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand-blue" />
+              <label className="block text-[10px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Amount (£)</label>
+              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" step="0.01" className={`${inputCls} font-mono`} />
             </div>
             <div>
-              <label className="block text-xs font-bold tracking-widest uppercase text-gray-400 mb-1">Method</label>
-              <select value={method} onChange={e => setMethod(e.target.value)}
-                className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-brand-blue">
-                {["bank","cash","card","cheque"].map(m => <option key={m} value={m}>{m.charAt(0).toUpperCase()+m.slice(1)}</option>)}
+              <label className="block text-[10px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Method</label>
+              <select value={method} onChange={e => setMethod(e.target.value)} className={`${inputCls} cursor-pointer`} style={{ colorScheme: 'dark' }}>
+                {["bank","cash","card","cheque"].map(m => <option key={m} value={m} className="text-brand-navy">{m.charAt(0).toUpperCase()+m.slice(1)}</option>)}
               </select>
             </div>
           </div>
           {parseFloat(amount) > 0 && (
-            <div className="bg-gray-50 border border-gray-100 rounded-sm divide-y divide-gray-100 text-sm">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] divide-y divide-white/[0.06] text-sm">
               <div className="flex justify-between px-4 py-2.5">
-                <span className="text-gray-500">Amount received</span>
-                <span className="font-semibold text-emerald-600">£{parseFloat(amount).toFixed(2)}</span>
+                <span className="text-[rgba(153,197,255,0.5)]">Amount received</span>
+                <span className="font-bold text-emerald-300">£{parseFloat(amount).toFixed(2)}</span>
               </div>
               <div className="flex justify-between px-4 py-2.5">
-                <span className="text-gray-500">Set aside for tax (25%)</span>
-                <span className="font-semibold text-amber-600">−£{(parseFloat(amount)*0.25).toFixed(2)}</span>
+                <span className="text-[rgba(153,197,255,0.5)]">Set aside for tax (25%)</span>
+                <span className="font-bold text-amber-300">−£{(parseFloat(amount)*0.25).toFixed(2)}</span>
               </div>
               <div className="flex justify-between px-4 py-2.5">
-                <span className="font-semibold text-gray-800">Available to spend</span>
-                <span className="font-bold text-brand-navy">£{(parseFloat(amount)*0.75).toFixed(2)}</span>
+                <span className="font-bold text-white">Available to spend</span>
+                <span className="font-black text-white">£{(parseFloat(amount)*0.75).toFixed(2)}</span>
               </div>
             </div>
           )}
@@ -1056,14 +1766,98 @@ function LogPaymentModal({ onClose, onConfirm }) {
             <button
               disabled={!customer || !parseFloat(amount)}
               onClick={() => { onConfirm({ customer, amount: parseFloat(amount), method }); onClose(); }}
-              className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide rounded-sm transition-colors ${customer && parseFloat(amount) ? "bg-brand-navy text-white hover:bg-brand-blue" : "bg-gray-100 text-gray-300 cursor-not-allowed"}`}
+              className={`flex-1 py-3 text-xs font-black uppercase tracking-wide rounded-xl transition-all ${
+                customer && parseFloat(amount)
+                  ? "text-white hover:brightness-110"
+                  : "bg-white/5 text-white/20 cursor-not-allowed"
+              }`}
+              style={customer && parseFloat(amount) ? { background: 'linear-gradient(180deg, #10b981 0%, #047857 100%)', boxShadow: '0 8px 20px -6px rgba(4,120,87,0.55)' } : undefined}
             >
               ✓ Confirm payment
             </button>
-            <button onClick={onClose} className="px-4 border border-gray-200 text-gray-500 text-xs font-bold rounded-sm hover:border-gray-300">Cancel</button>
+            <button onClick={onClose} className="px-4 rounded-xl border border-white/15 text-[rgba(153,197,255,0.6)] text-xs font-bold hover:bg-white/5 transition-colors">Cancel</button>
           </div>
         </div>
-      </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─── Set target modal ──────────────────────────────────────────────────────────
+// Asks for a monthly figure (how owners actually think), saves the annual
+// equivalent to business_settings so the whole app paces against it.
+function SetTargetModal({ onClose, onSave }) {
+  const [monthly, setMonthly] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const m = parseFloat(monthly) || 0;
+
+  const save = async () => {
+    if (m <= 0) return;
+    setBusy(true); setError(null);
+    try {
+      await onSave(m);
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Could not save your target — try again.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ background: 'rgba(1,3,20,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+      <div className="w-full max-w-md rounded-2xl overflow-hidden border border-[rgba(251,191,36,0.3)]" style={{ background: DASH_CARD_BG, boxShadow: '0 40px 90px -30px rgba(0,0,0,0.8)' }}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-1.5 h-4 rounded-full bg-amber-400 shadow-[0_0_8px_2px_rgba(251,191,36,0.6)]" />
+            <p className="font-black text-sm text-white">Set your monthly target</p>
+          </div>
+          <button onClick={onClose} className="text-[rgba(153,197,255,0.4)] hover:text-white text-lg leading-none">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-xs text-[rgba(153,197,255,0.5)] leading-relaxed">
+            How much do you want the business bringing in each month? Cadi paces your days, weeks and year against it — you can change it any time in Settings.
+          </p>
+          <div>
+            <label className="block text-[10px] font-black tracking-widest uppercase text-[rgba(153,197,255,0.45)] mb-1.5">Monthly target (£)</label>
+            <input
+              type="number" min="0" step="50" autoFocus
+              value={monthly}
+              onChange={e => setMonthly(e.target.value)}
+              placeholder="e.g. 4000"
+              className="w-full rounded-xl px-3 py-3 text-lg font-black tabular-nums text-white bg-white/[0.07] border border-white/15 focus:outline-none focus:border-amber-400/60 placeholder:text-white/25 placeholder:font-normal placeholder:text-sm"
+            />
+          </div>
+          {m > 0 && (
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] divide-y divide-white/[0.06] text-sm">
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-[rgba(153,197,255,0.5)]">Per week</span>
+                <span className="font-bold text-white tabular-nums">{fmt((m * 12) / 52)}</span>
+              </div>
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-[rgba(153,197,255,0.5)]">Per year</span>
+                <span className="font-black text-emerald-300 tabular-nums">{fmt(m * 12)}</span>
+              </div>
+            </div>
+          )}
+          {error && (
+            <div className="px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300">{error}</div>
+          )}
+          <div className="flex gap-2">
+            <button
+              disabled={m <= 0 || busy}
+              onClick={save}
+              className={`flex-1 py-3 text-xs font-black uppercase tracking-wide rounded-xl transition-all ${
+                m > 0 && !busy ? "text-white hover:brightness-110" : "bg-white/5 text-white/20 cursor-not-allowed"
+              }`}
+              style={m > 0 && !busy ? { background: 'linear-gradient(180deg, #10b981 0%, #047857 100%)', boxShadow: '0 8px 20px -6px rgba(4,120,87,0.55)' } : undefined}
+            >
+              {busy ? 'Saving…' : '🎯 Set target'}
+            </button>
+            <button onClick={onClose} className="px-4 rounded-xl border border-white/15 text-[rgba(153,197,255,0.6)] text-xs font-bold hover:bg-white/5 transition-colors">Not now</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1394,11 +2188,19 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
     teamData: liveTeamData,
     feedData: liveFeedData,
     jobsToday: liveJobsToday,
+    moneyEntries: liveMoneyEntries,
     isLoading: dataLoading,
     error: dataError,
     refresh: refreshData,
   } = useCleanProData();
+  // DataContext's job fetch runs independently of useCleanProData's own
+  // settings/quotes/money fetch — on accounts with a large job history it can
+  // still be in flight after dataLoading flips false, which previously let
+  // the dashboard render "0 jobs today" for real jobs that just hadn't
+  // arrived yet. Fold it into one combined loading flag everywhere below.
+  const { jobsLoading } = useData();
   const isLive = Boolean(user) && user?.id !== 'demo-user';
+  const dashboardLoading = dataLoading || jobsLoading;
   const displayName = useMemo(() => {
     const first = profile?.first_name?.trim();
     if (first) return first;
@@ -1431,10 +2233,13 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
   const invoices  = resolvedInvoiceData ?? (isLive ? [] : DEMO_INVOICES);
   const jobsToday = liveJobsToday ?? (isLive ? [] : DEMO_JOBS_TODAY);
   const teamData = resolvedTeamData ?? (isLive ? [] : DEMO_TEAM);
+  // Money Confidence hero feed — live tax-year entries, or demo pattern
+  const heroEntries = isLive ? (liveMoneyEntries ?? []) : DEMO_MONEY_ENTRIES;
 
   const [mode,             setMode]             = useState("solo");
   const [feed,             setFeed]             = useState(isLive ? [] : DEMO_FEED);
   const [showPayModal,     setShowPayModal]     = useState(false);
+  const [showTargetModal,  setShowTargetModal]  = useState(false);
   const [scoreDelta,       setScoreDelta]       = useState(0);
   const [recentPts,        setRecentPts]        = useState(null);
   // Welcome popup: show first 2 dashboard visits, then auto-dismiss
@@ -1561,7 +2366,8 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
   const isPreviewBoard = useMemo(() => (liveBoard || []).filter(r => r.owner_id !== user?.id).length < 2, [liveBoard, user?.id]);
 
-  // Merge live entries with demo padding so the board never looks empty
+  // Real users see ONLY real opted-in businesses — no seeded rows. Demo mode
+  // keeps the padded board so the marketing/demo view always looks alive.
   const leaderboardEntries = useMemo(() => {
     const real = (liveBoard || [])
       .filter(r => r.owner_id !== user?.id)
@@ -1573,13 +2379,10 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
         delta: 0,
         region: r.region || '—',
       }));
-    // Once we have enough real opted-in users, drop the seeded demo rows
-    // entirely so the board reflects genuine community state.
-    const REAL_ENTRIES_THRESHOLD = 5;
-    if (real.length >= REAL_ENTRIES_THRESHOLD) return real;
+    if (isLive) return real;
     const padding = LEADERBOARD_DEMO.slice(0, Math.max(0, 20 - real.length));
     return [...real, ...padding];
-  }, [liveBoard, user?.id]);
+  }, [liveBoard, user?.id, isLive]);
 
   // Build leaderboard with user injected + compute rank
   const allLeaderboard = useMemo(() => {
@@ -1723,6 +2526,17 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
   const [paymentError, setPaymentError] = useState(null);
 
+  // Persist the monthly target as an annual figure — same row Business Lab
+  // and the score engine read from — then bust the cache so it's live at once.
+  const handleSaveTarget = async (monthlyTarget) => {
+    if (!user || user.id === 'demo-user') return;
+    const { error } = await supabase
+      .from('business_settings')
+      .upsert({ owner_id: user.id, annual_target: Math.round(monthlyTarget * 12) }, { onConflict: 'owner_id' });
+    if (error) throw error;
+    refreshData();
+  };
+
   const handlePaymentLogged = async ({ customer, amount, method }) => {
     setPaymentError(null);
     // Save to Supabase
@@ -1776,6 +2590,12 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           onClose={() => setShowPayModal(false)}
         />
       )}
+      {showTargetModal && (
+        <SetTargetModal
+          onSave={handleSaveTarget}
+          onClose={() => setShowTargetModal(false)}
+        />
+      )}
       {profile && !profile?.onboarding_complete && (
         <Onboarding isModal onComplete={() => updateProfile({ onboarding_complete: true })} />
       )}
@@ -1825,25 +2645,36 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
           onShare={() => setShowShareCard(true)}
           displayName={displayName}
           isLive={isLive}
-          dataLoading={dataLoading}
+          dataLoading={dashboardLoading}
         />
       </div>
 
       {/* ── Desktop layout (≥ sm breakpoint) ── */}
-    <div className="hidden sm:flex flex-col h-full bg-gray-50/50">
+    <div
+      className="hidden sm:flex flex-col -mx-4 md:-mx-8 -mt-6 -mb-24 md:-mb-6"
+      style={{
+        minHeight: '100vh',
+        background: `
+          radial-gradient(70% 45% at 100% 0%, rgba(79,120,255,0.13) 0%, transparent 55%),
+          radial-gradient(50% 40% at 0% 100%, rgba(52,211,153,0.08) 0%, transparent 60%),
+          linear-gradient(180deg, #010314 0%, #030b28 55%, #01040f 100%)
+        `,
+      }}
+    >
 
       {/* ── 30 Day Plan — full-width at top, visible until Phase 4 complete ── */}
       <ThirtyDayPlan onRefresh={() => {}} />
 
       {/* ── Header ── */}
-      <div className="bg-brand-navy text-white px-4 sm:px-6 py-4">
+      <div className="text-white px-4 sm:px-6 lg:px-8 pt-6 pb-4 border-b border-white/[0.06]">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <p className="text-xs font-bold tracking-widest uppercase text-brand-skyblue mb-0.5">
-              {timeGreeting()}, {displayName} 👋
+            <p className="text-[10px] font-black tracking-[0.22em] uppercase text-[#99c5ff]/50 mb-1.5">
+              {todayLabel} · Week {weekNum} · {taxYear} tax year
             </p>
-            <h2 className="text-lg sm:text-xl font-bold">{todayLabel}</h2>
-            <p className="text-xs text-brand-skyblue/70 mt-0.5">Week {weekNum} · {taxYear} tax year</p>
+            <h2 className="text-2xl sm:text-3xl font-black leading-tight" style={{ textShadow: '0 0 40px rgba(79,120,255,0.3)' }}>
+              {timeGreeting()}, {displayName} <span className="inline-block">👋</span>
+            </h2>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Score flash */}
@@ -1866,22 +2697,14 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
                 </span>
               </div>
             )}
-            {/* Mode toggle — only shown when user has a team */}
-            {accounts.teamStructure !== 'solo' && (
-            <div className="flex bg-white/10 rounded-sm p-0.5 gap-0.5">
-              {[{id:"solo",label:"Solo"},{id:"team",label:"Team"}].map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => setMode(m.id)}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-sm transition-colors ${
-                    mode === m.id ? "bg-white text-brand-navy" : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            )} {/* end team toggle conditional */}
+            {/* Share card — badges + score share */}
+            <button
+              onClick={() => setShowShareCard(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:brightness-110"
+              style={{ background: 'linear-gradient(135deg, #4f78ff, #1a3de0)', boxShadow: '0 4px 14px -4px rgba(79,120,255,0.6)' }}
+            >
+              ✨ Share
+            </button>
             {/* Live indicator */}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 rounded-sm">
               <span className={`w-2 h-2 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-gray-400"}`} />
@@ -2016,23 +2839,23 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
 
       {/* ── Loading state ── */}
-      {isLive && dataLoading && (
+      {isLive && dashboardLoading && (
         <div className="flex items-center justify-center py-12">
-          <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-white border border-gray-200 shadow-sm">
-            <div className="w-4 h-4 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm font-semibold text-gray-600">Loading your business data...</span>
+          <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
+            <div className="w-4 h-4 border-2 border-[#4f78ff] border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm font-semibold text-white/60">Loading your business data...</span>
           </div>
         </div>
       )}
 
       {/* ── Error state ── */}
       {isLive && dataError && !dataLoading && (
-        <div className="mx-4 mt-4 p-4 rounded-xl bg-red-50 border border-red-200 flex items-center justify-between">
+        <div className="mx-4 mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-red-500 text-lg">!</span>
+            <span className="text-red-400 text-lg">!</span>
             <div>
-              <p className="text-sm font-semibold text-red-800">Couldn't load your data</p>
-              <p className="text-xs text-red-600 mt-0.5">Check your connection and try again.</p>
+              <p className="text-sm font-semibold text-red-300">Couldn't load your data</p>
+              <p className="text-xs text-red-300/60 mt-0.5">Check your connection and try again.</p>
             </div>
           </div>
           <button
@@ -2046,171 +2869,79 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
 
       {/* ── Scrollable content — hidden while live data is still loading ── */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4 lg:p-6" style={{ display: isLive && dataLoading ? 'none' : undefined }}>
+        <div className="p-4 lg:p-6" style={{ display: isLive && dashboardLoading ? 'none' : undefined }}>
 
-          {/* ── SOLO MODE ── */}
-          {mode === "solo" && (
-            <div className="space-y-4">
+          {/* ── THE 6-MODULE GRID — per the sketch ──
+              Left column (wide):  Money (big) → Pending payments → Leaderboard
+              Right column (rail): Score → Schedule → Marketplace (Connect) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
 
-              {/* ── LEADERBOARD HERO — front and centre ── */}
-              <div id="tour-leaderboard" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2">
-                  {demoMode ? (
-                    <DemoHint label="🏆 Cadi Leaderboard — see how your business ranks nationally">
-                      <LeaderboardPanel
-                        userScore={score.total}
-                        userBizName={profile?.business_name || displayName}
-                        userSector={profile?.cleaner_type || "residential"}
-                        communityOptIn={communityOptIn}
-                        onOptIn={handleCommunityOptIn}
-                        entries={leaderboardEntries}
-                        isPreview={isPreviewBoard}
-                      />
-                    </DemoHint>
-                  ) : (
-                    <LeaderboardPanel
-                      userScore={score.total}
-                      userBizName={profile?.business_name || displayName}
-                      userSector={profile?.cleaner_type || "residential"}
-                      communityOptIn={communityOptIn}
-                      onOptIn={handleCommunityOptIn}
-                      healthDelta={healthDelta}
-                      entries={leaderboardEntries}
-                      isPreview={isPreviewBoard}
+            {/* Left — main column */}
+            <div className="lg:col-span-2 space-y-4">
+              <div id="tour-money">
+                {demoMode ? (
+                  <DemoHint label="💷 Money Confidence — money in, out, kept, and your pace at a glance">
+                    <MoneyConfidenceHero
+                      entries={heroEntries}
+                      accounts={accounts}
+                      invoices={invoices}
+                      onLogPayment={() => setShowPayModal(true)}
+                      onNavigate={onNavigate}
+                      onSetTarget={() => setShowTargetModal(true)}
+                      isLive={isLive}
                     />
-                  )}
-                </div>
-
-                {/* Right column: Score + AI boost */}
-                <div className="space-y-4">
-                  {demoMode ? (
-                    <DemoHint label="📊 Business health score — tracks 5 dimensions of your business">
-                      <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
-                    </DemoHint>
-                  ) : (
-                    <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
-                  )}
-
-                  {demoMode ? (
-                    <DemoHint label="🤖 Cadi AI — personalised tasks to boost your score">
-                      <AskCadi tab="dashboard" score={score} onNavigate={onNavigate} />
-                    </DemoHint>
-                  ) : (
-                    <AskCadi tab="dashboard" score={score} onNavigate={onNavigate} />
-                  )}
-                </div>
+                  </DemoHint>
+                ) : (
+                  <MoneyConfidenceHero
+                    entries={heroEntries}
+                    accounts={accounts}
+                    invoices={invoices}
+                    onLogPayment={() => setShowPayModal(true)}
+                    onNavigate={onNavigate}
+                    onSetTarget={() => setShowTargetModal(true)}
+                    isLive={isLive}
+                  />
+                )}
               </div>
-
-              {/* ── Badges + actions ── */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div id="tour-badges">
-                  <BadgesShelf badges={badges} onShare={() => setShowShareCard(true)} />
-                </div>
-                <div id="tour-actions">
-                  <ActionsPanel actions={actions} onNavigate={onNavigate} />
-                </div>
+              <div id="tour-pending">
+                <PendingPaymentsCard invoices={invoices} onNavigate={onNavigate} />
               </div>
-
-              {/* ── Week + Today's jobs ── */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div id="tour-week"><WeekGrid weekJobs={weekJobs} /></div>
-                <div id="tour-jobs"><TodaysJobs jobs={jobsToday} onNavigate={onNavigate} /></div>
+              <div id="tour-leaderboard">
+                <LeaderboardPanel
+                  userScore={score.total}
+                  userBizName={profile?.business_name || displayName}
+                  userSector={profile?.cleaner_type || "residential"}
+                  communityOptIn={communityOptIn}
+                  onOptIn={handleCommunityOptIn}
+                  healthDelta={healthDelta}
+                  entries={leaderboardEntries}
+                  isPreview={isPreviewBoard}
+                />
               </div>
-
-              {/* ── Activity feed ── */}
-              <div id="tour-activity">
-                <ActivityFeed feed={feed} />
-              </div>
-
             </div>
-          )}
 
-          {/* ── TEAM MODE ── */}
-          {mode === "team" && (
+            {/* Right — rail */}
             <div className="space-y-4">
-
-              {/* ── LEADERBOARD HERO — front and centre ── */}
-              <div id="tour-leaderboard" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2">
-                  {demoMode ? (
-                    <DemoHint label="🏆 Cadi Leaderboard — see how your business ranks nationally">
-                      <LeaderboardPanel
-                        userScore={score.total}
-                        userBizName={profile?.business_name || displayName}
-                        userSector={profile?.cleaner_type || "residential"}
-                        communityOptIn={communityOptIn}
-                        onOptIn={handleCommunityOptIn}
-                        entries={leaderboardEntries}
-                        isPreview={isPreviewBoard}
-                      />
-                    </DemoHint>
-                  ) : (
-                    <LeaderboardPanel
-                      userScore={score.total}
-                      userBizName={profile?.business_name || displayName}
-                      userSector={profile?.cleaner_type || "residential"}
-                      communityOptIn={communityOptIn}
-                      onOptIn={handleCommunityOptIn}
-                      healthDelta={healthDelta}
-                      entries={leaderboardEntries}
-                      isPreview={isPreviewBoard}
-                    />
-                  )}
-                </div>
-
-                {/* Right column: Score + AI boost */}
-                <div className="space-y-4">
-                  {demoMode ? (
-                    <DemoHint label="📊 Business health score — tracks 5 dimensions of your business">
-                      <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
-                    </DemoHint>
-                  ) : (
-                    <HealthPanel score={score} onNavigate={onNavigate} scoreDelta={healthDelta} />
-                  )}
-
-                  {demoMode ? (
-                    <DemoHint label="🤖 Cadi AI — personalised tasks to boost your score">
-                      <AskCadi tab="dashboard" score={score} onNavigate={onNavigate} />
-                    </DemoHint>
-                  ) : (
-                    <AskCadi tab="dashboard" score={score} onNavigate={onNavigate} />
-                  )}
-                </div>
+              <div id="tour-score">
+                <ScoreCard score={score} actions={actions} onNavigate={onNavigate} />
               </div>
-
-              {/* ── Team + Actions ── */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <TeamPanel team={teamData} jobsToday={jobsToday} onNavigate={onNavigate} />
-                <div id="tour-actions">
-                  <ActionsPanel actions={actions} onNavigate={onNavigate} />
-                </div>
+              <div id="tour-schedule">
+                <ScheduleCard weekJobs={weekJobs} jobsToday={jobsToday} onNavigate={onNavigate} />
               </div>
-
-              {/* ── Badges ── */}
-              <div id="tour-badges">
-                <BadgesShelf badges={badges} onShare={() => setShowShareCard(true)} />
+              <div id="tour-marketplace">
+                <MarketplaceCard isLive={isLive} onNavigate={onNavigate} />
               </div>
-
-              {/* ── Week + Today's jobs ── */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div id="tour-week"><WeekGrid weekJobs={weekJobs} /></div>
-                <div id="tour-jobs"><TodaysJobs jobs={jobsToday} onNavigate={onNavigate} /></div>
-              </div>
-
-              {/* ── Activity feed ── */}
-              <div id="tour-activity">
-                <ActivityFeed feed={feed} />
-              </div>
-
             </div>
-          )}
+
+          </div>
+
 
           {/* Footer */}
-          <div className="flex items-center justify-between pt-4 mt-2 border-t border-gray-100">
-            <p className="text-xs text-gray-400">
+          <div className="flex items-center justify-between pt-4 mt-2 border-t border-white/[0.06]">
+            <p className="text-xs text-[rgba(153,197,255,0.3)]">
               All figures live from your connected tabs — no manual updates needed.
             </p>
-            <button onClick={() => onNavigate?.("accounts")} className="text-xs text-brand-blue font-semibold hover:underline">
+            <button onClick={() => onNavigate?.("accounts")} className="text-xs text-[#4f78ff] font-semibold hover:text-[#99c5ff] transition-colors">
               Open accounts →
             </button>
           </div>
@@ -2221,12 +2952,12 @@ export default function DashboardTab({ accountsData, schedulerData, invoiceData,
       {showTour && (
         <SpotlightTour
           steps={[
-            { selector: '#tour-leaderboard', emoji: '🏆', title: 'Community Leaderboard', body: 'See how your business ranks against other Cadi users. Your health score determines your position. Climb the ranks by running a great business.' },
-            { selector: '#tour-badges', emoji: '🎖️', title: 'Achievement Badges', body: 'Earn badges for hitting milestones — health score targets, login streaks, fully booked weeks, and more. Share your achievements on social media.' },
-            { selector: '#tour-actions', emoji: '⚡', title: 'Priority Actions', body: 'Your most urgent tasks, colour-coded by impact. Each one shows how many health score points you\'ll gain by completing it. Tap to jump straight to the right tab.' },
-            { selector: '#tour-week', emoji: '📆', title: 'This Week at a Glance', body: 'Revenue bars and job count for each day. Today is highlighted. Green days are done. Tap any day to see its jobs in the Scheduler.' },
-            { selector: '#tour-jobs', emoji: '🧹', title: 'Today\'s Jobs', body: 'Every job scheduled for today — customer, time, price, and status. Complete, in-progress, scheduled, or unassigned. Tap "Full schedule" to manage them.' },
-            { selector: '#tour-activity', emoji: '🔔', title: 'Activity Feed', body: 'A live log of everything happening in your business — payments received, invoices sent, jobs completed. Updates automatically as you work.' },
+            { selector: '#tour-money', emoji: '💷', title: 'Money Confidence', body: 'Your money at a glance — what came in today, this week or this month, what went out, what you kept, and whether you\'re on pace for your target. Every tile clicks through to the detail.' },
+            { selector: '#tour-pending', emoji: '📨', title: 'Pending Payments', body: 'Who owes you what, overdue first. Tap any invoice to jump straight in and chase it.' },
+            { selector: '#tour-leaderboard', emoji: '🏆', title: 'Community Leaderboard', body: 'See how your business ranks against other Cadi users. Your Cadi Score determines your position — climb by running a great business.' },
+            { selector: '#tour-score', emoji: '📊', title: 'Cadi Score', body: 'One number for the health of your business, plus the single next move that earns you the most points.' },
+            { selector: '#tour-schedule', emoji: '📆', title: 'Schedule', body: 'Today\'s progress, what\'s up next, and the shape of your week in miniature. Tap to open the full scheduler.' },
+            { selector: '#tour-marketplace', emoji: '🏗️', title: 'Marketplace', body: 'Live commercial work posted by FM companies on Cadi Connect. Browse listings, bid, and win contracts near you.' },
           ]}
           onComplete={async () => {
             setShowTour(false);

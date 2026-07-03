@@ -10,14 +10,15 @@ import { supabase } from "../lib/supabase";
 import { useBusinessId } from "../hooks/useBusinessId";
 import { getBusinessSettings } from "../lib/db/settingsDb";
 import { useYtdExpenses, CATEGORY_TO_SA103 } from "../hooks/useYtdExpenses";
-import { useYtdIncome, SOURCE_DISPLAY } from "../hooks/useYtdIncome";
+import { useYtdIncome, useRollingTurnover, SOURCE_DISPLAY } from "../hooks/useYtdIncome";
 import { currentTaxYear, taxYearStart, taxYearLabel, parseTaxYearLabel, recentTaxYears, today } from "../lib/taxYear";
-import { calculateCT, calcSelfEmployedTax } from "../lib/taxCalc";
+import { calculateCT, calcSelfEmployedTax, calcSalaryDividendTax, PERSONAL_ALLOWANCE } from "../lib/taxCalc";
 import {
   listDividends, addDividend, deleteDividend,
   listDirectorLoanEntries, addDirectorLoanEntry, deleteDirectorLoanEntry, dlaBalance, DLA_BIK_THRESHOLD,
   listCtAccruals, upsertCtAccrual, deleteCtAccrual, deriveCtDeadlines,
 } from "../lib/db/ltdDb";
+import { buildSaPack, saPackToCsv, downloadCsv, saPackToPrintableHtml, openPrintablePack } from "../lib/saPack";
 import FirstVisitCoach from "./FirstVisitCoach";
 
 // ─── Calculator logic (unchanged) ────────────────────────────────────────────
@@ -748,11 +749,18 @@ function ComplianceAndAdjustments({ businessId, taxYear, adjBusy, setAdjBusy, ad
   );
 }
 
-function HmrcTab({ entityType = 'sole_trader' }) {
+// Launch gate — HMRC production credentials + recognition land Q4 2026.
+// Until then real users keep digital records and watch quarterly figures
+// build, but cannot OAuth to HMRC (only sandbox credentials exist) or
+// submit. Flip to true once production credentials are configured.
+const HMRC_SUBMISSIONS_LIVE = false;
+
+function HmrcTab({ entityType = 'sole_trader', setActiveTab }) {
   const { invoices } = useInvoices();
   const { user }     = useAuth();
   const isDemo       = user?.id === 'demo-user';
   const isLive       = Boolean(user) && !isDemo;
+  const launchMode   = !HMRC_SUBMISSIONS_LIVE; // pre-credentials: records yes, submissions not yet
 
   // Real HMRC hook — no-ops when user isn't logged in or HMRC not connected
   const {
@@ -941,8 +949,30 @@ function HmrcTab({ entityType = 'sole_trader' }) {
         <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">Quarterly submissions · SA103 mapping · Tax year 2026/27</p>
       </div>
 
+      {/* Launch-mode banner — the MTD-ready story while submissions await
+          production credentials. Quarterly figures below are live regardless. */}
+      {launchMode && (
+        <div className="px-4 py-3 rounded-xl bg-[#1f48ff]/10 border border-[#1f48ff]/25 flex items-start gap-3">
+          <span className="text-base mt-0.5">🛡️</span>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-[#99c5ff]">You're MTD-ready — Cadi is keeping your digital records now</p>
+            <p className="text-[11px] text-[rgba(153,197,255,0.55)] mt-0.5 leading-relaxed">
+              Your quarterly totals below build in real time from invoices, bank transactions and logged expenses —
+              exactly the figures MTD asks for. Direct submission to HMRC arrives later this year. Until then,
+              export your figures for your accountant from the Year End tab.
+            </p>
+          </div>
+          {setActiveTab && (
+            <button onClick={() => setActiveTab('year-end')}
+              className="shrink-0 px-3 py-1.5 rounded-lg bg-[#1f48ff]/20 border border-[#1f48ff]/40 text-[10px] font-black text-[#99c5ff] hover:bg-[#1f48ff]/30 transition-colors whitespace-nowrap">
+              Export figures →
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Reconnect required banner */}
-      {reconnectRequired && !connected && (
+      {!launchMode && reconnectRequired && !connected && (
         <div className="px-4 py-3 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-start gap-3">
           <span className="text-amber-400 text-base mt-0.5">⚠</span>
           <div>
@@ -966,12 +996,14 @@ function HmrcTab({ entityType = 'sole_trader' }) {
               </SL>
             </div>
             <p className="text-sm font-black text-white mb-1">
-              {connected ? "Cadi is linked to your HMRC account" : "Connect Cadi to HMRC"}
+              {connected ? "Cadi is linked to your HMRC account" : launchMode ? "HMRC connection — coming later this year" : "Connect Cadi to HMRC"}
             </p>
             <p className="text-[11px] text-[rgba(153,197,255,0.45)] leading-relaxed max-w-sm">
               {connected
                 ? `Quarterly updates submit directly to HMRC. ${nino ? `NINO: ${nino}` : "Add your NINO below to start."}`
-                : "One-time OAuth2 authorisation. Cadi reads your obligations and submits quarterly income/expense summaries on your behalf — no HMRC login every quarter."}
+                : launchMode
+                  ? "Cadi is going through HMRC's recognition process for MTD software. When it completes, you'll connect once and submit every quarterly update from here — your records are already in the right shape."
+                  : "One-time OAuth2 authorisation. Cadi reads your obligations and submits quarterly income/expense summaries on your behalf — no HMRC login every quarter."}
             </p>
             {hmrcError && (
               <p className="text-red-400 text-[10px] mt-1.5">{hmrcError}</p>
@@ -983,7 +1015,10 @@ function HmrcTab({ entityType = 'sole_trader' }) {
           </div>
           <div className="flex flex-col items-end gap-2 shrink-0">
             {!isLive && <GChip color="amber">Demo mode</GChip>}
-            {isLive && !connected && (
+            {isLive && !connected && launchMode && (
+              <GChip color="blue">COMING SOON</GChip>
+            )}
+            {isLive && !connected && !launchMode && (
               <button
                 onClick={connectHmrc}
                 disabled={connecting || hmrcLoading}
@@ -1240,7 +1275,7 @@ function HmrcTab({ entityType = 'sole_trader' }) {
                 onClick={() => setExpandedQ(null)}>
                 Close
               </button>
-              {isLive && connected && nino ? (
+              {isLive && connected && nino && !launchMode ? (
                 <button
                   onClick={() => setSubmitModal(q)}
                   disabled={connecting || submitBusy}
@@ -1250,9 +1285,9 @@ function HmrcTab({ entityType = 'sole_trader' }) {
               ) : (
                 <button
                   disabled
-                  title={!isLive ? "Log in to submit" : !connected ? "Connect HMRC first" : "Add your NINO first"}
+                  title={launchMode ? "Direct submission arrives later this year — your figures are already prepared" : !isLive ? "Log in to submit" : !connected ? "Connect HMRC first" : "Add your NINO first"}
                   className="flex-1 py-2.5 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)] text-xs font-black text-[rgba(153,197,255,0.25)] cursor-not-allowed">
-                  Submit to HMRC →
+                  {launchMode ? "Submit to HMRC — coming soon" : "Submit to HMRC →"}
                 </button>
               )}
             </div>
@@ -1797,19 +1832,21 @@ function VATTab({ bizSettings = {}, saveSettings }) {
   const isDemo       = user?.id === 'demo-user';
 
   // ── Rolling 12-month taxable turnover (VAT uses rolling 12mo, not tax year) ──
+  // ALL business income counts towards the threshold, not just Cadi invoices —
+  // bank credits (GoCardless/Stripe/transfers) and manual entries included.
+  // Users near £90k are exactly the ones with income arriving outside invoices.
   const VAT_THRESHOLD = 90000;
-  const rolling12Turnover = useMemo(() => {
-    const now   = new Date();
-    const start = new Date(now);
-    start.setFullYear(start.getFullYear() - 1);
-    const startStr = start.toISOString().slice(0, 10);
-    const todayStr = now.toISOString().slice(0, 10);
-    return invoices
-      .filter(i => i.status === 'paid' && (i.paidAt ?? '').slice(0, 10) >= startStr && (i.paidAt ?? '').slice(0, 10) <= todayStr)
-      .reduce((s, i) => s + invTotal(i), 0);
-  }, [invoices]);
+  const paidInvoiceRows = useMemo(() =>
+    invoices
+      .filter(i => i.status === 'paid' && i.paidAt)
+      .map(i => ({ id: i.id, paidAt: i.paidAt, _total: invTotal(i) })),
+    [invoices]
+  );
+  const rolling = useRollingTurnover(paidInvoiceRows);
 
-  // Run-rate projection: annualise from months with data
+  // Run-rate projection: annualise from invoice months with data — a better
+  // pace estimate than total/12 for young accounts. Take whichever is higher
+  // so the crossing warning errs on the early side.
   const monthlyRunRate = useMemo(() => {
     const counts = {};
     invoices.filter(i => i.status === 'paid' && i.paidAt).forEach(i => {
@@ -1821,8 +1858,8 @@ function VATTab({ bizSettings = {}, saveSettings }) {
     return vals.reduce((s, v) => s + v, 0) / vals.length;
   }, [invoices]);
 
-  const liveTotal   = isDemo ? 41820 : rolling12Turnover;
-  const runRate     = isDemo ? 3485  : monthlyRunRate;
+  const liveTotal   = isDemo ? 41820 : rolling.total;
+  const runRate     = isDemo ? 3485  : Math.max(monthlyRunRate, rolling.monthlyAvg || 0);
   const headroom    = Math.max(0, VAT_THRESHOLD - liveTotal);
   const monthsToThreshold = runRate > 0 ? Math.ceil(headroom / runRate) : null;
   const threshPct   = Math.min(100, Math.round((liveTotal / VAT_THRESHOLD) * 100));
@@ -1962,8 +1999,8 @@ function VATTab({ bizSettings = {}, saveSettings }) {
             You're close to the VAT threshold. Consider registering voluntarily now — it avoids a rushed registration and lets you reclaim input VAT from the registration date.
           </GAlert>
         )}
-        {!isDemo && liveTotal === 0 && (
-          <p className="text-[11px] text-[rgba(153,197,255,0.35)]">No paid invoices found in the last 12 months — log income in the Payments tab to track your threshold.</p>
+        {!isDemo && liveTotal === 0 && !rolling.loading && (
+          <p className="text-[11px] text-[rgba(153,197,255,0.35)]">No income found in the last 12 months — connect your bank or log income to track your threshold.</p>
         )}
       </GCard>
 
@@ -2323,13 +2360,81 @@ function TaxToolsTab({ setActiveTab, isDemo = false }) {
 
 // ─── TAB: Year End ────────────────────────────────────────────────────────────
 function YearEndTab({ entityType = 'sole_trader', bizSettings = {}, isDemo = false }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { invoices } = useInvoices();
   const { connected: hmrcConnected, obligations } = useHmrc();
   const [checked, setChecked] = useState({});
   const toggle = (k) => setChecked(p => ({ ...p, [k]: !p[k] }));
   const isLtd = entityType === 'limited_company';
   // Real users only see fake-data screens when explicitly in demo mode
   const showDemoData = isDemo || user?.id === 'demo-user';
+
+  // ── Export pack data — real figures for the selected tax year ──────────────
+  const [packYearLabel, setPackYearLabel] = useState(taxYearLabel());
+  const [exportError, setExportError] = useState(null);
+  const packYearNum = parseTaxYearLabel(packYearLabel) ?? currentTaxYear();
+  const paidInvoiceRows = useMemo(() =>
+    invoices
+      .filter(i => i.status === 'paid' && i.paidAt)
+      .map(i => ({ id: i.id, customer: i.customer, num: i.num, paidAt: i.paidAt, _total: invTotal(i) })),
+    [invoices]
+  );
+  const packIncome   = useYtdIncome(packYearNum, paidInvoiceRows);
+  const packExpenses = useYtdExpenses(packYearNum);
+  const packLoading  = packIncome.loading || packExpenses.loading;
+
+  const handleExport = (format) => {
+    setExportError(null);
+    try {
+      const pack = buildSaPack({ taxYearNum: packYearNum, income: packIncome, expenses: packExpenses, entityType });
+      const bizName = profile?.business_name || '';
+      if (format === 'csv') {
+        downloadCsv(`cadi-${isLtd ? 'pl' : 'sa103'}-pack-${packYearLabel.replace('/', '-')}.csv`, saPackToCsv(pack));
+      } else {
+        openPrintablePack(saPackToPrintableHtml(pack, bizName));
+      }
+    } catch (e) { setExportError(e.message); }
+  };
+
+  // Shared export card body — used by both the sole-trader and Ltd layouts
+  const exportButtons = (
+    <>
+      <div className="flex items-center gap-2 mb-3">
+        <SL className="mb-0">Tax year</SL>
+        <select value={packYearLabel} onChange={e => setPackYearLabel(e.target.value)}
+          className="bg-[rgba(0,0,0,0.25)] border border-[rgba(153,197,255,0.15)] rounded-lg px-2 py-1 text-xs font-bold text-white outline-none">
+          {recentTaxYears(3).map(y => <option key={y} value={y} className="bg-[#010a4f]">{y}</option>)}
+        </select>
+        {packLoading && <span className="text-[10px] text-[rgba(153,197,255,0.4)]">loading figures…</span>}
+      </div>
+      <div className="space-y-2">
+        {[
+          { icon: "📊", label: "Export CSV / Excel",      desc: "Xero & QuickBooks compatible", format: "csv" },
+          { icon: "📄", label: "Export PDF summary pack", desc: isLtd ? "Print-ready P&L + CT estimate" : "Print-ready, SA103 boxes on one page", format: "pdf" },
+        ].map(({ icon, label, desc, format }) => (
+          <button key={label} onClick={() => handleExport(format)} disabled={packLoading || showDemoData}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] hover:border-[rgba(153,197,255,0.25)] transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+            <span className="text-base shrink-0">{icon}</span>
+            <div>
+              <p className="text-xs font-black text-white">{label}</p>
+              <p className="text-[10px] text-[rgba(153,197,255,0.35)]">{desc}</p>
+            </div>
+          </button>
+        ))}
+        <button disabled
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.02)] border border-[rgba(153,197,255,0.06)] text-left opacity-50 cursor-not-allowed">
+          <span className="text-base shrink-0">🔗</span>
+          <div className="flex-1">
+            <p className="text-xs font-black text-[rgba(153,197,255,0.6)]">Share accountant link</p>
+            <p className="text-[10px] text-[rgba(153,197,255,0.3)]">Read-only live access — no files</p>
+          </div>
+          <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-[rgba(153,197,255,0.08)] text-[rgba(153,197,255,0.5)] shrink-0">COMING SOON</span>
+        </button>
+      </div>
+      {showDemoData && <p className="mt-2 text-[10px] text-[rgba(153,197,255,0.4)]">Sign in to export your real figures.</p>}
+      {exportError && <p className="mt-2 text-[10px] text-red-400">{exportError}</p>}
+    </>
+  );
 
   // For ltd: derive key dates from accounting_year_end_month (default March = 3)
   const yearEndMonth = bizSettings.accounting_year_end_month ?? 3;
@@ -2473,21 +2578,7 @@ function YearEndTab({ entityType = 'sole_trader', bizSettings = {}, isDemo = fal
                   </div>
                 ))}
               </div>
-              <div className="space-y-2">
-                {[
-                  { icon: "📊", label: "Export CSV / Excel",      desc: "Xero & QuickBooks compatible" },
-                  { icon: "📄", label: "Export PDF summary pack", desc: "Print-ready, CT600 workings on last page" },
-                  { icon: "🔗", label: "Share accountant link",   desc: "Read-only live access — no files" },
-                ].map(({ icon, label, desc }) => (
-                  <button key={label} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] hover:border-[rgba(153,197,255,0.25)] transition-colors text-left">
-                    <span className="text-base shrink-0">{icon}</span>
-                    <div>
-                      <p className="text-xs font-black text-white">{label}</p>
-                      <p className="text-[10px] text-[rgba(153,197,255,0.35)]">{desc}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              {exportButtons}
             </GCard>
           </div>
         </div>
@@ -2593,21 +2684,7 @@ function YearEndTab({ entityType = 'sole_trader', bizSettings = {}, isDemo = fal
                 </div>
               ))}
             </div>
-            <div className="space-y-2">
-              {[
-                { icon: "📊", label: "Export CSV / Excel",        desc: "Xero & QuickBooks compatible" },
-                { icon: "📄", label: "Export PDF summary pack",   desc: "Print-ready, SA103 on last page" },
-                { icon: "🔗", label: "Share accountant link",     desc: "Read-only live access — no files" },
-              ].map(({ icon, label, desc }) => (
-                <button key={label} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] hover:border-[rgba(153,197,255,0.25)] transition-colors text-left">
-                  <span className="text-base shrink-0">{icon}</span>
-                  <div>
-                    <p className="text-xs font-black text-white">{label}</p>
-                    <p className="text-[10px] text-[rgba(153,197,255,0.35)]">{desc}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            {exportButtons}
           </GCard>
         </div>
       </div>
@@ -2851,7 +2928,90 @@ function LtdFirstUseGuide({ showCt, showDiv, showDla }) {
   );
 }
 
-function LtdTab({ bizSettings = {}, isDemo = false }) {
+// ─── Salary vs dividends — the director's running take + set-aside ──────────
+function SalaryDividendCard({ salary, taxYearDividends, ctDue, ctPaid, isDemo, onSaveSalary }) {
+  const [salaryDraft, setSalaryDraft] = useState(String(salary || 0));
+  const [saving, setSaving]           = useState(false);
+  const [saveErr, setSaveErr]         = useState(null);
+  useEffect(() => { setSalaryDraft(String(salary || 0)); }, [salary]);
+
+  const salaryNum   = Number(salaryDraft) || 0;
+  const personalTax = calcSalaryDividendTax(salaryNum, taxYearDividends);
+  const totalTaken  = salaryNum + taxYearDividends;
+  const ctToFund    = Math.max(0, ctDue - ctPaid);
+  const setAside    = personalTax.total + ctToFund;
+  const paHeadroom  = Math.max(0, PERSONAL_ALLOWANCE - salaryNum);
+
+  // Personal tax on this tax year is due 31 Jan after the tax year ends
+  const dueYear = currentTaxYear() + 2;
+
+  const persistSalary = async () => {
+    if (isDemo || Number(salaryDraft) === Number(salary)) return;
+    setSaving(true); setSaveErr(null);
+    try { await onSaveSalary(Number(salaryDraft) || 0); }
+    catch (e) { setSaveErr(e.message || String(e)); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <GCard className="p-4">
+      <div className="flex items-center justify-between mb-3">
+        <SL className="mb-0">Salary vs dividends · {taxYearLabel()}</SL>
+        {saving && <span className="text-[10px] text-[rgba(153,197,255,0.4)]">saving…</span>}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        <div className="p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
+          <SL className="mb-1">Salary (annual)</SL>
+          <div className="flex items-center gap-1">
+            <span className="text-sm font-black text-white">£</span>
+            <input type="number" value={salaryDraft}
+              onChange={e => setSalaryDraft(e.target.value)}
+              onBlur={persistSalary}
+              disabled={isDemo}
+              className="w-full bg-transparent text-sm font-black text-white outline-none tabular-nums disabled:opacity-60" />
+          </div>
+        </div>
+        <div className="p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
+          <SL className="mb-1">Dividends taken</SL>
+          <p className="text-sm font-black text-emerald-400 tabular-nums">{fmt(taxYearDividends)}</p>
+        </div>
+        <div className="p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
+          <SL className="mb-1">Total take</SL>
+          <p className="text-sm font-black text-white tabular-nums">{fmt(totalTaken)}</p>
+        </div>
+        <div className="p-3 rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)]">
+          <SL className="mb-1">Personal tax est.</SL>
+          <p className="text-sm font-black text-amber-400 tabular-nums">{fmt(personalTax.total)}</p>
+          <p className="text-[9px] text-[rgba(153,197,255,0.35)]">due 31 Jan {dueYear}</p>
+        </div>
+      </div>
+
+      {/* Set-aside — company CT still to fund + the director's personal bill */}
+      <div className="p-3 rounded-xl bg-amber-500/8 border border-amber-500/20 mb-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black text-amber-300">Set aside for tax: {fmt(setAside)}</p>
+            <p className="text-[10px] text-amber-300/60 mt-0.5">
+              {fmt(ctToFund)} Corporation Tax still to fund · {fmt(personalTax.total)} personal tax on salary + dividends
+            </p>
+          </div>
+          <span className="text-xl shrink-0">🛡️</span>
+        </div>
+      </div>
+
+      {paHeadroom > 0 && (
+        <GAlert type="blue">
+          Your salary is <strong>{fmt(paHeadroom)}</strong> below the £{PERSONAL_ALLOWANCE.toLocaleString()} personal allowance —
+          salary up to that level is income-tax-free and reduces the company's Corporation Tax bill. Worth reviewing with your accountant.
+        </GAlert>
+      )}
+      {saveErr && <p className="mt-2 text-[10px] text-red-400">{saveErr}</p>}
+    </GCard>
+  );
+}
+
+function LtdTab({ bizSettings = {}, saveSettings, isDemo = false }) {
   const yearEndMonth = bizSettings.accounting_year_end_month ?? 3;
   const today = new Date();
   const currentPeriodEnd = (() => {
@@ -2909,6 +3069,18 @@ function LtdTab({ bizSettings = {}, isDemo = false }) {
     .filter(d => d.tax_year === currentTaxYearLabel)
     .reduce((s, d) => s + Number(d.amount || 0), 0);
 
+  // Dividends in the PERSONAL tax year (6 Apr–5 Apr, by paid date) — the
+  // accounting-period figure above can straddle two personal tax years, and
+  // the director's own tax bill follows the personal year.
+  const personalYearStart = taxYearStart();
+  const personalYearEnd   = `${currentTaxYear() + 1}-04-05`;
+  const personalYearDividends = dividends
+    .filter(d => {
+      const paid = (d.paid_on || d.declared_on || '').slice(0, 10);
+      return paid >= personalYearStart && paid <= personalYearEnd;
+    })
+    .reduce((s, d) => s + Number(d.amount || 0), 0);
+
   return (
     <div className="space-y-5">
       <div>
@@ -2946,6 +3118,15 @@ function LtdTab({ bizSettings = {}, isDemo = false }) {
           await reload();
         }}
         ctDue={ctDue} ctPaid={ctPaid} ctFunded={ctFunded}
+      />
+
+      {/* Salary vs dividends — running personal-tax picture + combined set-aside */}
+      <SalaryDividendCard
+        salary={Number(bizSettings.director_salary_annual ?? 12570)}
+        taxYearDividends={personalYearDividends}
+        ctDue={ctDue} ctPaid={ctPaid}
+        isDemo={isDemo}
+        onSaveSalary={(v) => saveSettings?.({ director_salary_annual: v })}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -3305,11 +3486,11 @@ export default function AccountsTab() {
 
   const panels = {
     overview:    <OverviewTab  setActiveTab={setActiveTab} entityType={entityType} bizSettings={bizSettings} saveSettings={saveSettings} />,
-    hmrc:        <HmrcTab entityType={entityType} />,
+    hmrc:        <HmrcTab entityType={entityType} setActiveTab={setActiveTab} />,
     income:      <IncomeTab />,
     expenses:    <ExpensesTab />,
     vat:         <VATTab bizSettings={bizSettings} saveSettings={saveSettings} />,
-    ltd:         <LtdTab bizSettings={bizSettings} isDemo={isDemo} />,
+    ltd:         <LtdTab bizSettings={bizSettings} saveSettings={saveSettings} isDemo={isDemo} />,
     "tax-tools": <TaxToolsTab setActiveTab={setActiveTab} isDemo={isDemo} />,
     "year-end":  <YearEndTab entityType={entityType} bizSettings={bizSettings} isDemo={isDemo} />,
   };

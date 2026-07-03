@@ -15,7 +15,7 @@ import { supabase } from "../lib/supabase";
 
 // ─── Default accounts ─────────────────────────────────────────────────────────
 const DEFAULT_ACCOUNTS = {
-  vatRegistered: false, frsRate: 12, isLimitedCostTrader: false,
+  vatRegistered: false, vatScheme: 'none', frsRate: 12, isLimitedCostTrader: false,
   taxRate: 0.20, ytdIncome: 0, annualTarget: 0,
 };
 
@@ -40,11 +40,21 @@ const fmtShort  = (s) => new Date(s).toLocaleDateString("en-GB", { day: "numeric
 const today     = new Date().toISOString().split("T")[0];
 const addDays   = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x.toISOString().split("T")[0]; };
 
-function calcInvoice(lines, vatRegistered, frsRate) {
+// VAT is line-driven: each line carries its own vatRate (set to 20 at creation
+// when the business is VAT-registered, 0 otherwise). An invoice issued before
+// registration therefore keeps rendering without VAT forever — the invoice is
+// the record, not the current setting. vatRegistered/frsRate only shape the
+// FRS "your take" figure shown to the business owner.
+function calcInvoice(lines, vatRegistered, frsRate, vatScheme = 'frs') {
   const subtotal  = lines.reduce((s,l) => s + (parseFloat(l.qty)||0)*(parseFloat(l.rate)||0), 0);
-  const vatAmount = vatRegistered ? subtotal * 0.20 : 0;
+  const vatAmount = lines.reduce((s,l) => s + (parseFloat(l.qty)||0)*(parseFloat(l.rate)||0)*((parseFloat(l.vatRate)||0)/100), 0);
   const total     = subtotal + vatAmount;
-  const vatToHMRC = vatRegistered ? (subtotal + vatAmount) * ((frsRate||12)/100) : 0;
+  // 'flat_rate' is what the VAT tab saves; 'cash'/'annual' are accounting
+  // timing schemes — VAT owed is still the full output VAT for those.
+  const isFrs = vatScheme === 'flat_rate' || vatScheme === 'frs';
+  const vatToHMRC = vatAmount > 0
+    ? (isFrs ? total * ((frsRate||12)/100) : vatAmount)
+    : 0;
   const net       = total - vatToHMRC;
   return { subtotal, vatAmount, total, vatToHMRC, net };
 }
@@ -224,7 +234,7 @@ const TYPE_DOT = { residential: "#10b981", commercial: "#1f48ff", exterior: "#f5
 
 // ─── Email send modal ─────────────────────────────────────────────────────────
 function EmailModal({ invoice, business, accounts = DEFAULT_ACCOUNTS, onSent, onClose, chaseMode = false }) {
-  const calc      = calcInvoice(invoice.lines, accounts.vatRegistered, accounts.frsRate);
+  const calc      = calcInvoice(invoice.lines, accounts.vatRegistered, accounts.frsRate, accounts.vatScheme);
   const firstName = (invoice.customer?.name || "").split(" ")[0] || "there";
 
   const defaultMsg  = `Hi ${firstName},\n\nHere's your invoice! We appreciate your prompt payment.`;
@@ -635,7 +645,7 @@ function InvoiceList({ invoices, accounts, onSelect, onCreate, onQuickSend, onQu
       ) : (
         <GCard className="overflow-hidden divide-y divide-[rgba(153,197,255,0.05)]">
           {filtered.map(inv => {
-            const calc = calcInvoice(inv.lines, accounts.vatRegistered, accounts.frsRate);
+            const calc = calcInvoice(inv.lines, accounts.vatRegistered, accounts.frsRate, accounts.vatScheme);
             return (
               <div key={inv.id} className="flex items-center group hover:bg-[rgba(153,197,255,0.04)] transition-colors">
                 <button onClick={() => onSelect(inv)} className="flex flex-1 items-center gap-3 px-4 py-3.5 text-left min-w-0">
@@ -723,7 +733,7 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
   const [date,     setDate]     = useState(draftInvoice?.date     ?? today);
   const [terms,    setTerms]    = useState(draftInvoice?.terms    ?? business.defaultTerms);
   const [customDueDate, setCustomDueDate] = useState(draftInvoice?.customDueDate ?? "");
-  const [lines,    setLines]    = useState(draftInvoice?.lines    ?? [{ id: 1, desc: "", qty: 1, rate: "", vatRate: 0 }]);
+  const [lines,    setLines]    = useState(draftInvoice?.lines    ?? [{ id: 1, desc: "", qty: 1, rate: "", vatRate: accounts.vatRegistered ? 20 : 0 }]);
   const [notes,    setNotes]    = useState(draftInvoice?.notes    ?? business.defaultNotes);
   const [bankName, setBankName] = useState(draftInvoice?.bankName ?? business.bankName ?? "");
   const [sortCode, setSortCode] = useState(draftInvoice?.sortCode ?? business.sortCode ?? "");
@@ -733,10 +743,10 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
   const stableNum = useRef(draftInvoice?.num ?? invNum);
 
   const dueDate = terms === "custom" ? customDueDate : (terms === 0 ? date : addDays(date, terms));
-  const calc    = calcInvoice(lines, accounts.vatRegistered, accounts.frsRate);
+  const calc    = calcInvoice(lines, accounts.vatRegistered, accounts.frsRate, accounts.vatScheme);
   const valid   = customer.name && customer.email && lines.some(l => l.desc && parseFloat(l.rate) > 0);
 
-  const addLine    = () => setLines(prev => [...prev, { id: Date.now(), desc: "", description: "", serviceDate: date, rateType: "flat", qty: 1, rate: "", vatRate: 0 }]);
+  const addLine    = () => setLines(prev => [...prev, { id: Date.now(), desc: "", description: "", serviceDate: date, rateType: "flat", qty: 1, rate: "", vatRate: accounts.vatRegistered ? 20 : 0 }]);
   const removeLine = (id) => setLines(prev => prev.filter(l => l.id !== id));
   const updateLine = (id, field, val) => setLines(prev => prev.map(l => l.id===id ? { ...l, [field]: val } : l));
   const setC       = (field, val) => setCustomer(prev => ({ ...prev, [field]: val }));
@@ -859,7 +869,7 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
             <div className="flex flex-wrap gap-1.5 p-3">
               {QUICK_DESCS[type].map(desc => (
                 <button key={desc}
-                  onClick={() => setLines(prev => [...prev, { id: Date.now(), desc, description: "", serviceDate: date, rateType: "flat", qty: 1, rate: "", vatRate: 0 }])}
+                  onClick={() => setLines(prev => [...prev, { id: Date.now(), desc, description: "", serviceDate: date, rateType: "flat", qty: 1, rate: "", vatRate: accounts.vatRegistered ? 20 : 0 }])}
                   className="px-2.5 py-1 text-xs font-black border border-[rgba(153,197,255,0.12)] rounded-xl text-[rgba(153,197,255,0.5)] hover:border-[rgba(153,197,255,0.35)] hover:text-white hover:bg-[rgba(153,197,255,0.05)] transition-all">
                   + {desc}
                 </button>
@@ -963,25 +973,25 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
                   <span className="text-[rgba(153,197,255,0.45)]">Subtotal</span>
                   <span className="font-mono font-black text-[rgba(153,197,255,0.7)]">{fmt2(calc.subtotal)}</span>
                 </div>
-                {accounts.vatRegistered && (
+                {calc.vatAmount > 0 && (
                   <>
                     <div className="flex justify-between px-5 py-2.5 text-sm">
                       <span className="text-[rgba(153,197,255,0.45)]">VAT (20%)</span>
                       <span className="font-mono font-black text-[rgba(153,197,255,0.7)]">{fmt2(calc.vatAmount)}</span>
                     </div>
                     <div className="flex justify-between px-5 py-2.5 text-sm">
-                      <span className="text-[rgba(153,197,255,0.45)] flex items-center gap-1.5">VAT to HMRC <span className="text-amber-400">(FRS {accounts.frsRate}%)</span></span>
+                      <span className="text-[rgba(153,197,255,0.45)] flex items-center gap-1.5">VAT to HMRC <span className="text-amber-400">{(accounts.vatScheme === 'flat_rate' || accounts.vatScheme === 'frs') ? `(FRS ${accounts.frsRate}%)` : '(standard rate)'}</span></span>
                       <span className="font-mono font-black text-amber-400">−{fmt2(calc.vatToHMRC)}</span>
                     </div>
                   </>
                 )}
                 <div className="flex justify-between px-5 py-3 bg-[rgba(153,197,255,0.04)]">
-                  <span className="font-black text-white text-sm">Total{accounts.vatRegistered ? " inc. VAT" : ""}</span>
+                  <span className="font-black text-white text-sm">Total{calc.vatAmount > 0 ? " inc. VAT" : ""}</span>
                   <span className="text-xl font-black tabular-nums text-white">{fmt2(calc.total)}</span>
                 </div>
-                {accounts.vatRegistered && (
+                {calc.vatAmount > 0 && (
                   <div className="flex justify-between px-5 py-2.5">
-                    <span className="text-xs text-[rgba(153,197,255,0.45)]">Your take (after FRS VAT)</span>
+                    <span className="text-xs text-[rgba(153,197,255,0.45)]">Your take (after {(accounts.vatScheme === 'flat_rate' || accounts.vatScheme === 'frs') ? 'FRS VAT' : 'VAT'})</span>
                     <span className="text-xs font-black text-emerald-400">{fmt2(calc.net)}</span>
                   </div>
                 )}
@@ -1031,7 +1041,7 @@ function CreateInvoice({ accounts, draftInvoice, invNum, onSave, onPreview, onBa
 // ─── SCREEN: Invoice preview ──────────────────────────────────────────────────
 // The document itself stays clean white — it's customer-facing
 function InvoicePreview({ draft, accounts, business, onEdit, onSaveAndSend, onSaveDraftForSend, onBack }) {
-  const calc = calcInvoice(draft.lines, accounts.vatRegistered, accounts.frsRate);
+  const calc = calcInvoice(draft.lines, accounts.vatRegistered, accounts.frsRate, accounts.vatScheme);
   const [showEmail, setShowEmail] = useState(false);
   // Persisted draft (with real DB id) — set when "Send invoice" is clicked.
   // EmailModal needs this so send-invoice can correlate its delivery log
@@ -1210,7 +1220,7 @@ function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack, onDuplic
   const [showEmail,  setShowEmail]  = useState(false);
   const [showPaid,   setShowPaid]   = useState(false);
   const [chaseMode,  setChaseMode]  = useState(false);
-  const calc = calcInvoice(invoice.lines, accounts.vatRegistered, accounts.frsRate);
+  const calc = calcInvoice(invoice.lines, accounts.vatRegistered, accounts.frsRate, accounts.vatScheme);
 
   const timeline = [
     { icon: "📄", label: "Invoice created",   time: invoice.sentAt ? new Date(invoice.sentAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}) : fmtDate(invoice.date) },
@@ -1325,7 +1335,7 @@ function InvoiceDetail({ invoice, accounts, business, onUpdate, onBack, onDuplic
                 { label: "Income tax (est.)",          val: `−${fmt2(calc.total * accounts.taxRate)}`,    color: "text-red-400"      },
                 { label: "Class 4 NI (est.)",          val: `−${fmt2(calc.total * 0.09)}`,                color: "text-red-400"      },
                 { label: "Your take-home (est.)",      val: fmt2(calc.total * (1 - accounts.taxRate - 0.09)), color: "text-emerald-400"},
-                ...(accounts.vatRegistered ? [{ label: `VAT to HMRC (FRS ${accounts.frsRate}%)`, val: `−${fmt2(calc.vatToHMRC)}`, color: "text-amber-400" }] : []),
+                ...(calc.vatToHMRC > 0 ? [{ label: `VAT to HMRC ${(accounts.vatScheme === 'flat_rate' || accounts.vatScheme === 'frs') ? `(FRS ${accounts.frsRate}%)` : '(standard rate)'}`, val: `−${fmt2(calc.vatToHMRC)}`, color: "text-amber-400" }] : []),
               ].map(({ label, val, color }) => (
                 <div key={label} className="flex justify-between px-4 py-2.5">
                   <span className="text-xs text-[rgba(153,197,255,0.45)]">{label}</span>
@@ -1406,7 +1416,11 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
   const { user, profile } = useAuth();
   const { customers = [] } = useData();
   const isLive    = Boolean(user);
-  const accounts  = { ...DEFAULT_ACCOUNTS, ...(accountsData ?? {}) };
+  // VAT registration comes from business_settings (the VAT tab in Accounts) —
+  // loaded in the settings effect below. Until it resolves, invoices behave
+  // as non-registered, which is the safe default.
+  const [vatConf, setVatConf] = useState({});
+  const accounts  = { ...DEFAULT_ACCOUNTS, ...(accountsData ?? {}), ...vatConf };
 
   // Load business details from profile + settings
   const [BUSINESS, setBusiness] = useState(DEFAULT_BUSINESS);
@@ -1439,13 +1453,20 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
           settings?.setup_data?.registered_office_address ||
           fullAddress;
 
+        const scheme = settings?.vat_scheme || 'none';
+        setVatConf({
+          vatRegistered: scheme !== 'none',
+          vatScheme: scheme,
+          frsRate: 12, // FRS rate for cleaning services — both domestic and commercial
+        });
+
         setBusiness({
           name: profile?.business_name || '',
           ownerName: [profile?.first_name, profile?.last_name].filter(Boolean).join(' '),
           email: settings?.business_email || profile?.phone || '',
           phone: profile?.phone || '',
           address: fullAddress,
-          vatNumber: settings?.setup_data?.vat_number || '',
+          vatNumber: settings?.vat_number || settings?.setup_data?.vat_number || '',
           companyNum: settings?.companies_house_number || settings?.setup_data?.company_number || '',
           entityType: settings?.entity_type || 'sole_trader',
           registeredOffice,
@@ -1531,7 +1552,7 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
     setActiveInv(updated);
     // When marking paid, also log income to money_entries
     if (updated.status === "paid") {
-      const total = calcInvoice(updated.lines, accounts.vatRegistered, accounts.frsRate).total;
+      const total = calcInvoice(updated.lines, accounts.vatRegistered, accounts.frsRate, accounts.vatScheme).total;
       try {
         await createMoneyEntry({
           client: typeof updated.customer === 'object' ? updated.customer.name : updated.customer,
@@ -1590,7 +1611,7 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
                 )}
                 <span className="flex items-center gap-1.5 text-[10px] text-[rgba(153,197,255,0.4)]">
                   <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-[rgba(153,197,255,0.3)]"}`} />
-                  {isLive ? "Live" : "Demo"} · {accounts.vatRegistered ? `VAT FRS ${accounts.frsRate}%` : "No VAT"} · {(accounts.taxRate*100).toFixed(0)}% tax
+                  {isLive ? "Live" : "Demo"} · {accounts.vatRegistered ? ((accounts.vatScheme === 'flat_rate' || accounts.vatScheme === 'frs') ? `VAT FRS ${accounts.frsRate}%` : 'VAT registered') : "No VAT"} · {(accounts.taxRate*100).toFixed(0)}% tax
                 </span>
               </div>
             </div>

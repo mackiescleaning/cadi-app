@@ -12,7 +12,7 @@ import { getBusinessSettings, upsertBusinessSettings } from "../lib/db/settingsD
 import { logMileage, listMileageLogs, calcMileageAllowance, MILEAGE_RATE_HIGH, MILEAGE_RATE_LOW, MILEAGE_THRESHOLD } from "../lib/db/mileageDb";
 import { calcSelfEmployedTax as sharedCalcSelfEmployedTax, calculateCT as sharedCalculateCT } from "../lib/taxCalc";
 import { useAuth } from "../context/AuthContext";
-import { useInvoices } from "../context/InvoiceContext";
+import { useInvoices, invTotal, invCustomerName } from "../context/InvoiceContext";
 import { supabase } from "../lib/supabase";
 
 // ─── Expense categories (with HMRC MTD mapping) ───────────────────────────────
@@ -34,7 +34,11 @@ const EXPENSE_CATS = [
   { id: "other",        label: "Other",             emoji: "📦", hmrc: "otherAllowableCharges",    dot: "#6b7280", pill: "bg-gray-500/15 border-gray-500/25 text-gray-300"      },
 ];
 
-const catById = (id) => EXPENSE_CATS.find(c => c.id === id) ?? EXPENSE_CATS[EXPENSE_CATS.length - 1];
+// Pseudo-category for bank credits confirmed as business income (invoice-matched
+// or standalone). Not an expense cat — excluded from the category picker grids.
+const INCOME_CAT = { id: "income", label: "Income", emoji: "💰", hmrc: "turnover", dot: "#10b981", pill: "bg-emerald-500/15 border-emerald-500/25 text-emerald-300" };
+
+const catById = (id) => id === "income" ? INCOME_CAT : (EXPENSE_CATS.find(c => c.id === id) ?? EXPENSE_CATS[EXPENSE_CATS.length - 1]);
 
 // ─── Merchant auto-suggest ─────────────────────────────────────────────────────
 const MERCHANT_RULES = [
@@ -171,7 +175,10 @@ function MerchantGroupCard({ group, groupBy = 'merchant', onCategorise, disabled
   const catObj = catById(pendingCat);
   const saving = quickTaxSaving(group.total);
   const isAmount = groupBy === 'amount';
-  const headerIcon = isAmount ? '💷' : (group.suggested ? catById(group.suggested).emoji : '🏪');
+  // A group of pure credits is income, not an expense to categorise. Business
+  // button becomes "Business income"; invoice matching stays in one-by-one mode.
+  const allCredits = group.txs.length > 0 && group.txs.every(t => Number(t.amount) > 0);
+  const headerIcon = allCredits ? '💰' : isAmount ? '💷' : (group.suggested ? catById(group.suggested).emoji : '🏪');
 
   return (
     <div className="rounded-xl bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.1)] overflow-hidden">
@@ -198,30 +205,39 @@ function MerchantGroupCard({ group, groupBy = 'merchant', onCategorise, disabled
 
       {expanded && (
         <div className="border-t border-[rgba(153,197,255,0.08)] p-3 space-y-3 bg-[rgba(0,0,0,0.15)]">
-          {/* Category picker if business */}
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[rgba(153,197,255,0.5)] mb-1.5">If business, which category?</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {catOptions.map(c => (
-                <button key={c.id} onClick={() => setPendingCat(c.id)}
-                  disabled={disabled}
-                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all ${
-                    pendingCat === c.id
-                      ? 'bg-[#1f48ff]/20 border-[#1f48ff]/60 text-white'
-                      : 'border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.75)] hover:border-[rgba(153,197,255,0.35)] hover:text-white'
-                  }`}>
-                  <span>{c.emoji}</span>{c.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Tax-saving hint */}
-          <div className="text-center">
-            <p className="text-xs text-emerald-400/80">
-              All {group.txs.length} as business → <span className="font-black text-emerald-400">saves ~£{saving.toFixed(2)}</span> in tax
+          {allCredits ? (
+            <p className="text-[11px] text-[rgba(153,197,255,0.55)] leading-relaxed">
+              💰 These are payments <strong className="text-emerald-300">into</strong> your account. Mark them as business income,
+              or switch to one-by-one mode to match each payment to an unpaid invoice.
             </p>
-          </div>
+          ) : (
+            <>
+              {/* Category picker if business */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[rgba(153,197,255,0.5)] mb-1.5">If business, which category?</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {catOptions.map(c => (
+                    <button key={c.id} onClick={() => setPendingCat(c.id)}
+                      disabled={disabled}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all ${
+                        pendingCat === c.id
+                          ? 'bg-[#1f48ff]/20 border-[#1f48ff]/60 text-white'
+                          : 'border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.75)] hover:border-[rgba(153,197,255,0.35)] hover:text-white'
+                      }`}>
+                      <span>{c.emoji}</span>{c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tax-saving hint */}
+              <div className="text-center">
+                <p className="text-xs text-emerald-400/80">
+                  All {group.txs.length} as business → <span className="font-black text-emerald-400">saves ~£{saving.toFixed(2)}</span> in tax
+                </p>
+              </div>
+            </>
+          )}
 
           {/* Action buttons */}
           <div className="grid grid-cols-2 gap-2">
@@ -233,11 +249,11 @@ function MerchantGroupCard({ group, groupBy = 'merchant', onCategorise, disabled
               ✗ All {group.txs.length} Personal
             </button>
             <button
-              onClick={() => onCategorise(true, pendingCat)}
+              onClick={() => onCategorise(true, allCredits ? 'income' : pendingCat)}
               disabled={disabled}
               className="py-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 text-sm font-black hover:bg-emerald-500/25 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
-              ✓ All {group.txs.length} Business · {catObj.emoji}
+              {allCredits ? <>💰 All {group.txs.length} Business income</> : <>✓ All {group.txs.length} Business · {catObj.emoji}</>}
             </button>
           </div>
 
@@ -279,6 +295,11 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
   const [reviewIdx,         setReviewIdx]         = useState(0); // which needs-review tx to show
   const [sortMode,          setSortMode]          = useState(null); // 'smart' | 'one-by-one' — null = auto-pick
   const [groupBy,           setGroupBy]           = useState(null); // 'merchant' | 'amount' — null = auto-pick
+
+  // Invoice matching for bank credits — money in gets matched to an unpaid
+  // invoice (marks it paid) instead of being forced through the expense flow.
+  const { invoices, patchInvoice } = useInvoices();
+  const unpaidInvoices = invoices.filter(i => i.status === 'sent' || i.status === 'overdue');
 
   const tlInvoke = async (fn, body) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -373,6 +394,38 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
           category: category || 'other',
         });
       }
+    } catch (e) { setError(e.message); }
+  };
+
+  // Match a bank credit to an unpaid invoice: links the transaction (so income
+  // isn't double-counted) and marks the invoice paid on the money-in date.
+  // Direct table update rather than the categorise action — matching is
+  // per-transaction, so merchant-rule propagation must NOT fire here.
+  const handleMatchInvoice = async (tx, inv) => {
+    setAckToast({ kind: 'match', count: 1, invoiceNum: inv.num });
+    setTimeout(() => setAckToast(a => (a && a.kind === 'match' ? null : a)), 2200);
+    try {
+      const txDate = (tx.transaction_date || tx.date || '').slice(0, 10) || toISODate(new Date());
+      const { error: txErr } = await supabase.from('transactions').update({
+        matched_invoice_id: inv.id,
+        matched_customer_id: inv.customerId || null,
+        is_business: true,
+        category: 'income',
+        categorised_by: 'user',
+        categorisation_confidence: 1.0,
+        reconciliation_confidence: 1.0,
+      }).eq('id', tx.id);
+      if (txErr) throw txErr;
+      await patchInvoice(inv.id, { status: 'paid', paidAt: new Date(txDate).toISOString(), paymentMethod: 'bank' });
+      setBankTxs(prev => {
+        const updated = prev.map(t => t.id === tx.id
+          ? { ...t, is_business: true, category: 'income', categorised_by: 'user', matched_invoice_id: inv.id }
+          : t);
+        const remaining = updated.filter(t => t.is_business === null || (t.category === 'uncategorised' && t.categorised_by !== 'user')).length;
+        if (remaining === 0) { setShowAllClear(true); setTimeout(() => setShowAllClear(false), 4000); }
+        return updated;
+      });
+      setReviewIdx(0);
     } catch (e) { setError(e.message); }
   };
 
@@ -748,6 +801,7 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
       {needsReview.length > 0 && effectiveSortMode === 'one-by-one' && (() => {
         const tx = needsReview[reviewIdx] ?? needsReview[0];
         const txAmount = Math.abs(Number(tx.amount));
+        const isCredit = Number(tx.amount) > 0;
         const txKey = mKey(tx.merchant_name || tx.description);
         const sameMerchantCount = needsReview.filter(t => mKey(t.merchant_name || t.description) === txKey).length;
         const suggested = suggestCategory(tx.merchant_name, tx.description);
@@ -756,6 +810,13 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
         const pendingCat = tx._pendingCat ?? suggested ?? 'other';
         const catObj = catById(pendingCat);
         const setPendingCat = (cat) => setBankTxs(prev => prev.map(t => t.id === tx.id ? { ...t, _pendingCat: cat } : t));
+        // Invoice candidates for credits — exact amount matches first, then nearest.
+        const invoiceCandidates = isCredit
+          ? unpaidInvoices
+              .map(inv => ({ inv, total: invTotal(inv), diff: Math.abs(invTotal(inv) - txAmount) }))
+              .sort((a, b) => a.diff - b.diff)
+              .slice(0, 4)
+          : [];
         return (
           <div className="border-t border-amber-500/25">
             {/* Header */}
@@ -821,51 +882,100 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
                 </p>
               </div>
 
-              {/* Auto-suggested category pill */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-lg">{catObj.emoji}</span>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${catObj.pill}`}>{catObj.label}</span>
-                {suggested
-                  ? <span className="text-[10px] text-emerald-400/70">✨ Cadi guessed this</span>
-                  : <span className="text-[10px] text-[rgba(153,197,255,0.5)]">Pick a category if business</span>
-                }
-              </div>
+              {isCredit ? (
+                <>
+                  {/* Money in — invoice matching */}
+                  {invoiceCandidates.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-[rgba(153,197,255,0.5)] mb-1.5">Money in — is this one of these unpaid invoices?</p>
+                      <div className="space-y-1.5">
+                        {invoiceCandidates.map(({ inv, total, diff }) => (
+                          <button key={inv.id} onClick={() => handleMatchInvoice(tx, inv)}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/15 hover:border-emerald-500/40 active:scale-[0.98] transition-all text-left">
+                            <span className="text-base shrink-0">🧾</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-black text-white truncate">
+                                {invCustomerName(inv) || 'Customer'}
+                                <span className="ml-1.5 font-mono font-normal text-[rgba(153,197,255,0.45)]">{inv.num}</span>
+                              </p>
+                              <p className="text-[10px] text-[rgba(153,197,255,0.45)]">
+                                £{total.toFixed(2)}
+                                {diff < 0.01 && <span className="ml-1.5 text-emerald-400 font-bold">exact match</span>}
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-black text-emerald-300 shrink-0">Match & mark paid →</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {invoiceCandidates.length === 0 && (
+                    <p className="text-[11px] text-[rgba(153,197,255,0.5)] leading-relaxed">
+                      Money in with no unpaid invoices to match. If it's business income (cash job, bank transfer from a customer), tap Business income — it counts towards your turnover.
+                    </p>
+                  )}
 
-              {/* Category grid */}
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[rgba(153,197,255,0.5)] mb-1.5">If business, which category?</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {catOptions.map(c => (
-                    <button key={c.id} onClick={() => setPendingCat(c.id)}
-                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all ${
-                        pendingCat === c.id
-                          ? 'bg-[#1f48ff]/20 border-[#1f48ff]/60 text-white'
-                          : 'border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.75)] hover:border-[rgba(153,197,255,0.35)] hover:text-white hover:bg-[rgba(153,197,255,0.04)]'
-                      }`}>
-                      <span>{c.emoji}</span>{c.label}
+                  {/* Action buttons — credit version */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => handleCategorise(tx.id, false, 'personal')}
+                      className="py-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-black hover:bg-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+                      ✗ Personal
                     </button>
-                  ))}
-                </div>
-              </div>
+                    <button onClick={() => handleCategorise(tx.id, true, 'income')}
+                      className="py-3 rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 text-sm font-black hover:bg-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2">
+                      💰 Business income
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Auto-suggested category pill */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-lg">{catObj.emoji}</span>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${catObj.pill}`}>{catObj.label}</span>
+                    {suggested
+                      ? <span className="text-[10px] text-emerald-400/70">✨ Cadi guessed this</span>
+                      : <span className="text-[10px] text-[rgba(153,197,255,0.5)]">Pick a category if business</span>
+                    }
+                  </div>
 
-              {/* Tax saving hint */}
-              <div className="text-center py-0.5">
-                <p className="text-xs text-emerald-400/80">
-                  If business → <span className="font-black text-emerald-400">saves ~£{saving.toFixed(2)}</span> in tax
-                </p>
-              </div>
+                  {/* Category grid */}
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[rgba(153,197,255,0.5)] mb-1.5">If business, which category?</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {catOptions.map(c => (
+                        <button key={c.id} onClick={() => setPendingCat(c.id)}
+                          className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border transition-all ${
+                            pendingCat === c.id
+                              ? 'bg-[#1f48ff]/20 border-[#1f48ff]/60 text-white'
+                              : 'border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.75)] hover:border-[rgba(153,197,255,0.35)] hover:text-white hover:bg-[rgba(153,197,255,0.04)]'
+                          }`}>
+                          <span>{c.emoji}</span>{c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Action buttons */}
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => handleCategorise(tx.id, false, 'personal')}
-                  className="py-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-black hover:bg-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
-                  ✗ Personal
-                </button>
-                <button onClick={() => handleCategorise(tx.id, true, pendingCat)}
-                  className="py-3 rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 text-sm font-black hover:bg-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2">
-                  ✓ Business
-                </button>
-              </div>
+                  {/* Tax saving hint */}
+                  <div className="text-center py-0.5">
+                    <p className="text-xs text-emerald-400/80">
+                      If business → <span className="font-black text-emerald-400">saves ~£{saving.toFixed(2)}</span> in tax
+                    </p>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => handleCategorise(tx.id, false, 'personal')}
+                      className="py-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-black hover:bg-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+                      ✗ Personal
+                    </button>
+                    <button onClick={() => handleCategorise(tx.id, true, pendingCat)}
+                      className="py-3 rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 text-sm font-black hover:bg-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2">
+                      ✓ Business
+                    </button>
+                  </div>
+                </>
+              )}
 
               {/* Merchant propagation hint */}
               {sameMerchantCount > 1 && (
@@ -892,15 +1002,19 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
       {ackToast && (
         <div className="pointer-events-none fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
           <div className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg backdrop-blur-md border ${
-            ackToast.kind === 'business'
-              ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-200'
-              : 'bg-amber-500/20 border-amber-400/40 text-amber-200'
+            ackToast.kind === 'personal'
+              ? 'bg-amber-500/20 border-amber-400/40 text-amber-200'
+              : 'bg-emerald-500/20 border-emerald-400/40 text-emerald-200'
           }`}>
-            <span className="text-base">{ackToast.kind === 'business' ? '✓' : '✗'}</span>
+            <span className="text-base">{ackToast.kind === 'personal' ? '✗' : ackToast.kind === 'match' ? '🧾' : '✓'}</span>
             <span className="text-xs font-black tracking-wide">
-              Got it — {ackToast.count > 1 ? `${ackToast.count} ` : ''}
-              {ackToast.kind === 'business' ? 'business' : 'personal'}
-              {ackToast.kind === 'business' && ackToast.category && ackToast.category !== 'personal' && ` · ${catById(ackToast.category).label}`}
+              {ackToast.kind === 'match'
+                ? `Matched to ${ackToast.invoiceNum} — marked paid`
+                : <>
+                    Got it — {ackToast.count > 1 ? `${ackToast.count} ` : ''}
+                    {ackToast.kind === 'business' ? 'business' : 'personal'}
+                    {ackToast.kind === 'business' && ackToast.category && ackToast.category !== 'personal' && ` · ${catById(ackToast.category).label}`}
+                  </>}
             </span>
           </div>
         </div>

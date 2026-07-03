@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
-  Upload, Download, X, Loader2, Plus, MapPin, ChevronLeft, ChevronRight,
-  AlertCircle, CheckCircle2, Send,
+  Upload, X, Loader2, Plus, MapPin, ChevronLeft, ChevronRight,
+  AlertCircle, Send,
 } from 'lucide-react';
 import {
   parseCsv,
@@ -17,43 +17,45 @@ import {
   FREQUENCY_OPTIONS,
   WORK_TYPE_OPTIONS,
 } from '../../lib/db/fmOpsDb';
-import { FM_OPS_TOKENS } from '../../components/fm-ops/FmOpsLayout';
+import {
+  blueCanvas, glassDark, primaryButton, greenButton, ghostButton,
+  ON_DARK, FM_POP as POP,
+} from '../../lib/connectTheme';
 
-const { NAVY, INK, SUB, MUTE, LINE, PAPER, ACCENT } = FM_OPS_TOKENS;
-const SOFT  = '#f1f5f9';
-const GREEN = '#16a34a';
-
-const REGION_COLOURS = ['#7c3aed', NAVY, GREEN, '#0891b2', ACCENT, '#db2777', '#0ea5e9'];
+// Region accent rotation — bright tones tuned for the dark canvas.
+const REGION_COLOURS = ['#a78bfa', POP.blue, POP.green, '#22d3ee', POP.orange, '#f472b6', '#38bdf8'];
 const colourFor = (i) => REGION_COLOURS[i % REGION_COLOURS.length];
+
+const CARD_LINE = ON_DARK.line;
 
 // ─── Reusable bits ───────────────────────────────────────────────────────────
 function Stepper({ step, steps, onStep }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
+    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 26 }}>
       {steps.map((s, i) => {
         const active = i === step;
         const done   = i < step;
-        const colour = done ? GREEN : active ? ACCENT : SUB;
+        const colour = done ? POP.green : active ? POP.orange : ON_DARK.muted;
         return (
           <div key={s} style={{ display: 'flex', alignItems: 'center', flex: i === steps.length - 1 ? 0 : 1 }}>
             <button onClick={() => onStep(i)} disabled={i > step} style={{
               display: 'flex', alignItems: 'center', gap: 8,
               background: 'none', border: 'none',
               cursor: i > step ? 'default' : 'pointer',
-              opacity: i > step ? 0.5 : 1,
+              opacity: i > step ? 0.45 : 1,
             }}>
               <div style={{
                 width: 26, height: 26, borderRadius: '50%',
-                background: active ? colour : done ? `${colour}15` : SOFT,
+                background: active ? colour : done ? `${POP.green}1f` : 'rgba(255,255,255,0.06)',
                 border: `1.5px solid ${colour}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 12, fontWeight: 900,
-                color: active ? 'white' : colour,
+                color: active ? '#01062a' : colour,
               }}>{done ? '✓' : i + 1}</div>
-              <span style={{ fontSize: 12, fontWeight: active ? 800 : 600, color: active ? INK : SUB }}>{s}</span>
+              <span style={{ fontSize: 12, fontWeight: active ? 800 : 600, color: active ? ON_DARK.primary : ON_DARK.muted, whiteSpace: 'nowrap' }}>{s}</span>
             </button>
             {i < steps.length - 1 && (
-              <div style={{ flex: 1, height: 1, background: done ? GREEN : LINE, margin: '0 14px' }} />
+              <div style={{ flex: 1, height: 1, background: done ? 'rgba(52,211,153,0.5)' : CARD_LINE, margin: '0 14px' }} />
             )}
           </div>
         );
@@ -65,37 +67,26 @@ function Stepper({ step, steps, onStep }) {
 function Field({ label, children }) {
   return (
     <div>
-      <label style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</label>
-      <div style={{ marginTop: 4 }}>{children}</div>
+      <label style={{ fontSize: 10, fontWeight: 800, color: ON_DARK.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</label>
+      <div style={{ marginTop: 5 }}>{children}</div>
     </div>
   );
 }
 
+const inputStyle = {
+  width: '100%', padding: '9px 12px', fontSize: 13,
+  border: `1px solid ${ON_DARK.lineHi}`, borderRadius: 10,
+  background: 'rgba(255,255,255,0.08)', color: ON_DARK.primary, outline: 'none',
+  colorScheme: 'dark',
+};
+
 function Input(props) {
-  return (
-    <input
-      {...props}
-      style={{
-        width: '100%', padding: '9px 12px', fontSize: 13,
-        border: `1px solid ${LINE}`, borderRadius: 8,
-        background: PAPER, color: INK, outline: 'none',
-        ...(props.style || {}),
-      }}
-    />
-  );
+  return <input {...props} style={{ ...inputStyle, ...(props.style || {}) }} />;
 }
 
 function Select(props) {
   return (
-    <select
-      {...props}
-      style={{
-        width: '100%', padding: '9px 12px', fontSize: 13,
-        border: `1px solid ${LINE}`, borderRadius: 8,
-        background: PAPER, color: INK, outline: 'none',
-        ...(props.style || {}),
-      }}
-    >
+    <select {...props} style={{ ...inputStyle, cursor: 'pointer', ...(props.style || {}) }}>
       {props.children}
     </select>
   );
@@ -251,8 +242,8 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
   return (
     <>
       {/* Contract metadata */}
-      <div style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18, marginBottom: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 900, color: INK, marginBottom: 12 }}>Contract details</div>
+      <div style={{ ...glassDark({ radius: 18, padding: 20 }), marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: ON_DARK.primary, marginBottom: 14 }}>Contract details</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <Field label="FM client / chain">
             <Input
@@ -270,8 +261,8 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
           </Field>
           <Field label="Work type">
             <Select value={contract.work_type} onChange={e => setContract({ ...contract, work_type: e.target.value })}>
-              <option value="">— select —</option>
-              {WORK_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              <option value="" style={{ color: '#010a4f' }}>— select —</option>
+              {WORK_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ color: '#010a4f' }}>{o.label}</option>)}
             </Select>
           </Field>
           <Field label="Start date">
@@ -292,31 +283,33 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
             onDragOver={e => e.preventDefault()}
             onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
             style={{
-              background: PAPER, border: `2px dashed ${ACCENT}55`, borderRadius: 14,
-              padding: 32, textAlign: 'center', marginBottom: 14, cursor: 'pointer',
+              ...glassDark({ radius: 18 }),
+              border: '2px dashed rgba(251,146,60,0.45)',
+              padding: 34, textAlign: 'center', marginBottom: 14, cursor: 'pointer',
             }}
           >
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: `${ACCENT}18`, color: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 13,
+              background: 'rgba(251,146,60,0.16)', color: POP.orange, border: '1px solid rgba(251,146,60,0.35)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px',
+            }}>
               <Upload size={20} />
             </div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: INK, marginBottom: 4 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: ON_DARK.primary, marginBottom: 4 }}>
               Drop the FM's site list (CSV or Excel)
             </div>
-            <div style={{ fontSize: 11, color: SUB, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: ON_DARK.muted, marginBottom: 12 }}>
               Site · cost per visit · spec 1..3 · notes — any column order, Cadi maps it.
             </div>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
-              style={{
-                background: ACCENT, color: 'white', border: 'none',
-                borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 800, cursor: 'pointer',
-              }}
+              style={{ ...primaryButton({ size: 'sm' }) }}
             >
               Choose file
             </button>
-            <div style={{ fontSize: 10, color: MUTE, marginTop: 10 }}>
-              Or <button type="button" onClick={(e) => { e.stopPropagation(); downloadTemplate(); }} style={{ color: ACCENT, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>download template</button> · or <button type="button" onClick={(e) => { e.stopPropagation(); addManualRow(); }} style={{ color: NAVY, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>add sites manually</button>
+            <div style={{ fontSize: 10, color: ON_DARK.faint, marginTop: 12 }}>
+              Or <button type="button" onClick={(e) => { e.stopPropagation(); downloadTemplate(); }} style={{ color: POP.orange, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>download template</button> · or <button type="button" onClick={(e) => { e.stopPropagation(); addManualRow(); }} style={{ color: POP.blue, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>add sites manually</button>
             </div>
           </div>
           <input
@@ -327,7 +320,10 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
             onChange={e => handleFile(e.target.files?.[0])}
           />
           {parseErr && (
-            <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 14, fontSize: 12, color: '#b91c1c' }}>
+            <div style={{
+              padding: 12, borderRadius: 12, marginBottom: 14, fontSize: 12,
+              background: 'rgba(220,38,38,0.16)', border: '1px solid rgba(248,113,113,0.40)', color: '#fecaca',
+            }}>
               {parseErr}
             </div>
           )}
@@ -337,22 +333,22 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
       {/* Editable preview */}
       {rows.length > 0 && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: INK }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: ON_DARK.primary }}>
               Sites preview · {rows.length} row{rows.length === 1 ? '' : 's'}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={addManualRow} style={{ fontSize: 11, fontWeight: 700, color: SUB, background: PAPER, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={addManualRow} style={{ ...ghostButton({ size: 'sm', onDark: true }), display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
                 <Plus size={11} /> Add row
               </button>
-              <button onClick={() => setRows([])} style={{ fontSize: 11, fontWeight: 700, color: SUB, background: PAPER, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+              <button onClick={() => setRows([])} style={{ ...ghostButton({ size: 'sm', onDark: true }), fontSize: 11 }}>
                 Start over
               </button>
             </div>
           </div>
-          <div style={{ maxHeight: 480, overflowY: 'auto', border: `1px solid ${LINE}`, borderRadius: 10, background: PAPER, marginBottom: 14 }}>
+          <div style={{ ...glassDark({ radius: 16 }), maxHeight: 480, overflowY: 'auto', marginBottom: 14 }}>
             {rows.map((r, i) => (
-              <div key={i} style={{ padding: 14, borderBottom: i < rows.length - 1 ? `1px solid ${SOFT}` : 'none' }}>
+              <div key={i} style={{ padding: 14, borderBottom: i < rows.length - 1 ? `1px solid ${CARD_LINE}` : 'none' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 0.8fr 30px', gap: 10, marginBottom: 8 }}>
                   <Input
                     value={r.site.name}
@@ -369,7 +365,7 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
                     onChange={e => updateSite(i, { postcode: e.target.value })}
                     placeholder="Postcode"
                   />
-                  <button onClick={() => removeRow(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTE }}>
+                  <button onClick={() => removeRow(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: ON_DARK.faint }}>
                     <X size={14} />
                   </button>
                 </div>
@@ -379,33 +375,34 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
                       display: 'grid',
                       gridTemplateColumns: '110px 1fr 90px 30px',
                       gap: 8, alignItems: 'center',
-                      padding: '6px 8px', borderRadius: 6, background: SOFT,
+                      padding: '7px 9px', borderRadius: 10,
+                      background: 'rgba(255,255,255,0.05)', border: `1px solid ${CARD_LINE}`,
                     }}>
-                      <Select value={s.frequency} onChange={e => updateSpec(i, j, { frequency: e.target.value })} style={{ padding: '6px 8px' }}>
-                        {FREQUENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      <Select value={s.frequency} onChange={e => updateSpec(i, j, { frequency: e.target.value })} style={{ padding: '6px 8px', fontSize: 11 }}>
+                        {FREQUENCY_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ color: '#010a4f' }}>{o.label}</option>)}
                       </Select>
                       <Input
                         value={s.scope}
                         onChange={e => updateSpec(i, j, { scope: e.target.value })}
                         placeholder="Scope — e.g. in & out hand-height"
-                        style={{ padding: '6px 10px' }}
+                        style={{ padding: '6px 10px', fontSize: 12 }}
                       />
                       <Input
                         type="number" min="0"
                         value={s.price_per_visit}
                         onChange={e => updateSpec(i, j, { price_per_visit: e.target.value })}
                         placeholder="£/visit"
-                        style={{ padding: '6px 8px' }}
+                        style={{ padding: '6px 8px', fontSize: 12 }}
                       />
-                      <button onClick={() => removeSpec(i, j)} disabled={r.specs.length === 1} style={{ background: 'none', border: 'none', cursor: r.specs.length === 1 ? 'default' : 'pointer', color: r.specs.length === 1 ? MUTE : SUB, opacity: r.specs.length === 1 ? 0.4 : 1 }}>
+                      <button onClick={() => removeSpec(i, j)} disabled={r.specs.length === 1} style={{ background: 'none', border: 'none', cursor: r.specs.length === 1 ? 'default' : 'pointer', color: ON_DARK.faint, opacity: r.specs.length === 1 ? 0.4 : 1 }}>
                         <X size={12} />
                       </button>
                     </div>
                   ))}
                   <button onClick={() => addSpec(i)} style={{
-                    fontSize: 11, fontWeight: 700, color: ACCENT,
-                    background: 'none', border: `1px dashed ${ACCENT}40`,
-                    borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
+                    fontSize: 11, fontWeight: 700, color: POP.orange,
+                    background: 'none', border: '1px dashed rgba(251,146,60,0.40)',
+                    borderRadius: 8, padding: '5px 10px', cursor: 'pointer',
                     alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 4,
                   }}>
                     <Plus size={11} /> Add visit spec
@@ -423,8 +420,8 @@ function StepUpload({ contract, setContract, rows, setRows, onNext }) {
           onClick={onNext}
           disabled={!ready}
           style={{
-            background: ready ? ACCENT : MUTE, color: 'white', border: 'none',
-            borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 800,
+            ...primaryButton(),
+            opacity: ready ? 1 : 0.45,
             cursor: ready ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', gap: 6,
           }}
@@ -495,22 +492,22 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
         {[
-          { l: 'Total visit specs',  v: allSpecIds.length,   c: INK },
-          { l: 'Allocated to network', v: summary.network,  c: GREEN },
-          { l: 'To marketplace',     v: summary.market,    c: ACCENT },
-          { l: 'Unassigned',         v: summary.unassigned, c: summary.unassigned ? '#a16207' : MUTE },
+          { l: 'Total visit specs',    v: allSpecIds.length,   c: ON_DARK.primary },
+          { l: 'Allocated to network', v: summary.network,     c: POP.green },
+          { l: 'To marketplace',       v: summary.market,      c: POP.orange },
+          { l: 'Unassigned',           v: summary.unassigned,  c: summary.unassigned ? POP.amber : ON_DARK.faint },
         ].map(s => (
-          <div key={s.l} style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: 10, padding: '12px 14px' }}>
+          <div key={s.l} style={{ ...glassDark({ radius: 14, padding: '13px 15px' }) }}>
             <div style={{ fontSize: 22, fontWeight: 900, color: s.c, lineHeight: 1 }}>{s.v}</div>
-            <div style={{ fontSize: 11, color: SUB, fontWeight: 700, marginTop: 4 }}>{s.l}</div>
+            <div style={{ fontSize: 11, color: ON_DARK.muted, fontWeight: 700, marginTop: 6 }}>{s.l}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontSize: 11, color: SUB, fontWeight: 700 }}>Bulk ·</span>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: 11, color: ON_DARK.muted, fontWeight: 700 }}>Bulk ·</span>
         <button
           onClick={() => {
             const next = { ...allocations };
@@ -520,7 +517,11 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
             });
             setAllocations(next);
           }}
-          style={{ fontSize: 11, fontWeight: 800, color: NAVY, background: `${NAVY}08`, border: `1px solid ${NAVY}25`, borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}
+          style={{
+            fontSize: 11, fontWeight: 800, color: POP.blue,
+            background: 'rgba(79,120,255,0.14)', border: '1px solid rgba(79,120,255,0.35)',
+            borderRadius: 9, padding: '6px 11px', cursor: 'pointer',
+          }}
         >
           Auto-allocate by region
         </button>
@@ -530,7 +531,11 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
             allSpecIds.forEach(id => { if (!next[id]) next[id] = '__MARKET__'; });
             setAllocations(next);
           }}
-          style={{ fontSize: 11, fontWeight: 800, color: ACCENT, background: `${ACCENT}08`, border: `1px solid ${ACCENT}30`, borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}
+          style={{
+            fontSize: 11, fontWeight: 800, color: POP.orange,
+            background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.35)',
+            borderRadius: 9, padding: '6px 11px', cursor: 'pointer',
+          }}
         >
           Send unassigned → marketplace
         </button>
@@ -539,15 +544,15 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
             const next = {}; allSpecIds.forEach(id => { next[id] = null; });
             setAllocations(next);
           }}
-          style={{ fontSize: 11, fontWeight: 700, color: SUB, background: PAPER, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}
+          style={{ ...ghostButton({ size: 'sm', onDark: true }), fontSize: 11, padding: '6px 11px' }}
         >
           Clear all
         </button>
       </div>
 
       {loadingSubs && (
-        <div style={{ padding: 24, textAlign: 'center', fontSize: 11, color: SUB }}>
-          <Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite', display: 'block', margin: '0 auto 6px' }} /> Loading your contractor network…
+        <div style={{ padding: 24, textAlign: 'center', fontSize: 11, color: ON_DARK.muted }}>
+          <Loader2 size={16} color={ON_DARK.secondary} style={{ animation: 'spin 0.8s linear infinite', display: 'block', margin: '0 auto 6px' }} /> Loading your contractor network…
           <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
@@ -556,25 +561,25 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
         const colour = colourFor(idx);
         const regionSubs = subsByRegion.get(region) ?? [];
         return (
-          <div key={region} style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
+          <div key={region} style={{ ...glassDark({ radius: 18 }), marginBottom: 14, overflow: 'hidden' }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 12,
               padding: '12px 16px',
-              background: `${colour}06`, borderBottom: `1px solid ${colour}20`,
+              background: `${colour}14`, borderBottom: `1px solid ${CARD_LINE}`,
               borderLeft: `4px solid ${colour}`,
             }}>
               <MapPin size={14} color={colour} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: INK }}>{region}</div>
-                <div style={{ fontSize: 10, color: SUB, marginTop: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: ON_DARK.primary }}>{region}</div>
+                <div style={{ fontSize: 10, color: ON_DARK.muted, marginTop: 2 }}>
                   {specs.length} spec{specs.length === 1 ? '' : 's'} · {regionSubs.length} sub{regionSubs.length === 1 ? '' : 's'} available
                 </div>
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', minHeight: 100 }}>
               {/* Specs */}
-              <div style={{ padding: '12px 16px', borderRight: `1px solid ${LINE}` }}>
-                <div style={{ fontSize: 9, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>Specs in region</div>
+              <div style={{ padding: '12px 16px', borderRight: `1px solid ${CARD_LINE}` }}>
+                <div style={{ fontSize: 9, fontWeight: 800, color: ON_DARK.muted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Specs in region</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {specs.map(vs => {
                     const cur = allocations[vs.id];
@@ -583,13 +588,13 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
                     return (
                       <div key={vs.id} style={{
                         display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '8px 10px', borderRadius: 8,
-                        background: isMkt ? `${ACCENT}06` : assignedSub ? `${GREEN}06` : '#fafbff',
-                        border: `1px solid ${isMkt ? `${ACCENT}25` : assignedSub ? `${GREEN}25` : LINE}`,
+                        padding: '8px 10px', borderRadius: 10,
+                        background: isMkt ? 'rgba(251,146,60,0.10)' : assignedSub ? 'rgba(52,211,153,0.10)' : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${isMkt ? 'rgba(251,146,60,0.30)' : assignedSub ? 'rgba(52,211,153,0.30)' : CARD_LINE}`,
                       }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 11, fontWeight: 800, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{vs.site?.name ?? 'Site'}</div>
-                          <div style={{ fontSize: 9, color: MUTE, marginTop: 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: ON_DARK.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{vs.site?.name ?? 'Site'}</div>
+                          <div style={{ fontSize: 9, color: ON_DARK.muted, marginTop: 2 }}>
                             {vs.site?.postcode ?? ''} · {vs.frequency} · £{vs.price_per_visit}/visit
                           </div>
                         </div>
@@ -598,18 +603,23 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
                             <>
                               <span style={{
                                 fontSize: 10, fontWeight: 800,
-                                color: isMkt ? ACCENT : GREEN,
-                                background: isMkt ? `${ACCENT}15` : `${GREEN}15`,
+                                color: isMkt ? POP.orange : POP.green,
+                                background: isMkt ? 'rgba(251,146,60,0.16)' : 'rgba(52,211,153,0.16)',
+                                border: `1px solid ${isMkt ? 'rgba(251,146,60,0.35)' : 'rgba(52,211,153,0.35)'}`,
                                 padding: '3px 8px', borderRadius: 999,
                               }}>
                                 {isMkt ? '→ Marketplace' : `→ ${assignedSub?.name ?? cur}`}
                               </span>
                               <button onClick={() => setAllocations({ ...allocations, [vs.id]: null })} style={{
-                                fontSize: 11, color: MUTE, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+                                fontSize: 11, color: ON_DARK.faint, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
                               }}>✕</button>
                             </>
                           ) : (
-                            <span style={{ fontSize: 10, fontWeight: 700, color: '#a16207', background: '#fef3c7', padding: '3px 8px', borderRadius: 999 }}>
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, color: POP.amber,
+                              background: 'rgba(251,191,36,0.14)', border: '1px solid rgba(251,191,36,0.30)',
+                              padding: '3px 8px', borderRadius: 999,
+                            }}>
                               unassigned
                             </span>
                           )}
@@ -620,8 +630,8 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
                 </div>
               </div>
               {/* Sub picker */}
-              <div style={{ padding: '12px 16px', background: '#fafbff' }}>
-                <div style={{ fontSize: 9, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+              <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.03)' }}>
+                <div style={{ fontSize: 9, fontWeight: 800, color: ON_DARK.muted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Allocate to · {regionSubs.length ? 'subs in this region' : 'no subs — marketplace only'}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -631,36 +641,36 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
                       onClick={() => allRegionToSub(region, sub.id, specs)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '8px 10px', borderRadius: 8,
-                        background: PAPER, border: `1px solid ${LINE}`,
+                        padding: '8px 10px', borderRadius: 10,
+                        background: 'rgba(255,255,255,0.06)', border: `1px solid ${ON_DARK.lineHi}`,
                         cursor: 'pointer', textAlign: 'left',
                       }}
                     >
-                      <div style={{ width: 26, height: 26, borderRadius: 6, background: `${colour}15`, color: colour, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 }}>
+                      <div style={{ width: 26, height: 26, borderRadius: 7, background: `${colour}22`, color: colour, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900 }}>
                         {(sub.name?.[0] ?? '?').toUpperCase()}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 11, fontWeight: 800, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub.name}</div>
-                        <div style={{ fontSize: 9, color: SUB, marginTop: 1 }}>Score {sub.score ?? '—'} · cap {sub.capacity ?? '—'}</div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: ON_DARK.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub.name}</div>
+                        <div style={{ fontSize: 9, color: ON_DARK.muted, marginTop: 2 }}>Score {sub.score ?? '—'} · cap {sub.capacity ?? '—'}</div>
                       </div>
-                      <ChevronRight size={11} color={MUTE} />
+                      <ChevronRight size={11} color={ON_DARK.faint} />
                     </button>
                   ))}
                   <button
                     onClick={() => allRegionToSub(region, '__MARKET__', specs)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '8px 10px', borderRadius: 8,
-                      background: `${ACCENT}06`, border: `1px dashed ${ACCENT}40`,
+                      padding: '8px 10px', borderRadius: 10,
+                      background: 'rgba(251,146,60,0.08)', border: '1px dashed rgba(251,146,60,0.40)',
                       cursor: 'pointer', textAlign: 'left',
                     }}
                   >
-                    <div style={{ width: 26, height: 26, borderRadius: 6, background: `${ACCENT}15`, color: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(251,146,60,0.16)', color: POP.orange, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Send size={11} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 11, fontWeight: 800, color: ACCENT }}>Send region to marketplace</div>
-                      <div style={{ fontSize: 9, color: SUB, marginTop: 1 }}>Open to any verified sub in region</div>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: POP.orange }}>Send region to marketplace</div>
+                      <div style={{ fontSize: 9, color: ON_DARK.muted, marginTop: 2 }}>Open to any verified sub in region</div>
                     </div>
                   </button>
                 </div>
@@ -672,8 +682,7 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 20 }}>
         <button onClick={onBack} style={{
-          background: PAPER, color: SUB, border: `1px solid ${LINE}`,
-          borderRadius: 8, padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          ...ghostButton({ onDark: true }),
           display: 'flex', alignItems: 'center', gap: 4,
         }}>
           <ChevronLeft size={13} /> Back to upload
@@ -682,8 +691,8 @@ function StepAllocate({ contractDetail, allocations, setAllocations, onNext, onB
           onClick={onNext}
           disabled={!ready}
           style={{
-            background: ready ? ACCENT : MUTE, color: 'white', border: 'none',
-            borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 800,
+            ...primaryButton(),
+            opacity: ready ? 1 : 0.45,
             cursor: ready ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', gap: 6,
           }}
@@ -703,17 +712,17 @@ function StepPublish({ contractDetail, allocations, defaults, setDefaults, onPub
   });
   return (
     <>
-      <div style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 900, color: INK, marginBottom: 4 }}>
+      <div style={{ ...glassDark({ radius: 16, padding: 18 }), marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: ON_DARK.primary, marginBottom: 5 }}>
           {marketSpecs.length} spec{marketSpecs.length === 1 ? '' : 's'} going to marketplace · {networkSpecs.length} pre-allocated
         </div>
-        <div style={{ fontSize: 12, color: SUB }}>
+        <div style={{ fontSize: 12, color: ON_DARK.secondary }}>
           Set how listings are exposed to the network. Direct-allocated specs skip this step — they're already with the sub.
         </div>
       </div>
 
-      <div style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <div style={{ fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 12 }}>Listing defaults · apply to all</div>
+      <div style={{ ...glassDark({ radius: 16, padding: 18 }), marginBottom: 16 }}>
+        <div style={{ fontSize: 10, fontWeight: 800, color: ON_DARK.muted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Listing defaults · apply to all</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           {[
             { k: 'visibility', l: 'Visibility', opts: [
@@ -734,18 +743,19 @@ function StepPublish({ contractDetail, allocations, defaults, setDefaults, onPub
             ]},
           ].map(g => (
             <div key={g.k}>
-              <div style={{ fontSize: 10, color: SUB, fontWeight: 700, marginBottom: 6 }}>{g.l}</div>
+              <div style={{ fontSize: 10, color: ON_DARK.muted, fontWeight: 700, marginBottom: 6 }}>{g.l}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {g.opts.map(o => {
                   const active = defaults[g.k] === o.v;
                   return (
                     <button key={o.v} onClick={() => setDefaults({ ...defaults, [g.k]: o.v })} style={{
-                      fontSize: 11, padding: '6px 10px', borderRadius: 6,
-                      border: `1px solid ${active ? ACCENT : LINE}`,
-                      background: active ? `${ACCENT}10` : PAPER,
-                      color: active ? ACCENT : INK,
+                      fontSize: 11, padding: '7px 11px', borderRadius: 9,
+                      border: `1px solid ${active ? 'rgba(251,146,60,0.45)' : CARD_LINE}`,
+                      background: active ? 'rgba(251,146,60,0.14)' : 'rgba(255,255,255,0.04)',
+                      color: active ? POP.orange : ON_DARK.secondary,
                       fontWeight: active ? 800 : 600,
                       cursor: 'pointer', textAlign: 'left',
+                      transition: 'background 150ms ease, border-color 150ms ease',
                     }}>{o.l}</button>
                   );
                 })}
@@ -755,49 +765,55 @@ function StepPublish({ contractDetail, allocations, defaults, setDefaults, onPub
         </div>
       </div>
 
-      <div style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+      <div style={{ ...glassDark({ radius: 16 }), overflow: 'hidden', marginBottom: 16 }}>
         <div style={{
           display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 1fr',
-          padding: '10px 16px', background: SOFT, borderBottom: `1px solid ${LINE}`,
-          fontSize: 10, fontWeight: 800, color: SUB, letterSpacing: '0.05em', textTransform: 'uppercase',
+          padding: '10px 18px', background: 'rgba(255,255,255,0.04)', borderBottom: `1px solid ${CARD_LINE}`,
+          fontSize: 10, fontWeight: 800, color: ON_DARK.muted, letterSpacing: '0.08em', textTransform: 'uppercase',
         }}>
           <div>Listing</div><div>Target price</div><div>Visibility</div><div>Bid window</div>
         </div>
         {marketSpecs.length === 0 && (
-          <div style={{ padding: 18, fontSize: 12, color: SUB }}>
+          <div style={{ padding: 18, fontSize: 12, color: ON_DARK.muted }}>
             No specs going to marketplace — everything was allocated to your network. Click Publish to activate the contract.
           </div>
         )}
         {marketSpecs.map((vs, i) => (
           <div key={vs.id} style={{
             display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 1fr',
-            padding: '12px 16px', borderBottom: i < marketSpecs.length - 1 ? `1px solid ${LINE}` : 'none',
+            padding: '12px 18px', borderBottom: i < marketSpecs.length - 1 ? `1px solid ${CARD_LINE}` : 'none',
             alignItems: 'center', fontSize: 12,
           }}>
             <div>
-              <div style={{ fontWeight: 800, color: INK }}>{vs.site?.name ?? 'Site'}</div>
-              <div style={{ fontSize: 10, color: MUTE, marginTop: 2 }}>{vs.frequency} · {vs.scope}</div>
+              <div style={{ fontWeight: 800, color: ON_DARK.primary }}>{vs.site?.name ?? 'Site'}</div>
+              <div style={{ fontSize: 10, color: ON_DARK.muted, marginTop: 2 }}>{vs.frequency} · {vs.scope}</div>
             </div>
-            <div style={{ fontWeight: 800, color: INK }}>£{vs.price_per_visit}</div>
-            <span style={{ fontSize: 10, fontWeight: 800, color: ACCENT, background: `${ACCENT}10`, padding: '3px 8px', borderRadius: 999, alignSelf: 'flex-start' }}>
+            <div style={{ fontWeight: 800, color: ON_DARK.primary }}>£{vs.price_per_visit}</div>
+            <span style={{
+              fontSize: 10, fontWeight: 800, color: POP.orange,
+              background: 'rgba(251,146,60,0.14)', border: '1px solid rgba(251,146,60,0.35)',
+              padding: '3px 8px', borderRadius: 999, justifySelf: 'start',
+            }}>
               {defaults.visibility === 'open' ? 'Open' : defaults.visibility[0].toUpperCase() + defaults.visibility.slice(1)}
             </span>
-            <span style={{ color: SUB }}>{defaults.bid_window_hours}h</span>
+            <span style={{ color: ON_DARK.secondary }}>{defaults.bid_window_hours}h</span>
           </div>
         ))}
       </div>
 
-      <div style={{ background: `${ACCENT}06`, border: `1px solid ${ACCENT}25`, borderRadius: 10, padding: 14, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <AlertCircle size={16} color={ACCENT} />
-        <div style={{ flex: 1, fontSize: 11, color: '#334155', lineHeight: 1.5 }}>
-          <strong>Listings appear instantly</strong> in matched subs' Cadi Connect tabs. Pre-allocated specs land in the assigned sub's My Jobs.
+      <div style={{
+        background: 'rgba(79,120,255,0.10)', border: '1px solid rgba(79,120,255,0.30)',
+        borderRadius: 14, padding: 14, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        <AlertCircle size={16} color={POP.blue} />
+        <div style={{ flex: 1, fontSize: 11, color: ON_DARK.secondary, lineHeight: 1.5 }}>
+          <strong style={{ color: ON_DARK.primary }}>Listings appear instantly</strong> in matched subs' Cadi Connect tabs. Pre-allocated specs land in the assigned sub's My Jobs.
         </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 20 }}>
         <button onClick={onBack} disabled={busy} style={{
-          background: PAPER, color: SUB, border: `1px solid ${LINE}`,
-          borderRadius: 8, padding: '10px 16px', fontSize: 13, fontWeight: 700,
+          ...ghostButton({ onDark: true }),
           cursor: busy ? 'not-allowed' : 'pointer',
           display: 'flex', alignItems: 'center', gap: 4,
         }}>
@@ -807,8 +823,7 @@ function StepPublish({ contractDetail, allocations, defaults, setDefaults, onPub
           onClick={onPublish}
           disabled={busy}
           style={{
-            background: GREEN, color: 'white', border: 'none',
-            borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 800,
+            ...greenButton(),
             cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
             display: 'flex', alignItems: 'center', gap: 6,
           }}
@@ -904,74 +919,91 @@ export default function FmOpsContractNew() {
   };
 
   return (
-    <div>
-      <div style={{
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-        marginBottom: 20, paddingBottom: 14, borderBottom: `1px solid ${LINE}`,
-      }}>
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 900, color: INK, letterSpacing: '-0.01em' }}>New contract</div>
-          <div style={{ fontSize: 12, color: SUB, marginTop: 4 }}>
-            Upload the FM's site list, allocate to your network, publish the rest to marketplace.
+    <div style={{ ...blueCanvas(), margin: '-28px -32px', padding: '34px 36px 56px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+          marginBottom: 24, gap: 16, flexWrap: 'wrap',
+        }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.22em', textTransform: 'uppercase', color: ON_DARK.muted, marginBottom: 8 }}>
+              FM Operations · Contracts
+            </div>
+            <h1 style={{ fontSize: 26, fontWeight: 900, color: ON_DARK.primary, letterSpacing: '-0.02em', margin: 0 }}>
+              New <span style={{ color: POP.blue }}>contract</span>
+            </h1>
+            <div style={{ fontSize: 12.5, color: ON_DARK.secondary, marginTop: 6 }}>
+              Upload the FM's site list, allocate to your network, publish the rest to marketplace.
+            </div>
           </div>
+          <button
+            onClick={() => navigate('/fm-ops/contracts')}
+            style={{ ...ghostButton({ size: 'sm', onDark: true }) }}
+          >
+            Cancel
+          </button>
         </div>
-        <button
-          onClick={() => navigate('/fm-ops/contracts')}
-          style={{
-            background: PAPER, color: SUB, border: `1px solid ${LINE}`,
-            borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-          }}
-        >
-          Cancel
-        </button>
+
+        <Stepper step={step} steps={STEPS} onStep={(i) => i <= step && setStep(i)} />
+
+        {error && (
+          <div style={{
+            padding: 12, borderRadius: 12, marginBottom: 14, fontSize: 12,
+            background: 'rgba(220,38,38,0.16)', border: '1px solid rgba(248,113,113,0.40)', color: '#fecaca',
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <AlertCircle size={14} /> {error}
+          </div>
+        )}
+
+        {step === 0 && (
+          <StepUpload
+            contract={contract}
+            setContract={setContract}
+            rows={rows}
+            setRows={setRows}
+            onNext={goToAllocate}
+          />
+        )}
+        {step === 1 && contractDetail && (
+          <StepAllocate
+            contractDetail={contractDetail}
+            allocations={allocations}
+            setAllocations={setAllocations}
+            onNext={goToPublish}
+            onBack={() => setStep(0)}
+          />
+        )}
+        {step === 2 && contractDetail && (
+          <StepPublish
+            contractDetail={contractDetail}
+            allocations={allocations}
+            defaults={defaults}
+            setDefaults={setDefaults}
+            onPublish={publish}
+            onBack={() => setStep(1)}
+            busy={busy}
+          />
+        )}
+
+        {busy && step === 0 && (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(1,4,25,0.55)',
+            backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+          }}>
+            <div style={{
+              ...glassDark({ radius: 18, padding: '20px 28px', strong: true }),
+              display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, fontWeight: 700, color: ON_DARK.primary,
+            }}>
+              <Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Creating contract…
+              <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+            </div>
+          </div>
+        )}
       </div>
-
-      <Stepper step={step} steps={STEPS} onStep={(i) => i <= step && setStep(i)} />
-
-      {error && (
-        <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 14, fontSize: 12, color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <AlertCircle size={14} /> {error}
-        </div>
-      )}
-
-      {step === 0 && (
-        <StepUpload
-          contract={contract}
-          setContract={setContract}
-          rows={rows}
-          setRows={setRows}
-          onNext={goToAllocate}
-        />
-      )}
-      {step === 1 && contractDetail && (
-        <StepAllocate
-          contractDetail={contractDetail}
-          allocations={allocations}
-          setAllocations={setAllocations}
-          onNext={goToPublish}
-          onBack={() => setStep(0)}
-        />
-      )}
-      {step === 2 && contractDetail && (
-        <StepPublish
-          contractDetail={contractDetail}
-          allocations={allocations}
-          defaults={defaults}
-          setDefaults={setDefaults}
-          onPublish={publish}
-          onBack={() => setStep(1)}
-          busy={busy}
-        />
-      )}
-
-      {busy && step === 0 && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ background: PAPER, padding: '20px 28px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, fontWeight: 700, color: INK }}>
-            <Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Creating contract…
-            <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
