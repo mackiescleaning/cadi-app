@@ -51,9 +51,13 @@ const json = (data: unknown, status = 200) =>
 // secret (base64-decoded after stripping the `whsec_` prefix), then
 // constant-time compare against any of the provided signatures.
 async function verifySignature(req: Request, raw: string): Promise<boolean> {
+  // Fail closed: without the signing secret we cannot verify the payload, so we
+  // MUST reject rather than trust it. The previous `return true` here let anyone
+  // POST forged email.delivered/bounced events and corrupt invoice_sends
+  // delivery status for any guessed message id (security audit item 0.8).
   if (!WEBHOOK_SECRET) {
-    console.warn("RESEND_WEBHOOK_SECRET not set — accepting unverified webhook");
-    return true; // dev fallback
+    console.error("RESEND_WEBHOOK_SECRET is not configured — rejecting webhook");
+    return false;
   }
   const id  = req.headers.get("svix-id");
   const ts  = req.headers.get("svix-timestamp");
