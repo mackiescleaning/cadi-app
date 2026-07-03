@@ -9,6 +9,13 @@
       "port": 3000
     },
     {
+      "name": "cadi-dev-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start", "--", "--port", "3005", "--strictPort"],
+      "cwd": "/Users/mackiescleaning/cleaning business blueprints/cleaning-blueprints",
+      "port": 3005
+    },
+    {
       "name": "widget-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "--port", "3001"],

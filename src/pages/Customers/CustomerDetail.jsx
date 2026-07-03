@@ -6,11 +6,12 @@ import { supabase } from "../../lib/supabase";
 import { useData } from "../../context/DataContext";
 import { BILLING_MODES } from "../../lib/billing";
 import { generateSuggestions, JOB_TYPES } from "./helpers";
-import { GlassCard, GlassSurface, SL, Chip, Alert, StatusBadge, PriorityBadge, StarRating } from "./primitives";
+import { GlassCard, GlassSurface, SL, Chip, StatusBadge, StarRating } from "./primitives";
 import SecureVault from "./SecureVault";
 import ArchiveButton from "./ArchiveButton";
 import AddCustomerModal from "./AddCustomerModal";
 import CustomerMetrics from "./CustomerMetrics";
+import GrowthTab from "./GrowthTab";
 
 export default function CustomerDetail({ customer, onMessage, onClose, onBookJob, onUpdateCustomer, onDeleteCustomer, onEraseCustomer, onExportCustomer, ownerId }) {
   const suggestions  = useMemo(() => generateSuggestions(customer), [customer]);
@@ -110,7 +111,9 @@ export default function CustomerDetail({ customer, onMessage, onClose, onBookJob
     return () => { cancelled = true; };
   }, [customer.id]);
 
-  const TABS = ["overview", "metrics", "history", "suggestions", "messages", "secure"];
+  // "growth" is the CRM tab (migration 080): sales plan, annual calendar,
+  // service ledger — it also absorbed the old heuristic "suggestions" tab.
+  const TABS = ["overview", "growth", "metrics", "history", "messages", "secure"];
 
   const [gcLoading, setGcLoading]       = useState(false);
   const [gcMandateUrl, setGcMandateUrl] = useState(null);
@@ -271,7 +274,7 @@ export default function CustomerDetail({ customer, onMessage, onClose, onBookJob
             }`}
           >
             {t === "secure" ? "🔒" : t}
-            {t === "suggestions" && suggestions.length > 0 && (
+            {t === "growth" && suggestions.length > 0 && (
               <span className="ml-1 px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-lg text-[10px] border border-amber-500/25">
                 {suggestions.length}
               </span>
@@ -617,49 +620,8 @@ export default function CustomerDetail({ customer, onMessage, onClose, onBookJob
           </>
         )}
 
-        {activeTab === "suggestions" && (
-          <>
-            <div className="flex items-center justify-between">
-              <SL>Opportunities</SL>
-              <Chip color="amber">{suggestions.length} suggestions</Chip>
-            </div>
-
-            {suggestions.length === 0 ? (
-              <Alert type="green">No urgent opportunities right now — this customer is well engaged.</Alert>
-            ) : (
-              suggestions.map((s, i) => (
-                <div
-                  key={i}
-                  className={`relative overflow-hidden rounded-xl border border-[rgba(153,197,255,0.12)] ${
-                    s.priority === "urgent"
-                      ? "border-l-[3px] border-l-red-400"
-                      : s.priority === "high"
-                      ? "border-l-[3px] border-l-amber-400"
-                      : "border-l-[3px] border-l-[#99c5ff]"
-                  }`}
-                  style={{ background: "linear-gradient(145deg, #010a4f 0%, #05124a 50%, #0d1e78 100%)" }}
-                >
-                  <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/60 to-transparent" />
-                  <div className="relative p-4">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <p className="text-sm font-bold text-white">{s.title}</p>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <PriorityBadge priority={s.priority} />
-                        {s.value > 0 && <Chip color="green">+£{s.value}</Chip>}
-                      </div>
-                    </div>
-                    <p className="text-xs text-[rgba(153,197,255,0.7)] leading-relaxed mb-3">{s.body}</p>
-                    <button
-                      onClick={() => onMessage(customer, s)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-bold uppercase tracking-wide transition-all rounded-xl shadow-lg shadow-[#1f48ff]/25"
-                    >
-                      {s.action}
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </>
+        {activeTab === "growth" && (
+          <GrowthTab customer={customer} suggestions={suggestions} onMessage={onMessage} />
         )}
 
         {activeTab === "messages" && (
