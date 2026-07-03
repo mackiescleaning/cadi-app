@@ -36,8 +36,14 @@ export const SHARED_DEMO_INVOICES = [
 ];
 
 // ─── Exported helpers ────────────────────────────────────────────────────────
+// Gross total including line-level VAT. Lines created while VAT-registered
+// carry vatRate (e.g. 20); everything older has vatRate 0 so nothing changes.
+// This is the number that hits the bank — bank-credit matching depends on it.
 export const invTotal = (inv) =>
-  (inv.lines ?? []).reduce((s, l) => s + (parseFloat(l.qty) || 1) * (parseFloat(l.rate) || 0), 0);
+  (inv.lines ?? []).reduce((s, l) => {
+    const net = (parseFloat(l.qty) || 1) * (parseFloat(l.rate) || 0);
+    return s + net * (1 + (parseFloat(l.vatRate) || 0) / 100);
+  }, 0);
 
 export const invCustomerName = (inv) =>
   typeof inv.customer === "object" ? (inv.customer?.name ?? "") : (inv.customer ?? "");

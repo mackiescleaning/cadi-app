@@ -32,9 +32,13 @@ function hexToRgb(hex) {
   return [parseInt(m.slice(0,2),16), parseInt(m.slice(2,4),16), parseInt(m.slice(4,6),16)];
 }
 
-function calcTotals(lines, vatRegistered) {
+// Line-driven VAT — mirrors calcInvoice in InvoiceGenerator.jsx. Each line
+// carries its own vatRate (set when the invoice was issued), so the PDF always
+// matches what the customer was actually charged, regardless of the business's
+// current registration status.
+function calcTotals(lines) {
   const subtotal = lines.reduce((s, l) => s + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0), 0);
-  const vatAmount = vatRegistered ? subtotal * 0.20 : 0;
+  const vatAmount = lines.reduce((s, l) => s + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0) * ((parseFloat(l.vatRate) || 0) / 100), 0);
   const total = subtotal + vatAmount;
   return { subtotal, vatAmount, total };
 }
@@ -49,7 +53,7 @@ function calcTotals(lines, vatRegistered) {
  */
 export function generateInvoicePdf(invoice, business, accounts = {}) {
   const vatRegistered = !!accounts.vatRegistered;
-  const { subtotal, vatAmount, total } = calcTotals(invoice.lines || [], vatRegistered);
+  const { subtotal, vatAmount, total } = calcTotals(invoice.lines || []);
 
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -187,7 +191,7 @@ export function generateInvoicePdf(invoice, business, accounts = {}) {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(110, 110, 110);
 
-  if (vatRegistered) {
+  if (vatAmount > 0) {
     doc.text('Net total', totalsX, afterTable);
     doc.setTextColor(40, 40, 40);
     doc.text(fmt2(subtotal), totalsX + totalsW, afterTable, { align: 'right' });

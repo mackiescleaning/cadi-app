@@ -2,14 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { listMoneyEntries } from '../lib/db/moneyDb';
-import { listQuotes } from '../lib/db/quotesDb';
+import { listInvoices } from '../lib/db/invoiceDb';
 import { getBusinessSettings } from '../lib/db/settingsDb';
 
 // ─── Module-level TTL cache ───────────────────────────────────────────────────
 // Survives component unmount (tab navigation) so re-visiting the dashboard
 // within the TTL window fires zero DB queries. Keyed by user ID.
 const DB_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
-const _dbCache = {}; // { [userId]: { ts, settings, quotes, moneyEntries, profile } }
+const _dbCache = {}; // { [userId]: { ts, settings, invoices, moneyEntries, profile } }
 
 function isoToday() {
   return new Date().toISOString().split('T')[0];
@@ -70,35 +70,33 @@ function parseAmount(value) {
   return Number.parseFloat(value || 0) || 0;
 }
 
-function inferInvoiceStatus(quote) {
-  const status = (quote.status || '').toLowerCase();
+// Invoices carry a real status ('draft' | 'sent' | 'paid') and a real
+// due_date — "overdue" is derived (sent + due_date in the past), same rule
+// the Invoices tab itself uses.
+function inferInvoiceStatus(invoice) {
+  const status = (invoice.status || '').toLowerCase();
   if (status === 'paid') return 'paid';
   if (status === 'draft') return 'draft';
-
-  // Only flag overdue when payment was actually expected (sent/accepted/invoiced states)
-  const paymentExpected = status === 'accepted' || status === 'sent' || status === 'invoiced' || status === '';
-
-  if (paymentExpected) {
-    // Prefer an explicit due_date stored in the jsonb payload; fall back to
-    // 30 days from created_at (UK standard net-30 terms) rather than 14.
-    const payload = quote.payload || {};
-    const dueDateStr = payload.due_date || null;
-    const termsGrace = (payload.payment_terms > 0 ? payload.payment_terms : 30) * 86400000;
-    const refDate = dueDateStr
-      ? new Date(dueDateStr).getTime()
-      : (quote.created_at ? new Date(quote.created_at).getTime() + termsGrace : null);
-
-    if (refDate && Date.now() > refDate) return 'overdue';
-  }
-
+  if (status === 'sent' && invoice.due_date && invoice.due_date < isoToday()) return 'overdue';
   return 'sent';
 }
 
-function getQuoteCustomerName(quote, customersById) {
-  if (quote.customer_id && customersById[quote.customer_id]?.name) return customersById[quote.customer_id].name;
-  if (quote.payload?.customer) return quote.payload.customer;
-  if (quote.job_label) return quote.job_label;
-  return 'Customer';
+function daysOverdue(dueDate) {
+  if (!dueDate) return 0;
+  return Math.max(0, Math.round((Date.now() - new Date(`${dueDate}T00:00:00`).getTime()) / 86400000));
+}
+
+// Mirrors calcInvoice() in InvoiceGenerator.jsx — line qty*rate, plus VAT
+// when the business is VAT-registered.
+function calcInvoiceTotal(invoice, vatRegistered) {
+  const subtotal = (invoice.lines || []).reduce(
+    (s, l) => s + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0), 0,
+  );
+  return vatRegistered ? subtotal * 1.20 : subtotal;
+}
+
+function getInvoiceCustomerName(invoice) {
+  return invoice.customer?.name || 'Customer';
 }
 
 function mapAccountsData({ profile, settings, moneyEntries }) {
@@ -113,8 +111,10 @@ function mapAccountsData({ profile, settings, moneyEntries }) {
     .filter(entry => entry.kind === 'expense')
     .reduce((sum, entry) => sum + parseAmount(entry.amount), 0);
 
-  const annualTarget   = parseAmount(settings?.annual_target) || 65000;
-  const monthlyTarget  = annualTarget / 12;
+  // No fabricated default — 0 means "not set" and the dashboard prompts the
+  // user to enter one (a made-up £65k undermined the real-data promise).
+  const annualTarget   = parseAmount(settings?.annual_target);
+  const monthlyTarget  = annualTarget > 0 ? annualTarget / 12 : 0;
   const taxRate        = settings?.tax_rate ?? (settings?.vat_registered ? 0.2 : 0.25);
   const taxReserve     = parseAmount(settings?.setup_data?.tax_reserve_saved);
   const ytdProfit      = Math.max(ytdIncome - ytdExpenses, 0);
@@ -208,33 +208,35 @@ function mapSchedulerData(userJobs, moneyEntries) {
   return { weekJobs, todayJobs };
 }
 
-function mapInvoiceData(quotes, customersById) {
-  return (quotes || []).map(quote => {
-    const status = inferInvoiceStatus(quote);
-    const createdAt = quote.created_at ? new Date(quote.created_at) : null;
-    const ageDays = createdAt ? Math.floor((Date.now() - createdAt.getTime()) / 86400000) : 0;
+function mapInvoiceData(invoices, vatRegistered) {
+  return (invoices || []).map(invoice => {
+    const status = inferInvoiceStatus(invoice);
     return {
-      id: quote.id,
-      customer: getQuoteCustomerName(quote, customersById),
-      amount: parseAmount(quote.price),
-      daysOverdue: status === 'overdue' ? Math.max(0, ageDays - 14) : 0,
+      id: invoice.id,
+      customer: getInvoiceCustomerName(invoice),
+      amount: calcInvoiceTotal(invoice, vatRegistered),
+      daysOverdue: status === 'overdue' ? daysOverdue(invoice.due_date) : 0,
       status,
+      reference: invoice.invoice_num,
     };
   });
 }
 
-function mapFeedData({ quotes, moneyEntries, customersById }) {
-  const quoteFeed = (quotes || []).slice(0, 5).map(quote => ({
-    id: `quote-${quote.id}`,
-    icon: inferInvoiceStatus(quote) === 'paid' ? '💷' : '📤',
-    bg: inferInvoiceStatus(quote) === 'paid' ? 'bg-emerald-100' : 'bg-blue-100',
-    title: `${inferInvoiceStatus(quote) === 'paid' ? 'Payment received' : 'Quote updated'} — ${getQuoteCustomerName(quote, customersById)}`,
-    sub: `£${parseAmount(quote.price).toFixed(0)} · ${quote.type || 'service'} · ${quote.status || 'draft'}`,
-    time: quote.updated_at
-      ? new Date(quote.updated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-      : '—',
-    _sort: new Date(quote.updated_at || quote.created_at || 0).getTime(),
-  }));
+function mapFeedData({ invoices, moneyEntries, vatRegistered }) {
+  const invoiceFeed = (invoices || []).slice(0, 5).map(invoice => {
+    const status = inferInvoiceStatus(invoice);
+    return {
+      id: `invoice-${invoice.id}`,
+      icon: status === 'paid' ? '💷' : '📤',
+      bg: status === 'paid' ? 'bg-emerald-100' : 'bg-blue-100',
+      title: `${status === 'paid' ? 'Invoice paid' : 'Invoice sent'} — ${getInvoiceCustomerName(invoice)}`,
+      sub: `£${calcInvoiceTotal(invoice, vatRegistered).toFixed(0)} · ${invoice.invoice_num || ''} · ${status}`,
+      time: invoice.updated_at
+        ? new Date(invoice.updated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+        : '—',
+      _sort: new Date(invoice.updated_at || invoice.created_at || 0).getTime(),
+    };
+  });
 
   const moneyFeed = (moneyEntries || []).slice(0, 5).map(entry => ({
     id: `money-${entry.id}`,
@@ -248,7 +250,7 @@ function mapFeedData({ quotes, moneyEntries, customersById }) {
     _sort: new Date(entry.date || 0).getTime(),
   }));
 
-  return [...quoteFeed, ...moneyFeed]
+  return [...invoiceFeed, ...moneyFeed]
     .sort((a, b) => b._sort - a._sort)
     .slice(0, 8)
     .map(({ _sort, ...item }) => item);
@@ -283,16 +285,17 @@ export function useCleanProData() {
     if (cacheValid) {
       // Re-derive scheduler and jobsToday from live DataContext jobs so the
       // dashboard stays current when jobs are added — zero extra DB queries.
-      const customersById = Object.fromEntries((liveCustomers || []).map(c => [c.id, c]));
+      const vatRegistered = Boolean(cached.settings?.vat_registered);
       const schedulerResult = mapSchedulerData(userJobs, cached.moneyEntries);
       setData({
         accounts: mapAccountsData({ profile, settings: cached.settings, moneyEntries: cached.moneyEntries }),
         scheduler: { weekJobs: schedulerResult.weekJobs },
-        invoiceData: mapInvoiceData(cached.quotes, customersById),
+        invoiceData: mapInvoiceData(cached.invoices, vatRegistered),
         jobsToday: schedulerResult.todayJobs,
         teamData: [],
-        feedData: mapFeedData({ quotes: cached.quotes, moneyEntries: cached.moneyEntries, customersById }),
+        feedData: mapFeedData({ invoices: cached.invoices, moneyEntries: cached.moneyEntries, vatRegistered }),
         customerCount: (liveCustomers || []).length,
+        moneyEntries: cached.moneyEntries,
       });
       setIsLoading(false);
       return;
@@ -303,27 +306,27 @@ export function useCleanProData() {
 
     try {
       const taxYearFrom = formatIsoDate(startOfTaxYear());
-      const [settings, quotes, moneyEntries] = await Promise.all([
+      const [settings, invoices, moneyEntries] = await Promise.all([
         getBusinessSettings(),
-        listQuotes(250),
+        listInvoices({ pageSize: 250 }),
         listMoneyEntries({ from: taxYearFrom, pageSize: 500 }),
       ]);
 
       // Store raw DB results in the module cache
-      _dbCache[cacheKey] = { ts: Date.now(), settings, quotes, moneyEntries };
+      _dbCache[cacheKey] = { ts: Date.now(), settings, invoices, moneyEntries };
 
-      // Use already-loaded context customers (up to 1000) — avoids a duplicate fetch
-      const customersById = Object.fromEntries((liveCustomers || []).map(c => [c.id, c]));
+      const vatRegistered = Boolean(settings?.vat_registered);
       const schedulerResult = mapSchedulerData(userJobs, moneyEntries);
 
       setData({
         accounts: mapAccountsData({ profile, settings, moneyEntries }),
         scheduler: { weekJobs: schedulerResult.weekJobs },
-        invoiceData: mapInvoiceData(quotes, customersById),
+        invoiceData: mapInvoiceData(invoices, vatRegistered),
         jobsToday: schedulerResult.todayJobs,
         teamData: [],
-        feedData: mapFeedData({ quotes, moneyEntries, customersById }),
+        feedData: mapFeedData({ invoices, moneyEntries, vatRegistered }),
         customerCount: (liveCustomers || []).length,
+        moneyEntries,
       });
     } catch (err) {
       setError(err);
@@ -351,6 +354,7 @@ export function useCleanProData() {
     teamData: data?.teamData ?? null,
     feedData: data?.feedData ?? null,
     jobsToday: data?.jobsToday ?? null,
+    moneyEntries: data?.moneyEntries ?? null,
     customerCount: liveCustomers?.length ?? 0,
     isLoading,
     error,

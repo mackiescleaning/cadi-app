@@ -66,6 +66,69 @@ function invoiceToRow(inv, total) {
   };
 }
 
+/**
+ * Rolling 12-month business turnover — the number HMRC's VAT registration
+ * threshold is measured against (not the tax year!). Combines paid invoices,
+ * unmatched business bank credits, and manual income entries, deduped the
+ * same way as useYtdIncome.
+ */
+export function useRollingTurnover(paidInvoiceRows = [], days = 365) {
+  const [data, setData] = useState({ total: 0, monthlyAvg: 0, loading: true });
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const end   = new Date().toISOString().slice(0, 10);
+        const start = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+        const businessId = await resolveBusinessId();
+        if (!mounted) return;
+        if (!businessId) { setData(d => ({ ...d, loading: false })); return; }
+
+        const [bankRes, manualRes] = await Promise.all([
+          supabase
+            .from('transactions')
+            .select('id,transaction_date,amount,matched_invoice_id')
+            .eq('business_id', businessId)
+            .gte('transaction_date', start)
+            .lte('transaction_date', end)
+            .eq('is_business', true)
+            .eq('is_hidden', false)
+            .gt('amount', 0),
+          supabase
+            .from('money_entries')
+            .select('id,date,amount')
+            .eq('kind', 'income')
+            .gte('date', start)
+            .lte('date', end),
+        ]);
+
+        if (!mounted) return;
+
+        const bankRows = bankRes.data ?? [];
+        const invoiceSum = (paidInvoiceRows ?? [])
+          .filter(inv => { const d = (inv.paidAt ?? '').slice(0, 10); return d >= start && d <= end; })
+          .reduce((s, inv) => s + (inv._total ?? 0), 0);
+        // Matched credits are already counted via their invoice
+        const bankSum = bankRows
+          .filter(b => !b.matched_invoice_id)
+          .reduce((s, b) => s + (Number(b.amount) || 0), 0);
+        const manualSum = (manualRes.data ?? [])
+          .reduce((s, m) => s + (Math.abs(Number(m.amount)) || 0), 0);
+
+        const total = invoiceSum + bankSum + manualSum;
+        setData({ total, monthlyAvg: total / (days / 30.44), loading: false });
+      } catch (e) {
+        console.error('useRollingTurnover error:', e);
+        if (mounted) setData(d => ({ ...d, loading: false }));
+      }
+    })();
+    return () => { mounted = false; };
+  }, [paidInvoiceRows, days]);
+
+  return data;
+}
+
 export function useYtdIncome(taxYear = currentTaxYear(), paidInvoiceRows = []) {
   const [data, setData] = useState({
     ytdTotal: 0,

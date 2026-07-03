@@ -73,3 +73,18 @@ export async function geocodePostcodes(postcodes) {
 // Convenience export — same key normalisation the cache uses, so a UI
 // component can look up the result map by the customer's raw postcode.
 export { normalisePostcode };
+
+// Haversine great-circle distance in miles. Returns Infinity if either
+// coord is missing so callers can filter/sort them to the bottom of a list.
+export function haversineMiles(lat1, lng1, lat2, lng2) {
+  if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return Infinity;
+  const R_MI = 3958.7613;   // Earth radius, miles
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLng / 2) ** 2;
+  return 2 * R_MI * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}

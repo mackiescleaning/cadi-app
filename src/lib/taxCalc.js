@@ -95,3 +95,70 @@ export function calculateCT(profit) {
   if (p >= CT_MAIN_THRESHOLD)   return Math.round(p * CT_MAIN_RATE);
   return Math.round(p * CT_MARGINAL_RATE - CT_MARGINAL_DEDUCTION);
 }
+
+// ─── Director: salary + dividends (personal tax) ────────────────────────────
+export const DIVIDEND_ALLOWANCE   = 500;    // 2025/26 dividend allowance
+export const DIV_BASIC_RATE       = 0.0875;
+export const DIV_HIGHER_RATE      = 0.3375;
+export const DIV_ADDITIONAL_RATE  = 0.3935;
+
+/**
+ * Personal tax on a director's salary + dividends for one tax year.
+ * Salary uses the personal allowance first; dividends stack on top of salary
+ * for band purposes. The £500 dividend allowance is 0%-rated but still uses
+ * band space. Employee NI is ignored (typical director salary ≤ £12,570 pays
+ * none) — this is a set-aside guide, not a payroll calculation.
+ *
+ * @param {number} salary    - annual gross director salary
+ * @param {number} dividends - dividends taken in the tax year
+ * @returns {{ salaryTax: number, dividendTax: number, total: number }}
+ */
+export function calcSalaryDividendTax(salary, dividends) {
+  const s = Math.max(0, Number(salary) || 0);
+  const d = Math.max(0, Number(dividends) || 0);
+
+  // PA taper on total income (salary + dividends both count)
+  const totalIncome = s + d;
+  const PA_TAPER_START = 100_000;
+  const pa = totalIncome > PA_TAPER_START
+    ? Math.max(0, PERSONAL_ALLOWANCE - (totalIncome - PA_TAPER_START) / 2)
+    : PERSONAL_ALLOWANCE;
+
+  const basicSpan  = BASIC_RATE_THRESHOLD - PERSONAL_ALLOWANCE;              // £37,700
+  const higherSpan = HIGHER_RATE_THRESHOLD - BASIC_RATE_THRESHOLD;
+
+  // Salary first: PA covers it, remainder through the normal bands
+  const salaryTaxable = Math.max(0, s - pa);
+  let salaryTax = 0;
+  if (salaryTaxable <= basicSpan) salaryTax = salaryTaxable * BASIC_RATE;
+  else if (salaryTaxable <= basicSpan + higherSpan) salaryTax = basicSpan * BASIC_RATE + (salaryTaxable - basicSpan) * HIGHER_RATE;
+  else salaryTax = basicSpan * BASIC_RATE + higherSpan * HIGHER_RATE + (salaryTaxable - basicSpan - higherSpan) * ADDITIONAL_RATE;
+
+  // Dividends: leftover PA first, then the £500 allowance (0% but uses band
+  // space), then taxed by where they sit in the bands above the salary.
+  const paLeft = Math.max(0, pa - s);
+  const divAfterPa = Math.max(0, d - paLeft);
+  const divTaxable = Math.max(0, divAfterPa - DIVIDEND_ALLOWANCE);
+  // Band position already used by salary + the 0%-rated dividend slice
+  let pos = salaryTaxable + Math.min(divAfterPa, DIVIDEND_ALLOWANCE);
+  let remaining = divTaxable;
+  let dividendTax = 0;
+  const bands = [
+    { upTo: basicSpan,              rate: DIV_BASIC_RATE },
+    { upTo: basicSpan + higherSpan, rate: DIV_HIGHER_RATE },
+    { upTo: Infinity,               rate: DIV_ADDITIONAL_RATE },
+  ];
+  for (const { upTo, rate } of bands) {
+    if (remaining <= 0) break;
+    const room = Math.max(0, upTo - pos);
+    const slice = Math.min(remaining, room);
+    dividendTax += slice * rate;
+    pos += slice; remaining -= slice;
+  }
+
+  return {
+    salaryTax:   Math.round(salaryTax),
+    dividendTax: Math.round(dividendTax),
+    total:       Math.round(salaryTax + dividendTax),
+  };
+}

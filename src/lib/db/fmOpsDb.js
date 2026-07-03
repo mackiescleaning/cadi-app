@@ -799,15 +799,20 @@ export async function getJobApprovalDetail(jobId) {
   if (jErr) throw jErr;
   if (!job) return null;
 
-  const [{ data: checkins }, { data: evidence }] = await Promise.all([
+  const [{ data: checkins }, { data: evidence }, { data: messages }] = await Promise.all([
     supabase
       .from('job_checkins')
-      .select('id, action, lat, lng, inside_geo_fence, distance_from_site_m, checked_in_at, note, photo_url')
+      .select('id, action, lat, lng, inside_geo_fence, distance_from_site_m, checked_in_at, note, photo_url, customer_on_site, customer_name')
       .eq('job_id', jobId)
       .order('checked_in_at', { ascending: true }),
     supabase
       .from('job_evidence')
       .select('id, type, data, created_at')
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('job_messages')
+      .select('id, author_id, author_role, body, created_at')
       .eq('job_id', jobId)
       .order('created_at', { ascending: true }),
   ]);
@@ -816,11 +821,135 @@ export async function getJobApprovalDetail(jobId) {
     subName:  job.sub?.business_name || [job.sub?.first_name, job.sub?.last_name].filter(Boolean).join(' ') || '—',
     checkins: checkins ?? [],
     evidence: evidence ?? [],
+    messages: messages ?? [],
   };
 }
 
-export async function approveJob({ jobId, decision, note }) {
-  return callFmFn('connect-approve-job', { job_id: jobId, decision, note });
+export async function approveJob({ jobId, decision, note, ratingStars, ratingComment }) {
+  return callFmFn('connect-approve-job', {
+    job_id:         jobId,
+    decision,
+    note,
+    rating_stars:   ratingStars ?? null,
+    rating_comment: ratingComment ?? null,
+  });
+}
+
+export async function postJobMessage({ jobId, body }) {
+  return callFmFn('connect-job-message', { job_id: jobId, body });
+}
+
+// ── Marketplace listing Q&A (FM side) ──────────────────────────────────────
+// FM sees full sub identities (not anonymised like the sub-side view) so
+// they know who's engaged. Uses the shared connect-listing-question fn.
+export async function listListingQuestionsFm(listingId) {
+  const { data, error } = await supabase
+    .from('marketplace_listing_qa')
+    .select(`
+      id, listing_id, author_id, author_role, body, parent_id, created_at,
+      author:profiles!marketplace_listing_qa_author_id_fkey (
+        id, business_name, first_name, last_name
+      )
+    `)
+    .eq('listing_id', listingId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(r => ({
+    ...r,
+    authorName: r.author?.business_name
+      || [r.author?.first_name, r.author?.last_name].filter(Boolean).join(' ')
+      || (r.author_role === 'fm' ? 'You / your team' : 'Contractor'),
+  }));
+}
+
+export async function postListingAnswer({ listingId, body, parentId }) {
+  return callFmFn('connect-listing-question', {
+    listing_id: listingId,
+    body,
+    parent_id:  parentId ?? null,
+  });
+}
+
+// ── Site-level history (FM Ops → Sites drawer) ─────────────────────────────
+// All jobs at a site the FM's org owns, plus per-job photo counts + sub
+// name. Used to give the FM a "what's happened at this address" view
+// without leaving the Sites tab. Photos loaded as thumbnail URLs when
+// available. Ordered most-recent first.
+// ── Sub compliance docs (FM view) ──────────────────────────────────────────
+// RLS on connect_sub_docs already gates this to subs connected to the FM's
+// org (via jobs history / visit_specs / connect_unlock). The FM just sees a
+// summary; storage signed URLs come from the FM helper below.
+export async function listSubDocsForFm(subUserId) {
+  const { data, error } = await supabase
+    .from('connect_sub_docs')
+    .select('id, doc_type, file_path, file_name, mime_type, issued_date, expiry_date, provider, policy_number, verified_by_cadi, verified_at, updated_at')
+    .eq('sub_user_id', subUserId);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function signSubDocUrlForFm(filePath, ttlSeconds = 3600) {
+  const { data, error } = await supabase.storage
+    .from('connect-sub-docs')
+    .createSignedUrl(filePath, ttlSeconds);
+  if (error) return null;
+  return data?.signedUrl ?? null;
+}
+
+// ── Sub availability (FM view) ─────────────────────────────────────────────
+// RLS on connect_sub_availability already gates to subs connected to the
+// caller's FM org. Returns future-only blocks so the FM's contractor
+// drawer isn't cluttered with past holidays.
+export async function listSubAvailabilityForFm(subUserId) {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('connect_sub_availability')
+    .select('id, start_date, end_date, reason, created_at')
+    .eq('sub_user_id', subUserId)
+    .gte('end_date', today)
+    .order('start_date', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getSiteJobHistory(siteId, { limit = 100 } = {}) {
+  const { data: jobs, error: jErr } = await supabase
+    .from('jobs')
+    .select(`
+      id, status, approval_status, date, start_hour, duration_hrs, price,
+      completion_marked_at, actual_duration_minutes, service,
+      sub:profiles!jobs_sub_user_id_fkey ( id, business_name, first_name, last_name )
+    `)
+    .eq('site_id', siteId)
+    .is('deleted_at', null)
+    .order('date', { ascending: false })
+    .limit(limit);
+  if (jErr) throw jErr;
+
+  const jobIds = (jobs ?? []).map(j => j.id);
+  if (jobIds.length === 0) return [];
+
+  const { data: evidence, error: eErr } = await supabase
+    .from('job_evidence')
+    .select('id, job_id, type, data')
+    .in('job_id', jobIds)
+    .in('type', ['before_photo', 'after_photo', 'photo']);
+  if (eErr) throw eErr;
+
+  const photosByJob = new Map();
+  for (const e of evidence ?? []) {
+    const arr = photosByJob.get(e.job_id) ?? [];
+    const url = e.data?.url ?? e.data?.photo_url ?? null;
+    if (url) arr.push(url);
+    photosByJob.set(e.job_id, arr);
+  }
+
+  return (jobs ?? []).map(j => ({
+    ...j,
+    subName:    j.sub?.business_name || [j.sub?.first_name, j.sub?.last_name].filter(Boolean).join(' ') || '—',
+    photoUrls:  (photosByJob.get(j.id) ?? []).slice(0, 5),
+    photoCount: (photosByJob.get(j.id) ?? []).length,
+  }));
 }
 
 // ── Accounts inbox ─────────────────────────────────────────────────────────
@@ -869,6 +998,159 @@ export async function markInvoicesPaid(invoiceIds) {
     op:          'mark_paid',
     invoice_ids: invoiceIds,
   });
+}
+
+// ── FM accounting settings (per FM org) ─────────────────────────────────────
+// Stored in the dedicated fm_accounts_settings table (1 row per org). FM
+// members own RW on their own org's row. Returns null when no row exists
+// yet — the upsert below creates it lazily on first save.
+export async function getFmAccountsSettings() {
+  const org = await getMyFmOrganisation();
+  if (!org?.id) return null;
+  const { data, error } = await supabase
+    .from('fm_accounts_settings')
+    .select(`
+      fm_organisation_id, accounts_platform, default_nominal_code, default_vat_code,
+      default_payment_terms_days, accounts_email
+    `)
+    .eq('fm_organisation_id', org.id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function upsertFmAccountsSettings(updates) {
+  const org = await getMyFmOrganisation();
+  if (!org?.id) throw new Error('No FM organisation');
+  const { data, error } = await supabase
+    .from('fm_accounts_settings')
+    .upsert(
+      {
+        fm_organisation_id:         org.id,
+        accounts_platform:          updates.accounts_platform ?? 'generic',
+        default_nominal_code:       updates.default_nominal_code ?? null,
+        default_vat_code:           updates.default_vat_code ?? null,
+        default_payment_terms_days: updates.default_payment_terms_days ?? 30,
+        accounts_email:             updates.accounts_email ?? null,
+        updated_at:                 new Date().toISOString(),
+      },
+      { onConflict: 'fm_organisation_id' },
+    )
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export const ACCOUNTS_PLATFORMS = [
+  { value: 'sage_50',     label: 'Sage 50 Accounts',     hint: 'CSV import via "Easy Import" → Purchase Invoices' },
+  { value: 'sage_cloud',  label: 'Sage Business Cloud',  hint: 'CSV import via Suppliers → Purchase Invoices' },
+  { value: 'xero',        label: 'Xero',                 hint: 'CSV import via Business → Bills → Import' },
+  { value: 'quickbooks',  label: 'QuickBooks Online',    hint: 'CSV import via Expenses → New transaction → Bill' },
+  { value: 'freeagent',   label: 'FreeAgent',            hint: 'CSV import via Files → Bills' },
+  { value: 'generic',     label: 'Other / manual',       hint: 'Generic CSV with all fields — map columns yourself' },
+];
+
+// ── FM supplier codes (per FM × per sub) ────────────────────────────────────
+// Auto-created by the export function on first export. UI exposes for override.
+export async function listFmSupplierCodes() {
+  const org = await getMyFmOrganisation();
+  if (!org?.id) return [];
+  const { data, error } = await supabase
+    .from('fm_supplier_codes')
+    .select(`
+      id, sub_user_id, supplier_code, nominal_code_override, notes, updated_at,
+      sub:profiles!fm_supplier_codes_sub_user_id_fkey ( id, business_name, first_name, last_name )
+    `)
+    .eq('fm_organisation_id', org.id)
+    .order('supplier_code', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(r => ({
+    ...r,
+    subName: r.sub?.business_name || [r.sub?.first_name, r.sub?.last_name].filter(Boolean).join(' ') || '—',
+  }));
+}
+
+export async function upsertFmSupplierCode({ subUserId, supplierCode, nominalCodeOverride, notes }) {
+  const org = await getMyFmOrganisation();
+  if (!org?.id) throw new Error('No FM organisation');
+  const { data, error } = await supabase
+    .from('fm_supplier_codes')
+    .upsert(
+      {
+        fm_organisation_id:    org.id,
+        sub_user_id:           subUserId,
+        supplier_code:         supplierCode,
+        nominal_code_override: nominalCodeOverride ?? null,
+        notes:                 notes ?? null,
+        updated_at:            new Date().toISOString(),
+      },
+      { onConflict: 'fm_organisation_id,sub_user_id' },
+    )
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ── Single-invoice detail (FM-side) ─────────────────────────────────────────
+// Loads the invoice + its line items + the sub's surface profile (name only —
+// RLS hides the sub's business_settings). Used by the FM accounts drawer.
+export async function getFmInvoiceDetail(invoiceId) {
+  const { data: invoice, error: invErr } = await supabase
+    .from('connect_invoices')
+    .select(`
+      id, reference, service_date, net_value, vat_value, total_value, status,
+      submitted_at, exported_at, paid_at, note, created_at,
+      fm_organisation:fm_organisations ( id, name ),
+      sub:profiles!connect_invoices_sub_user_id_fkey (
+        id, business_name, first_name, last_name, phone, postcode
+      ),
+      job:jobs ( id, site:sites ( id, name, postcode ) )
+    `)
+    .eq('id', invoiceId)
+    .maybeSingle();
+  if (invErr) throw invErr;
+  if (!invoice) return null;
+
+  const { data: lines, error: linesErr } = await supabase
+    .from('connect_invoice_lines')
+    .select(`
+      id, job_id, description, service_date, net_value, vat_value, created_at,
+      job:jobs ( id, site:sites ( id, name, postcode ) )
+    `)
+    .eq('invoice_id', invoiceId)
+    .order('service_date', { ascending: true });
+  if (linesErr) throw linesErr;
+
+  return {
+    ...invoice,
+    lines:    lines ?? [],
+    subName:  invoice.sub?.business_name || [invoice.sub?.first_name, invoice.sub?.last_name].filter(Boolean).join(' ') || '—',
+  };
+}
+
+// Single-invoice state changes. FM has direct UPDATE rights on
+// connect_invoices for their own org so we don't need to round-trip an
+// edge function — direct supabase update keeps the drawer snappy.
+export async function markInvoicePaid(invoiceId) {
+  const { data, error } = await supabase
+    .from('connect_invoices')
+    .update({ status: 'paid', paid_at: new Date().toISOString() })
+    .eq('id', invoiceId)
+    .select('id, status, paid_at')
+    .single();
+  return { ok: !error, data, error };
+}
+
+export async function markInvoiceExported(invoiceId) {
+  const { data, error } = await supabase
+    .from('connect_invoices')
+    .update({ status: 'exported', exported_at: new Date().toISOString() })
+    .eq('id', invoiceId)
+    .select('id, status, exported_at')
+    .single();
+  return { ok: !error, data, error };
 }
 
 export const INVOICE_STATUS = {

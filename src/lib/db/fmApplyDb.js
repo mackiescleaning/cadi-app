@@ -25,7 +25,12 @@ async function callFn(name, body, { auth = true } = {}) {
 }
 
 // ── Public submit ──────────────────────────────────────────────────────────
-// Inserts via RLS (anon-permitted with check(status='pending')).
+// Routes through the fm-application-submit edge function which handles
+// per-IP rate limiting, honeypot detection and size caps. The old anon
+// RLS INSERT policy was dropped in migration 075.
+//
+// payload.hp_website2 is the honeypot — real users leave it blank; bots
+// filling every field trigger the silent-success trap.
 export async function submitFmApplication(payload) {
   const required = ['company_name', 'contact_name', 'contact_email'];
   for (const k of required) {
@@ -33,27 +38,26 @@ export async function submitFmApplication(payload) {
       throw new Error(`${k.replace('_', ' ')} is required`);
     }
   }
-  const { data, error } = await supabase
-    .from('fm_applications')
-    .insert({
-      company_name:     payload.company_name?.trim(),
-      company_website:  payload.company_website?.trim() || null,
-      company_size:     payload.company_size || null,
-      business_model:   payload.business_model?.trim() || null,
-      regions_covered:  payload.regions_covered ?? [],
-      sites_managed:    payload.sites_managed ? Number(payload.sites_managed) : null,
-      current_subs:     payload.current_subs   ? Number(payload.current_subs)   : null,
-      current_software: payload.current_software?.trim() || null,
-      contact_name:     payload.contact_name?.trim(),
-      contact_role:     payload.contact_role?.trim() || null,
-      contact_email:    payload.contact_email?.trim().toLowerCase(),
-      contact_phone:    payload.contact_phone?.trim() || null,
-      why_cadi:         payload.why_cadi?.trim() || null,
-      status:           'pending',
-    })
-    .select('id')
-    .single();
-  if (error) throw error;
+  const { ok, status, data } = await callFn('fm-application-submit', {
+    company_name:     payload.company_name,
+    company_website:  payload.company_website,
+    company_size:     payload.company_size,
+    business_model:   payload.business_model,
+    regions_covered:  payload.regions_covered,
+    sites_managed:    payload.sites_managed,
+    current_subs:     payload.current_subs,
+    current_software: payload.current_software,
+    contact_name:     payload.contact_name,
+    contact_role:     payload.contact_role,
+    contact_email:    payload.contact_email,
+    contact_phone:    payload.contact_phone,
+    why_cadi:         payload.why_cadi,
+    hp_website2:      payload.hp_website2 ?? '',
+  }, { auth: false });
+  if (!ok) {
+    if (status === 429) throw new Error("You've submitted too many applications recently — please wait a while and try again.");
+    throw new Error(data?.error || 'Application failed to submit.');
+  }
   return data;
 }
 
