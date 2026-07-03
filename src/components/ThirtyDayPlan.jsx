@@ -107,6 +107,9 @@ const LITE_PHASE2_SUBHEADS = [
 
 // ── Phase 3 step definitions ──────────────────────────────────────────────────
 
+// Two live steps only — Review Agent and Operations Manager return here when
+// those agents ship (see migration 083). A payments step joins when a payment
+// processor integration is live.
 const PHASE3_STEPS = [
   {
     key: 'hire_sales_manager',
@@ -120,29 +123,12 @@ const PHASE3_STEPS = [
     fromParam: 'phase3',
   },
   {
-    key: 'hire_review_agent',
-    title: 'Hire your Review Agent',
-    incompleteSub: 'The agent who builds your reputation, one review at a time.',
-    completeSub: (meta) => meta?.requests_sent
-      ? `Review Agent active. ${meta.requests_sent} review requests sent.`
-      : 'Review Agent active.',
-    cta: 'Set up Review Agent',
-    path: '/front-desk/review-agent',
-    fromParam: 'phase3',
-  },
-  {
-    key: 'hire_operations_manager',
-    title: 'Hire your Operations Manager',
-    incompleteSub: (isPro) => isPro
-      ? 'The agent who runs your schedule, reminders, and payment matching.'
-      : 'Operations Manager runs your schedule and matches payments. Pro feature.',
-    completeSub: (meta) => meta?.acknowledged_free
-      ? 'Ready when you upgrade.'
-      : meta?.reminders_sent
-      ? `Operations Manager active. ${meta.reminders_sent} reminders sent.`
-      : 'Operations Manager active.',
-    cta: (isPro) => isPro ? 'Hire Operations Manager' : 'See what Pro unlocks',
-    path: '/front-desk/operations-manager',
+    key: 'install_widget',
+    title: 'Put Cadi on your website',
+    incompleteSub: 'Embed your Front Desk on your own site — it answers enquiries, quotes, and takes bookings while you\'re out cleaning.',
+    completeSub: () => 'Your website answers for itself now. Every enquiry lands in your Inbox.',
+    cta: 'Set up my widget',
+    path: '/front-desk/sales-manager/setup',
     fromParam: 'phase3',
   },
 ];
@@ -162,9 +148,9 @@ const PHASE2_SUBHEADS = [
 ];
 
 const PHASE3_SUBHEADS = [
-  "Time to hire some help. Three AI agents to bring on board.",
-  "Sales Manager hired. Two more to go.",
-  "Almost staffed up. One more agent to hire.",
+  "Time to hire some help — and put it where your customers are.",
+  "Sales Manager hired. Now give it a storefront: your own website.",
+  "",
   "",
 ];
 
@@ -319,7 +305,8 @@ function Phase2Celebration({ stats, onClose }) {
 // ── Phase 3 celebration modal ─────────────────────────────────────────────────
 
 function Phase3Celebration({ stats, onClose, onViewFrontDesk }) {
-  const omSkipped = stats?.omSkippedByFree;
+  const navigate = useNavigate();
+  const { isPro } = usePlan();
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -335,15 +322,15 @@ function Phase3Celebration({ stats, onClose, onViewFrontDesk }) {
           <div className="text-center">
             <div className="text-5xl mb-4">🎉</div>
             <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#4f78ff] mb-1">
-              {omSkipped ? 'Phase 3 — almost complete' : 'Phase 3 complete'}
+              Phase 3 complete
             </p>
             <h2 className="text-2xl font-black text-white mb-2 leading-tight">
-              Look who's running your business now.
+              Your business answers for itself now.
             </h2>
           </div>
 
-          {/* Agent cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-6">
+          {/* What's running */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-6">
             <div className="rounded-xl bg-white/5 border border-[#4f78ff]/30 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-2 h-2 rounded-full bg-[#4f78ff]" />
@@ -359,29 +346,11 @@ function Phase3Celebration({ stats, onClose, onViewFrontDesk }) {
             <div className="rounded-xl bg-white/5 border border-emerald-500/30 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <p className="text-xs font-black text-emerald-300">Review Agent</p>
+                <p className="text-xs font-black text-emerald-300">Your website</p>
               </div>
-              <p className="text-[10px] text-emerald-400 font-bold mb-2">Active</p>
+              <p className="text-[10px] text-emerald-400 font-bold mb-2">Live</p>
               <p className="text-[10px] text-[rgba(153,197,255,0.5)]">
-                {stats?.reviewRequestsSent > 0
-                  ? `${stats.reviewRequestsSent} requests sent`
-                  : 'Watching for completed jobs'}
-              </p>
-            </div>
-            <div className={`rounded-xl bg-white/5 p-4 ${omSkipped ? 'border border-amber-500/20 opacity-70' : 'border border-amber-500/30'}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`w-2 h-2 rounded-full ${omSkipped ? 'bg-amber-500/40' : 'bg-amber-500'}`} />
-                <p className={`text-xs font-black ${omSkipped ? 'text-amber-300/60' : 'text-amber-300'}`}>Operations Manager</p>
-              </div>
-              <p className={`text-[10px] font-bold mb-2 ${omSkipped ? 'text-amber-400/50' : 'text-emerald-400'}`}>
-                {omSkipped ? 'Ready when you upgrade' : 'Active'}
-              </p>
-              <p className="text-[10px] text-[rgba(153,197,255,0.5)]">
-                {omSkipped
-                  ? 'Available with Pro'
-                  : stats?.remindersCount > 0
-                  ? `${stats.remindersCount} reminders sent`
-                  : 'Watching your schedule'}
+                Answering, quoting and booking around the clock — every enquiry lands in your Inbox.
               </p>
             </div>
           </div>
@@ -391,9 +360,9 @@ function Phase3Celebration({ stats, onClose, onViewFrontDesk }) {
             <p className="text-xs font-bold text-[rgba(153,197,255,0.7)] mb-3">Over 30 days with Cadi, you've:</p>
             <ul className="space-y-1.5">
               {[
-                'Built your business inside Cadi',
-                'Walked through your finances and chosen a focus',
-                'Staffed your Front Desk with AI agents',
+                'Built your business inside Cadi — customers, jobs, invoices',
+                'Got your money visible: what comes in, what goes out, what\'s truly yours',
+                'Put a Sales Manager on your website that never misses an enquiry',
               ].map(item => (
                 <li key={item} className="flex items-center gap-2 text-xs text-[rgba(153,197,255,0.6)]">
                   <Check size={11} className="text-emerald-400 shrink-0" />
@@ -404,10 +373,25 @@ function Phase3Celebration({ stats, onClose, onViewFrontDesk }) {
           </div>
 
           <p className="text-center text-base font-black text-white mb-6 leading-snug">
-            {omSkipped
-              ? "Your Cadi 30 Day Plan is complete. When you're ready, upgrading to Pro brings your Operations Manager online."
-              : 'Your Cadi 30 Day Plan is complete. Now we run.'}
+            {isPro
+              ? 'Your Cadi 30 Day Plan is complete. Now we run.'
+              : 'Your Cadi 30 Day Plan is complete. On Pro, all of it goes hands-free.'}
           </p>
+
+          {/* Lite close: everything they just built, automated */}
+          {!isPro && (
+            <button
+              onClick={() => { onClose?.(); navigate('/upgrade'); }}
+              className="w-full text-left px-4 py-3.5 rounded-xl border border-amber-400/30 hover:bg-amber-400/10 transition-colors mb-2"
+              style={{ background: 'rgba(251,191,36,0.06)' }}
+            >
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-300 mb-1">⚡ Make it hands-free</p>
+              <p className="text-[11px] text-white leading-snug">
+                Pro connects your bank so the money logs itself, removes the enquiry cap on your website,
+                and unlocks unlimited customers. <span className="font-black text-amber-300">See Pro — £39/mo →</span>
+              </p>
+            </button>
+          )}
 
           <div className="space-y-2">
             <button
@@ -568,24 +552,25 @@ export default function ThirtyDayPlan({ onRefresh }) {
         // ── Phase 3 data (only if Phase 2 done) ────────────────────────────
         const phase2Done = !!(freshProg2?.phase_2_completed_at || prog?.phase_2_completed_at);
         if (phase2Done) {
-          // Read agent activation status
-          const { data: agentRows } = await supabase
-            .from('agent_settings')
-            .select('agent, mode')
-            .eq('business_id', biz?.id)
-            .in('agent', ['sales_manager', 'front_desk', 'review_agent', 'reviews', 'operations_manager']);
+          // Read Sales Manager activation + widget install status
+          const [{ data: agentRows }, { data: widgetRow }] = await Promise.all([
+            supabase
+              .from('agent_settings')
+              .select('agent, mode')
+              .eq('business_id', biz?.id)
+              .in('agent', ['sales_manager', 'front_desk']),
+            supabase
+              .from('widget_configs')
+              .select('id, enabled')
+              .eq('business_id', biz?.id)
+              .limit(1)
+              .maybeSingle(),
+          ]);
 
-          const agentMode = (key) => {
-            const alts = { sales_manager: ['sales_manager', 'front_desk'], review_agent: ['review_agent', 'reviews'] };
-            const keys = alts[key] ?? [key];
-            return (agentRows ?? []).find(r => keys.includes(r.agent))?.mode;
-          };
+          const smActive        = !!(agentRows ?? []).find(r => r.mode && r.mode !== 'off');
+          const widgetInstalled = !!widgetRow?.enabled;
 
-          const smActive = !!(agentMode('sales_manager') && agentMode('sales_manager') !== 'off');
-          const raActive = !!(agentMode('review_agent') && agentMode('review_agent') !== 'off');
-          const omActive = !!(agentMode('operations_manager') && agentMode('operations_manager') !== 'off');
-
-          const p3Result = await syncPhase3Steps({ smActive, raActive, omActive, omSkippedByFree: false });
+          const p3Result = await syncPhase3Steps({ smActive, widgetInstalled });
           if (p3Result?.completed && !p3Result?.alreadyDone) {
             const stats = await getPhase3Stats();
             setCelebrationStats(stats);
@@ -617,7 +602,7 @@ export default function ThirtyDayPlan({ onRefresh }) {
   const p2Required = ['connect_open_banking', 'financial_walkthrough', 'first_weekly_report'];
   const p2Done     = p2Steps.filter(s => p2Required.includes(s.step_key) && s.status === 'completed').length;
 
-  const p3Required = ['hire_sales_manager', 'hire_review_agent', 'hire_operations_manager'];
+  const p3Required = ['hire_sales_manager', 'install_widget'];
   const p3Done     = p3Steps.filter(s => p3Required.includes(s.step_key) && s.status === 'completed').length;
 
   const getStepObj = (steps, key) => steps.find(s => s.step_key === key);

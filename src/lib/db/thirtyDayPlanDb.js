@@ -4,7 +4,10 @@ import { supabase } from '../supabase';
 
 const PHASE_1_STEPS = ['add_customers', 'first_job', 'invoice_template'];
 const PHASE_2_STEPS = ['connect_open_banking', 'financial_walkthrough', 'first_weekly_report'];
-const PHASE_3_STEPS = ['hire_sales_manager', 'hire_review_agent', 'hire_operations_manager'];
+// Phase 3 slimmed to the two live features (Review Agent + Operations Manager
+// steps retired until those agents ship — migration 083). A payments step
+// returns when a payment processor integration is live.
+const PHASE_3_STEPS = ['hire_sales_manager', 'install_widget'];
 
 // ── Read ──────────────────────────────────────────────────────────────────────
 
@@ -275,7 +278,7 @@ export async function getPhase2Stats() {
 
 // ── Phase 3: sync step statuses from agent activation state ───────────────────
 
-export async function syncPhase3Steps({ smActive, raActive, omActive, omSkippedByFree }) {
+export async function syncPhase3Steps({ smActive, widgetInstalled }) {
   const steps = await getSteps(3);
   const updates = [];
 
@@ -288,12 +291,8 @@ export async function syncPhase3Steps({ smActive, raActive, omActive, omSkippedB
   if (shouldComplete('hire_sales_manager', smActive)) {
     updates.push(markStepComplete('hire_sales_manager', 3));
   }
-  if (shouldComplete('hire_review_agent', raActive)) {
-    updates.push(markStepComplete('hire_review_agent', 3));
-  }
-  if (shouldComplete('hire_operations_manager', omActive || omSkippedByFree)) {
-    const meta = omSkippedByFree && !omActive ? { acknowledged_free: true } : {};
-    updates.push(markStepComplete('hire_operations_manager', 3, meta));
+  if (shouldComplete('install_widget', widgetInstalled)) {
+    updates.push(markStepComplete('install_widget', 3));
   }
 
   if (updates.length) await Promise.all(updates);
@@ -303,7 +302,7 @@ export async function syncPhase3Steps({ smActive, raActive, omActive, omSkippedB
 
 export async function checkAndCompletePhase3() {
   const steps = await getSteps(3);
-  if (steps.length < 3) return { completed: false };
+  if (steps.length < PHASE_3_STEPS.length) return { completed: false };
 
   const allComplete = PHASE_3_STEPS.every(key =>
     steps.find(s => s.step_key === key)?.status === 'completed',
@@ -326,55 +325,20 @@ export async function checkAndCompletePhase3() {
 }
 
 export async function getPhase3Stats() {
-  const [steps, progress] = await Promise.all([getSteps(3), getProgress()]);
-
-  // Sales Manager stats
+  // Sales Manager stats — web_chat conversations are widget enquiries too
   const { count: inquiryCount } = await supabase
     .from('conversations')
     .select('*', { count: 'exact', head: true })
     .eq('channel', 'web_chat');
 
-  // Review Agent stats
-  const { count: reviewRequestsSent } = await supabase
-    .from('agent_actions')
-    .select('*', { count: 'exact', head: true })
-    .in('agent', ['review_agent', 'reviews'])
-    .eq('action_type', 'send_review_request')
-    .neq('status', 'pending_approval');
-
-  const { count: reviewsReceived } = await supabase
-    .from('reviews')
-    .select('*', { count: 'exact', head: true })
-    .not('rating', 'is', null);
-
-  // Operations Manager stats
-  const { count: remindersCount } = await supabase
-    .from('autobooking_queue')
-    .select('*', { count: 'exact', head: true })
-    .eq('message_type', 'customer_reminder')
-    .eq('status', 'sent');
-
-  const { count: autoCompletedCount } = await supabase
-    .from('jobs')
-    .select('*', { count: 'exact', head: true })
-    .not('completion_method', 'is', null)
-    .neq('completion_method', 'manual');
-
-  const { count: paymentsMatchedCount } = await supabase
-    .from('transactions')
-    .select('*', { count: 'exact', head: true })
-    .not('matched_invoice_id', 'is', null);
-
-  const omStep = steps.find(s => s.step_key === 'hire_operations_manager');
-  const omSkippedByFree = !!(omStep?.metadata?.acknowledged_free);
+  const { data: widgetConfig } = await supabase
+    .from('widget_configs')
+    .select('id, enabled, business_name')
+    .limit(1)
+    .maybeSingle();
 
   return {
-    inquiryCount:       inquiryCount ?? 0,
-    reviewRequestsSent: reviewRequestsSent ?? 0,
-    reviewsReceived:    reviewsReceived ?? 0,
-    remindersCount:     remindersCount ?? 0,
-    autoCompletedCount: autoCompletedCount ?? 0,
-    paymentsMatchedCount: paymentsMatchedCount ?? 0,
-    omSkippedByFree,
+    inquiryCount:  inquiryCount ?? 0,
+    widgetEnabled: !!widgetConfig?.enabled,
   };
 }
