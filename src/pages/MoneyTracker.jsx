@@ -3188,7 +3188,7 @@ export default function MoneyTab({ accountsData, schedulerData, onNavigate: onNa
 
     try {
       // Save to DB first
-      await createMoneyEntry({ quoteId: invoiceId !== "other" ? invoiceId : null, client: invoice?.customer || "Payment received", amount, date: today, method: "bank", kind: "income" });
+      await createMoneyEntry({ quoteId: invoiceId !== "other" ? invoiceId : null, invoiceId: invoiceId !== "other" ? invoiceId : null, client: invoice?.customer || "Payment received", amount, date: today, method: "bank", kind: "income" });
       if (invoiceId && invoiceId !== "other") await updateQuoteStatus(invoiceId, "paid");
 
       // Only update UI after DB success

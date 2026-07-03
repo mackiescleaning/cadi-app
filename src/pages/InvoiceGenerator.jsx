@@ -1554,12 +1554,16 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
     if (updated.status === "paid") {
       const total = calcInvoice(updated.lines, accounts.vatRegistered, accounts.frsRate, accounts.vatScheme).total;
       try {
+        // Link the mirror entry to its invoice (uuid ids only — local/demo
+        // invoices use display ids like "INV-1041" the DB would reject).
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(updated.id));
         await createMoneyEntry({
           client: typeof updated.customer === 'object' ? updated.customer.name : updated.customer,
           amount: total,
           date: new Date().toISOString().split('T')[0],
           method: updated.paymentMethod || 'bank',
           kind: 'income',
+          invoiceId: isUuid ? updated.id : null,
         });
       } catch (err) { console.error('Failed to log invoice payment:', err); }
       onInvoicePaid?.({ invoice: updated, amount: total });

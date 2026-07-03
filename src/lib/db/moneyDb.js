@@ -7,6 +7,10 @@ export async function createMoneyEntry(entry) {
   const payload = {
     owner_id: ownerId,
     quote_id: entry.quoteId || null,
+    // Set when this entry mirrors an invoice payment — read paths that count
+    // invoices directly (useYtdIncome, VAT turnover) exclude linked entries
+    // so income is never double-counted.
+    invoice_id: entry.invoiceId || null,
     customer_id: entry.customerId || null,
     client: entry.client || null,
     amount: Number(entry.amount) || 0,

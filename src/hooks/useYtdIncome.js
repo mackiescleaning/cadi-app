@@ -99,6 +99,7 @@ export function useRollingTurnover(paidInvoiceRows = [], days = 365) {
             .from('money_entries')
             .select('id,date,amount')
             .eq('kind', 'income')
+            .is('invoice_id', null)   // invoice mirrors — already counted via the invoice
             .gte('date', start)
             .lte('date', end),
         ]);
@@ -160,11 +161,14 @@ export function useYtdIncome(taxYear = currentTaxYear(), paidInvoiceRows = []) {
             .eq('is_business', true)
             .eq('is_hidden', false)
             .gt('amount', 0),
-          // Manual income entries
+          // Manual income entries — excluding invoice mirrors (the entry
+          // written when an invoice is marked paid), which are already
+          // counted via paidInvoiceRows.
           supabase
             .from('money_entries')
             .select('id,date,amount,client,category,notes')
             .eq('kind', 'income')
+            .is('invoice_id', null)
             .gte('date', ytdStart)
             .lte('date', ytdEnd),
         ]);
