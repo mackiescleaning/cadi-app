@@ -179,7 +179,9 @@ serve(async (req: Request) => {
     },
     body: JSON.stringify({
       model:      MODEL,
-      max_tokens: 3000,
+      // Claude 5 models spend adaptive thinking tokens before the text
+      // answer — budget for both or the reply gets truncated mid-thought.
+      max_tokens: 8000,
       system:     SYSTEM_PROMPT,
       messages:   [{ role: "user", content: userPrompt }],
     }),
@@ -190,16 +192,32 @@ serve(async (req: Request) => {
     return json(cors, { error: "AI request failed", detail: aiData }, 502);
   }
 
-  const rawText: string = aiData?.content?.[0]?.text ?? "";
+  // The text answer may come after thinking blocks — never assume content[0].
+  const rawText: string = (aiData?.content ?? [])
+    .filter((c: { type?: string }) => c?.type === "text")
+    .map((c: { text?: string }) => c.text ?? "")
+    .join("\n");
   let plan: {
     summary?: string;
     opportunities?: Array<Record<string, unknown>>;
     potential_annual_value?: number;
   };
   try {
-    plan = JSON.parse(rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+    const start = rawText.indexOf("{");
+    const end   = rawText.lastIndexOf("}");
+    if (start === -1 || end <= start) throw new Error("no JSON object in reply");
+    plan = JSON.parse(rawText.slice(start, end + 1));
   } catch {
-    return json(cors, { error: "AI returned unparseable plan", raw: rawText }, 502);
+    console.error("crm-sales-plan: unparseable reply", {
+      stop_reason: aiData?.stop_reason,
+      content_types: (aiData?.content ?? []).map((c: { type?: string }) => c?.type),
+      raw_head: rawText.slice(0, 300),
+    });
+    return json(cors, {
+      error: "AI returned unparseable plan",
+      stop_reason: aiData?.stop_reason,
+      raw: rawText.slice(0, 500),
+    }, 502);
   }
 
   const opportunities = Array.isArray(plan.opportunities) ? plan.opportunities : [];

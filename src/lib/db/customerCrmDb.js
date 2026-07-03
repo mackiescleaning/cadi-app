@@ -135,16 +135,27 @@ export async function getActiveSalesPlan(customerId) {
   return data;
 }
 
+// FunctionsHttpError hides the function's JSON error behind a generic
+// "non-2xx" message — pull the real one out so the UI can show it.
+async function invokeCrmFn(name, body) {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (error) {
+    let msg = error.message;
+    try {
+      const rb = await error.context?.json?.();
+      if (rb?.error) msg = rb.error;
+    } catch { /* keep generic message */ }
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
 // Calls the crm-sales-plan edge function: generates the plan with Claude,
 // archives the previous active plan, and creates draft outreach + calendar
 // entries. Returns { plan, outreach_created, calendar_created }.
 export async function generateSalesPlan(customerId) {
-  const { data, error } = await supabase.functions.invoke('crm-sales-plan', {
-    body: { customer_id: customerId },
-  });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
-  return data;
+  return invokeCrmFn('crm-sales-plan', { customer_id: customerId });
 }
 
 // ─── Outreach ────────────────────────────────────────────────────────────────
@@ -176,12 +187,7 @@ export async function updateOutreachDraft(id, { subject, body }) {
 // Sends via the crm-send-outreach edge function. Calling this as the owner
 // IS the approval — the function accepts draft/pending_approval/approved.
 export async function sendOutreach(id) {
-  const { data, error } = await supabase.functions.invoke('crm-send-outreach', {
-    body: { outreach_id: id },
-  });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
-  return data;
+  return invokeCrmFn('crm-send-outreach', { outreach_id: id });
 }
 
 export async function dismissOutreach(id) {
