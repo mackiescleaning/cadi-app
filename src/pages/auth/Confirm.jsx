@@ -12,43 +12,59 @@ export default function Confirm() {
   const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
-    const isRecovery = window.location.hash.includes('type=recovery');
+    let isRecovery = false;
+    let redirected = false;
 
-    if (isRecovery) {
-      // Supabase auto-exchanges the recovery token on load and fires PASSWORD_RECOVERY.
-      // Check if the session is already established (token exchanged before this effect ran).
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          setStatus('recovery');
-          return;
-        }
-        // Otherwise wait for the exchange to complete.
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, sess) => {
-          if (event === 'PASSWORD_RECOVERY' && sess) {
-            setStatus('recovery');
-            subscription.unsubscribe();
-          }
-        });
-      });
-      return;
+    // A recovery link can arrive two ways depending on the client flow:
+    //   implicit → #access_token=...&type=recovery   (hash)
+    //   PKCE     → ?code=...                          (query, no type marker)
+    // The one reliable cross-flow signal is the PASSWORD_RECOVERY auth event, so
+    // listen for it unconditionally. We also honour an explicit recovery marker
+    // in the URL. This is what stops a reset link from silently logging the user
+    // into the app instead of showing the "set a new password" form.
+    const params = new URLSearchParams(window.location.search);
+    const urlSaysRecovery =
+      window.location.hash.includes('type=recovery') || params.get('type') === 'recovery';
+    const hasPkceCode = params.has('code');
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        isRecovery = true;
+        setStatus('recovery');
+      }
+    });
+
+    if (urlSaysRecovery) {
+      isRecovery = true;
+      setStatus('recovery');
+      return () => subscription.unsubscribe();
     }
 
-    // Email confirmation / magic link flow — redirect as soon as a session exists.
+    // Email confirmation / magic link / PKCE code exchange — redirect once a
+    // session exists, UNLESS a PASSWORD_RECOVERY event classifies this as a reset.
     let attempts = 0;
     async function tryRedirect() {
+      if (isRecovery || redirected) return;
       const { data: { session } } = await supabase.auth.getSession();
+      if (isRecovery || redirected) return; // event may have fired during the await
       if (session) {
+        redirected = true;
         navigate('/', { replace: true });
         return;
       }
       attempts++;
-      if (attempts < 10) {
-        setTimeout(tryRedirect, 400);
-      } else {
-        setStatus('error');
-      }
+      if (attempts < 12) setTimeout(tryRedirect, 400);
+      else setStatus('error');
     }
-    tryRedirect();
+    // For a PKCE ?code= callback, give the code exchange + any PASSWORD_RECOVERY
+    // event a moment to fire before we treat it as a plain login and redirect.
+    const startTimer = setTimeout(tryRedirect, hasPkceCode ? 700 : 0);
+
+    return () => {
+      redirected = true;
+      clearTimeout(startTimer);
+      subscription.unsubscribe();
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSetPassword(e) {

@@ -1097,8 +1097,8 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2500);
   };
 
-  const showSaveError = () => {
-    setSaveError('Couldn\'t save — check your connection and try again.');
+  const showSaveError = (msg) => {
+    setSaveError(msg || 'Couldn\'t save — check your connection and try again.');
     setTimeout(() => setSaveError(null), 5000);
   };
 
@@ -1193,11 +1193,32 @@ export default function Settings() {
   };
 
   const handlePasswordUpdate = async () => {
-    if (!security.newPassword || security.newPassword !== security.confirmPassword) return;
-    if (security.newPassword.length < 8) { showSaveError(); return; }
+    if (!security.currentPassword) { showSaveError('Enter your current password.'); return; }
+    if (!security.newPassword || security.newPassword !== security.confirmPassword) {
+      showSaveError('New passwords don\'t match.'); return;
+    }
+    if (security.newPassword.length < 8) { showSaveError('New password must be at least 8 characters.'); return; }
+    if (security.newPassword === security.currentPassword) {
+      showSaveError('New password must be different from your current one.'); return;
+    }
+
+    const email = user?.email;
+    if (!email) { showSaveError(); return; }
 
     try {
-      await supabase.auth.updateUser({ password: security.newPassword });
+      // Reauthenticate before changing: verify the current password so a borrowed
+      // or hijacked session can't silently change it. Forgot-password users go
+      // through the email reset flow (/auth/confirm) instead, which needs no old
+      // password.
+      const { error: reauthErr } = await supabase.auth.signInWithPassword({
+        email,
+        password: security.currentPassword,
+      });
+      if (reauthErr) { showSaveError('Current password is incorrect.'); return; }
+
+      const { error: updateErr } = await supabase.auth.updateUser({ password: security.newPassword });
+      if (updateErr) { showSaveError(updateErr.message); return; }
+
       setSecurity((prev) => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
       showSaved();
     } catch {
