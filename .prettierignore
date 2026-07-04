@@ -1,0 +1,9 @@
+build
+node_modules
+coverage
+.vercel
+package-lock.json
+public
+*.min.js
+# Deno edge functions — formatted with `deno fmt`, not Prettier
+supabase/functions

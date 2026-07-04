@@ -847,7 +847,6 @@ export default function RoundsView({ onScheduleRound }) {
       nextTo.customers = arrayMove(nextTo.customers, fromIndex, toIndex);
     } else {
       const [moved] = nextFrom.customers.splice(fromIndex, 1);
-      moved.accountStatus = moved.accountStatus; // no-op, just for clarity
       nextTo.customers.splice(Math.min(toIndex, nextTo.customers.length), 0, moved);
     }
     // Re-stamp display_order on each affected round

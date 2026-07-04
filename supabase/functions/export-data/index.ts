@@ -18,6 +18,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { writeAudit } from "../_shared/auditLog.ts";
+import { scrub } from "../_shared/scrub.ts";
 
 // CORS pinned to known origins — no wildcard on a function that emits PII
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ??
@@ -46,22 +47,8 @@ function json(data: unknown, status = 200, origin: string | null = null, extraHe
   });
 }
 
-// Strip sensitive fields. Pattern broadened to catch every shape of token / key
-// we know about plus likely future additions (webhook signing keys, bearer
-// tokens, encrypted blobs, OAuth state, etc).
-function scrub<T extends Record<string, unknown>>(row: T): T {
-  const SENSITIVE = /access_token|refresh_token|id_token|bearer|consent(_id|_token)?|secret|api_key|signing_key|webhook_secret|password|hash|salt|cookie|csrf|enc:v1:|nonce|otp|verification_code/i;
-  const out = { ...row } as Record<string, unknown>;
-  for (const key of Object.keys(out)) {
-    if (SENSITIVE.test(key)) {
-      out[key] = '[REDACTED for security]';
-    } else if (typeof out[key] === 'string' && /^enc:v1:/.test(out[key] as string)) {
-      // Defence-in-depth: also redact encrypted blobs we missed by key name
-      out[key] = '[REDACTED encrypted value]';
-    }
-  }
-  return out as T;
-}
+// scrub() (PII/secret redaction) now lives in ../_shared/scrub.ts so it can be
+// unit-tested. See src/test/scrub.test.js.
 
 serve(async (req: Request) => {
   const origin = req.headers.get("Origin");

@@ -33,6 +33,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { timingSafeEqualStr } from "../_shared/timingSafeEqual.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("RESEND_WEBHOOK_SECRET") ?? "";
 
@@ -84,9 +85,10 @@ async function verifySignature(req: Request, raw: string): Promise<boolean> {
   const expected = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
 
   // Header contains space-separated `v1,sig` pairs — any match accepts.
+  // Constant-time compare to avoid a signature-timing side channel.
   return sig.split(" ").some(pair => {
     const [, candidate] = pair.split(",");
-    return candidate === expected;
+    return timingSafeEqualStr(candidate ?? "", expected);
   });
 }
 

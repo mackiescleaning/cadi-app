@@ -733,7 +733,7 @@ function ImportTab({ showToast }) {
                       ) : (
                         <button onClick={() => handleAction(integ)} style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
-                          padding: '0.55rem 1rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer',
+                          padding: '0.55rem 1rem', borderRadius: '0.5rem',
                           background: isConnected
                             ? 'rgba(74,222,128,0.15)'
                             : `linear-gradient(135deg, ${integ.color}, ${integ.color}cc)`,

@@ -201,6 +201,83 @@ export function splitAddress(input) {
   return { addressLine1, addressLine2, town, county, postcode };
 }
 
+// ── Plain currency ────────────────────────────────────────────────────────────
+// Lenient numeric parse for price/amount cells. Strips currency symbols and any
+// non-numeric noise. "quote" and empty → null (no price yet). Unlike parseBalance
+// it has no CR/DR sign logic — use it for prices, not balances.
+
+export function parseCurrency(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  if (s.toLowerCase() === 'quote' || s === '') return null;
+  const n = parseFloat(s.replace(/[^0-9.-]/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+// ── Cleaner-industry date parser ──────────────────────────────────────────────
+// Normalises the many date shapes competitor exports leak (ISO, Excel serials,
+// DD/MM/YYYY, DD-MM-YY, "1st Jun 2026", Date objects) to an ISO YYYY-MM-DD string.
+// Returns null for blanks and non-dates ("-", "n/a", "overdue").
+
+const MONTH_MAP = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+
+export function parseCleanerDate(val) {
+  if (!val) return null;
+
+  // Already a JS Date object (XLSX parses Excel date cells as Date objects)
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    return val.toISOString().slice(0, 10);
+  }
+
+  const s = String(val).trim();
+  if (!s || s === '-' || s.toLowerCase() === 'n/a' || s.toLowerCase() === 'overdue') return null;
+
+  // ISO: YYYY-MM-DD (already normalised)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+
+  // Excel serial number (e.g. 46983 — days since 1900-01-01)
+  if (/^\d{5}$/.test(s)) {
+    const serial = Number(s);
+    // Excel epoch: Dec 31 1899 (with Lotus leap-year bug offset 1)
+    const d = new Date(Date.UTC(1899, 11, 31) + serial * 86400000);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+
+  // DD/MM/YYYY or DD/MM/YY
+  const slash = s.split('/');
+  if (slash.length === 3) {
+    const [d, m, y] = slash;
+    const year = y.length === 2 ? `20${y}` : y;
+    const result = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(result)) return result;
+  }
+
+  // DD-MM-YYYY or DD-MM-YY (dash separated, day first)
+  const dash = s.split('-');
+  if (dash.length === 3 && dash[0].length <= 2 && isNaN(Number(dash[1])) === false) {
+    const [d, m, y] = dash;
+    const year = y.length === 2 ? `20${y}` : y;
+    const result = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(result)) return result;
+  }
+
+  // D MMM YYYY or DD MMM YY  (e.g. "1 Jun 2026", "01 Jun 26", "1st Jun 2026")
+  const named = s.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3})[a-z]*[\s,]+(\d{2,4})$/i);
+  if (named) {
+    const d = named[1];
+    const m = MONTH_MAP[named[2].toLowerCase()];
+    const yr = named[3].length === 2 ? `20${named[3]}` : named[3];
+    if (m) return `${yr}-${String(m).padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  // Fallback: let JS Date try to parse it (handles "Thu Jun 05 2026 00:00:00 GMT+…")
+  const js = new Date(s);
+  if (!isNaN(js.getTime())) return js.toISOString().slice(0, 10);
+
+  return null;
+}
+
 // ── Source detectors ──────────────────────────────────────────────────────────
 // Each takes a normalised array of lowercased headers and returns true if the
 // file looks like an export from that source. Order from most-specific to least.
