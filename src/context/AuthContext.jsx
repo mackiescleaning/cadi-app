@@ -49,7 +49,17 @@ export function AuthProvider({ children }) {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
+        // Forgot-password links log the user in with a temporary recovery
+        // session and fire PASSWORD_RECOVERY. Supabase may redirect them to the
+        // Site URL root rather than /auth/confirm, so handle it globally here:
+        // send them to the set-new-password screen wherever the link landed.
+        // (Guard against a redirect loop once we're already on that screen.)
+        if (event === 'PASSWORD_RECOVERY' && !window.location.pathname.startsWith('/auth/confirm')) {
+          window.location.replace('/auth/confirm#type=recovery');
+          return;
+        }
+
         setUser(session?.user ?? null);
         if (session?.user) {
           fetchProfile(session.user.id);
