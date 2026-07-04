@@ -159,6 +159,18 @@ serve(async (req) => {
       return json({ error: "net_value and vat_value must be non-negative numbers" }, 400);
     }
 
+    // A sub may submit AT OR BELOW the FM-approved (auto-drafted from job price)
+    // net value, never above it — otherwise a contractor could unilaterally
+    // inflate the bill past what the FM approved, and the FM only catches it at
+    // manual review. If no amount was drafted (0/null), accept the sub's figure.
+    const approvedNet = Number(inv.net_value ?? 0);
+    if (approvedNet > 0 && newNet > approvedNet + 0.005) {
+      return json({
+        error: `Submitted amount (£${newNet.toFixed(2)}) exceeds the approved amount ` +
+               `(£${approvedNet.toFixed(2)}). Ask the FM to revise the job price first.`,
+      }, 422);
+    }
+
     // Get line count for the email + audit context
     const { count: lineCount } = await sb
       .from("connect_invoice_lines")

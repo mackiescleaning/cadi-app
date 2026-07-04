@@ -65,6 +65,14 @@ serve(async (req) => {
     if (iErr) return json({ error: iErr.message }, 500);
     if (!invite) return json({ error: "Invitation not found" }, 404);
 
+    // Only surface details (incl. the invited email / contact name) for a still-
+    // valid invite. For claimed/revoked/expired invites, return a bare "no longer
+    // valid" so a token-holder can't harvest the invitee's PII after the fact.
+    const isExpired = invite.expires_at && new Date(invite.expires_at) < new Date();
+    if (invite.status !== "pending" || isExpired) {
+      return json({ ok: false, error: "This invitation is no longer valid." }, 410);
+    }
+
     return json({
       ok: true,
       invite: {

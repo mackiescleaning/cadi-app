@@ -202,13 +202,12 @@ serve(async (req) => {
       .eq("fm_organisation_id", caller.fm_organisation_id);
     if (updErr) return json({ error: updErr.message }, 500);
 
-    // On rejection, wipe the working-table data so the contractor sees a
-    // clean slate. The audit_log keeps the full history (what photos
-    // existed, what notes were written) — nothing is truly lost.
-    if (decision === "rejected") {
-      await sb.from("job_checkins").delete().eq("job_id", jobId).then(() => {}).catch(() => {});
-      await sb.from("job_evidence").delete().eq("job_id", jobId).then(() => {}).catch(() => {});
-    }
+    // On rejection we reset the job to `scheduled` (above) for a clean re-do, but
+    // we deliberately KEEP the sub's check-ins and evidence (GPS/photos). Those
+    // are the contractor's proof-of-work and may be their only evidence in a
+    // payment dispute — the audit_log only records the decision, not the deleted
+    // rows, so hard-deleting them here was irrecoverable. Re-work adds new rows
+    // alongside the old ones. (Per-attempt versioning is a possible future add.)
 
     let invoiceId: string | null = null;
 

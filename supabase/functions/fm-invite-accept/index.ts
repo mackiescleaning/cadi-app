@@ -99,10 +99,14 @@ serve(async (req) => {
       return json({ error: "Invitation has expired" }, 409);
     }
 
-    // Email match (case-insensitive)
+    // Email match (case-insensitive). If the invite is bound to an email, the
+    // caller's email MUST match it — including the case where the caller's JWT
+    // has no email at all (phone/anon providers). Previously an empty caller
+    // email skipped the check, letting any authed user claim an email-bound
+    // invite and take over that FM org.
     const callerEmail = (user.email ?? "").toLowerCase();
     const inviteEmail = (invite.email ?? "").toLowerCase();
-    if (callerEmail && inviteEmail && callerEmail !== inviteEmail) {
+    if (inviteEmail && callerEmail !== inviteEmail) {
       return json({
         error: `This invitation was sent to ${inviteEmail}. Sign in with that email to accept.`,
       }, 403);
