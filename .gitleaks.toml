@@ -1,0 +1,19 @@
+# Cadi gitleaks configuration
+#
+# Extends the default gitleaks ruleset and adds ONE allowlist entry: the public
+# Supabase anon key that is intentionally hard-coded in src/lib/supabase.js as a
+# fallback. It is designed to ship in the client bundle (see CLAUDE.md, "Vercel
+# env-var fallback") and decodes to role:anon — it is NOT a secret.
+#
+# The allowlist is scoped to this exact key value, so any OTHER JWT (e.g. a
+# service_role key mistakenly committed anywhere) will still be flagged.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public Supabase anon key (role:anon) — safe to ship in the client bundle by design."
+regexTarget = "match"
+regexes = [
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN1ZmdvenB3YmluamhqbmtpbW1uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4ODM4NDUsImV4cCI6MjA5MDQ1OTg0NX0\.Vv1DQvcQj5lvjxRmPZVj3TWya072ujgv1O_C\-jzfdcM''',
+]

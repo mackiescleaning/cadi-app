@@ -25,7 +25,7 @@ jobs:
             | tar -xz gitleaks
           sudo mv gitleaks /usr/local/bin/
       - name: Scan full history
-        run: gitleaks detect --source . --redact -v
+        run: gitleaks detect --source . --config .gitleaks.toml --redact -v
 
   npm-audit:
     name: Dependency audit
