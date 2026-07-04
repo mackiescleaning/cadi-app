@@ -83,6 +83,11 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const email = (body.email ?? "").trim().toLowerCase();
     const contactName = body.contact_name?.trim() || null;
+    // SECURITY (deferred): any FM-org member can currently request role:"admin".
+    // Inert today — fm-invite-accept sets only fm_organisation_id on claim, never
+    // a role, so no privilege is actually conferred. Before FM-member roles are
+    // enforced on accept, gate admin invites on the caller being an org admin
+    // (requires an FM-admin flag that doesn't exist in the schema yet).
     const role = body.role === "admin" ? "admin" : "member";
 
     if (!email || !EMAIL_RE.test(email)) {

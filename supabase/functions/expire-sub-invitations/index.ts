@@ -12,6 +12,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { timingSafeEqualStr } from "../_shared/timingSafeEqual.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
@@ -31,8 +32,8 @@ serve(async (req) => {
   const auth = req.headers.get("authorization")?.replace("Bearer ", "") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-  const isCron = cronSecret && headerSecret === cronSecret;
-  const isService = serviceKey && auth === serviceKey;
+  const isCron = Boolean(cronSecret) && timingSafeEqualStr(headerSecret, cronSecret);
+  const isService = Boolean(serviceKey) && timingSafeEqualStr(auth, serviceKey);
   if (!isCron && !isService) return json({ error: "Unauthorised" }, 401);
 
   try {
