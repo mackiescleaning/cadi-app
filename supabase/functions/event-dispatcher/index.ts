@@ -20,7 +20,7 @@ const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info, x-event-dispatcher-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -36,6 +36,19 @@ function shouldAutoApprove(trustLevel: string, actionType: string): boolean {
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
+  // Authorize the caller. The only legitimate caller is the
+  // trigger_event_dispatcher DB trigger, which sends a shared secret. Without
+  // this gate anyone could POST arbitrary {event_type, business_id} and make the
+  // service role create agent_actions / fire review emails for any business.
+  // Fail closed if the secret isn't configured.
+  const dispatcherSecret = Deno.env.get("EVENT_DISPATCHER_SECRET") ?? "";
+  const headerSecret     = req.headers.get("x-event-dispatcher-secret") ?? "";
+  if (!dispatcherSecret || headerSecret !== dispatcherSecret) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
   }
 
   let body: Record<string, unknown>;
