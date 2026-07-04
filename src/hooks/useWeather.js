@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { normalisePostcode } from '../lib/migration/parsers';
 
 // useWeather — fetch 7-day forecast for a postcode via the met-office edge fn.
 // Returns { forecast, loading, source } where forecast is keyed by date (YYYY-MM-DD).
@@ -10,11 +11,17 @@ export function useWeather(postcode) {
   const [state, setState] = useState({ forecast: null, byDate: null, loading: false, source: null });
 
   useEffect(() => {
-    if (!postcode) { setState({ forecast: null, byDate: null, loading: false, source: null }); return; }
+    // Only call the weather fn for a *valid* UK postcode. A non-empty but
+    // malformed value (e.g. a half-set business postcode) would otherwise get a
+    // 400 "invalid postcode" from the met-office fn and spam the console — weather
+    // is optional, so degrade silently instead. Pass the normalised form so the
+    // server-side weather_cache key stays consistent.
+    const pc = normalisePostcode(postcode);
+    if (!pc) { setState({ forecast: null, byDate: null, loading: false, source: null }); return; }
     let cancelled = false;
     setState(s => ({ ...s, loading: true }));
 
-    supabase.functions.invoke('met-office', { body: { postcode } })
+    supabase.functions.invoke('met-office', { body: { postcode: pc } })
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error || !data || data.source === 'unavailable' || !data.forecast?.length) {

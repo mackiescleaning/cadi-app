@@ -45,27 +45,21 @@ async function fetchWithAuthRetry(url, options = {}) {
   return res;
 }
 
-// Tab-isolated session: each tab has its own auth token, and closing the last
-// tab ends the session. Default Supabase behaviour is localStorage, which
-// silently persisted across tabs and browser restarts until the refresh token
-// expired — a real footgun on shared devices. If "Remember me on this device"
-// ships later, flip this to localStorage conditionally at sign-in time.
+// Persistent session storage (localStorage): keep users signed in across tabs
+// and browser restarts, and — critically — let supabase-js sync rotated refresh
+// tokens between tabs via storage events. That cross-tab sync is what prevents
+// the multi-tab token-rotation race that was spuriously firing SIGNED_OUT and
+// bouncing users back to the login screen right after they signed in. Shared-
+// device safety is covered by the 30-minute idle timeout in AuthContext, not by
+// dropping the session when the tab closes.
+//
+// NB: do NOT reintroduce a startup sweep of `sb-*-auth-token` from localStorage —
+// that would delete the very token this storage relies on and log everyone out
+// on each load. (An earlier sessionStorage experiment had such a sweep.)
 const authStorage =
-  typeof window !== 'undefined' && window.sessionStorage
-    ? window.sessionStorage
+  typeof window !== 'undefined' && window.localStorage
+    ? window.localStorage
     : undefined; // SSR / Node tests fall back to in-memory default
-
-// One-time cleanup: existing users had their Supabase token in localStorage.
-// Now that we use sessionStorage, the old entry would sit unused (and readable)
-// until expiry. Wipe any `sb-*-auth-token` keys from localStorage on first load.
-if (typeof window !== 'undefined' && window.localStorage) {
-  try {
-    for (let i = window.localStorage.length - 1; i >= 0; i--) {
-      const k = window.localStorage.key(i);
-      if (k && /^sb-.*-auth-token($|\.)/.test(k)) window.localStorage.removeItem(k);
-    }
-  } catch {}
-}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: { fetch: fetchWithAuthRetry },

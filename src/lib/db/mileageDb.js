@@ -15,15 +15,42 @@ export function calcMileageAllowance(newMiles, ytdMilesBefore) {
   return Math.round((atHighRate * MILEAGE_RATE_HIGH + atLowRate * MILEAGE_RATE_LOW) * 100) / 100;
 }
 
+// NOTE on schema: the live `mileage_logs` table (migration 003) is date-shaped —
+// columns date / route_name / miles / claim_value / notes. Migration 032 tried to
+// recreate it with period_start / period_end / allowance_pence, but `create table
+// if not exists` was a no-op because 003 had already created it, so those columns
+// never existed. Querying them threw 42703 and broke the Money + Accounting tabs.
+// We therefore read/write the real columns and expose the legacy period_start /
+// period_end / allowance_pence names as aliases so existing callers (MoneyTracker,
+// annualReviewDb) keep working without changes. This also means the Money tab now
+// sees route-logged mileage too (same table), which is correct for tax totals.
+
+function withLegacyAliases(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    period_start: row.date,
+    period_end: row.date,
+    allowance_pence: row.claim_value, // stored/handled in £ throughout
+  };
+}
+
 export async function logMileage({ periodStart, periodEnd, miles, allowancePence, notes }) {
   const ownerId = await getCurrentUserId();
   const { data, error } = await supabase
     .from('mileage_logs')
-    .insert({ owner_id: ownerId, period_start: periodStart, period_end: periodEnd, miles, allowance_pence: allowancePence, notes: notes || null })
+    .insert({
+      owner_id: ownerId,
+      date: periodStart || periodEnd || new Date().toISOString().split('T')[0],
+      route_name: 'Mileage claim',
+      miles,
+      claim_value: allowancePence,
+      notes: notes || null,
+    })
     .select('*')
     .single();
   if (error) throw error;
-  return data;
+  return withLegacyAliases(data);
 }
 
 export async function listMileageLogs({ taxYearStart } = {}) {
@@ -32,9 +59,9 @@ export async function listMileageLogs({ taxYearStart } = {}) {
     .from('mileage_logs')
     .select('*')
     .eq('owner_id', ownerId)
-    .order('period_start', { ascending: false });
-  if (taxYearStart) q = q.gte('period_start', taxYearStart);
+    .order('date', { ascending: false });
+  if (taxYearStart) q = q.gte('date', taxYearStart);
   const { data, error } = await q;
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map(withLegacyAliases);
 }
