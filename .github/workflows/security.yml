@@ -1,0 +1,45 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so a secret in any commit is caught
+      # Run the binary directly — gitleaks-action@v2 requires a paid license for
+      # organisation-owned repos; the CLI does not.
+      - name: Install gitleaks
+        run: |
+          VER=8.21.2
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          sudo mv gitleaks /usr/local/bin/
+      - name: Scan full history
+        run: gitleaks detect --source . --redact -v
+
+  npm-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Fails the job on high/critical advisories. There is currently a backlog
+      # (jspdf critical, react-router/ws/xlsx high) — clear it, then this gate
+      # keeps new vulnerable deps out. Set continue-on-error: true temporarily if
+      # you need to unblock merges while working through the backlog.
+      - name: npm audit (high + critical)
+        run: npm audit --audit-level=high --omit=dev
