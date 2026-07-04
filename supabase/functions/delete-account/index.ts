@@ -91,6 +91,33 @@ serve(async (req: Request) => {
       }
     }
 
+    // Delete Storage objects owned by this user (GDPR: no orphaned PII files).
+    // Objects carry owner = the uploading user's id (e.g. customer-import CSVs,
+    // job-evidence photos). Group by bucket and remove; remove() deletes both
+    // the stored blob and its metadata row. Note: only owner-tagged objects are
+    // covered — any purely path-scoped uploads would need prefix-based cleanup.
+    let storageDeleted = 0;
+    try {
+      const { data: owned } = await sb
+        .schema("storage").from("objects")
+        .select("bucket_id, name")
+        .eq("owner", user.id);
+      const byBucket = new Map<string, string[]>();
+      for (const o of (owned ?? []) as { bucket_id: string; name: string }[]) {
+        const arr = byBucket.get(o.bucket_id) ?? [];
+        arr.push(o.name);
+        byBucket.set(o.bucket_id, arr);
+      }
+      for (const [bucket, names] of byBucket) {
+        const { error: rmErr } = await sb.storage.from(bucket).remove(names);
+        if (rmErr) console.error(`delete-account: storage remove failed for ${bucket}:`, rmErr.message);
+        else storageDeleted += names.length;
+      }
+    } catch (storageErr) {
+      // Never block account deletion on a storage hiccup — log and continue.
+      console.error("delete-account storage cleanup failed:", storageErr);
+    }
+
     // Write the audit entry BEFORE deleting the user — once the auth row is
     // gone, the RLS policy on audit_log would prevent the row from being
     // visible to anyone except service-role. We want a permanent record that
@@ -103,6 +130,7 @@ serve(async (req: Request) => {
       detail:   {
         email:                 user.email,
         stripe_customers_swept: customerIds.size,
+        storage_objects_deleted: storageDeleted,
         last_subscription_tier: profile?.subscription_tier ?? null,
       },
     });
