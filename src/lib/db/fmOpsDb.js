@@ -79,20 +79,11 @@ export async function listFmContractors() {
 
   let profilesById = {};
   if (claimedIds.length > 0) {
+    // Curated FM-facing projection via SECURITY DEFINER fn — NOT the raw profiles
+    // table (which exposes the sub's HMRC/bank tokens, NINO, home postcode, etc).
+    // See migrations 090/091.
     const { data: profs, error: profErr } = await supabase
-      .from('profiles')
-      .select(`
-        id,
-        business_name,
-        first_name,
-        last_name,
-        connect_score,
-        connect_tier,
-        connect_trades,
-        connect_region,
-        connect_capacity
-      `)
-      .in('id', claimedIds);
+      .rpc('connect_sub_profiles', { p_ids: claimedIds });
     if (profErr) throw profErr;
     profilesById = Object.fromEntries((profs ?? []).map(p => [p.id, p]));
   }
@@ -314,13 +305,9 @@ export async function listFmActiveSubs() {
   const ids = (invites ?? []).map(r => r.claimed_by_user_id);
   if (ids.length === 0) return [];
 
+  // Curated FM-facing projection via SECURITY DEFINER fn. See migrations 090/091.
   const { data: profs, error: pErr } = await supabase
-    .from('profiles')
-    .select(`
-      id, business_name, first_name, last_name,
-      connect_score, connect_tier, connect_region, connect_capacity, connect_trades
-    `)
-    .in('id', ids);
+    .rpc('connect_sub_profiles', { p_ids: ids });
   if (pErr) throw pErr;
 
   return (profs ?? []).map(p => ({
