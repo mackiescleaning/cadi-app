@@ -1,70 +1,133 @@
-# Getting Started with Create React App
+# Cadi
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+UK cleaning-business SaaS. Production app at **[app.cadi.cleaning](https://app.cadi.cleaning)**.
 
-## Available Scripts
+> The folder is named `cleaning-blueprints` for historical reasons — the product is **Cadi**,
+> and the GitHub repo is `mackiescleaning/cadi-app`.
 
-In the project directory, you can run:
+**Stack:** React 19 + Vite 8 (SPA) · Supabase (Postgres + Auth + Edge Functions) · Tailwind CSS.
+There is **no Node/Express backend** — the React app talks to Supabase directly for CRUD, and to
+Supabase Edge Functions (Deno) for anything that needs a secret (Stripe, Anthropic, HMRC MTD,
+GoCardless, TrueLayer/Yapily, Resend).
 
-### `npm start`
+---
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Prerequisites
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- **Node 20+** (CI runs on Node 20; local development is fine on 20–24).
+- **npm** (the repo ships a `package-lock.json` — use `npm ci` for reproducible installs).
+- A **Supabase project** if you want live data. The repo hard-codes the public anon URL + key as a
+  fallback (see [`src/lib/supabase.js`](src/lib/supabase.js)), so `npm start` renders without any
+  `.env` — but you'll be pointing at the shared project. Set your own values in `.env` to isolate.
+- Optional: the **Supabase CLI** (`brew install supabase/tap/supabase`) — only needed to deploy or
+  run edge functions. The frontend does not require it.
 
-### `npm test`
+## Setup
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```bash
+git clone git@github.com:mackiescleaning/cadi-app.git
+cd cadi-app            # folder is "cleaning-blueprints" in the multi-project workspace
+npm ci                 # or: npm install
+cp .env.example .env   # then fill in the values below
+```
 
-### `npm run build`
+### Environment variables
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+All client-side vars are **`VITE_`-prefixed** and get **baked into the public browser bundle** — so
+only ever put **public** values here. Server secrets live on Supabase Edge Functions
+(`supabase secrets set …`), never in this file. See [`.env.example`](.env.example).
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+| Var                                  | Required | What                                                                   |
+| ------------------------------------ | -------- | ---------------------------------------------------------------------- |
+| `VITE_SUPABASE_URL`                  | yes\*    | Supabase project URL (public)                                          |
+| `VITE_SUPABASE_ANON_KEY`             | yes\*    | Supabase anon/publishable key (public by design)                       |
+| `VITE_STRIPE_CLIENT_ID`              | no       | Public Stripe Connect client id — only for local payment-connect flows |
+| `VITE_GOCARDLESS_PAYMENTS_CLIENT_ID` | no       | Public GoCardless client id — same                                     |
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+\* The two Supabase vars have a hard-coded public fallback in `src/lib/supabase.js`, so the app boots
+without a `.env`. Set them to target your own project instead of the shared one.
 
-### `npm run eject`
+## Commands
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```bash
+npm start              # dev server on http://localhost:3000  (Vite — NOT Create React App)
+npm run build          # production build → /build  (NOT /dist — overridden in vite.config.js)
+npm run preview        # serve the built bundle on :3000
+npm run lint           # ESLint (flat config, eslint.config.mjs) — CI runs this
+npm run format         # Prettier — write
+npm run format:check   # Prettier — check only
+npm test               # Vitest (single run) — CI runs this
+npm run test:watch     # Vitest watch mode
+npm run test:coverage  # Vitest with V8 coverage
+npm run deploy         # build + deploy to Vercel prod + alias app.cadi.cleaning (see deploy.sh)
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+> ⚠️ **Despite the boilerplate history, this is a Vite app, not CRA.** `npm start` runs Vite;
+> there is no `npm run eject`. Build output is **`/build`** (Vite's default `dist` is overridden in
+> [`vite.config.js`](vite.config.js) because Vercel and `deploy.sh` expect `build/`).
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+Pre-commit hooks (husky + lint-staged) auto-run ESLint + Prettier on **staged** files, so formatting
+stays consistent without reformatting the whole tree.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## Testing
 
-## Learn More
+Tests run on **[Vitest](https://vitest.dev/)** (`*.test.js` beside the code under test, plus
+[`src/test/`](src/test) for edge-function pure logic). Coverage today targets the high-risk
+"scary paths": subscription-tier gating, invoice/VAT math, the customer-import parsers, the GDPR
+export scrubber, and webhook signature comparison. Run `npm test`.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+There is **no type-checker** (this is a JavaScript project — see [TypeScript](#typescript) below) and
+`src/App.test.js` / `src/setupTests.js` are dead CRA leftovers that don't run.
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Integration-level concerns (RLS/multi-tenant isolation, edge-function auth) were verified live in the
+July 2026 security audit and are **not** covered by Vitest — a repeatable Supabase-local / Deno
+integration harness is a tracked stretch goal, not yet built.
 
-### Code Splitting
+## Deployment
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+```bash
+npm run deploy         # runs deploy.sh
+```
 
-### Analyzing the Bundle Size
+`deploy.sh` builds, runs `vercel deploy --prod`, then aliases the deployment to
+**app.cadi.cleaning**. Deploys are manual and run from **inside this folder only** — never build from
+the workspace root.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+**Edge functions** (Deno, in `supabase/functions/`) deploy one at a time:
 
-### Making a Progressive Web App
+```bash
+supabase functions deploy <name>     # e.g. stripe-webhook
+supabase secrets list                # inspect configured secrets
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+Supabase project ref: `cufgozpwbinjhjnkimmn`.
 
-### Advanced Configuration
+### Build-graph gotcha
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+Vite 8's Rolldown is strict: if new code imports a file that isn't committed to git, the Vercel build
+breaks even though it worked locally. **Before pushing, make sure everything your new code imports is
+tracked in git.**
 
-### Deployment
+## TypeScript
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+This is a **JavaScript** project by decision — there is no TS build step or type-checker, and none is
+planned as part of routine work. Edge functions under `supabase/functions/` are TypeScript (Deno
+requires it), but the React app is plain JS/JSX. A full TS migration would be a separate, scoped
+effort; see [`docs/typescript-decision.md`](docs/typescript-decision.md).
 
-### `npm run build` fails to minify
+## Where to read next
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+The source-of-truth architecture docs live in this folder:
+
+- **[CLAUDE.md](CLAUDE.md)** — the essentials: multi-tenancy/RLS patterns, state contexts, DB query
+  helpers, edge-function CORS gotcha, migration rules, subscription tiers. **Read this first.**
+- **[HANDOFF.md](HANDOFF.md)** — latest session state and what's live in production.
+- **[CADI_STACK.md](CADI_STACK.md)** · **[CADI_BACKEND.md](CADI_BACKEND.md)** ·
+  **[CADI_PROMPTING.md](CADI_PROMPTING.md)** — deep dives on stack, backend, and AI prompting.
+- **[SMOKE_TEST.md](SMOKE_TEST.md)** — manual smoke-test checklist (no automated e2e yet).
+
+## Repo layout note
+
+This folder is one of four sibling projects in the `cleaning business blueprints` workspace
+(the Cadi app, the marketing site, the embeddable widget, Mackies' own site). Each deploys
+independently — see the workspace `CLAUDE.md`. **Almost all engineering happens here.**
