@@ -56,7 +56,7 @@ function ConnectSchedule() {
           width: 36, height: 36, borderRadius: '0.625rem', flexShrink: 0,
           background: '#C2410C', display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Zap size={17} color="white" />
+          <ZapIcon size={17} color="white" />
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#010a4f', marginBottom: '0.15rem' }}>

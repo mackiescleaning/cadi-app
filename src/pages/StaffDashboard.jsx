@@ -548,6 +548,32 @@ export default function StaffDashboard() {
       .catch(() => {});
   }, [staffMember?.id, staffMember?.ownerId]);
 
+  // Defined before the early return below so the hook order stays stable across
+  // renders (rules-of-hooks). Body uses optional chaining, safe when null.
+  const handleStatusChange = useCallback(async (jobId, newStatus) => {
+    // Optimistic update
+    setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: newStatus } : j));
+
+    if (!staffMember?.id || !staffMember?.ownerId) return; // demo mode — local only
+
+    try {
+      const init = staffFetchInit({
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ job_id: jobId, status: newStatus }),
+      });
+      if (!init) return;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/staff-jobs`, init);
+      if (!res.ok) {
+        // Roll back on failure
+        setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: j._prevStatus || j.status } : j));
+        console.error('Status update failed:', await res.text());
+      }
+    } catch (err) {
+      console.error('Status update error:', err);
+    }
+  }, [staffMember?.id, staffMember?.ownerId]);
+
   if (!staffMember) {
     navigate('/staff-login');
     return null;
@@ -572,30 +598,6 @@ export default function StaffDashboard() {
     : weekOffset === 1  ? 'Next week'
     : weekOffset === -1 ? 'Last week'
     : `${weekDates[0].getDate()} ${weekDates[0].toLocaleString('en-GB',{month:'short'})} – ${weekDates[6].getDate()} ${weekDates[6].toLocaleString('en-GB',{month:'short'})}`;
-
-  const handleStatusChange = useCallback(async (jobId, newStatus) => {
-    // Optimistic update
-    setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: newStatus } : j));
-
-    if (!staffMember?.id || !staffMember?.ownerId) return; // demo mode — local only
-
-    try {
-      const init = staffFetchInit({
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ job_id: jobId, status: newStatus }),
-      });
-      if (!init) return;
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/staff-jobs`, init);
-      if (!res.ok) {
-        // Roll back on failure
-        setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: j._prevStatus || j.status } : j));
-        console.error('Status update failed:', await res.text());
-      }
-    } catch (err) {
-      console.error('Status update error:', err);
-    }
-  }, [staffMember?.id, staffMember?.ownerId]);
 
   const handleLogout = () => {
     logoutStaff();

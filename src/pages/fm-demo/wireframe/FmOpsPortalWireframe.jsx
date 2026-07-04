@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   LayoutDashboard, FileText, ClipboardList, Users, Send, Calendar,
   CheckCircle2, Receipt, ChevronRight, Plus, Search, Filter, Upload,
-  Download, MoreHorizontal, MapPin, Camera, AlertCircle, PoundSterling,
+  Download, MoreHorizontal, MapPin, Camera, AlertCircle, PoundSterling, Star,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────

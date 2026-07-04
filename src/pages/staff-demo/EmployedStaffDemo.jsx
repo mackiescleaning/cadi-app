@@ -181,7 +181,7 @@ function TodayTab({ checkedIn, checkingIn, onCheckIn, tasks, onToggleTask, photo
           {/* Photo evidence */}
           <button onClick={onPhotoUpload}
             style={{
-              width: '100%', padding: '0.8rem 1rem', borderRadius: '1rem', border: 'none', cursor: 'pointer', marginBottom: '0.75rem',
+              width: '100%', padding: '0.8rem 1rem', borderRadius: '1rem', cursor: 'pointer', marginBottom: '0.75rem',
               background: photoUploaded ? 'rgba(16,185,129,0.07)' : 'rgba(234,88,12,0.06)',
               border: `1px solid ${photoUploaded ? 'rgba(16,185,129,0.25)' : 'rgba(234,88,12,0.18)'}`,
               display: 'flex', alignItems: 'center', gap: '0.75rem',

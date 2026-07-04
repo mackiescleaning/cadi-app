@@ -10,29 +10,18 @@
  * trigger — so it is a trustworthy server-side source of truth.
  *
  * Keep LITE_LIMITS in sync with FEATURES.lite in src/hooks/usePlan.js.
+ *
+ * The pure tier logic (resolveTier / isPaidTier / LITE_LIMITS / Tier) lives in
+ * ./tier.ts — a dependency-free module the Vitest suite also imports, so the
+ * client/server tier mirror is unit-tested. Re-exported here for existing callers.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { LITE_LIMITS, resolveTier, isPaidTier, type Tier } from "./tier.ts";
 
-export type Tier = "lite" | "pro" | "max";
+export { LITE_LIMITS, resolveTier, isPaidTier };
+export type { Tier };
+
 type SB = ReturnType<typeof createClient>;
-
-// Server-authoritative Lite caps (mirror of usePlan.js FEATURES.lite).
-export const LITE_LIMITS = {
-  customerLimit:         30,
-  frontDeskMonthlyLimit: 5,
-} as const;
-
-/** Canonical tier resolution — mirrors resolveTier() in usePlan.js. */
-export function resolveTier(
-  p?: { subscription_tier?: string | null; plan?: string | null } | null,
-): Tier {
-  const t = p?.subscription_tier;
-  if (t === "pro" || t === "max") return t;
-  if (p?.plan === "pro" || p?.plan === "max") return p.plan as Tier;
-  return "lite";
-}
-
-export const isPaidTier = (t: Tier): boolean => t === "pro" || t === "max";
 
 /** Resolve a user's tier from their profile (subscription_tier → plan → lite). */
 export async function tierForUser(sb: SB, userId: string): Promise<Tier> {

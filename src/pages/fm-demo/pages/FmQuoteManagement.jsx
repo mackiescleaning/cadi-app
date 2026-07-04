@@ -277,7 +277,7 @@ function NewCardWizard({ onDeploy, onClose, showToast }) {
             {cadiEst && <CadiChip label={cadiEst.label} note={cadiEst.note} />}
 
             <button onClick={() => setStep(2)} disabled={!canStep1}
-              style={{ padding: '0.85rem', borderRadius: 12, fontSize: 13, fontWeight: 900, border: 'none', cursor: canStep1 ? 'pointer' : 'default', transition: 'all 0.15s',
+              style={{ padding: '0.85rem', borderRadius: 12, fontSize: 13, fontWeight: 900, cursor: canStep1 ? 'pointer' : 'default', transition: 'all 0.15s',
                 background: canStep1 ? 'linear-gradient(135deg, rgba(56,189,248,0.2), rgba(14,165,233,0.15))' : 'rgba(255,255,255,0.04)',
                 color: canStep1 ? '#38bdf8' : 'rgba(255,255,255,0.2)',
                 border: `1px solid ${canStep1 ? 'rgba(56,189,248,0.35)' : 'rgba(255,255,255,0.06)'}`,

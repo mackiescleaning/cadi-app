@@ -25,6 +25,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { crypto }       from "https://deno.land/std@0.168.0/crypto/mod.ts";
 import { encode }       from "https://deno.land/std@0.168.0/encoding/hex.ts";
+import { timingSafeEqualStr } from "../_shared/timingSafeEqual.ts";
 
 const GC_WEBHOOK_SECRET = Deno.env.get("GC_WEBHOOK_SECRET") ?? "";
 
@@ -57,13 +58,8 @@ async function verifySignature(rawBody: string, signature: string): Promise<bool
   );
   const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
   const expected = new TextDecoder().decode(encode(new Uint8Array(mac)));
-  // Constant-time compare to avoid signature-timing side channel.
-  if (expected.length !== signature.length) return false;
-  let diff = 0;
-  for (let i = 0; i < signature.length; i++) {
-    diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
-  }
-  return diff === 0;
+  // Constant-time compare to avoid a signature-timing side channel.
+  return timingSafeEqualStr(expected, signature);
 }
 
 serve(async (req: Request) => {
