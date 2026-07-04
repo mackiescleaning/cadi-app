@@ -36,7 +36,7 @@ function hexToRgb(hex) {
 // carries its own vatRate (set when the invoice was issued), so the PDF always
 // matches what the customer was actually charged, regardless of the business's
 // current registration status.
-function calcTotals(lines) {
+export function calcTotals(lines) {
   const subtotal = lines.reduce((s, l) => s + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0), 0);
   const vatAmount = lines.reduce((s, l) => s + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0) * ((parseFloat(l.vatRate) || 0) / 100), 0);
   const total = subtotal + vatAmount;

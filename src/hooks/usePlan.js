@@ -7,7 +7,7 @@ export const FREE_CUSTOMER_LIMIT = 30;
 export const PRO_TABS = ['/money', '/accounts', '/scaling', '/staff', '/review'];
 
 // Feature matrix per tier
-const FEATURES = {
+export const FEATURES = {
   lite: {
     customerLimit:         FREE_CUSTOMER_LIMIT,
     canChaseInvoices:      false,
@@ -64,13 +64,15 @@ const FEATURES = {
   },
 };
 
-const PRICES = {
+export const PRICES = {
   lite: 0,
   pro:  39,
   max:  79,
 };
 
-function resolveTier(profile) {
+// Exported for unit testing and to keep the client tier logic a single source of
+// truth. Mirrors resolveTier() in supabase/functions/_shared/tier.ts.
+export function resolveTier(profile) {
   // subscription_tier is canonical — but only trust it if it's an upgraded tier
   const tier = profile?.subscription_tier;
   if (tier === 'pro' || tier === 'max') return tier;
