@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Camera, CheckCircle2, FileText, Send, ChevronRight, ChevronLeft,
-  Building2, MapPin, Calendar, Hash, X, Loader2, Upload,
+  Building2, MapPin, Calendar, Hash, X, Loader2,
 } from 'lucide-react';
 import { submitConnectInvoice } from '../../lib/db/connectDb';
 
@@ -15,7 +15,7 @@ const SOFT   = '#f1f5f9';
 const PAPER  = '#ffffff';
 const GREEN  = '#16a34a';
 
-const STEPS = ['Pick & upload', 'Reading…', 'Confirm details', 'Send'];
+const STEPS = ['Pick job & upload', 'Confirm details', 'Send'];
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -67,8 +67,8 @@ function StepPickAndUpload({ drafts, selectedId, setSelectedId, photoUrl, setPho
   return (
     <>
       <div style={{ fontSize: 13, color: SUB, marginBottom: 14, lineHeight: 1.6 }}>
-        Pick the job this invoice is for, then snap or upload a photo of your handwritten or printed invoice.
-        Cadi will read it and pre-fill the details on the next step.
+        Pick the job this invoice is for. The amount is pre-filled from the FM-approved job — you can
+        adjust it on the next step. Optionally attach a photo of your paper invoice for the FM's records.
       </div>
 
       <div style={{ marginBottom: 14 }}>
@@ -142,7 +142,7 @@ function StepPickAndUpload({ drafts, selectedId, setSelectedId, photoUrl, setPho
                 Take a photo, or drop a PDF / image
               </div>
               <div style={{ fontSize: 11, color: SUB }}>
-                Handwritten is fine — Cadi will do its best to read it.
+                Optional — attached to your submission for the FM's records.
               </div>
             </div>
           ) : (
@@ -181,75 +181,17 @@ function StepPickAndUpload({ drafts, selectedId, setSelectedId, photoUrl, setPho
             display: 'flex', alignItems: 'center', gap: 6,
           }}
         >
-          Read invoice <ChevronRight size={13} />
+          Continue <ChevronRight size={13} />
         </button>
       </div>
     </>
   );
 }
 
-// ─── Step 2 — Simulated OCR animation ───────────────────────────────────────
-function StepReading({ draft, onDone }) {
-  const lines = useMemo(() => [
-    { label: 'Contractor',         value: draft.sub?.business_name ?? 'Your business', delay: 300 },
-    { label: 'Reference',          value: draft.reference ?? '(none yet)',              delay: 700 },
-    { label: 'Service date',       value: fmtDate(draft.service_date),                  delay: 1100 },
-    { label: 'Site',               value: draft.job?.site?.name ?? 'Site',              delay: 1500 },
-    { label: 'Net',                value: `£${Number(draft.net_value ?? 0).toFixed(2)}`,delay: 1900 },
-    { label: 'VAT',                value: `£${Number(draft.vat_value ?? 0).toFixed(2)}`,delay: 2200 },
-    { label: 'Total',              value: `£${Number(draft.total_value ?? 0).toFixed(2)}`, delay: 2500 },
-  ], [draft]);
+// (No OCR/"reading" step: the amount is pre-filled from the FM-approved job draft,
+// not extracted from the uploaded photo — the photo is an optional record attachment.)
 
-  const [visible, setVisible] = useState([]);
-
-  useEffect(() => {
-    const timers = lines.map((l, i) => setTimeout(() => setVisible(v => [...v, i]), l.delay));
-    const done = setTimeout(onDone, 3100);
-    return () => { timers.forEach(clearTimeout); clearTimeout(done); };
-  }, [lines, onDone]);
-
-  return (
-    <div style={{ padding: '14px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        <div style={{ position: 'relative', width: 32, height: 32 }}>
-          <div style={{
-            position: 'absolute', inset: 0,
-            border: `2px solid ${ORANGE}25`, borderTopColor: ORANGE,
-            borderRadius: '50%', animation: 'invSpin 0.8s linear infinite',
-          }} />
-        </div>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>Reading your invoice…</div>
-          <div style={{ fontSize: 11, color: SUB }}>Matching values against the job draft.</div>
-        </div>
-      </div>
-
-      <div style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: 12, padding: 14 }}>
-        {lines.map((l, i) => {
-          const shown = visible.includes(i);
-          return (
-            <div key={l.label} style={{
-              display: 'grid', gridTemplateColumns: '120px 1fr',
-              gap: 12, padding: '7px 0',
-              borderBottom: i < lines.length - 1 ? `1px solid ${SOFT}` : 'none',
-              opacity: shown ? 1 : 0,
-              transform: shown ? 'translateY(0)' : 'translateY(6px)',
-              transition: 'opacity 0.25s ease, transform 0.25s ease',
-              fontSize: 12,
-            }}>
-              <span style={{ color: SUB, fontWeight: 700 }}>{l.label}</span>
-              <span style={{ color: INK, fontWeight: 700 }}>{l.value}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      <style>{`@keyframes invSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
-}
-
-// ─── Step 3 — Confirm + edit ────────────────────────────────────────────────
+// ─── Step 2 — Confirm + edit ────────────────────────────────────────────────
 function StepConfirm({ draft, fields, setFields, onBack, onNext }) {
   const total = Number(fields.net || 0) + Number(fields.vat || 0);
   return (
@@ -257,7 +199,7 @@ function StepConfirm({ draft, fields, setFields, onBack, onNext }) {
       <div style={{ background: `${ORANGE}06`, border: `1px solid ${ORANGE}25`, borderRadius: 10, padding: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
         <CheckCircle2 size={16} color={ORANGE} />
         <div style={{ flex: 1, fontSize: 12, color: '#3f1d0a', lineHeight: 1.5 }}>
-          <strong style={{ color: ORANGE }}>Read complete.</strong> Check the numbers below match your paper invoice and edit if anything's off.
+          <strong style={{ color: ORANGE }}>Pre-filled from the approved job.</strong> Check the amount matches your invoice and edit if anything's off.
         </div>
       </div>
 
@@ -491,7 +433,7 @@ export default function EarnInvoiceUploadWizard({ drafts, onClose, onSent }) {
           <div>
             <div style={{ fontSize: 17, fontWeight: 900, color: INK }}>Upload an invoice</div>
             <div style={{ fontSize: 12, color: SUB, marginTop: 4 }}>
-              Snap your paper invoice — Cadi reads it for you.
+              Confirm the amount and send — attach a photo of your paper invoice if you like.
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTE, padding: 4 }}>
@@ -513,23 +455,20 @@ export default function EarnInvoiceUploadWizard({ drafts, onClose, onSent }) {
           />
         )}
         {step === 1 && draft && (
-          <StepReading draft={draft} onDone={() => setStep(2)} />
-        )}
-        {step === 2 && draft && (
           <StepConfirm
             draft={draft}
             fields={fields}
             setFields={setFields}
             onBack={() => setStep(0)}
-            onNext={() => setStep(3)}
+            onNext={() => setStep(2)}
           />
         )}
-        {step === 3 && draft && (
+        {step === 2 && draft && (
           <StepPreview
             draft={draft}
             fields={fields}
             photoUrl={photoUrl}
-            onBack={() => setStep(2)}
+            onBack={() => setStep(1)}
             onSend={send}
             busy={busy}
             error={error}
