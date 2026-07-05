@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { getCurrentUserId } from './authDb';
+import { bustCleanProDataCache } from '../dashboardCache';
 
 export async function createMoneyEntry(entry) {
   const ownerId = await getCurrentUserId();
@@ -28,6 +29,7 @@ export async function createMoneyEntry(entry) {
     .single();
 
   if (error) throw error;
+  bustCleanProDataCache(); // dashboard money cache is now stale
   return data;
 }
 
@@ -68,6 +70,7 @@ export async function updateMoneyEntry(id, updates) {
     .single();
 
   if (error) throw error;
+  bustCleanProDataCache();
   return data;
 }
 
@@ -80,4 +83,5 @@ export async function deleteMoneyEntry(id) {
     .eq('owner_id', ownerId);
 
   if (error) throw error;
+  bustCleanProDataCache();
 }
