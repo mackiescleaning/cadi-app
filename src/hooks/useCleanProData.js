@@ -4,19 +4,13 @@ import { useData } from '../context/DataContext';
 import { listMoneyEntries } from '../lib/db/moneyDb';
 import { listInvoices } from '../lib/db/invoiceDb';
 import { getBusinessSettings } from '../lib/db/settingsDb';
+import { _dbCache, DB_CACHE_TTL, bustCleanProDataCache } from '../lib/dashboardCache';
 
-// ─── Module-level TTL cache ───────────────────────────────────────────────────
-// Survives component unmount (tab navigation) so re-visiting the dashboard
-// within the TTL window fires zero DB queries. Keyed by user ID.
-const DB_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
-const _dbCache = {}; // { [userId]: { ts, settings, invoices, moneyEntries, profile } }
-
-// Invalidate the cache so the next mount re-reads from the DB. Call this after any
-// write that changes money/invoices (e.g. marking an invoice paid, logging money)
-// so the dashboard reflects it immediately instead of after the 2-minute TTL.
-export function bustCleanProDataCache() {
-  for (const key of Object.keys(_dbCache)) delete _dbCache[key];
-}
+// The module TTL cache (survives tab navigation so re-visiting the dashboard
+// within the window fires zero DB queries) and its invalidator live in
+// ../lib/dashboardCache, so the money DB write helpers can bust it too.
+// Re-exported for existing importers (e.g. InvoiceGenerator).
+export { bustCleanProDataCache };
 
 function isoToday() {
   return new Date().toISOString().split('T')[0];
