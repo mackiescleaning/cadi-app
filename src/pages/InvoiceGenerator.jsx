@@ -10,6 +10,7 @@ import { useAuth } from "../context/AuthContext";
 import { useInvoices } from "../context/InvoiceContext";
 import { useData } from "../context/DataContext";
 import { createMoneyEntry } from "../lib/db/moneyDb";
+import { bustCleanProDataCache } from "../hooks/useCleanProData";
 import { getBusinessSettings } from "../lib/db/settingsDb";
 import { supabase } from "../lib/supabase";
 
@@ -1567,6 +1568,9 @@ export default function InvoiceTab({ accountsData, onInvoicePaid, onNavigate: on
         });
       } catch (err) { console.error('Failed to log invoice payment:', err); }
       onInvoicePaid?.({ invoice: updated, amount: total });
+      // Marking paid wrote a new income entry — invalidate the dashboard's money
+      // cache so it reflects the payment on next view (not after the 2-min TTL).
+      bustCleanProDataCache();
     }
   };
 

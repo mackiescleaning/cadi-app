@@ -11,6 +11,13 @@ import { getBusinessSettings } from '../lib/db/settingsDb';
 const DB_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 const _dbCache = {}; // { [userId]: { ts, settings, invoices, moneyEntries, profile } }
 
+// Invalidate the cache so the next mount re-reads from the DB. Call this after any
+// write that changes money/invoices (e.g. marking an invoice paid, logging money)
+// so the dashboard reflects it immediately instead of after the 2-minute TTL.
+export function bustCleanProDataCache() {
+  for (const key of Object.keys(_dbCache)) delete _dbCache[key];
+}
+
 function isoToday() {
   return new Date().toISOString().split('T')[0];
 }
