@@ -55,24 +55,43 @@ serve(async (req) => {
 
     if (!biz) return json({ error: "Invalid token" }, 404);
 
-    const { data: staff } = await supabase
+    // Optional name search + pagination so a 1000+ staff roster isn't returned
+    // (or enumerated) in one payload. Sanitise q strictly — it's interpolated
+    // into a PostgREST .or() filter, so only allow name-safe characters.
+    const url = new URL(req.url);
+    const q = (url.searchParams.get("q") ?? "").replace(/[^a-zA-Z0-9 '-]/g, "").slice(0, 60).trim();
+    const LIMIT = 50;
+
+    // Total active-staff count decides whether the client shows the whole list
+    // or a search box.
+    const { count } = await supabase
       .from("team_members")
-      .select("id, first_name, last_name, role")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", biz.owner_id)
+      .eq("is_active", true);
+
+    let query = supabase
+      .from("team_members")
+      .select("id, first_name, last_name, role, has_pin")
       .eq("business_id", biz.owner_id)
       .eq("is_active", true)
-      .order("first_name");
+      .order("first_name")
+      .limit(LIMIT);
+    if (q) query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
 
+    const { data: staff } = await query;
     const mapped = (staff ?? []).map(s => ({
-      id: s.id,
-      name: [s.first_name, s.last_name].filter(Boolean).join(" ").trim() || "Unnamed",
-      role: s.role,
+      id:      s.id,
+      name:    [s.first_name, s.last_name].filter(Boolean).join(" ").trim() || "Unnamed",
+      role:    s.role,
+      has_pin: s.has_pin ?? false,
     }));
-    return json({ staff: mapped });
+    return json({ staff: mapped, total: count ?? mapped.length, searchable: (count ?? 0) > LIMIT });
   }
 
   // ── POST — validate PIN and return staff member + signed JWT ───────────────
   if (req.method === "POST") {
-    const { token, pin } = await req.json() as { token: string; pin: string };
+    const { token, pin, member_id } = await req.json() as { token: string; pin: string; member_id?: string };
     if (!token || !pin) return json({ error: "token and pin required" }, 400);
     if (!/^[0-9]{4,8}$/.test(pin)) return json({ error: "PIN must be 4-8 digits" }, 400);
 
@@ -88,10 +107,13 @@ serve(async (req) => {
     });
     if (!rl.ok) return rateLimitedResponse(CORS, rl.resetAt);
 
-    const { data, error } = await supabase.rpc("validate_staff_pin", {
-      p_token: token,
-      p_pin:   pin,
-    });
+    // Per-member validation when the client identifies the staff member (new,
+    // scale-safe flow). Falls back to the legacy match-against-all path when no
+    // member_id is sent, so an old client keeps working until it's redeployed.
+    const rpcArgs = member_id
+      ? { p_token: token, p_member_id: member_id, p_pin: pin }
+      : { p_token: token, p_pin: pin };
+    const { data, error } = await supabase.rpc("validate_staff_pin", rpcArgs);
 
     if (error) {
       console.error("validate_staff_pin RPC error:", error);
