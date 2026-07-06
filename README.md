@@ -25,7 +25,9 @@ GoCardless, TrueLayer/Yapily, Resend).
 ## Setup
 
 ```bash
-git clone git@github.com:mackiescleaning/cadi-app.git
+git clone git@github.com:mackiescleaning/cadi-app.git       # SSH (needs a GitHub SSH key)
+# or, without an SSH key set up:
+git clone https://github.com/mackiescleaning/cadi-app.git   # HTTPS
 cd cadi-app            # folder is "cleaning-blueprints" in the multi-project workspace
 npm ci                 # or: npm install
 cp .env.example .env   # then fill in the values below
