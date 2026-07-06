@@ -1,0 +1,58 @@
+# Supabase project config.
+#
+# The ONLY reason this file exists today is to pin `verify_jwt = false` on the
+# functions that MUST be reachable without a Supabase JWT. Without it, a plain
+# `supabase functions deploy <name>` defaults to verify_jwt = true, and the
+# gateway then rejects every call that lacks a valid Supabase JWT
+# (UNAUTHORIZED_NO_AUTH_HEADER) *before* it reaches the function body —
+# silently breaking the endpoint. See CLAUDE.md "verify_jwt deploy trap".
+#
+# Anything NOT listed here keeps the secure default (verify_jwt = true).
+# Add a function below ONLY if it is genuinely public or carries a credential
+# the Supabase gateway cannot validate (e.g. the staff HS256 token).
+
+project_id = "cufgozpwbinjhjnkimmn"
+
+# ── Webhooks — called by external services, no Supabase JWT ──────────────────
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.gocardless-webhook]
+verify_jwt = false
+
+[functions.resend-webhook]
+verify_jwt = false
+
+# ── Public widget / form endpoints — hit from anon browsers & cleaners' sites ─
+[functions.front-desk-chat]
+verify_jwt = false
+
+[functions.receive-site-visit]
+verify_jwt = false
+
+# ── DB-trigger dispatcher — invoked by a Postgres trigger with a secret header ─
+[functions.event-dispatcher]
+verify_jwt = false
+
+# ── Staff endpoints — carry a custom HS256 staff token the gateway can't verify ─
+[functions.staff-auth]
+verify_jwt = false
+
+[functions.staff-jobs]
+verify_jwt = false
+
+[functions.staff-timesheet]
+verify_jwt = false
+
+[functions.staff-payslip]
+verify_jwt = false
+
+# ── Public invite lookups — resolve an invite token before the user has a JWT ─
+[functions.invite-lookup]
+verify_jwt = false
+
+[functions.connect-invite-lookup]
+verify_jwt = false
+
+[functions.fm-invite-lookup]
+verify_jwt = false
