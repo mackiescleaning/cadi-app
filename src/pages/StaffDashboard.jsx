@@ -875,8 +875,8 @@ export default function StaffDashboard() {
       } catch (err) {
         console.error('Status update error:', err);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on staff id/owner; staffFetchInit is redefined each render
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on staff id/owner; staffFetchInit is redefined each render
     [staffMember?.id, staffMember?.ownerId]
   );
 

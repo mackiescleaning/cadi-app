@@ -421,9 +421,9 @@ function InvoiceDetailDrawer({ invoiceId, onClose, onChanged }) {
       setLoading(false);
     }
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when invoiceId changes; load() is redefined each render
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when invoiceId changes; load() is redefined each render
   }, [invoiceId]);
 
   async function handleDownloadPdf() {
@@ -992,9 +992,9 @@ export default function FmOpsAccounts() {
   useEffect(() => {
     loadCounts();
   }, []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when tab changes; load() is redefined each render
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when tab changes; load() is redefined each render
   }, [tab]);
 
   const totals = useMemo(

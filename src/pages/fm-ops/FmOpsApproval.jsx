@@ -156,9 +156,9 @@ function ApprovalDrawer({ jobId, onClose, onChanged }) {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when jobId changes; load() is redefined each render
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when jobId changes; load() is redefined each render
   }, [jobId]);
 
   const decide = async (decision) => {
@@ -1110,9 +1110,9 @@ export default function FmOpsApproval() {
     })();
   }, []);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when tab changes; load() is redefined each render
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when tab changes; load() is redefined each render
   }, [tab]);
 
   const totals = useMemo(() => {

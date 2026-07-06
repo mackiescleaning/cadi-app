@@ -619,9 +619,9 @@ function QaPanel({ listingId, listingStatus }) {
       setLoading(false);
     }
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when listingId changes; load() is redefined each render
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when listingId changes; load() is redefined each render
   }, [listingId]);
 
   async function submit(e) {
@@ -809,9 +809,9 @@ function ListingDetail({ listingId, onClose, onChanged }) {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when listingId changes; load() is redefined each render
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when listingId changes; load() is redefined each render
   }, [listingId]);
 
   const handleAward = async (bid) => {

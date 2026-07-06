@@ -550,9 +550,9 @@ function QueryReplyModal({ job, onCancel, onResubmitted }) {
       setLoading(false);
     }
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- load the thread once on mount; load() is redefined each render
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load the thread once on mount; load() is redefined each render
   }, []);
 
   function addFiles(picked) {

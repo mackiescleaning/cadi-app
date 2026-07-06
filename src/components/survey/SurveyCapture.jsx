@@ -76,8 +76,8 @@ export default function SurveyCapture({ survey, onNotesChange, onPhotoAdded, onD
         clearTimeout(clarifyTimer.current);
         clarifyTimer.current = setTimeout(() => triggerClarify(val), DEBOUNCE_MS_CLARIFY);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- triggerClarify/onNotesChange are redefined each render; keyed on survey.id
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- triggerClarify/onNotesChange are redefined each render; keyed on survey.id
     [survey.id]
   );
 

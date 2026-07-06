@@ -4306,9 +4306,9 @@ function StaffPay() {
   const [submitting, setSubmitting] = useState(null);
   const [confirmSubmit, setConfirmSubmit] = useState(null);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- run when the user changes; loadSettings() is redefined each render
   useEffect(() => {
     if (user?.id) loadSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when the user changes; loadSettings() is redefined each render
   }, [user]);
 
   async function loadSettings() {

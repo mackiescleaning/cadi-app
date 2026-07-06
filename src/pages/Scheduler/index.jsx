@@ -527,8 +527,9 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
   // user can reverse any drag, status flip or completion.
   const undoableUpdateJob = useCallback(
     (id, updates) => handleUpdateJob(id, updates),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [contextJobs]
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const _undoableDeleteJob = useCallback((id) => handleDeleteJob(id), [contextJobs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ⌘Z / Ctrl+Z keyboard shortcut for undo. Skips when the user is typing
@@ -563,8 +564,9 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
             j.customer?.toLowerCase().includes(searchLower) ||
             j.postcode?.toLowerCase().includes(searchLower))
       ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [allJobs, todayStr, search]
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const weekJobs = useMemo(
     () =>
@@ -577,8 +579,9 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
             j.customer?.toLowerCase().includes(searchLower) ||
             j.postcode?.toLowerCase().includes(searchLower))
       ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [allJobs, weekStartStr, weekEndStr, search]
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const nonCancelledJobs = useMemo(
     () => allJobs.filter((j) => j.status !== 'cancelled'),

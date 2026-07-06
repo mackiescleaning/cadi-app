@@ -597,9 +597,9 @@ export default function AdminFmApplications() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run on isAdmin/tab; load() is redefined each render
   useEffect(() => {
     if (isAdmin) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run on isAdmin/tab; load() is redefined each render
   }, [isAdmin, tab]);
   useEffect(() => {
     if (isAdmin) loadCounts();

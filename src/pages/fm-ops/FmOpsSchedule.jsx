@@ -100,9 +100,9 @@ export default function FmOpsSchedule() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the week changes; load() is redefined each render
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the week changes; load() is redefined each render
   }, [weekStart.getTime()]);
 
   const subs = useMemo(() => {

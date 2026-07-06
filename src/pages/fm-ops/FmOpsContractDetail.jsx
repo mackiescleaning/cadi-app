@@ -108,9 +108,9 @@ export default function FmOpsContractDetail() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when id changes; load() is redefined each render
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when id changes; load() is redefined each render
   }, [id]);
 
   const markBusy = (specId, busy) => {
