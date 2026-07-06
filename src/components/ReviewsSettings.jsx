@@ -1,22 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Save, Star, ExternalLink, Mail } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { Save, ExternalLink, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useBusinessId } from '../hooks/useBusinessId';
 import { loadAgentSettings, upsertAgentSettings, AGENT_MODES } from '../lib/agentFramework';
 import { getBusinessSettings, upsertBusinessSettings } from '../lib/db/settingsDb';
 
 const PLATFORMS = [
-  { id: 'google',      label: 'Google',       hint: 'google.com/maps/…', icon: '🔍' },
-  { id: 'trustpilot',  label: 'Trustpilot',   hint: 'trustpilot.com/review/…', icon: '⭐' },
-  { id: 'facebook',    label: 'Facebook',      hint: 'facebook.com/…/reviews', icon: '👍' },
-  { id: 'custom',      label: 'Custom link',  hint: 'https://…', icon: '🔗' },
+  { id: 'google', label: 'Google', hint: 'google.com/maps/…', icon: '🔍' },
+  { id: 'trustpilot', label: 'Trustpilot', hint: 'trustpilot.com/review/…', icon: '⭐' },
+  { id: 'facebook', label: 'Facebook', hint: 'facebook.com/…/reviews', icon: '👍' },
+  { id: 'custom', label: 'Custom link', hint: 'https://…', icon: '🔗' },
 ];
 
 const TIMING_OPTIONS = [
-  { value: 0,  label: 'Immediately' },
-  { value: 1,  label: '1 hour later' },
-  { value: 2,  label: '2 hours later' },
+  { value: 0, label: 'Immediately' },
+  { value: 1, label: '1 hour later' },
+  { value: 2, label: '2 hours later' },
   { value: 24, label: 'Next day' },
 ];
 
@@ -43,7 +42,8 @@ function EmailPreview({ businessName, template, reviewLink, customerName = 'Jane
           )}
         </div>
         <p className="text-[10px] text-gray-400 border-t border-gray-100 pt-3">
-          Sent via Cadi · You received this because you recently had a service from {businessName || 'us'}.
+          Sent via Cadi · You received this because you recently had a service from{' '}
+          {businessName || 'us'}.
         </p>
       </div>
     </div>
@@ -54,18 +54,22 @@ export default function ReviewsSettings() {
   const { profile } = useAuth();
   const businessId = useBusinessId();
 
-  const [platform,  setPlatform]  = useState('google');
-  const [link,      setLink]      = useState('');
-  const [template,  setTemplate]  = useState(DEFAULT_TEMPLATE);
-  const [timing,    setTiming]    = useState(2);
-  const [mode,      setMode]      = useState('approval');
-  const [saved,     setSaved]     = useState(false);
-  const [saving,    setSaving]    = useState(false);
-  const [loading,   setLoading]   = useState(true);
+  const [platform, setPlatform] = useState('google');
+  const [link, setLink] = useState('');
+  const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
+  const [timing, setTiming] = useState(2);
+  const [mode, setMode] = useState('approval');
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
 
   const { user } = useAuth();
-  const businessName = profile?.brand_voice?.business_name || profile?.business_name || profile?.display_name || 'Your Business';
+  const businessName =
+    profile?.brand_voice?.business_name ||
+    profile?.business_name ||
+    profile?.display_name ||
+    'Your Business';
 
   useEffect(() => {
     if (!user) return;
@@ -73,16 +77,18 @@ export default function ReviewsSettings() {
       try {
         const settings = await getBusinessSettings();
         const sd = settings?.setup_data ?? {};
-        if (sd.review_platform)             setPlatform(sd.review_platform);
-        if (sd.review_link)                 setLink(sd.review_link);
-        if (sd.review_message_template)     setTemplate(sd.review_message_template);
+        if (sd.review_platform) setPlatform(sd.review_platform);
+        if (sd.review_link) setLink(sd.review_link);
+        if (sd.review_message_template) setTemplate(sd.review_message_template);
         if (sd.review_timing_hours != null) setTiming(sd.review_timing_hours);
 
         if (businessId) {
           const agentData = await loadAgentSettings(businessId, 'reviews');
           if (agentData?.mode) setMode(agentData.mode);
         }
-      } catch { /* no session in demo — use defaults */ }
+      } catch {
+        /* no session in demo — use defaults */
+      }
       setLoading(false);
     })();
   }, [user, businessId]);
@@ -96,10 +102,10 @@ export default function ReviewsSettings() {
       upsertBusinessSettings({
         setup_data: {
           ...sd,
-          review_platform:          platform,
-          review_link:              link.trim(),
-          review_message_template:  template,
-          review_timing_hours:      timing,
+          review_platform: platform,
+          review_link: link.trim(),
+          review_message_template: template,
+          review_timing_hours: timing,
         },
       }),
       upsertAgentSettings(businessId, 'reviews', mode),
@@ -112,8 +118,11 @@ export default function ReviewsSettings() {
   if (loading) {
     return (
       <div className="space-y-4">
-        {[1, 2, 3].map(i => (
-          <div key={i} className="h-24 rounded-2xl bg-white border border-[#99c5ff]/20 animate-pulse" />
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="h-24 rounded-2xl bg-white border border-[#99c5ff]/20 animate-pulse"
+          />
         ))}
       </div>
     );
@@ -121,7 +130,6 @@ export default function ReviewsSettings() {
 
   return (
     <div className="space-y-5">
-
       {/* Agent mode */}
       <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100">
@@ -134,11 +142,13 @@ export default function ReviewsSettings() {
           <label className="block text-xs font-semibold text-gray-500 mb-1.5">Mode</label>
           <select
             value={mode}
-            onChange={e => setMode(e.target.value)}
+            onChange={(e) => setMode(e.target.value)}
             className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff]"
           >
             {Object.entries(AGENT_MODES).map(([val, { label, desc }]) => (
-              <option key={val} value={val}>{label} — {desc}</option>
+              <option key={val} value={val}>
+                {label} — {desc}
+              </option>
             ))}
           </select>
         </div>
@@ -151,7 +161,7 @@ export default function ReviewsSettings() {
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {PLATFORMS.map(p => (
+            {PLATFORMS.map((p) => (
               <button
                 key={p.id}
                 onClick={() => setPlatform(p.id)}
@@ -162,7 +172,9 @@ export default function ReviewsSettings() {
                 }`}
               >
                 <span className="text-xl">{p.icon}</span>
-                <span className={`text-xs font-bold ${platform === p.id ? 'text-[#1f48ff]' : 'text-gray-600'}`}>
+                <span
+                  className={`text-xs font-bold ${platform === p.id ? 'text-[#1f48ff]' : 'text-gray-600'}`}
+                >
                   {p.label}
                 </span>
               </button>
@@ -177,8 +189,8 @@ export default function ReviewsSettings() {
               <input
                 type="url"
                 value={link}
-                onChange={e => setLink(e.target.value)}
-                placeholder={PLATFORMS.find(p => p.id === platform)?.hint ?? 'https://…'}
+                onChange={(e) => setLink(e.target.value)}
+                placeholder={PLATFORMS.find((p) => p.id === platform)?.hint ?? 'https://…'}
                 className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10 font-mono"
               />
               {link && (
@@ -207,29 +219,27 @@ export default function ReviewsSettings() {
         <div className="px-6 py-4 border-b border-gray-100">
           <h3 className="font-bold text-[#010a4f]">Message template</h3>
           <p className="text-xs text-gray-400 mt-0.5">
-            Use <code className="font-mono text-[#1f48ff] bg-[#f0f4ff] px-1 rounded">{'{{name}}'}</code> for the customer's first name.
+            Use{' '}
+            <code className="font-mono text-[#1f48ff] bg-[#f0f4ff] px-1 rounded">{'{{name}}'}</code>{' '}
+            for the customer's first name.
           </p>
         </div>
         <div className="p-6 space-y-4">
           <textarea
             value={template}
-            onChange={e => setTemplate(e.target.value)}
+            onChange={(e) => setTemplate(e.target.value)}
             rows={4}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/10 resize-none leading-relaxed"
           />
           <button
-            onClick={() => setShowPreview(v => !v)}
+            onClick={() => setShowPreview((v) => !v)}
             className="flex items-center gap-2 text-xs font-bold text-[#1f48ff] hover:underline"
           >
             <Mail size={12} />
             {showPreview ? 'Hide' : 'Preview'} email
           </button>
           {showPreview && (
-            <EmailPreview
-              businessName={businessName}
-              template={template}
-              reviewLink={link}
-            />
+            <EmailPreview businessName={businessName} template={template} reviewLink={link} />
           )}
         </div>
       </div>
@@ -238,11 +248,13 @@ export default function ReviewsSettings() {
       <div className="bg-white rounded-2xl shadow-sm border border-[#99c5ff]/20 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100">
           <h3 className="font-bold text-[#010a4f]">Send timing</h3>
-          <p className="text-xs text-gray-400 mt-0.5">How long after a job is marked complete to send the request.</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            How long after a job is marked complete to send the request.
+          </p>
         </div>
         <div className="px-6 py-4">
           <div className="flex gap-2 flex-wrap">
-            {TIMING_OPTIONS.map(opt => (
+            {TIMING_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setTiming(opt.value)}
@@ -258,7 +270,8 @@ export default function ReviewsSettings() {
           </div>
           {timing > 0 && (
             <p className="text-[11px] text-gray-400 mt-2">
-              Note: delayed sending requires a scheduled background job. For now Cadi will queue the request for manual approval at the right time.
+              Note: delayed sending requires a scheduled background job. For now Cadi will queue the
+              request for manual approval at the right time.
             </p>
           )}
         </div>
@@ -273,7 +286,9 @@ export default function ReviewsSettings() {
         {saved ? (
           <>✓ Saved</>
         ) : (
-          <><Save size={14} /> {saving ? 'Saving…' : 'Save Reviews settings'}</>
+          <>
+            <Save size={14} /> {saving ? 'Saving…' : 'Save Reviews settings'}
+          </>
         )}
       </button>
     </div>

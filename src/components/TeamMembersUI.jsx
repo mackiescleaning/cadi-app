@@ -17,7 +17,7 @@ const EMPTY_FORM = {
 
 function MemberForm({ initial, onSave, onCancel, saving }) {
   const [form, setForm] = useState(initial ?? EMPTY_FORM);
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
     <div className="space-y-3">
@@ -27,7 +27,7 @@ function MemberForm({ initial, onSave, onCancel, saving }) {
           <input
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/30"
             value={form.first_name}
-            onChange={e => set('first_name', e.target.value)}
+            onChange={(e) => set('first_name', e.target.value)}
             placeholder="Sarah"
           />
         </div>
@@ -36,7 +36,7 @@ function MemberForm({ initial, onSave, onCancel, saving }) {
           <input
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/30"
             value={form.last_name}
-            onChange={e => set('last_name', e.target.value)}
+            onChange={(e) => set('last_name', e.target.value)}
             placeholder="Jones"
           />
         </div>
@@ -47,7 +47,7 @@ function MemberForm({ initial, onSave, onCancel, saving }) {
           <input
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/30"
             value={form.phone}
-            onChange={e => set('phone', e.target.value)}
+            onChange={(e) => set('phone', e.target.value)}
             placeholder="+44 7700 000000"
             type="tel"
           />
@@ -57,7 +57,7 @@ function MemberForm({ initial, onSave, onCancel, saving }) {
           <input
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/30"
             value={form.email}
-            onChange={e => set('email', e.target.value)}
+            onChange={(e) => set('email', e.target.value)}
             placeholder="sarah@example.com"
             type="email"
           />
@@ -69,10 +69,12 @@ function MemberForm({ initial, onSave, onCancel, saving }) {
           <select
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/30"
             value={form.role}
-            onChange={e => set('role', e.target.value)}
+            onChange={(e) => set('role', e.target.value)}
           >
             {Object.entries(ROLE_LABELS).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
+              <option key={v} value={v}>
+                {l}
+              </option>
             ))}
           </select>
         </div>
@@ -80,7 +82,7 @@ function MemberForm({ initial, onSave, onCancel, saving }) {
           <input
             type="checkbox"
             checked={form.receives_daily_schedule}
-            onChange={e => set('receives_daily_schedule', e.target.checked)}
+            onChange={(e) => set('receives_daily_schedule', e.target.checked)}
             className="w-4 h-4 accent-[#1f48ff]"
           />
           <span className="text-xs text-gray-600">Send daily schedule</span>
@@ -109,7 +111,7 @@ function MemberForm({ initial, onSave, onCancel, saving }) {
 
 export default function TeamMembersUI() {
   const businessId = useBusinessId();
-  const { teamMemberLimit, isPro } = usePlan();
+  const { teamMemberLimit } = usePlan();
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -131,10 +133,13 @@ export default function TeamMembersUI() {
           setLoading(false);
         }
       });
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [businessId]);
 
-  const atLimit = teamMemberLimit !== Infinity && members.filter(m => m.is_active).length >= teamMemberLimit;
+  const atLimit =
+    teamMemberLimit !== Infinity && members.filter((m) => m.is_active).length >= teamMemberLimit;
 
   async function handleAdd(form) {
     setSaving(true);
@@ -145,7 +150,7 @@ export default function TeamMembersUI() {
       .single();
     setSaving(false);
     if (!error && data) {
-      setMembers(m => [...m, data]);
+      setMembers((m) => [...m, data]);
       setShowAdd(false);
     }
   }
@@ -161,14 +166,14 @@ export default function TeamMembersUI() {
       .single();
     setSaving(false);
     if (!error && data) {
-      setMembers(m => m.map(x => x.id === id ? data : x));
+      setMembers((m) => m.map((x) => (x.id === id ? data : x)));
       setEditingId(null);
     }
   }
 
   async function handleToggleActive(member) {
     const updated = { is_active: !member.is_active, updated_at: new Date().toISOString() };
-    setMembers(m => m.map(x => x.id === member.id ? { ...x, ...updated } : x));
+    setMembers((m) => m.map((x) => (x.id === member.id ? { ...x, ...updated } : x)));
     await supabase
       .from('team_members')
       .update(updated)
@@ -178,12 +183,8 @@ export default function TeamMembersUI() {
 
   async function handleDelete(id) {
     setDeleting(id);
-    await supabase
-      .from('team_members')
-      .delete()
-      .eq('id', id)
-      .eq('business_id', businessId);
-    setMembers(m => m.filter(x => x.id !== id));
+    await supabase.from('team_members').delete().eq('id', id).eq('business_id', businessId);
+    setMembers((m) => m.filter((x) => x.id !== id));
     setDeleting(null);
   }
 
@@ -205,11 +206,13 @@ export default function TeamMembersUI() {
             Team members
             {teamMemberLimit !== Infinity && (
               <span className="ml-2 text-xs font-normal text-gray-400">
-                {members.filter(m => m.is_active).length} / {teamMemberLimit} active
+                {members.filter((m) => m.is_active).length} / {teamMemberLimit} active
               </span>
             )}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">Who receives daily schedules and can check in to jobs</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Who receives daily schedules and can check in to jobs
+          </p>
         </div>
         {!showAdd && (
           <button
@@ -228,11 +231,7 @@ export default function TeamMembersUI() {
       {showAdd && (
         <div className="p-4 rounded-xl border border-[#1f48ff]/20 bg-[#f8faff]">
           <p className="text-xs font-bold text-[#010a4f] mb-3">New team member</p>
-          <MemberForm
-            onSave={handleAdd}
-            onCancel={() => setShowAdd(false)}
-            saving={saving}
-          />
+          <MemberForm onSave={handleAdd} onCancel={() => setShowAdd(false)} saving={saving} />
         </div>
       )}
 
@@ -243,19 +242,17 @@ export default function TeamMembersUI() {
         </div>
       ) : (
         <div className="space-y-2">
-          {members.map(m => (
+          {members.map((m) => (
             <div
               key={m.id}
               className={`rounded-xl border p-4 transition-colors ${
-                m.is_active
-                  ? 'border-gray-200 bg-white'
-                  : 'border-gray-100 bg-gray-50 opacity-60'
+                m.is_active ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'
               }`}
             >
               {editingId === m.id ? (
                 <MemberForm
                   initial={m}
-                  onSave={form => handleEdit(m.id, form)}
+                  onSave={(form) => handleEdit(m.id, form)}
                   onCancel={() => setEditingId(null)}
                   saving={saving}
                 />
@@ -317,7 +314,8 @@ export default function TeamMembersUI() {
 
       {atLimit && !showAdd && (
         <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          You've reached the {teamMemberLimit}-member limit on your current plan. Upgrade to Max for unlimited team members.
+          You've reached the {teamMemberLimit}-member limit on your current plan. Upgrade to Max for
+          unlimited team members.
         </p>
       )}
     </div>

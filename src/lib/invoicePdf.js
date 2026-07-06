@@ -18,18 +18,21 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const BRAND = '#010a4f';
-const MUTED = '#888888';
-const LINE  = '#e6e6ec';
+const LINE = '#e6e6ec';
 
 const fmt2 = (n) => `GBP ${(+n).toFixed(2)}`;
 const fmtDate = (s) => {
   if (!s) return '';
-  return new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  return new Date(s).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 };
 
 function hexToRgb(hex) {
   const m = hex.replace('#', '');
-  return [parseInt(m.slice(0,2),16), parseInt(m.slice(2,4),16), parseInt(m.slice(4,6),16)];
+  return [parseInt(m.slice(0, 2), 16), parseInt(m.slice(2, 4), 16), parseInt(m.slice(4, 6), 16)];
 }
 
 // Line-driven VAT — mirrors calcInvoice in InvoiceGenerator.jsx. Each line
@@ -37,8 +40,16 @@ function hexToRgb(hex) {
 // matches what the customer was actually charged, regardless of the business's
 // current registration status.
 export function calcTotals(lines) {
-  const subtotal = lines.reduce((s, l) => s + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0), 0);
-  const vatAmount = lines.reduce((s, l) => s + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0) * ((parseFloat(l.vatRate) || 0) / 100), 0);
+  const subtotal = lines.reduce(
+    (s, l) => s + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0),
+    0
+  );
+  const vatAmount = lines.reduce(
+    (s, l) =>
+      s +
+      (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0) * ((parseFloat(l.vatRate) || 0) / 100),
+    0
+  );
   const total = subtotal + vatAmount;
   return { subtotal, vatAmount, total };
 }
@@ -78,16 +89,29 @@ export function generateInvoicePdf(invoice, business, accounts = {}) {
   doc.setTextColor(80, 80, 80);
   let yL = y + 14;
   if (business.address) {
-    const addressLines = String(business.address).split(/\n|,\s*/).filter(Boolean);
-    addressLines.forEach(line => { doc.text(line, M, yL); yL += 11; });
+    const addressLines = String(business.address)
+      .split(/\n|,\s*/)
+      .filter(Boolean);
+    addressLines.forEach((line) => {
+      doc.text(line, M, yL);
+      yL += 11;
+    });
   }
-  if (business.email) { doc.text(business.email, M, yL); yL += 11; }
-  if (business.phone) { doc.text(business.phone, M, yL); yL += 11; }
+  if (business.email) {
+    doc.text(business.email, M, yL);
+    yL += 11;
+  }
+  if (business.phone) {
+    doc.text(business.phone, M, yL);
+    yL += 11;
+  }
   if (vatRegistered && business.vatNumber) {
-    doc.text(`VAT registration: ${business.vatNumber}`, M, yL); yL += 11;
+    doc.text(`VAT registration: ${business.vatNumber}`, M, yL);
+    yL += 11;
   }
   if (business.companyNum) {
-    doc.text(`Company no.: ${business.companyNum}`, M, yL); yL += 11;
+    doc.text(`Company no.: ${business.companyNum}`, M, yL);
+    yL += 11;
   }
 
   // INVOICE block (right)
@@ -105,7 +129,16 @@ export function generateInvoicePdf(invoice, business, accounts = {}) {
   const metaLines = [
     invoice.date ? ['Issue date', fmtDate(invoice.date)] : null,
     invoice.dueDate ? ['Due date', fmtDate(invoice.dueDate)] : null,
-    invoice.terms != null ? ['Terms', typeof invoice.terms === 'number' ? (invoice.terms === 0 ? 'Due on receipt' : `Net ${invoice.terms}`) : String(invoice.terms)] : null,
+    invoice.terms != null
+      ? [
+          'Terms',
+          typeof invoice.terms === 'number'
+            ? invoice.terms === 0
+              ? 'Due on receipt'
+              : `Net ${invoice.terms}`
+            : String(invoice.terms),
+        ]
+      : null,
   ].filter(Boolean);
   let ym = y + 30;
   metaLines.forEach(([label, val]) => {
@@ -137,16 +170,24 @@ export function generateInvoicePdf(invoice, business, accounts = {}) {
   doc.setFontSize(9);
   doc.setTextColor(110, 110, 110);
   if (invoice.customer?.address) {
-    const cLines = String(invoice.customer.address).split(/\n|,\s*/).filter(Boolean);
-    cLines.forEach(line => { y += 12; doc.text(line, M, y); });
+    const cLines = String(invoice.customer.address)
+      .split(/\n|,\s*/)
+      .filter(Boolean);
+    cLines.forEach((line) => {
+      y += 12;
+      doc.text(line, M, y);
+    });
   }
-  if (invoice.customer?.email) { y += 12; doc.text(invoice.customer.email, M, y); }
+  if (invoice.customer?.email) {
+    y += 12;
+    doc.text(invoice.customer.email, M, y);
+  }
 
   // ─── Line items ─────────────────────────────────────────────────────────────
   y += 24;
   const rows = (invoice.lines || [])
-    .filter(l => l.desc && parseFloat(l.rate) > 0)
-    .map(l => {
+    .filter((l) => l.desc && parseFloat(l.rate) > 0)
+    .map((l) => {
       const qty = parseFloat(l.qty) || 1;
       const rate = parseFloat(l.rate) || 0;
       const supplyDate = l.serviceDate ? fmtDate(l.serviceDate) : '';
@@ -238,9 +279,9 @@ export function generateInvoicePdf(invoice, business, accounts = {}) {
 
     let py = afterTable + 32;
     const payRows = [
-      bankName   ? ['Bank',      bankName]   : null,
-      sortCode   ? ['Sort code', sortCode]   : null,
-      accountNum ? ['Account',   accountNum] : null,
+      bankName ? ['Bank', bankName] : null,
+      sortCode ? ['Sort code', sortCode] : null,
+      accountNum ? ['Account', accountNum] : null,
       ['Reference', invoice.num || ''],
     ].filter(Boolean);
 
@@ -282,7 +323,8 @@ export function generateInvoicePdf(invoice, business, accounts = {}) {
   if (business.entityType === 'limited_company') {
     legalBits.push(`${business.name} — registered in England & Wales`);
     if (business.companyNum) legalBits.push(`Company no. ${business.companyNum}`);
-    if (business.registeredOffice) legalBits.push(`Registered office: ${business.registeredOffice}`);
+    if (business.registeredOffice)
+      legalBits.push(`Registered office: ${business.registeredOffice}`);
   } else if (business.name) {
     legalBits.push(business.name);
     if (business.address) legalBits.push(business.address.replace(/\n/g, ', '));
@@ -302,7 +344,7 @@ export function generateInvoicePdf(invoice, business, accounts = {}) {
   // /privacy and /terms URLs only resolve on app.cadi.cleaning, where the
   // recipient (the cleaner's customer) won't have an account.
   const privacyUrl = business.privacyUrl || 'https://cadi.cleaning/privacy.html';
-  const termsUrl   = business.termsUrl   || 'https://cadi.cleaning/terms.html';
+  const termsUrl = business.termsUrl || 'https://cadi.cleaning/terms.html';
 
   doc.setTextColor(br, bg, bb);
   const linkText = `Privacy Policy   ·   Terms & Conditions`;
@@ -310,8 +352,8 @@ export function generateInvoicePdf(invoice, business, accounts = {}) {
   // Approximate clickable rectangles for the two link strings.
   // jsPDF measures in pt; using textWidth helps position links accurately.
   const half = doc.getTextWidth('Privacy Policy   ·   ') / 2;
-  const ppW  = doc.getTextWidth('Privacy Policy');
-  const tcW  = doc.getTextWidth('Terms & Conditions');
+  const ppW = doc.getTextWidth('Privacy Policy');
+  const tcW = doc.getTextWidth('Terms & Conditions');
   const centerX = pageW / 2;
   doc.link(centerX - half - ppW / 2, linkY - 8, ppW, 10, { url: privacyUrl });
   doc.link(centerX + half - tcW / 2, linkY - 8, tcW, 10, { url: termsUrl });
@@ -321,6 +363,6 @@ export function generateInvoicePdf(invoice, business, accounts = {}) {
   const dataUri = doc.output('datauristring');
   const base64 = dataUri.split(',')[1] || '';
 
-  const safeNum = String(invoice.num || 'invoice').replace(/[^A-Za-z0-9_\-]/g, '_');
+  const safeNum = String(invoice.num || 'invoice').replace(/[^A-Za-z0-9_-]/g, '_');
   return { base64, filename: `${safeNum}.pdf` };
 }

@@ -48,37 +48,37 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        // Forgot-password links log the user in with a temporary recovery
-        // session and fire PASSWORD_RECOVERY. Supabase may redirect them to the
-        // Site URL root rather than /auth/confirm, so handle it globally here:
-        // send them to the set-new-password screen wherever the link landed.
-        // (Guard against a redirect loop once we're already on that screen.)
-        if (event === 'PASSWORD_RECOVERY' && !window.location.pathname.startsWith('/auth/confirm')) {
-          window.location.replace('/auth/confirm#type=recovery');
-          return;
-        }
-
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchProfile(session.user.id);
-          if (window.FS) {
-            window.FS('setIdentity', {
-              uid: session.user.id,
-              properties: {
-                email: session.user.email ?? '',
-                displayName: session.user.user_metadata?.first_name ?? session.user.email ?? '',
-              },
-            });
-          }
-        } else {
-          setProfile(null);
-          if (window.FS) window.FS('setIdentity', { anonymous: true });
-        }
-        setLoading(false);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Forgot-password links log the user in with a temporary recovery
+      // session and fire PASSWORD_RECOVERY. Supabase may redirect them to the
+      // Site URL root rather than /auth/confirm, so handle it globally here:
+      // send them to the set-new-password screen wherever the link landed.
+      // (Guard against a redirect loop once we're already on that screen.)
+      if (event === 'PASSWORD_RECOVERY' && !window.location.pathname.startsWith('/auth/confirm')) {
+        window.location.replace('/auth/confirm#type=recovery');
+        return;
       }
-    );
+
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        if (window.FS) {
+          window.FS('setIdentity', {
+            uid: session.user.id,
+            properties: {
+              email: session.user.email ?? '',
+              displayName: session.user.user_metadata?.first_name ?? session.user.email ?? '',
+            },
+          });
+        }
+      } else {
+        setProfile(null);
+        if (window.FS) window.FS('setIdentity', { anonymous: true });
+      }
+      setLoading(false);
+    });
 
     return () => subscription.unsubscribe();
   }, []);
@@ -94,45 +94,59 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    const channel = typeof BroadcastChannel !== 'undefined'
-      ? new BroadcastChannel('cadi-activity')
-      : null;
+    const channel =
+      typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('cadi-activity') : null;
 
     const resetTimer = () => {
       setIdleWarning(false);
       clearTimeout(idleTimerRef.current);
       clearTimeout(idleWarningRef.current);
-      idleWarningRef.current = setTimeout(() => setIdleWarning(true), IDLE_TIMEOUT_MS - IDLE_WARNING_MS);
-      idleTimerRef.current   = setTimeout(() => { signOut(); }, IDLE_TIMEOUT_MS);
+      idleWarningRef.current = setTimeout(
+        () => setIdleWarning(true),
+        IDLE_TIMEOUT_MS - IDLE_WARNING_MS
+      );
+      idleTimerRef.current = setTimeout(() => {
+        signOut();
+      }, IDLE_TIMEOUT_MS);
     };
 
     const onLocalActivity = () => {
       resetTimer();
-      try { channel?.postMessage('activity'); } catch {}
+      try {
+        channel?.postMessage('activity');
+      } catch {}
     };
-    const onRemoteActivity = (ev) => { if (ev.data === 'activity') resetTimer(); };
+    const onRemoteActivity = (ev) => {
+      if (ev.data === 'activity') resetTimer();
+    };
 
-    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'visibilitychange'];
-    events.forEach(e => window.addEventListener(e, onLocalActivity, { passive: true }));
+    const events = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'touchstart',
+      'scroll',
+      'visibilitychange',
+    ];
+    events.forEach((e) => window.addEventListener(e, onLocalActivity, { passive: true }));
     if (channel) channel.addEventListener('message', onRemoteActivity);
     resetTimer();
 
     return () => {
-      events.forEach(e => window.removeEventListener(e, onLocalActivity));
-      if (channel) { channel.removeEventListener('message', onRemoteActivity); channel.close(); }
+      events.forEach((e) => window.removeEventListener(e, onLocalActivity));
+      if (channel) {
+        channel.removeEventListener('message', onRemoteActivity);
+        channel.close();
+      }
       clearTimeout(idleTimerRef.current);
       clearTimeout(idleWarningRef.current);
     };
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user]);
 
   async function fetchProfile(userId) {
     setProfileLoading(true);
     try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
       if (data) setProfile(data);
     } catch {}
     setProfileLoading(false);
@@ -143,8 +157,8 @@ export function AuthProvider({ children }) {
       email,
       password,
       options: {
-        data: { first_name: firstName, business_name: businessName }
-      }
+        data: { first_name: firstName, business_name: businessName },
+      },
     });
     return { data, error };
   }
@@ -179,7 +193,7 @@ export function AuthProvider({ children }) {
   async function updateProfile(updates) {
     // Demo user — update locally only
     if (user?.id === 'demo-user') {
-      setProfile(prev => ({ ...prev, ...updates }));
+      setProfile((prev) => ({ ...prev, ...updates }));
       return { data: { ...profile, ...updates }, error: null };
     }
     const { data, error } = await supabase
@@ -195,11 +209,23 @@ export function AuthProvider({ children }) {
   const isPro = profile?.plan === 'pro';
 
   return (
-    <AuthContext.Provider value={{
-      user, profile, loading, profileLoading, isPro,
-      idleWarning, dismissIdleWarning: () => setIdleWarning(false),
-      signUp, signIn, signOut, loginAsDemo, updateProfile, refreshProfile
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        profileLoading,
+        isPro,
+        idleWarning,
+        dismissIdleWarning: () => setIdleWarning(false),
+        signUp,
+        signIn,
+        signOut,
+        loginAsDemo,
+        updateProfile,
+        refreshProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

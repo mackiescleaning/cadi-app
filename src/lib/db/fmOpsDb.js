@@ -13,14 +13,16 @@ import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../supabase';
 
 // ── Raw-fetch edge-function caller (CORS workaround) ───────────────────────
 async function callFmFn(name, body) {
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   const url = `${SUPABASE_URL}/functions/v1/${name}`;
   const res = await fetch(url, {
-    method:  'POST',
+    method: 'POST',
     headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
-      'apikey':        SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
+      apikey: SUPABASE_ANON_KEY,
     },
     body: JSON.stringify(body),
   });
@@ -30,7 +32,9 @@ async function callFmFn(name, body) {
 
 // ── Current FM-org snapshot ────────────────────────────────────────────────
 export async function getMyFmOrganisation() {
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return null;
 
   const { data: prof, error: profErr } = await supabase
@@ -56,7 +60,8 @@ export async function getMyFmOrganisation() {
 export async function listFmContractors() {
   const { data: invites, error: invErr } = await supabase
     .from('sub_invitations')
-    .select(`
+    .select(
+      `
       id,
       company_name,
       contact_name,
@@ -69,43 +74,43 @@ export async function listFmContractors() {
       claimed_at,
       expires_at,
       created_at
-    `)
+    `
+    )
     .order('created_at', { ascending: false });
   if (invErr) throw invErr;
 
-  const claimedIds = (invites ?? [])
-    .map(r => r.claimed_by_user_id)
-    .filter(Boolean);
+  const claimedIds = (invites ?? []).map((r) => r.claimed_by_user_id).filter(Boolean);
 
   let profilesById = {};
   if (claimedIds.length > 0) {
     // Curated FM-facing projection via SECURITY DEFINER fn — NOT the raw profiles
     // table (which exposes the sub's HMRC/bank tokens, NINO, home postcode, etc).
     // See migrations 090/091.
-    const { data: profs, error: profErr } = await supabase
-      .rpc('connect_sub_profiles', { p_ids: claimedIds });
+    const { data: profs, error: profErr } = await supabase.rpc('connect_sub_profiles', {
+      p_ids: claimedIds,
+    });
     if (profErr) throw profErr;
-    profilesById = Object.fromEntries((profs ?? []).map(p => [p.id, p]));
+    profilesById = Object.fromEntries((profs ?? []).map((p) => [p.id, p]));
   }
 
-  return (invites ?? []).map(inv => {
+  return (invites ?? []).map((inv) => {
     const prof = inv.claimed_by_user_id ? profilesById[inv.claimed_by_user_id] : null;
     return {
       id: inv.id,
       claimedUserId: inv.claimed_by_user_id,
-      companyName:   prof?.business_name || inv.company_name || inv.contact_name || inv.email || '—',
-      contactName:   inv.contact_name,
-      email:         inv.email,
-      phone:         inv.phone,
-      region:        prof?.connect_region || inv.region || 'Unassigned',
-      trades:        prof?.connect_trades?.length ? prof.connect_trades : (inv.trades ?? []),
-      score:         prof?.connect_score ?? null,
-      tier:          prof?.connect_tier ?? null,
-      capacity:      prof?.connect_capacity ?? null,
-      status:        inv.status,                // pending / claimed / declined / expired
-      claimedAt:     inv.claimed_at,
-      invitedAt:     inv.created_at,
-      expiresAt:     inv.expires_at,
+      companyName: prof?.business_name || inv.company_name || inv.contact_name || inv.email || '—',
+      contactName: inv.contact_name,
+      email: inv.email,
+      phone: inv.phone,
+      region: prof?.connect_region || inv.region || 'Unassigned',
+      trades: prof?.connect_trades?.length ? prof.connect_trades : (inv.trades ?? []),
+      score: prof?.connect_score ?? null,
+      tier: prof?.connect_tier ?? null,
+      capacity: prof?.connect_capacity ?? null,
+      status: inv.status, // pending / claimed / declined / expired
+      claimedAt: inv.claimed_at,
+      invitedAt: inv.created_at,
+      expiresAt: inv.expires_at,
     };
   });
 }
@@ -129,16 +134,16 @@ export function groupByRegion(contractors) {
 
 // ── KPIs ───────────────────────────────────────────────────────────────────
 export function summariseContractors(contractors) {
-  const active = contractors.filter(c => c.status === 'claimed');
-  const pending = contractors.filter(c => c.status === 'pending');
-  const scored = active.filter(c => typeof c.score === 'number');
+  const active = contractors.filter((c) => c.status === 'claimed');
+  const pending = contractors.filter((c) => c.status === 'pending');
+  const scored = active.filter((c) => typeof c.score === 'number');
   return {
-    total:        contractors.length,
-    active:       active.length,
-    pending:      pending.length,
-    avgScore:     scored.length
-                    ? Math.round(scored.reduce((a, c) => a + c.score, 0) / scored.length)
-                    : null,
+    total: contractors.length,
+    active: active.length,
+    pending: pending.length,
+    avgScore: scored.length
+      ? Math.round(scored.reduce((a, c) => a + c.score, 0) / scored.length)
+      : null,
   };
 }
 
@@ -157,8 +162,10 @@ export function parseCsv(text) {
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (ch === '"') {
-      if (inQuotes && text[i + 1] === '"') { cur += '"'; i++; }
-      else inQuotes = !inQuotes;
+      if (inQuotes && text[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else inQuotes = !inQuotes;
     } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
       if (ch === '\r' && text[i + 1] === '\n') i++;
       if (cur.length || lines.length) lines.push(cur);
@@ -177,22 +184,29 @@ export function parseCsv(text) {
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
       if (ch === '"') {
-        if (q && line[i + 1] === '"') { cell += '"'; i++; }
-        else q = !q;
-      } else if (ch === ',' && !q) { out.push(cell); cell = ''; }
-      else cell += ch;
+        if (q && line[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else q = !q;
+      } else if (ch === ',' && !q) {
+        out.push(cell);
+        cell = '';
+      } else cell += ch;
     }
     out.push(cell);
-    return out.map(s => s.trim());
+    return out.map((s) => s.trim());
   };
 
-  const headers = splitRow(lines[0]).map(h => h.toLowerCase());
-  const rows = lines.slice(1)
-    .filter(l => l.trim().length)
-    .map(line => {
+  const headers = splitRow(lines[0]).map((h) => h.toLowerCase());
+  const rows = lines
+    .slice(1)
+    .filter((l) => l.trim().length)
+    .map((line) => {
       const cells = splitRow(line);
       const obj = {};
-      headers.forEach((h, i) => { obj[h] = cells[i] ?? ''; });
+      headers.forEach((h, i) => {
+        obj[h] = cells[i] ?? '';
+      });
       return obj;
     });
   return { headers, rows };
@@ -209,14 +223,17 @@ export function csvRowToInvite(row) {
     return null;
   };
   const trades = pick('trades', 'trade', 'services')
-    ? pick('trades', 'trade', 'services').split(/[;,/]/).map(s => s.trim()).filter(Boolean)
+    ? pick('trades', 'trade', 'services')
+        .split(/[;,/]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
   return {
     company_name: pick('company', 'company_name', 'business', 'business_name', 'name'),
     contact_name: pick('contact', 'contact_name', 'first_name'),
-    email:        pick('email', 'email_address', 'e-mail')?.toLowerCase() ?? null,
-    phone:        pick('phone', 'mobile', 'telephone', 'tel'),
-    region:       pick('region', 'area', 'territory'),
+    email: pick('email', 'email_address', 'e-mail')?.toLowerCase() ?? null,
+    phone: pick('phone', 'mobile', 'telephone', 'tel'),
+    region: pick('region', 'area', 'territory'),
     trades,
   };
 }
@@ -225,21 +242,23 @@ export function csvRowToInvite(row) {
 export async function listContracts() {
   const { data, error } = await supabase
     .from('contracts')
-    .select(`
+    .select(
+      `
       id, name, work_type, starts_on, billing_terms, status, created_at,
       end_client:end_clients ( id, name ),
       visit_specs ( id, frequency, price_per_visit, status, assigned_sub_user_id, site_id )
-    `)
+    `
+    )
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw error;
 
-  return (data ?? []).map(c => {
+  return (data ?? []).map((c) => {
     const specs = c.visit_specs ?? [];
-    const siteIds = new Set(specs.map(s => s.site_id).filter(Boolean));
-    const subIds  = new Set(specs.map(s => s.assigned_sub_user_id).filter(Boolean));
-    const freqs   = Array.from(new Set(specs.map(s => s.frequency))).filter(Boolean);
-    const prices  = specs.map(s => Number(s.price_per_visit) || 0);
+    const siteIds = new Set(specs.map((s) => s.site_id).filter(Boolean));
+    const subIds = new Set(specs.map((s) => s.assigned_sub_user_id).filter(Boolean));
+    const freqs = Array.from(new Set(specs.map((s) => s.frequency))).filter(Boolean);
+    const prices = specs.map((s) => Number(s.price_per_visit) || 0);
     const sumPrice = prices.reduce((a, b) => a + b, 0);
     const avgPrice = prices.length ? sumPrice / prices.length : 0;
     return {
@@ -264,10 +283,12 @@ export async function listContracts() {
 export async function getContract(contractId) {
   const { data: contract, error: cErr } = await supabase
     .from('contracts')
-    .select(`
+    .select(
+      `
       id, name, work_type, starts_on, billing_terms, status, created_at,
       end_client:end_clients ( id, name )
-    `)
+    `
+    )
     .eq('id', contractId)
     .is('deleted_at', null)
     .maybeSingle();
@@ -276,14 +297,16 @@ export async function getContract(contractId) {
 
   const { data: specs, error: sErr } = await supabase
     .from('visit_specs')
-    .select(`
+    .select(
+      `
       id, frequency, scope, access_notes, duration_minutes, price_per_visit,
       assigned_sub_user_id, status, created_at,
       site:sites ( id, name, postcode, address, lat, lng, notes ),
       assigned_sub:profiles!visit_specs_assigned_sub_user_id_fkey (
         id, business_name, first_name, last_name, connect_region
       )
-    `)
+    `
+    )
     .eq('contract_id', contractId)
     .is('deleted_at', null)
     .order('created_at', { ascending: true });
@@ -302,22 +325,21 @@ export async function listFmActiveSubs() {
     .not('claimed_by_user_id', 'is', null);
   if (iErr) throw iErr;
 
-  const ids = (invites ?? []).map(r => r.claimed_by_user_id);
+  const ids = (invites ?? []).map((r) => r.claimed_by_user_id);
   if (ids.length === 0) return [];
 
   // Curated FM-facing projection via SECURITY DEFINER fn. See migrations 090/091.
-  const { data: profs, error: pErr } = await supabase
-    .rpc('connect_sub_profiles', { p_ids: ids });
+  const { data: profs, error: pErr } = await supabase.rpc('connect_sub_profiles', { p_ids: ids });
   if (pErr) throw pErr;
 
-  return (profs ?? []).map(p => ({
-    id:          p.id,
-    name:        p.business_name || [p.first_name, p.last_name].filter(Boolean).join(' ') || '—',
-    region:      p.connect_region || 'Unassigned',
-    score:       p.connect_score ?? null,
-    tier:        p.connect_tier ?? null,
-    capacity:    p.connect_capacity ?? null,
-    trades:      p.connect_trades ?? [],
+  return (profs ?? []).map((p) => ({
+    id: p.id,
+    name: p.business_name || [p.first_name, p.last_name].filter(Boolean).join(' ') || '—',
+    region: p.connect_region || 'Unassigned',
+    score: p.connect_score ?? null,
+    tier: p.connect_tier ?? null,
+    capacity: p.connect_capacity ?? null,
+    trades: p.connect_trades ?? [],
   }));
 }
 
@@ -371,12 +393,12 @@ export async function createContract({ fmOrganisationId, contract, rows }) {
     .from('contracts')
     .insert({
       fm_organisation_id: fmOrganisationId,
-      end_client_id:      endClientId,
-      name:               contract.name.trim(),
-      work_type:          contract.work_type ?? null,
-      starts_on:          contract.starts_on ?? null,
-      billing_terms:      contract.billing_terms ?? null,
-      status:             'mobilising',
+      end_client_id: endClientId,
+      name: contract.name.trim(),
+      work_type: contract.work_type ?? null,
+      starts_on: contract.starts_on ?? null,
+      billing_terms: contract.billing_terms ?? null,
+      status: 'mobilising',
     })
     .select('id')
     .single();
@@ -392,12 +414,12 @@ export async function createContract({ fmOrganisationId, contract, rows }) {
   };
 
   // 3. Sites (one per row). Per-row end_client_id required for RLS.
-  const sitePayload = rows.map(r => ({
+  const sitePayload = rows.map((r) => ({
     end_client_id: endClientId,
-    name:          (r.site?.name ?? '').trim() || 'Untitled site',
-    address:       r.site?.address ?? null,
-    postcode:      r.site?.postcode ?? null,
-    notes:         r.site?.notes ?? null,
+    name: (r.site?.name ?? '').trim() || 'Untitled site',
+    address: r.site?.address ?? null,
+    postcode: r.site?.postcode ?? null,
+    notes: r.site?.notes ?? null,
   }));
   if (!endClientId) {
     await rollback('End-client is required for sites — set a client name');
@@ -413,18 +435,18 @@ export async function createContract({ fmOrganisationId, contract, rows }) {
   rows.forEach((row, idx) => {
     const siteId = createdSites[idx]?.id;
     if (!siteId) return;
-    (row.specs ?? []).forEach(spec => {
+    (row.specs ?? []).forEach((spec) => {
       if (!spec.frequency || !spec.scope || spec.price_per_visit == null) return;
       specPayload.push({
-        contract_id:        contractId,
-        site_id:            siteId,
+        contract_id: contractId,
+        site_id: siteId,
         fm_organisation_id: fmOrganisationId,
-        frequency:          spec.frequency,
-        scope:              spec.scope,
-        access_notes:       spec.access_notes ?? null,
-        duration_minutes:   spec.duration_minutes ?? null,
-        price_per_visit:    Number(spec.price_per_visit) || 0,
-        status:             'unassigned',
+        frequency: spec.frequency,
+        scope: spec.scope,
+        access_notes: spec.access_notes ?? null,
+        duration_minutes: spec.duration_minutes ?? null,
+        price_per_visit: Number(spec.price_per_visit) || 0,
+        status: 'unassigned',
       });
     });
   });
@@ -433,9 +455,7 @@ export async function createContract({ fmOrganisationId, contract, rows }) {
     await rollback('At least one valid visit spec required across all sites');
   }
 
-  const { error: vErr } = await supabase
-    .from('visit_specs')
-    .insert(specPayload);
+  const { error: vErr } = await supabase.from('visit_specs').insert(specPayload);
   if (vErr) await rollback(`Could not create visit specs: ${vErr.message}`);
 
   return { contractId, siteCount: createdSites.length, specCount: specPayload.length };
@@ -450,7 +470,7 @@ export async function assignVisitSpec({ visitSpecId, subUserId }) {
     .from('visit_specs')
     .update({
       assigned_sub_user_id: subUserId,
-      status:               subUserId ? 'assigned' : 'unassigned',
+      status: subUserId ? 'assigned' : 'unassigned',
     })
     .eq('id', visitSpecId);
   if (error) throw error;
@@ -478,23 +498,23 @@ export async function publishListings({
   if (!fmOrganisationId) throw new Error('FM organisation required');
   if (!visitSpecs?.length) return [];
 
-  const payload = visitSpecs.map(vs => {
+  const payload = visitSpecs.map((vs) => {
     const o = perSpec[vs.id] ?? {};
-    const target = Number(o.target_price  ?? vs.price_per_visit) || 0;
-    const floor  = o.floor_price  != null ? Number(o.floor_price)   : Math.round(target * 0.8);
-    const ceil   = o.ceiling_price != null ? Number(o.ceiling_price) : Math.round(target * 1.1);
+    const target = Number(o.target_price ?? vs.price_per_visit) || 0;
+    const floor = o.floor_price != null ? Number(o.floor_price) : Math.round(target * 0.8);
+    const ceil = o.ceiling_price != null ? Number(o.ceiling_price) : Math.round(target * 1.1);
     return {
-      visit_spec_id:      vs.id,
+      visit_spec_id: vs.id,
       fm_organisation_id: fmOrganisationId,
-      visibility:         o.visibility       ?? defaults.visibility       ?? 'open',
-      format:             o.format           ?? defaults.format           ?? 'auction',
-      score_floor:        o.score_floor      ?? defaults.score_floor      ?? 70,
-      target_price:       target,
-      floor_price:        floor,
-      ceiling_price:      ceil,
-      bid_window_hours:   o.bid_window_hours ?? defaults.bid_window_hours ?? 72,
-      award_rule:         o.award_rule       ?? defaults.award_rule       ?? 'best_fit',
-      status:             'open',
+      visibility: o.visibility ?? defaults.visibility ?? 'open',
+      format: o.format ?? defaults.format ?? 'auction',
+      score_floor: o.score_floor ?? defaults.score_floor ?? 70,
+      target_price: target,
+      floor_price: floor,
+      ceiling_price: ceil,
+      bid_window_hours: o.bid_window_hours ?? defaults.bid_window_hours ?? 72,
+      award_rule: o.award_rule ?? defaults.award_rule ?? 'best_fit',
+      status: 'open',
     };
   });
 
@@ -508,52 +528,52 @@ export async function publishListings({
 
 // ── Tier label/colour passthroughs (re-export from connectDb for consistency)
 export const TIER_LABEL = {
-  elite:    'Elite',
+  elite: 'Elite',
   verified: 'Verified',
   eligible: 'Eligible',
 };
 export const TIER_COLOR = {
-  elite:    '#a78bfa',
+  elite: '#a78bfa',
   verified: '#16a34a',
   eligible: '#fbbf24',
 };
 
 export const FREQUENCY_OPTIONS = [
-  { value: 'weekly',      label: 'Weekly' },
+  { value: 'weekly', label: 'Weekly' },
   { value: 'fortnightly', label: 'Fortnightly' },
-  { value: 'monthly',     label: 'Monthly' },
-  { value: 'quarterly',   label: 'Quarterly' },
-  { value: 'annual',      label: 'Annual' },
-  { value: 'one_off',     label: 'One-off' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'annual', label: 'Annual' },
+  { value: 'one_off', label: 'One-off' },
 ];
 
 export const WORK_TYPE_OPTIONS = [
-  { value: 'exterior',   label: 'Exterior' },
-  { value: 'interior',   label: 'Interior' },
+  { value: 'exterior', label: 'Exterior' },
+  { value: 'interior', label: 'Interior' },
   { value: 'specialist', label: 'Specialist' },
-  { value: 'mixed',      label: 'Mixed' },
+  { value: 'mixed', label: 'Mixed' },
 ];
 
 export const CONTRACT_STATUS = {
   mobilising: { label: 'Mobilising', color: '#a16207' },
-  active:     { label: 'Active',     color: '#16a34a' },
-  paused:     { label: 'Paused',     color: '#6b7280' },
-  closed:     { label: 'Closed',     color: '#94a3b8' },
+  active: { label: 'Active', color: '#16a34a' },
+  paused: { label: 'Paused', color: '#6b7280' },
+  closed: { label: 'Closed', color: '#94a3b8' },
 };
 
 export const LISTING_STATUS = {
-  draft:     { label: 'Draft',     color: '#6b7280' },
-  open:      { label: 'Open',      color: '#3b82f6' },
-  bidding:   { label: 'Bidding',   color: '#C2410C' },
-  awarded:   { label: 'Awarded',   color: '#16a34a' },
-  closed:    { label: 'Closed',    color: '#94a3b8' },
+  draft: { label: 'Draft', color: '#6b7280' },
+  open: { label: 'Open', color: '#3b82f6' },
+  bidding: { label: 'Bidding', color: '#C2410C' },
+  awarded: { label: 'Awarded', color: '#16a34a' },
+  closed: { label: 'Closed', color: '#94a3b8' },
   cancelled: { label: 'Cancelled', color: '#94a3b8' },
 };
 
 export const FORMAT_LABEL = {
-  auction:   'Auction · best fit',
+  auction: 'Auction · best fit',
   rate_card: 'Rate card direct',
-  cluster:   'Cluster bid',
+  cluster: 'Cluster bid',
 };
 
 // ── Marketplace ────────────────────────────────────────────────────────────
@@ -561,7 +581,8 @@ export const FORMAT_LABEL = {
 export async function listFmListings() {
   const { data, error } = await supabase
     .from('marketplace_listings')
-    .select(`
+    .select(
+      `
       id, visibility, format, score_floor,
       target_price, floor_price, ceiling_price,
       bid_window_hours, award_rule, status,
@@ -573,17 +594,18 @@ export async function listFmListings() {
         contract:contracts ( id, name )
       ),
       bids:marketplace_bids ( id, status )
-    `)
+    `
+    )
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw error;
 
-  return (data ?? []).map(l => {
+  return (data ?? []).map((l) => {
     const bids = l.bids ?? [];
     return {
       ...l,
-      bidCount:    bids.length,
-      submittedCount: bids.filter(b => b.status === 'submitted').length,
+      bidCount: bids.length,
+      submittedCount: bids.filter((b) => b.status === 'submitted').length,
     };
   });
 }
@@ -592,7 +614,8 @@ export async function listFmListings() {
 export async function getListingWithBids(listingId) {
   const { data: listing, error: lErr } = await supabase
     .from('marketplace_listings')
-    .select(`
+    .select(
+      `
       id, visibility, format, score_floor,
       target_price, floor_price, ceiling_price,
       bid_window_hours, award_rule, status,
@@ -602,7 +625,8 @@ export async function getListingWithBids(listingId) {
         site:sites ( id, name, postcode, address ),
         contract:contracts ( id, name )
       )
-    `)
+    `
+    )
     .eq('id', listingId)
     .is('deleted_at', null)
     .maybeSingle();
@@ -611,49 +635,56 @@ export async function getListingWithBids(listingId) {
 
   const { data: bidsRaw, error: bErr } = await supabase
     .from('marketplace_bids')
-    .select(`
+    .select(
+      `
       id, listing_id, sub_user_id, bid_price, fit_score, match_breakdown,
       status, note, created_at,
       sub:profiles!marketplace_bids_sub_user_id_fkey (
         id, business_name, first_name, last_name,
         connect_score, connect_tier, connect_region, connect_capacity
       )
-    `)
+    `
+    )
     .eq('listing_id', listingId)
     .order('created_at', { ascending: false });
   if (bErr) throw bErr;
 
   // FM-side ranking — mirrors connectDb.computeFitScore weights so the
   // FM sees the same number the sub does.
-  const floor   = Number(listing.floor_price ?? 0);
-  const target  = Number(listing.target_price ?? 0);
-  const ceiling = Number(listing.ceiling_price ?? 0);
+  const floor = Number(listing.floor_price ?? 0);
+  const target = Number(listing.target_price ?? 0);
 
-  const ranked = (bidsRaw ?? []).map(b => {
+  const ranked = (bidsRaw ?? []).map((b) => {
     const subScore = Number(b.sub?.connect_score ?? 0);
-    const capFree  = Number(b.sub?.connect_capacity ?? 0);
-    const price    = Number(b.bid_price ?? 0);
-    const priceComp = floor && target && target > floor
-      ? Math.max(60, 100 - Math.round(((price - floor) / (target - floor)) * 50))
-      : 90;
-    const scoreComp    = Math.max(0, Math.min(100, subScore));
-    const distanceComp = 80;  // TODO: postcode → distance
+    const capFree = Number(b.sub?.connect_capacity ?? 0);
+    const price = Number(b.bid_price ?? 0);
+    const priceComp =
+      floor && target && target > floor
+        ? Math.max(60, 100 - Math.round(((price - floor) / (target - floor)) * 50))
+        : 90;
+    const scoreComp = Math.max(0, Math.min(100, subScore));
+    const distanceComp = 80; // TODO: postcode → distance
     const capacityComp = Math.min(100, capFree * 10);
-    const computedFit  = Math.round(priceComp * 0.4 + scoreComp * 0.35 + distanceComp * 0.15 + capacityComp * 0.1);
+    const computedFit = Math.round(
+      priceComp * 0.4 + scoreComp * 0.35 + distanceComp * 0.15 + capacityComp * 0.1
+    );
     return {
       ...b,
-      subName:      b.sub?.business_name || [b.sub?.first_name, b.sub?.last_name].filter(Boolean).join(' ') || '—',
+      subName:
+        b.sub?.business_name ||
+        [b.sub?.first_name, b.sub?.last_name].filter(Boolean).join(' ') ||
+        '—',
       subScore,
-      subTier:      b.sub?.connect_tier ?? null,
-      subRegion:    b.sub?.connect_region ?? null,
-      subCapacity:  capFree,
-      fit:          b.fit_score ?? computedFit,
+      subTier: b.sub?.connect_tier ?? null,
+      subRegion: b.sub?.connect_region ?? null,
+      subCapacity: capFree,
+      fit: b.fit_score ?? computedFit,
     };
   });
 
   // Sort by fit desc when listing is auction/best_fit, by price asc when lowest_price
   if (listing.award_rule === 'lowest_price') {
-    ranked.sort((a, b) => (Number(a.bid_price) - Number(b.bid_price)));
+    ranked.sort((a, b) => Number(a.bid_price) - Number(b.bid_price));
   } else {
     ranked.sort((a, b) => b.fit - a.fit);
   }
@@ -667,11 +698,13 @@ export async function getListingWithBids(listingId) {
 export async function listVisitSpecsForListing() {
   const { data, error } = await supabase
     .from('visit_specs')
-    .select(`
+    .select(
+      `
       id, frequency, scope, price_per_visit, status,
       site:sites ( id, name, postcode ),
       contract:contracts ( id, name )
-    `)
+    `
+    )
     .eq('status', 'unassigned')
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
@@ -689,23 +722,29 @@ export async function publishSingleListing({ fmOrganisationId, visitSpec, listin
   if (vErr) throw vErr;
 
   const target = Number(listingFields.target_price ?? visitSpec.price_per_visit) || 0;
-  const floor  = listingFields.floor_price   != null ? Number(listingFields.floor_price)   : Math.round(target * 0.8);
-  const ceil   = listingFields.ceiling_price != null ? Number(listingFields.ceiling_price) : Math.round(target * 1.1);
+  const floor =
+    listingFields.floor_price != null
+      ? Number(listingFields.floor_price)
+      : Math.round(target * 0.8);
+  const ceil =
+    listingFields.ceiling_price != null
+      ? Number(listingFields.ceiling_price)
+      : Math.round(target * 1.1);
 
   const { data, error } = await supabase
     .from('marketplace_listings')
     .insert({
-      visit_spec_id:      visitSpec.id,
+      visit_spec_id: visitSpec.id,
       fm_organisation_id: fmOrganisationId,
-      visibility:         listingFields.visibility       ?? 'open',
-      format:             listingFields.format           ?? 'auction',
-      score_floor:        listingFields.score_floor      ?? 70,
-      target_price:       target,
-      floor_price:        floor,
-      ceiling_price:      ceil,
-      bid_window_hours:   listingFields.bid_window_hours ?? 72,
-      award_rule:         listingFields.award_rule       ?? 'best_fit',
-      status:             'open',
+      visibility: listingFields.visibility ?? 'open',
+      format: listingFields.format ?? 'auction',
+      score_floor: listingFields.score_floor ?? 70,
+      target_price: target,
+      floor_price: floor,
+      ceiling_price: ceil,
+      bid_window_hours: listingFields.bid_window_hours ?? 72,
+      award_rule: listingFields.award_rule ?? 'best_fit',
+      status: 'open',
     })
     .select('id')
     .single();
@@ -716,11 +755,11 @@ export async function publishSingleListing({ fmOrganisationId, visitSpec, listin
 // ── Award + close ─────────────────────────────────────────────────────────
 export async function awardListing({ listingId, bidId, scheduledDate, startHour, durationHrs }) {
   return callFmFn('award-listing', {
-    listing_id:     listingId,
-    bid_id:         bidId,
+    listing_id: listingId,
+    bid_id: bidId,
     scheduled_date: scheduledDate,
-    start_hour:     startHour,
-    duration_hrs:   durationHrs,
+    start_hour: startHour,
+    duration_hrs: durationHrs,
   });
 }
 
@@ -740,7 +779,8 @@ export async function closeListing(listingId) {
 export async function listJobsForApproval({ filter = 'pending' } = {}) {
   let q = supabase
     .from('jobs')
-    .select(`
+    .select(
+      `
       id, status, approval_status, date, start_hour, duration_hrs,
       service, price, completion_method, completion_marked_at,
       actual_duration_minutes, query_note, rejection_note,
@@ -751,7 +791,8 @@ export async function listJobsForApproval({ filter = 'pending' } = {}) {
       sub:profiles!jobs_sub_user_id_fkey (
         id, business_name, first_name, last_name, connect_score, connect_tier
       )
-    `)
+    `
+    )
     .eq('status', 'complete')
     .is('deleted_at', null)
     .not('sub_user_id', 'is', null)
@@ -760,16 +801,20 @@ export async function listJobsForApproval({ filter = 'pending' } = {}) {
 
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []).map(j => ({
+  return (data ?? []).map((j) => ({
     ...j,
-    subName: j.sub?.business_name || [j.sub?.first_name, j.sub?.last_name].filter(Boolean).join(' ') || '—',
+    subName:
+      j.sub?.business_name ||
+      [j.sub?.first_name, j.sub?.last_name].filter(Boolean).join(' ') ||
+      '—',
   }));
 }
 
 export async function getJobApprovalDetail(jobId) {
   const { data: job, error: jErr } = await supabase
     .from('jobs')
-    .select(`
+    .select(
+      `
       id, status, approval_status, date, start_hour, duration_hrs,
       service, price, completion_method, completion_marked_at,
       actual_duration_minutes, query_note, rejection_note,
@@ -780,7 +825,8 @@ export async function getJobApprovalDetail(jobId) {
       sub:profiles!jobs_sub_user_id_fkey (
         id, business_name, first_name, last_name, connect_score, connect_tier, connect_region
       )
-    `)
+    `
+    )
     .eq('id', jobId)
     .maybeSingle();
   if (jErr) throw jErr;
@@ -789,7 +835,9 @@ export async function getJobApprovalDetail(jobId) {
   const [{ data: checkins }, { data: evidence }, { data: messages }] = await Promise.all([
     supabase
       .from('job_checkins')
-      .select('id, action, lat, lng, inside_geo_fence, distance_from_site_m, checked_in_at, note, photo_url, customer_on_site, customer_name')
+      .select(
+        'id, action, lat, lng, inside_geo_fence, distance_from_site_m, checked_in_at, note, photo_url, customer_on_site, customer_name'
+      )
       .eq('job_id', jobId)
       .order('checked_in_at', { ascending: true }),
     supabase
@@ -805,7 +853,10 @@ export async function getJobApprovalDetail(jobId) {
   ]);
   return {
     ...job,
-    subName:  job.sub?.business_name || [job.sub?.first_name, job.sub?.last_name].filter(Boolean).join(' ') || '—',
+    subName:
+      job.sub?.business_name ||
+      [job.sub?.first_name, job.sub?.last_name].filter(Boolean).join(' ') ||
+      '—',
     checkins: checkins ?? [],
     evidence: evidence ?? [],
     messages: messages ?? [],
@@ -814,10 +865,10 @@ export async function getJobApprovalDetail(jobId) {
 
 export async function approveJob({ jobId, decision, note, ratingStars, ratingComment }) {
   return callFmFn('connect-approve-job', {
-    job_id:         jobId,
+    job_id: jobId,
     decision,
     note,
-    rating_stars:   ratingStars ?? null,
+    rating_stars: ratingStars ?? null,
     rating_comment: ratingComment ?? null,
   });
 }
@@ -832,20 +883,23 @@ export async function postJobMessage({ jobId, body }) {
 export async function listListingQuestionsFm(listingId) {
   const { data, error } = await supabase
     .from('marketplace_listing_qa')
-    .select(`
+    .select(
+      `
       id, listing_id, author_id, author_role, body, parent_id, created_at,
       author:profiles!marketplace_listing_qa_author_id_fkey (
         id, business_name, first_name, last_name
       )
-    `)
+    `
+    )
     .eq('listing_id', listingId)
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return (data ?? []).map(r => ({
+  return (data ?? []).map((r) => ({
     ...r,
-    authorName: r.author?.business_name
-      || [r.author?.first_name, r.author?.last_name].filter(Boolean).join(' ')
-      || (r.author_role === 'fm' ? 'You / your team' : 'Contractor'),
+    authorName:
+      r.author?.business_name ||
+      [r.author?.first_name, r.author?.last_name].filter(Boolean).join(' ') ||
+      (r.author_role === 'fm' ? 'You / your team' : 'Contractor'),
   }));
 }
 
@@ -853,7 +907,7 @@ export async function postListingAnswer({ listingId, body, parentId }) {
   return callFmFn('connect-listing-question', {
     listing_id: listingId,
     body,
-    parent_id:  parentId ?? null,
+    parent_id: parentId ?? null,
   });
 }
 
@@ -869,7 +923,9 @@ export async function postListingAnswer({ listingId, body, parentId }) {
 export async function listSubDocsForFm(subUserId) {
   const { data, error } = await supabase
     .from('connect_sub_docs')
-    .select('id, doc_type, file_path, file_name, mime_type, issued_date, expiry_date, provider, policy_number, verified_by_cadi, verified_at, updated_at')
+    .select(
+      'id, doc_type, file_path, file_name, mime_type, issued_date, expiry_date, provider, policy_number, verified_by_cadi, verified_at, updated_at'
+    )
     .eq('sub_user_id', subUserId);
   if (error) throw error;
   return data ?? [];
@@ -902,18 +958,20 @@ export async function listSubAvailabilityForFm(subUserId) {
 export async function getSiteJobHistory(siteId, { limit = 100 } = {}) {
   const { data: jobs, error: jErr } = await supabase
     .from('jobs')
-    .select(`
+    .select(
+      `
       id, status, approval_status, date, start_hour, duration_hrs, price,
       completion_marked_at, actual_duration_minutes, service,
       sub:profiles!jobs_sub_user_id_fkey ( id, business_name, first_name, last_name )
-    `)
+    `
+    )
     .eq('site_id', siteId)
     .is('deleted_at', null)
     .order('date', { ascending: false })
     .limit(limit);
   if (jErr) throw jErr;
 
-  const jobIds = (jobs ?? []).map(j => j.id);
+  const jobIds = (jobs ?? []).map((j) => j.id);
   if (jobIds.length === 0) return [];
 
   const { data: evidence, error: eErr } = await supabase
@@ -931,10 +989,13 @@ export async function getSiteJobHistory(siteId, { limit = 100 } = {}) {
     photosByJob.set(e.job_id, arr);
   }
 
-  return (jobs ?? []).map(j => ({
+  return (jobs ?? []).map((j) => ({
     ...j,
-    subName:    j.sub?.business_name || [j.sub?.first_name, j.sub?.last_name].filter(Boolean).join(' ') || '—',
-    photoUrls:  (photosByJob.get(j.id) ?? []).slice(0, 5),
+    subName:
+      j.sub?.business_name ||
+      [j.sub?.first_name, j.sub?.last_name].filter(Boolean).join(' ') ||
+      '—',
+    photoUrls: (photosByJob.get(j.id) ?? []).slice(0, 5),
     photoCount: (photosByJob.get(j.id) ?? []).length,
   }));
 }
@@ -943,20 +1004,25 @@ export async function getSiteJobHistory(siteId, { limit = 100 } = {}) {
 export async function listFmInvoices({ status = null } = {}) {
   let q = supabase
     .from('connect_invoices')
-    .select(`
+    .select(
+      `
       id, reference, service_date, net_value, vat_value, total_value, status,
       submitted_at, exported_at, paid_at, note, created_at, exported_in_export_id,
       sub:profiles!connect_invoices_sub_user_id_fkey ( id, business_name, first_name, last_name ),
       job:jobs ( id, site:sites ( id, name, postcode ) )
-    `)
+    `
+    )
     .order('service_date', { ascending: false });
   if (status) q = q.eq('status', status);
 
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []).map(inv => ({
+  return (data ?? []).map((inv) => ({
     ...inv,
-    subName: inv.sub?.business_name || [inv.sub?.first_name, inv.sub?.last_name].filter(Boolean).join(' ') || '—',
+    subName:
+      inv.sub?.business_name ||
+      [inv.sub?.first_name, inv.sub?.last_name].filter(Boolean).join(' ') ||
+      '—',
     siteName: inv.job?.site?.name ?? null,
     sitePostcode: inv.job?.site?.postcode ?? null,
   }));
@@ -964,25 +1030,25 @@ export async function listFmInvoices({ status = null } = {}) {
 
 export async function previewAccountsExport({ periodFrom, periodTo }) {
   return callFmFn('connect-export-accounts', {
-    op:          'preview',
+    op: 'preview',
     period_from: periodFrom,
-    period_to:   periodTo,
+    period_to: periodTo,
   });
 }
 
 export async function runAccountsExport({ periodFrom, periodTo, periodLabel, fileFormat = 'csv' }) {
   return callFmFn('connect-export-accounts', {
-    op:           'export',
-    period_from:  periodFrom,
-    period_to:    periodTo,
+    op: 'export',
+    period_from: periodFrom,
+    period_to: periodTo,
     period_label: periodLabel,
-    file_format:  fileFormat,
+    file_format: fileFormat,
   });
 }
 
 export async function markInvoicesPaid(invoiceIds) {
   return callFmFn('connect-export-accounts', {
-    op:          'mark_paid',
+    op: 'mark_paid',
     invoice_ids: invoiceIds,
   });
 }
@@ -996,10 +1062,12 @@ export async function getFmAccountsSettings() {
   if (!org?.id) return null;
   const { data, error } = await supabase
     .from('fm_accounts_settings')
-    .select(`
+    .select(
+      `
       fm_organisation_id, accounts_platform, default_nominal_code, default_vat_code,
       default_payment_terms_days, accounts_email
-    `)
+    `
+    )
     .eq('fm_organisation_id', org.id)
     .maybeSingle();
   if (error) throw error;
@@ -1013,15 +1081,15 @@ export async function upsertFmAccountsSettings(updates) {
     .from('fm_accounts_settings')
     .upsert(
       {
-        fm_organisation_id:         org.id,
-        accounts_platform:          updates.accounts_platform ?? 'generic',
-        default_nominal_code:       updates.default_nominal_code ?? null,
-        default_vat_code:           updates.default_vat_code ?? null,
+        fm_organisation_id: org.id,
+        accounts_platform: updates.accounts_platform ?? 'generic',
+        default_nominal_code: updates.default_nominal_code ?? null,
+        default_vat_code: updates.default_vat_code ?? null,
         default_payment_terms_days: updates.default_payment_terms_days ?? 30,
-        accounts_email:             updates.accounts_email ?? null,
-        updated_at:                 new Date().toISOString(),
+        accounts_email: updates.accounts_email ?? null,
+        updated_at: new Date().toISOString(),
       },
-      { onConflict: 'fm_organisation_id' },
+      { onConflict: 'fm_organisation_id' }
     )
     .select('*')
     .single();
@@ -1030,12 +1098,28 @@ export async function upsertFmAccountsSettings(updates) {
 }
 
 export const ACCOUNTS_PLATFORMS = [
-  { value: 'sage_50',     label: 'Sage 50 Accounts',     hint: 'CSV import via "Easy Import" → Purchase Invoices' },
-  { value: 'sage_cloud',  label: 'Sage Business Cloud',  hint: 'CSV import via Suppliers → Purchase Invoices' },
-  { value: 'xero',        label: 'Xero',                 hint: 'CSV import via Business → Bills → Import' },
-  { value: 'quickbooks',  label: 'QuickBooks Online',    hint: 'CSV import via Expenses → New transaction → Bill' },
-  { value: 'freeagent',   label: 'FreeAgent',            hint: 'CSV import via Files → Bills' },
-  { value: 'generic',     label: 'Other / manual',       hint: 'Generic CSV with all fields — map columns yourself' },
+  {
+    value: 'sage_50',
+    label: 'Sage 50 Accounts',
+    hint: 'CSV import via "Easy Import" → Purchase Invoices',
+  },
+  {
+    value: 'sage_cloud',
+    label: 'Sage Business Cloud',
+    hint: 'CSV import via Suppliers → Purchase Invoices',
+  },
+  { value: 'xero', label: 'Xero', hint: 'CSV import via Business → Bills → Import' },
+  {
+    value: 'quickbooks',
+    label: 'QuickBooks Online',
+    hint: 'CSV import via Expenses → New transaction → Bill',
+  },
+  { value: 'freeagent', label: 'FreeAgent', hint: 'CSV import via Files → Bills' },
+  {
+    value: 'generic',
+    label: 'Other / manual',
+    hint: 'Generic CSV with all fields — map columns yourself',
+  },
 ];
 
 // ── FM supplier codes (per FM × per sub) ────────────────────────────────────
@@ -1045,34 +1129,44 @@ export async function listFmSupplierCodes() {
   if (!org?.id) return [];
   const { data, error } = await supabase
     .from('fm_supplier_codes')
-    .select(`
+    .select(
+      `
       id, sub_user_id, supplier_code, nominal_code_override, notes, updated_at,
       sub:profiles!fm_supplier_codes_sub_user_id_fkey ( id, business_name, first_name, last_name )
-    `)
+    `
+    )
     .eq('fm_organisation_id', org.id)
     .order('supplier_code', { ascending: true });
   if (error) throw error;
-  return (data ?? []).map(r => ({
+  return (data ?? []).map((r) => ({
     ...r,
-    subName: r.sub?.business_name || [r.sub?.first_name, r.sub?.last_name].filter(Boolean).join(' ') || '—',
+    subName:
+      r.sub?.business_name ||
+      [r.sub?.first_name, r.sub?.last_name].filter(Boolean).join(' ') ||
+      '—',
   }));
 }
 
-export async function upsertFmSupplierCode({ subUserId, supplierCode, nominalCodeOverride, notes }) {
+export async function upsertFmSupplierCode({
+  subUserId,
+  supplierCode,
+  nominalCodeOverride,
+  notes,
+}) {
   const org = await getMyFmOrganisation();
   if (!org?.id) throw new Error('No FM organisation');
   const { data, error } = await supabase
     .from('fm_supplier_codes')
     .upsert(
       {
-        fm_organisation_id:    org.id,
-        sub_user_id:           subUserId,
-        supplier_code:         supplierCode,
+        fm_organisation_id: org.id,
+        sub_user_id: subUserId,
+        supplier_code: supplierCode,
         nominal_code_override: nominalCodeOverride ?? null,
-        notes:                 notes ?? null,
-        updated_at:            new Date().toISOString(),
+        notes: notes ?? null,
+        updated_at: new Date().toISOString(),
       },
-      { onConflict: 'fm_organisation_id,sub_user_id' },
+      { onConflict: 'fm_organisation_id,sub_user_id' }
     )
     .select('*')
     .single();
@@ -1086,7 +1180,8 @@ export async function upsertFmSupplierCode({ subUserId, supplierCode, nominalCod
 export async function getFmInvoiceDetail(invoiceId) {
   const { data: invoice, error: invErr } = await supabase
     .from('connect_invoices')
-    .select(`
+    .select(
+      `
       id, reference, service_date, net_value, vat_value, total_value, status,
       submitted_at, exported_at, paid_at, note, created_at,
       fm_organisation:fm_organisations ( id, name ),
@@ -1094,7 +1189,8 @@ export async function getFmInvoiceDetail(invoiceId) {
         id, business_name, first_name, last_name, phone, postcode
       ),
       job:jobs ( id, site:sites ( id, name, postcode ) )
-    `)
+    `
+    )
     .eq('id', invoiceId)
     .maybeSingle();
   if (invErr) throw invErr;
@@ -1102,18 +1198,23 @@ export async function getFmInvoiceDetail(invoiceId) {
 
   const { data: lines, error: linesErr } = await supabase
     .from('connect_invoice_lines')
-    .select(`
+    .select(
+      `
       id, job_id, description, service_date, net_value, vat_value, created_at,
       job:jobs ( id, site:sites ( id, name, postcode ) )
-    `)
+    `
+    )
     .eq('invoice_id', invoiceId)
     .order('service_date', { ascending: true });
   if (linesErr) throw linesErr;
 
   return {
     ...invoice,
-    lines:    lines ?? [],
-    subName:  invoice.sub?.business_name || [invoice.sub?.first_name, invoice.sub?.last_name].filter(Boolean).join(' ') || '—',
+    lines: lines ?? [],
+    subName:
+      invoice.sub?.business_name ||
+      [invoice.sub?.first_name, invoice.sub?.last_name].filter(Boolean).join(' ') ||
+      '—',
   };
 }
 
@@ -1141,10 +1242,10 @@ export async function markInvoiceExported(invoiceId) {
 }
 
 export const INVOICE_STATUS = {
-  draft:     { label: 'Draft (sub-side)', color: '#94a3b8' },
-  submitted: { label: 'With FM',          color: '#3b82f6' },
-  exported:  { label: 'Exported',         color: '#7c3aed' },
-  paid:      { label: 'Paid',             color: '#16a34a' },
+  draft: { label: 'Draft (sub-side)', color: '#94a3b8' },
+  submitted: { label: 'With FM', color: '#3b82f6' },
+  exported: { label: 'Exported', color: '#7c3aed' },
+  paid: { label: 'Paid', color: '#16a34a' },
 };
 
 // ── Sites / Job Cards ──────────────────────────────────────────────────────
@@ -1153,24 +1254,28 @@ export const INVOICE_STATUS = {
 export async function listFmSites() {
   const { data: sites, error: sErr } = await supabase
     .from('sites')
-    .select(`
+    .select(
+      `
       id, name, address, postcode, lat, lng, notes, geo_fence_radius_m, created_at,
       end_client:end_clients ( id, name, fm_organisation_id )
-    `)
+    `
+    )
     .is('deleted_at', null)
     .order('name', { ascending: true });
   if (sErr) throw sErr;
 
-  const ids = (sites ?? []).map(s => s.id);
+  const ids = (sites ?? []).map((s) => s.id);
   if (ids.length === 0) return [];
 
   const [{ data: specs }, { data: jobs }] = await Promise.all([
     supabase
       .from('visit_specs')
-      .select(`
+      .select(
+        `
         id, site_id, frequency, scope, price_per_visit, status, assigned_sub_user_id,
         contract:contracts ( id, name )
-      `)
+      `
+      )
       .in('site_id', ids)
       .is('deleted_at', null),
     supabase
@@ -1182,86 +1287,97 @@ export async function listFmSites() {
   ]);
 
   const specsBySite = new Map();
-  (specs ?? []).forEach(s => {
+  (specs ?? []).forEach((s) => {
     if (!specsBySite.has(s.site_id)) specsBySite.set(s.site_id, []);
     specsBySite.get(s.site_id).push(s);
   });
   const jobsBySite = new Map();
-  (jobs ?? []).forEach(j => {
+  (jobs ?? []).forEach((j) => {
     if (!jobsBySite.has(j.site_id)) jobsBySite.set(j.site_id, []);
     jobsBySite.get(j.site_id).push(j);
   });
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  return (sites ?? []).map(site => {
+  return (sites ?? []).map((site) => {
     const siteSpecs = specsBySite.get(site.id) ?? [];
-    const siteJobs  = jobsBySite.get(site.id)  ?? [];
-    const past = siteJobs.filter(j => j.date && j.date <= todayIso);
-    const future = siteJobs.filter(j => j.date && j.date > todayIso);
+    const siteJobs = jobsBySite.get(site.id) ?? [];
+    const past = siteJobs.filter((j) => j.date && j.date <= todayIso);
+    const future = siteJobs.filter((j) => j.date && j.date > todayIso);
     const lastVisit = past[0]?.date ?? null;
     const nextVisit = future[future.length - 1]?.date ?? null;
-    const status = siteSpecs.length === 0
-      ? 'no-specs'
-      : siteSpecs.some(s => s.status === 'active') ? 'active'
-      : siteSpecs.some(s => s.status === 'marketplace') ? 'marketplace'
-      : siteSpecs.some(s => s.status === 'assigned') ? 'assigned'
-      : 'unassigned';
+    const status =
+      siteSpecs.length === 0
+        ? 'no-specs'
+        : siteSpecs.some((s) => s.status === 'active')
+          ? 'active'
+          : siteSpecs.some((s) => s.status === 'marketplace')
+            ? 'marketplace'
+            : siteSpecs.some((s) => s.status === 'assigned')
+              ? 'assigned'
+              : 'unassigned';
     return {
       ...site,
       endClientName: site.end_client?.name ?? null,
-      specs:        siteSpecs,
-      contract:     siteSpecs[0]?.contract ?? null,
+      specs: siteSpecs,
+      contract: siteSpecs[0]?.contract ?? null,
       lastVisit,
       nextVisit,
-      jobCount:     siteJobs.length,
-      pendingJobs:  siteJobs.filter(j => j.status === 'complete' && j.approval_status === 'pending').length,
-      perVisit:     siteSpecs.reduce((a, s) => a + (Number(s.price_per_visit) || 0), 0),
+      jobCount: siteJobs.length,
+      pendingJobs: siteJobs.filter(
+        (j) => j.status === 'complete' && j.approval_status === 'pending'
+      ).length,
+      perVisit: siteSpecs.reduce((a, s) => a + (Number(s.price_per_visit) || 0), 0),
       status,
     };
   });
 }
 
 export const SITE_STATUS = {
-  active:      { label: 'Active',         color: '#16a34a' },
-  assigned:    { label: 'Assigned',       color: '#16a34a' },
+  active: { label: 'Active', color: '#16a34a' },
+  assigned: { label: 'Assigned', color: '#16a34a' },
   marketplace: { label: 'On marketplace', color: '#C2410C' },
-  unassigned:  { label: 'Unassigned',     color: '#a16207' },
-  'no-specs':  { label: 'No specs',       color: '#94a3b8' },
+  unassigned: { label: 'Unassigned', color: '#a16207' },
+  'no-specs': { label: 'No specs', color: '#94a3b8' },
 };
 
 // ── Schedule (jobs in a date window) ──────────────────────────────────────
 export async function listFmJobs({ from, to } = {}) {
   let q = supabase
     .from('jobs')
-    .select(`
+    .select(
+      `
       id, date, start_hour, duration_hrs, status, approval_status, price,
       service, source,
       site:sites ( id, name, postcode ),
       contract:contracts ( id, name ),
       sub:profiles!jobs_sub_user_id_fkey ( id, business_name, first_name, last_name )
-    `)
+    `
+    )
     .is('deleted_at', null)
     .not('fm_organisation_id', 'is', null)
     .order('date', { ascending: true });
   if (from) q = q.gte('date', from);
-  if (to)   q = q.lte('date', to);
+  if (to) q = q.lte('date', to);
 
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []).map(j => ({
+  return (data ?? []).map((j) => ({
     ...j,
-    subName: j.sub?.business_name || [j.sub?.first_name, j.sub?.last_name].filter(Boolean).join(' ') || null,
+    subName:
+      j.sub?.business_name ||
+      [j.sub?.first_name, j.sub?.last_name].filter(Boolean).join(' ') ||
+      null,
   }));
 }
 
 export const JOB_STATUS = {
-  scheduled:           { label: 'Scheduled',    color: '#3b82f6' },
-  in_progress:         { label: 'In progress',  color: '#C2410C' },
-  complete:            { label: 'Complete',     color: '#16a34a' },
-  unassigned:          { label: 'Unassigned',   color: '#a16207' },
-  pending_confirmation:{ label: 'Pending',      color: '#a16207' },
-  cancelled:           { label: 'Cancelled',    color: '#94a3b8' },
+  scheduled: { label: 'Scheduled', color: '#3b82f6' },
+  in_progress: { label: 'In progress', color: '#C2410C' },
+  complete: { label: 'Complete', color: '#16a34a' },
+  unassigned: { label: 'Unassigned', color: '#a16207' },
+  pending_confirmation: { label: 'Pending', color: '#a16207' },
+  cancelled: { label: 'Cancelled', color: '#94a3b8' },
 };
 
 // ── Overview KPIs ─────────────────────────────────────────────────────────
@@ -1281,28 +1397,50 @@ export async function getFmOverview() {
   ] = await Promise.all([
     supabase.from('contracts').select('id, status', { count: 'exact' }).is('deleted_at', null),
     supabase.from('sites').select('id', { count: 'exact', head: true }).is('deleted_at', null),
-    supabase.from('jobs').select('id, status, price', { count: 'exact' }).is('deleted_at', null).gte('date', todayIso).lte('date', weekAhead).not('fm_organisation_id', 'is', null),
-    supabase.from('jobs').select('id, sub_user_id, price', { count: 'exact' }).is('deleted_at', null).eq('status', 'complete').eq('approval_status', 'pending'),
-    supabase.from('connect_invoices').select('id, total_value, status, sub_user_id', { count: 'exact' }).in('status', ['submitted', 'exported']),
-    supabase.from('sub_invitations').select('id', { count: 'exact', head: true }).eq('status', 'claimed'),
-    supabase.from('marketplace_listings').select('id, status', { count: 'exact' }).is('deleted_at', null).in('status', ['open', 'bidding']),
+    supabase
+      .from('jobs')
+      .select('id, status, price', { count: 'exact' })
+      .is('deleted_at', null)
+      .gte('date', todayIso)
+      .lte('date', weekAhead)
+      .not('fm_organisation_id', 'is', null),
+    supabase
+      .from('jobs')
+      .select('id, sub_user_id, price', { count: 'exact' })
+      .is('deleted_at', null)
+      .eq('status', 'complete')
+      .eq('approval_status', 'pending'),
+    supabase
+      .from('connect_invoices')
+      .select('id, total_value, status, sub_user_id', { count: 'exact' })
+      .in('status', ['submitted', 'exported']),
+    supabase
+      .from('sub_invitations')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'claimed'),
+    supabase
+      .from('marketplace_listings')
+      .select('id, status', { count: 'exact' })
+      .is('deleted_at', null)
+      .in('status', ['open', 'bidding']),
   ]);
 
   const sumPrice = (rows) => (rows.data ?? []).reduce((a, r) => a + (Number(r.price) || 0), 0);
-  const sumInvoice = (rows) => (rows.data ?? []).reduce((a, r) => a + (Number(r.total_value) || 0), 0);
+  const sumInvoice = (rows) =>
+    (rows.data ?? []).reduce((a, r) => a + (Number(r.total_value) || 0), 0);
 
   return {
-    activeContracts:   (contracts.data ?? []).filter(c => c.status === 'active').length,
-    mobilisingContracts: (contracts.data ?? []).filter(c => c.status === 'mobilising').length,
-    totalContracts:    contracts.count ?? 0,
-    siteCount:         sites.count ?? 0,
-    jobsThisWeek:      jobsThisWeek.count ?? 0,
+    activeContracts: (contracts.data ?? []).filter((c) => c.status === 'active').length,
+    mobilisingContracts: (contracts.data ?? []).filter((c) => c.status === 'mobilising').length,
+    totalContracts: contracts.count ?? 0,
+    siteCount: sites.count ?? 0,
+    jobsThisWeek: jobsThisWeek.count ?? 0,
     jobsThisWeekValue: sumPrice(jobsThisWeek),
-    pendingApprovals:  pendingApprovals.count ?? 0,
+    pendingApprovals: pendingApprovals.count ?? 0,
     pendingApprovalsValue: sumPrice(pendingApprovals),
-    invoicesDueCount:  submittedInvoices.count ?? 0,
-    invoicesDueValue:  sumInvoice(submittedInvoices),
-    activeSubs:        activeSubs.count ?? 0,
-    liveListings:      listings.count ?? 0,
+    invoicesDueCount: submittedInvoices.count ?? 0,
+    invoicesDueValue: sumInvoice(submittedInvoices),
+    activeSubs: activeSubs.count ?? 0,
+    liveListings: listings.count ?? 0,
   };
 }

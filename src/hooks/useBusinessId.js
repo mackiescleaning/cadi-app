@@ -13,7 +13,10 @@ export function useBusinessId() {
       .select('id')
       .eq('owner_user_id', user.id)
       .maybeSingle()
-      .then(({ data }) => { if (data) setBusinessId(data.id); });
+      .then(({ data }) => {
+        if (data) setBusinessId(data.id);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-fetch only when the signed-in user changes
   }, [user?.id]);
 
   return businessId;

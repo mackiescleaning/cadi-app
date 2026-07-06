@@ -20,7 +20,8 @@ const STEPS = [
     id: 'logo',
     emoji: '🖼️',
     title: 'Add your business logo',
-    mission: 'Upload your logo and the app looks completely yours — it appears in the sidebar, on every invoice and quote.',
+    mission:
+      'Upload your logo and the app looks completely yours — it appears in the sidebar, on every invoice and quote.',
     tab: 'settings',
     tabLabel: 'Open Settings',
     settingsTab: 'profile',
@@ -33,7 +34,8 @@ const STEPS = [
     id: 'pricing',
     emoji: '💷',
     title: 'Set your pricing foundations',
-    mission: 'Add your hourly rate and minimum job price. These flow automatically into every quote, invoice and job card across Cadi.',
+    mission:
+      'Add your hourly rate and minimum job price. These flow automatically into every quote, invoice and job card across Cadi.',
     tab: 'calculator',
     tabLabel: 'Open Pricing',
     hint: 'Pricing tab → set your base hourly rate',
@@ -44,7 +46,8 @@ const STEPS = [
     id: 'services',
     emoji: '✅',
     title: 'Build your service menu',
-    mission: "Pick every service you offer. They'll appear as options on job cards, customer profiles and invoices — no more typing from scratch.",
+    mission:
+      "Pick every service you offer. They'll appear as options on job cards, customer profiles and invoices — no more typing from scratch.",
     tab: 'calculator',
     tabLabel: 'Open Pricing',
     hint: 'Pricing tab → Services section',
@@ -55,7 +58,8 @@ const STEPS = [
     id: 'goals',
     emoji: '🎯',
     title: 'Set your revenue target',
-    mission: "Set a monthly target and Cadi tracks every job against it — showing exactly how many bookings stand between you and your goal.",
+    mission:
+      'Set a monthly target and Cadi tracks every job against it — showing exactly how many bookings stand between you and your goal.',
     tab: 'review',
     tabLabel: 'Open Sprint Planner',
     hint: 'Annual Review → create a 90-day sprint',
@@ -66,7 +70,8 @@ const STEPS = [
     id: 'compliance',
     emoji: '🛡️',
     title: 'Log your compliance',
-    mission: 'Add your PLI, DBS, ICO and COSHH status. Cadi tracks renewal dates and alerts you before anything lapses.',
+    mission:
+      'Add your PLI, DBS, ICO and COSHH status. Cadi tracks renewal dates and alerts you before anything lapses.',
     tab: 'settings',
     tabLabel: 'Open Settings',
     settingsTab: 'business',
@@ -78,7 +83,8 @@ const STEPS = [
     id: 'customers',
     emoji: '🚚',
     title: 'Bring your customers across',
-    mission: "Drop in your CleanerPlanner / Aworka / Squeegee export — or photos of your paper diary — and I'll pull every customer, job, frequency and price. One sitting, no copy-paste.",
+    mission:
+      "Drop in your CleanerPlanner / Aworka / Squeegee export — or photos of your paper diary — and I'll pull every customer, job, frequency and price. One sitting, no copy-paste.",
     tab: 'onboarding/customers',
     tabLabel: 'Start migration',
     hint: 'Upload Customers.csv + Jobs.csv',
@@ -86,15 +92,18 @@ const STEPS = [
     // in business_settings.setup_data). Falls back to checking the legacy
     // wizard_completed_steps array so users who already ticked manually
     // don't see this step re-open.
-    detect: (_p, sd) => Boolean(sd?.customers_imported)
-                     || (Array.isArray(sd?.wizard_completed_steps) && sd.wizard_completed_steps.includes('customers')),
+    detect: (_p, sd) =>
+      Boolean(sd?.customers_imported) ||
+      (Array.isArray(sd?.wizard_completed_steps) &&
+        sd.wizard_completed_steps.includes('customers')),
     autoDetect: true,
   },
   {
     id: 'schedule',
     emoji: '📅',
     title: 'Fill in your first week',
-    mission: 'Drop your current jobs onto the scheduler. See your week take shape — and let the dashboard start showing real numbers.',
+    mission:
+      'Drop your current jobs onto the scheduler. See your week take shape — and let the dashboard start showing real numbers.',
     tab: 'scheduler',
     tabLabel: 'Open Scheduler',
     hint: 'Scheduler tab → Add job',
@@ -105,7 +114,8 @@ const STEPS = [
     id: 'kit',
     emoji: '🧴',
     title: 'Build your cleaning kit',
-    mission: 'Log your products, quantities and restock dates. Cadi tracks what you use so you never run out mid-job.',
+    mission:
+      'Log your products, quantities and restock dates. Cadi tracks what you use so you never run out mid-job.',
     tab: 'inventory',
     tabLabel: 'Open Inventory',
     hint: 'Inventory tab → Add product',
@@ -122,15 +132,15 @@ export default function SetupWizard({ onAllDone }) {
   const { isPro } = usePlan();
   const navigate = useNavigate();
 
-  const [setupData,      setSetupData]      = useState(null);
-  const [completed,      setCompleted]      = useState([]);
-  const [collapsed,      setCollapsed]      = useState(false);
-  const [celebrating,    setCelebrating]    = useState(false);
-  const [dismissed,      setDismissed]      = useState(false);
-  const [activeStep,     setActiveStep]     = useState(null);
-  const [goalValue,      setGoalValue]      = useState('');
-  const [goalSaving,     setGoalSaving]     = useState(false);
-  const [goalSaved,      setGoalSaved]      = useState(false);
+  const [setupData, setSetupData] = useState(null);
+  const [completed, setCompleted] = useState([]);
+  const [collapsed, setCollapsed] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [_activeStep, setActiveStep] = useState(null);
+  const [goalValue, setGoalValue] = useState('');
+  const [goalSaving, setGoalSaving] = useState(false);
+  const [goalSaved, setGoalSaved] = useState(false);
 
   // ── Load setup_data + saved wizard progress from Supabase ──────────────────
   useEffect(() => {
@@ -155,9 +165,9 @@ export default function SetupWizard({ onAllDone }) {
   useEffect(() => {
     if (!profile || setupData === null) return;
 
-    setCompleted(prev => {
+    setCompleted((prev) => {
       const next = new Set(prev);
-      STEPS.forEach(step => {
+      STEPS.forEach((step) => {
         if (step.autoDetect && step.detect && step.detect(profile, setupData)) {
           next.add(step.id);
         }
@@ -167,28 +177,34 @@ export default function SetupWizard({ onAllDone }) {
   }, [profile, setupData]);
 
   // ── Persist completed steps ────────────────────────────────────────────────
-  const saveCompleted = useCallback(async (ids) => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('business_settings')
-      .select('setup_data')
-      .eq('owner_id', user.id)
-      .single();
-    const existing = data?.setup_data ?? {};
-    await supabase
-      .from('business_settings')
-      .update({ setup_data: { ...existing, wizard_completed_steps: ids } })
-      .eq('owner_id', user.id);
-  }, [user]);
+  const saveCompleted = useCallback(
+    async (ids) => {
+      if (!user) return;
+      const { data } = await supabase
+        .from('business_settings')
+        .select('setup_data')
+        .eq('owner_id', user.id)
+        .single();
+      const existing = data?.setup_data ?? {};
+      await supabase
+        .from('business_settings')
+        .update({ setup_data: { ...existing, wizard_completed_steps: ids } })
+        .eq('owner_id', user.id);
+    },
+    [user]
+  );
 
   const tick = (id) => {
-    setCompleted(prev => {
+    setCompleted((prev) => {
       if (prev.includes(id)) return prev;
       const next = [...prev, id];
       saveCompleted(next);
       if (next.length === TOTAL) {
         setCelebrating(true);
-        setTimeout(() => { setCelebrating(false); onAllDone?.(); }, 3000);
+        setTimeout(() => {
+          setCelebrating(false);
+          onAllDone?.();
+        }, 3000);
       }
       return next;
     });
@@ -196,8 +212,8 @@ export default function SetupWizard({ onAllDone }) {
   };
 
   const untick = (id) => {
-    setCompleted(prev => {
-      const next = prev.filter(x => x !== id);
+    setCompleted((prev) => {
+      const next = prev.filter((x) => x !== id);
       saveCompleted(next);
       return next;
     });
@@ -214,25 +230,37 @@ export default function SetupWizard({ onAllDone }) {
     if (!monthly || !user) return;
     setGoalSaving(true);
     try {
-      const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).maybeSingle();
+      const { data } = await supabase
+        .from('business_settings')
+        .select('setup_data')
+        .eq('owner_id', user.id)
+        .maybeSingle();
       const existing = data?.setup_data ?? {};
-      await supabase.from('business_settings').upsert(
-        { owner_id: user.id, annual_target: monthly * 12, setup_data: { ...existing, target_revenue: monthly } },
-        { onConflict: 'owner_id' }
-      );
-      setSetupData(prev => ({ ...prev, target_revenue: monthly }));
+      await supabase
+        .from('business_settings')
+        .upsert(
+          {
+            owner_id: user.id,
+            annual_target: monthly * 12,
+            setup_data: { ...existing, target_revenue: monthly },
+          },
+          { onConflict: 'owner_id' }
+        );
+      setSetupData((prev) => ({ ...prev, target_revenue: monthly }));
       setGoalSaved(true);
       tick('goals');
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
     setGoalSaving(false);
   };
 
   if (dismissed) return null;
 
-  const doneCount   = completed.length;
-  const pct         = Math.round((doneCount / TOTAL) * 100);
-  const allDone     = doneCount === TOTAL;
-  const currentStep = STEPS.find(s => !completed.includes(s.id));
+  const doneCount = completed.length;
+  const pct = Math.round((doneCount / TOTAL) * 100);
+  const allDone = doneCount === TOTAL;
+  const currentStep = STEPS.find((s) => !completed.includes(s.id));
 
   // ── Celebration state ──────────────────────────────────────────────────────
   if (celebrating) {
@@ -240,7 +268,9 @@ export default function SetupWizard({ onAllDone }) {
       <div className="rounded-2xl overflow-hidden border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-6 text-center">
         <div className="text-4xl mb-3 animate-bounce">🎉</div>
         <h3 className="text-lg font-black text-emerald-800 mb-1">Setup complete!</h3>
-        <p className="text-sm text-emerald-600">Your business is now fully configured in Cadi. Time to grow.</p>
+        <p className="text-sm text-emerald-600">
+          Your business is now fully configured in Cadi. Time to grow.
+        </p>
       </div>
     );
   }
@@ -250,24 +280,32 @@ export default function SetupWizard({ onAllDone }) {
     return (
       <div className="rounded-2xl overflow-hidden border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white text-lg">✓</div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white text-lg">
+            ✓
+          </div>
           <div>
             <p className="text-sm font-black text-emerald-800">Cadi setup complete!</p>
-            <p className="text-xs text-emerald-600">Your business is fully configured — your health score is now live</p>
+            <p className="text-xs text-emerald-600">
+              Your business is fully configured — your health score is now live
+            </p>
           </div>
         </div>
-        <button onClick={() => setDismissed(true)} className="text-xs text-emerald-500 hover:text-emerald-700 font-semibold">Dismiss</button>
+        <button
+          onClick={() => setDismissed(true)}
+          className="text-xs text-emerald-500 hover:text-emerald-700 font-semibold"
+        >
+          Dismiss
+        </button>
       </div>
     );
   }
 
   return (
     <div className="rounded-2xl overflow-hidden border border-[#99c5ff]/30 bg-white shadow-sm">
-
       {/* ── Header ── */}
       <div
         className="px-5 py-4 bg-gradient-to-r from-[#010a4f] to-[#0d1e78] flex items-center justify-between cursor-pointer select-none"
-        onClick={() => setCollapsed(v => !v)}
+        onClick={() => setCollapsed((v) => !v)}
       >
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
@@ -282,8 +320,10 @@ export default function SetupWizard({ onAllDone }) {
             </div>
             <p className="text-xs text-brand-skyblue/60 mt-0.5">
               {collapsed
-                ? currentStep ? `Next: ${currentStep.title}` : 'All done!'
-                : "Complete each mission to unlock your full business dashboard"}
+                ? currentStep
+                  ? `Next: ${currentStep.title}`
+                  : 'All done!'
+                : 'Complete each mission to unlock your full business dashboard'}
             </p>
           </div>
         </div>
@@ -291,16 +331,30 @@ export default function SetupWizard({ onAllDone }) {
           {/* Progress ring */}
           <div className="relative w-9 h-9 shrink-0">
             <svg width="36" height="36" viewBox="0 0 36 36" className="-rotate-90">
-              <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(153,197,255,0.15)" strokeWidth="3.5" />
               <circle
-                cx="18" cy="18" r="14" fill="none"
-                stroke="#10b981" strokeWidth="3.5" strokeLinecap="round"
+                cx="18"
+                cy="18"
+                r="14"
+                fill="none"
+                stroke="rgba(153,197,255,0.15)"
+                strokeWidth="3.5"
+              />
+              <circle
+                cx="18"
+                cy="18"
+                r="14"
+                fill="none"
+                stroke="#10b981"
+                strokeWidth="3.5"
+                strokeLinecap="round"
                 strokeDasharray={2 * Math.PI * 14}
                 strokeDashoffset={2 * Math.PI * 14 * (1 - pct / 100)}
                 style={{ transition: 'stroke-dashoffset 0.5s ease' }}
               />
             </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white">{pct}%</span>
+            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white">
+              {pct}%
+            </span>
           </div>
           <span className="text-white/40 text-sm">{collapsed ? '▼' : '▲'}</span>
         </div>
@@ -318,29 +372,26 @@ export default function SetupWizard({ onAllDone }) {
       {!collapsed && (
         <div className="divide-y divide-gray-50">
           {STEPS.map((step, idx) => {
-            const done    = completed.includes(step.id);
-            const isCurrent = !done && STEPS.findIndex(s => !completed.includes(s.id)) === idx;
-            const isActive  = activeStep === step.id;
+            const done = completed.includes(step.id);
+            const isCurrent = !done && STEPS.findIndex((s) => !completed.includes(s.id)) === idx;
 
             return (
               <div
                 key={step.id}
                 className={`transition-colors ${
-                  done        ? 'bg-emerald-50/30'
-                  : isCurrent ? 'bg-brand-blue/[0.03]'
-                  : ''
+                  done ? 'bg-emerald-50/30' : isCurrent ? 'bg-brand-blue/[0.03]' : ''
                 }`}
               >
                 <div className="flex items-start gap-3 px-5 py-3.5">
                   {/* Tick button */}
                   <button
-                    onClick={() => done ? untick(step.id) : tick(step.id)}
+                    onClick={() => (done ? untick(step.id) : tick(step.id))}
                     className={`mt-0.5 shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
                       done
                         ? 'bg-emerald-500 border-emerald-500 text-white'
                         : isCurrent
-                        ? 'border-brand-blue hover:bg-brand-blue/10'
-                        : 'border-gray-300 hover:border-gray-400'
+                          ? 'border-brand-blue hover:bg-brand-blue/10'
+                          : 'border-gray-300 hover:border-gray-400'
                     }`}
                   >
                     {done && <span className="text-[10px] font-black">✓</span>}
@@ -349,11 +400,15 @@ export default function SetupWizard({ onAllDone }) {
                   {/* Step content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-sm font-bold leading-tight ${done ? 'line-through text-gray-400' : isCurrent ? 'text-brand-navy' : 'text-gray-600'}`}>
+                      <span
+                        className={`text-sm font-bold leading-tight ${done ? 'line-through text-gray-400' : isCurrent ? 'text-brand-navy' : 'text-gray-600'}`}
+                      >
                         {step.emoji} {step.title}
                       </span>
                       {isCurrent && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-blue text-white">NOW</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-blue text-white">
+                          NOW
+                        </span>
                       )}
                     </div>
 
@@ -365,19 +420,25 @@ export default function SetupWizard({ onAllDone }) {
                         {/* Goals step: inline setter for free users */}
                         {step.id === 'goals' && !isPro ? (
                           goalSaved ? (
-                            <p className="text-xs font-bold text-emerald-600">✓ Target saved — tracking live on your dashboard</p>
+                            <p className="text-xs font-bold text-emerald-600">
+                              ✓ Target saved — tracking live on your dashboard
+                            </p>
                           ) : (
                             <div className="rounded-xl border border-[#1f48ff]/20 bg-[#f5f7ff] p-3 space-y-2">
-                              <p className="text-xs font-semibold text-[#010a4f]">What's your monthly revenue target?</p>
+                              <p className="text-xs font-semibold text-[#010a4f]">
+                                What's your monthly revenue target?
+                              </p>
                               <div className="flex gap-2">
                                 <div className="relative flex-1">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">£</span>
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">
+                                    £
+                                  </span>
                                   <input
                                     type="number"
                                     min="0"
                                     value={goalValue}
-                                    onChange={e => setGoalValue(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && saveGoal()}
+                                    onChange={(e) => setGoalValue(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && saveGoal()}
                                     placeholder="e.g. 3000"
                                     className="w-full pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#1f48ff] bg-white"
                                   />
@@ -390,7 +451,10 @@ export default function SetupWizard({ onAllDone }) {
                                   {goalSaving ? '…' : 'Save'}
                                 </button>
                               </div>
-                              <p className="text-[10px] text-gray-400">Cadi shows your progress toward this target on the dashboard every day.</p>
+                              <p className="text-[10px] text-gray-400">
+                                Cadi shows your progress toward this target on the dashboard every
+                                day.
+                              </p>
                             </div>
                           )
                         ) : (
@@ -422,7 +486,9 @@ export default function SetupWizard({ onAllDone }) {
 
                     {/* Show mission for collapsed non-current steps on hover */}
                     {!isCurrent && !done && (
-                      <p className="text-xs text-gray-400 mt-0.5 leading-snug line-clamp-1">{step.mission}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 leading-snug line-clamp-1">
+                        {step.mission}
+                      </p>
                     )}
                   </div>
 
@@ -459,7 +525,8 @@ export default function SetupWizard({ onAllDone }) {
       {!collapsed && (
         <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
           <p className="text-xs text-gray-400">
-            {TOTAL - doneCount} step{TOTAL - doneCount !== 1 ? 's' : ''} remaining · your dashboard unlocks fully when complete
+            {TOTAL - doneCount} step{TOTAL - doneCount !== 1 ? 's' : ''} remaining · your dashboard
+            unlocks fully when complete
           </p>
           <button
             onClick={() => setDismissed(true)}

@@ -7,9 +7,8 @@ import { logAudit } from './auditDb';
 export async function listCustomers(optionsOrLimit = {}) {
   const ownerId = await getCurrentUserId();
 
-  const opts = typeof optionsOrLimit === 'number'
-    ? { pageSize: optionsOrLimit, page: 0 }
-    : optionsOrLimit;
+  const opts =
+    typeof optionsOrLimit === 'number' ? { pageSize: optionsOrLimit, page: 0 } : optionsOrLimit;
 
   const { page = 0, pageSize = 500 } = opts;
 
@@ -53,33 +52,30 @@ export async function upsertCustomer(customer) {
     next_job_date: customer.nextJobDate || null,
     lifetime_value: Number(customer.lifetimeValue) || 0,
     // CleanerPlanner / Squeegee import fields
-    due_date:           customer.dueDate || null,
-    job_reference:      customer.jobReference || null,
+    due_date: customer.dueDate || null,
+    job_reference: customer.jobReference || null,
     customer_reference: customer.customerReference || null,
-    schedule:           customer.schedule || null,
-    customer_balance:   customer.customerBalance != null ? Number(customer.customerBalance) : null,
-    price_per_visit:    customer.pricePerVisit != null ? Number(customer.pricePerVisit) : null,
-    round_name:         customer.roundName || null,
-    account_status:     customer.accountStatus || 'active',
-    segment:            customer.segment || 'unsegmented',
-    segment_source:     customer.segmentSource || 'owner_set',
-    birthday:           customer.birthday || null,
-    customer_since:     customer.customerSince || null,
+    schedule: customer.schedule || null,
+    customer_balance: customer.customerBalance != null ? Number(customer.customerBalance) : null,
+    price_per_visit: customer.pricePerVisit != null ? Number(customer.pricePerVisit) : null,
+    round_name: customer.roundName || null,
+    account_status: customer.accountStatus || 'active',
+    segment: customer.segment || 'unsegmented',
+    segment_source: customer.segmentSource || 'owner_set',
+    birthday: customer.birthday || null,
+    customer_since: customer.customerSince || null,
     // Billing mode picks what onJobCompleted() does on the next scheduled→complete
     // transition. Defaults handled by the DB; only set when caller supplies it
     // so an unrelated upsert doesn't reset the value.
     ...(customer.billing_mode || customer.billingMode
-      ? { billing_mode: customer.billing_mode || customer.billingMode } : {}),
+      ? { billing_mode: customer.billing_mode || customer.billingMode }
+      : {}),
     // Stamped by the import wizard so a mis-import can be rolled back as a batch.
     // Only set on first insert — preserved on upsert via "..." spread inside payload.
     ...(customer.importBatchId && !customer.id ? { import_batch_id: customer.importBatchId } : {}),
   };
 
-  const { data, error } = await supabase
-    .from('customers')
-    .upsert(payload)
-    .select('*')
-    .single();
+  const { data, error } = await supabase.from('customers').upsert(payload).select('*').single();
 
   if (error) throw error;
   return data;
@@ -96,10 +92,7 @@ export async function approvePendingCustomer(id) {
     .eq('id', id)
     .eq('owner_id', ownerId);
   if (cErr) throw cErr;
-  await supabase
-    .from('customer_rounds')
-    .update({ account_status: 'active' })
-    .eq('customer_id', id);
+  await supabase.from('customer_rounds').update({ account_status: 'active' }).eq('customer_id', id);
 
   // Expand the recurring patterns into actual scheduled jobs. Best-effort —
   // failure here doesn't undo the approval (the customer still goes live).
@@ -107,7 +100,6 @@ export async function approvePendingCustomer(id) {
     const { materialiseVisitsForCustomers } = await import('./recurringJobsDb');
     return await materialiseVisitsForCustomers([id], { weeks: 12 });
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.warn('Scheduler projection failed for customer', id, e?.message ?? e);
     return { rulesProcessed: 0, jobsCreated: 0, skipped: 0 };
   }
@@ -125,7 +117,7 @@ export async function approveAllPending() {
     .eq('account_status', 'pending_review')
     .select('id');
   if (error) throw error;
-  const ids = (data ?? []).map(c => c.id);
+  const ids = (data ?? []).map((c) => c.id);
   if (!ids.length) return { count: 0, jobsCreated: 0 };
 
   await supabase
@@ -140,7 +132,6 @@ export async function approveAllPending() {
     const result = await materialiseVisitsForCustomers(ids, { weeks: 12 });
     jobsCreated = result?.jobsCreated ?? 0;
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.warn('Bulk scheduler projection failed:', e?.message ?? e);
   }
   return { count: ids.length, jobsCreated };
@@ -159,9 +150,9 @@ export async function archiveCustomer(id) {
   // Soft delete is still a customer-data action — log it so the audit trail
   // covers both archive and erasure paths.
   await logAudit({
-    action:   'customer.archived',
+    action: 'customer.archived',
     category: 'customer',
-    detail:   { customer_id: id },
+    detail: { customer_id: id },
   });
 }
 
@@ -203,74 +194,107 @@ export async function exportCustomerData(customerId) {
 
   // Fetch everything else in parallel — every query is RLS-scoped so cross-
   // business leaks are impossible even with a malicious customerId.
-  const [jobs, rounds, recurring, invoices, surveys, reviews, conversations, packs] = await Promise.all([
-    supabase.from('jobs')
-      .select('id, date, service, type, price, status, notes, postcode, address_line1, address_line2, town, county, start_hour, duration_hrs, created_at, updated_at')
-      .eq('owner_id', ownerId).eq('customer_id', customerId).order('date', { ascending: false }).then(r => r.data ?? []),
-    supabase.from('customer_rounds')
-      .select('id, round_name, schedule, price_per_visit, due_date, account_status, job_reference, notes, display_order, created_at, updated_at')
-      .eq('customer_id', customerId).order('round_name').then(r => r.data ?? []),
-    supabase.from('recurring_jobs')
-      .select('*').eq('owner_id', ownerId).eq('customer_id', customerId).then(r => r.data ?? []),
-    supabase.from('invoices')
-      .select('id, invoice_num, date, due_date, status, lines, payment_method, payment_terms, sent_at, viewed_at, paid_at, notes, created_at, updated_at')
-      .eq('owner_id', ownerId).eq('customer_id', customerId).order('date', { ascending: false }).then(r => r.data ?? []),
-    supabase.from('site_surveys')
-      .select('*').eq('customer_id', customerId).then(r => r.data ?? []),
-    supabase.from('reviews')
-      .select('*').eq('customer_id', customerId).then(r => r.data ?? []),
-    supabase.from('conversations')
-      .select('id, channel, started_at, ended_at, summary, message_count')
-      .eq('customer_id', customerId).then(r => r.data ?? []),
-    supabase.from('onboarding_packs')
-      .select('id, status, created_at, updated_at')
-      .eq('customer_id', customerId).then(r => r.data ?? []),
-  ]);
+  const [jobs, rounds, recurring, invoices, surveys, reviews, conversations, packs] =
+    await Promise.all([
+      supabase
+        .from('jobs')
+        .select(
+          'id, date, service, type, price, status, notes, postcode, address_line1, address_line2, town, county, start_hour, duration_hrs, created_at, updated_at'
+        )
+        .eq('owner_id', ownerId)
+        .eq('customer_id', customerId)
+        .order('date', { ascending: false })
+        .then((r) => r.data ?? []),
+      supabase
+        .from('customer_rounds')
+        .select(
+          'id, round_name, schedule, price_per_visit, due_date, account_status, job_reference, notes, display_order, created_at, updated_at'
+        )
+        .eq('customer_id', customerId)
+        .order('round_name')
+        .then((r) => r.data ?? []),
+      supabase
+        .from('recurring_jobs')
+        .select('*')
+        .eq('owner_id', ownerId)
+        .eq('customer_id', customerId)
+        .then((r) => r.data ?? []),
+      supabase
+        .from('invoices')
+        .select(
+          'id, invoice_num, date, due_date, status, lines, payment_method, payment_terms, sent_at, viewed_at, paid_at, notes, created_at, updated_at'
+        )
+        .eq('owner_id', ownerId)
+        .eq('customer_id', customerId)
+        .order('date', { ascending: false })
+        .then((r) => r.data ?? []),
+      supabase
+        .from('site_surveys')
+        .select('*')
+        .eq('customer_id', customerId)
+        .then((r) => r.data ?? []),
+      supabase
+        .from('reviews')
+        .select('*')
+        .eq('customer_id', customerId)
+        .then((r) => r.data ?? []),
+      supabase
+        .from('conversations')
+        .select('id, channel, started_at, ended_at, summary, message_count')
+        .eq('customer_id', customerId)
+        .then((r) => r.data ?? []),
+      supabase
+        .from('onboarding_packs')
+        .select('id, status, created_at, updated_at')
+        .eq('customer_id', customerId)
+        .then((r) => r.data ?? []),
+    ]);
 
   const envelope = {
     schema_version: 1,
-    cadi_version:   'app.cadi.cleaning',
-    purpose:        'Subject Access Request (UK GDPR Article 15 / Article 20)',
-    notice:         'This file contains personal data. Handle accordingly. Do not share except with the data subject named below.',
-    exported_at:    new Date().toISOString(),
-    exported_by:    ownerId,
+    cadi_version: 'app.cadi.cleaning',
+    purpose: 'Subject Access Request (UK GDPR Article 15 / Article 20)',
+    notice:
+      'This file contains personal data. Handle accordingly. Do not share except with the data subject named below.',
+    exported_at: new Date().toISOString(),
+    exported_by: ownerId,
     customer: {
-      id:             customer.id,
-      name:           customer.name,
-      email:          customer.email,
-      phone:          customer.phone,
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
       address: {
-        line1:    customer.address_line1,
-        line2:    customer.address_line2,
-        town:     customer.town,
-        county:   customer.county,
+        line1: customer.address_line1,
+        line2: customer.address_line2,
+        town: customer.town,
+        county: customer.county,
         postcode: customer.postcode,
       },
-      status:           customer.status,
-      account_status:   customer.account_status,
-      segment:          customer.segment,
-      tags:             customer.tags,
-      rating:           customer.rating,
-      notes:            customer.notes,
-      source:           customer.source,
-      created_at:       customer.created_at,
-      updated_at:       customer.updated_at,
+      status: customer.status,
+      account_status: customer.account_status,
+      segment: customer.segment,
+      tags: customer.tags,
+      rating: customer.rating,
+      notes: customer.notes,
+      source: customer.source,
+      created_at: customer.created_at,
+      updated_at: customer.updated_at,
     },
     billing: {
-      mode:                   customer.billing_mode,
-      customer_balance:       customer.customer_balance,
-      price_per_visit:        customer.price_per_visit,
-      customer_reference:     customer.customer_reference,
-      gc_customer_id:         customer.gc_customer_id,
-      gc_mandate_id:          customer.gc_mandate_id,
-      gc_mandate_status:      customer.gc_mandate_status,
+      mode: customer.billing_mode,
+      customer_balance: customer.customer_balance,
+      price_per_visit: customer.price_per_visit,
+      customer_reference: customer.customer_reference,
+      gc_customer_id: customer.gc_customer_id,
+      gc_mandate_id: customer.gc_mandate_id,
+      gc_mandate_status: customer.gc_mandate_status,
     },
     schedule: {
-      next_job_date:  customer.next_job_date,
-      last_job_date:  customer.last_job_date,
-      due_date:       customer.due_date,
-      schedule:       customer.schedule,
-      frequency:      customer.frequency,
+      next_job_date: customer.next_job_date,
+      last_job_date: customer.last_job_date,
+      due_date: customer.due_date,
+      schedule: customer.schedule,
+      frequency: customer.frequency,
     },
     jobs,
     rounds,
@@ -287,19 +311,19 @@ export async function exportCustomerData(customerId) {
   // failure. detail keeps the customer's name for the controller's own
   // records (this is the controller's audit, not the data subject's data).
   await logAudit({
-    action:   'customer.exported',
+    action: 'customer.exported',
     category: 'gdpr',
     detail: {
-      customer_id:   customerId,
-      name:          customer.name,
+      customer_id: customerId,
+      name: customer.name,
       record_counts: {
-        jobs:           jobs.length,
-        rounds:         rounds.length,
+        jobs: jobs.length,
+        rounds: rounds.length,
         recurring_jobs: recurring.length,
-        invoices:       invoices.length,
-        surveys:        surveys.length,
-        reviews:        reviews.length,
-        conversations:  conversations.length,
+        invoices: invoices.length,
+        surveys: surveys.length,
+        reviews: reviews.length,
+        conversations: conversations.length,
       },
     },
   });
@@ -366,11 +390,11 @@ export async function hardDeleteCustomer(id) {
   const { data: jobsHit } = await supabase
     .from('jobs')
     .update({
-      customer:      '[Deleted customer]',
+      customer: '[Deleted customer]',
       address_line1: null,
       address_line2: null,
-      postcode:      null,
-      notes:         null,
+      postcode: null,
+      notes: null,
     })
     .eq('customer_id', id)
     .eq('owner_id', ownerId)
@@ -410,12 +434,9 @@ export async function hardDeleteCustomer(id) {
   //     not PII); the conversation.customer_id FK will SET NULL when the
   //     customer row is dropped below.
   let messagesRedacted = 0;
-  const { data: convs } = await supabase
-    .from('conversations')
-    .select('id')
-    .eq('customer_id', id);
+  const { data: convs } = await supabase.from('conversations').select('id').eq('customer_id', id);
   if (convs?.length) {
-    const convIds = convs.map(c => c.id);
+    const convIds = convs.map((c) => c.id);
     const { data: msgHit } = await supabase
       .from('messages')
       .update({ body: '[Customer erased]', media: null })
@@ -436,19 +457,26 @@ export async function hardDeleteCustomer(id) {
   //    on audit failure. detail captures enough to prove the action without
   //    re-storing the PII we just deleted.
   await logAudit({
-    action:   'customer.erased',
+    action: 'customer.erased',
     category: 'gdpr',
     detail: {
-      customer_id_was:   id,
-      name_initial:      customer.name?.[0] ?? null,
-      postcode_was:      customer.postcode ?? null,
-      jobs_redacted:     jobsRedacted,
+      customer_id_was: id,
+      name_initial: customer.name?.[0] ?? null,
+      postcode_was: customer.postcode ?? null,
+      jobs_redacted: jobsRedacted,
       invoices_redacted: invoicesRedacted,
-      reviews_redacted:  reviewsRedacted,
+      reviews_redacted: reviewsRedacted,
       messages_redacted: messagesRedacted,
-      parsed_removed:    parsedRemoved,
+      parsed_removed: parsedRemoved,
     },
   });
 
-  return { deleted: true, jobsRedacted, invoicesRedacted, reviewsRedacted, messagesRedacted, parsedRemoved };
+  return {
+    deleted: true,
+    jobsRedacted,
+    invoicesRedacted,
+    reviewsRedacted,
+    messagesRedacted,
+    parsedRemoved,
+  };
 }

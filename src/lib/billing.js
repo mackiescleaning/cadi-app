@@ -30,12 +30,12 @@ function lineFor(job) {
   // Each completed job becomes one invoice line. Description is intentionally
   // human-readable so the customer recognises it on the invoice.
   return {
-    job_id:      job.id,
+    job_id: job.id,
     description: [job.service, job.customer, job.date].filter(Boolean).join(' · '),
-    date:        job.date,
-    quantity:    1,
-    unit_price:  Number(job.price) || 0,
-    total:       Number(job.price) || 0,
+    date: job.date,
+    quantity: 1,
+    unit_price: Number(job.price) || 0,
+    total: Number(job.price) || 0,
   };
 }
 
@@ -63,29 +63,21 @@ function customerSnapshot(customer) {
   // expects in its rendering code.
   if (!customer) return {};
   return {
-    id:           customer.id,
-    name:         customer.name,
-    email:        customer.email ?? null,
-    phone:        customer.phone ?? null,
+    id: customer.id,
+    name: customer.name,
+    email: customer.email ?? null,
+    phone: customer.phone ?? null,
     addressLine1: customer.addressLine1 ?? customer.address_line1 ?? null,
     addressLine2: customer.addressLine2 ?? customer.address_line2 ?? null,
-    town:         customer.town ?? null,
-    postcode:     customer.postcode ?? null,
+    town: customer.town ?? null,
+    postcode: customer.postcode ?? null,
   };
 }
 
 function paymentTermsFor(mode) {
   // 0 for auto-collect modes — the invoice is for the customer's records, the
   // money is already on its way. 14 days for everything else (UK norm).
-  return (mode === 'gocardless' || mode === 'stripe') ? 0 : 14;
-}
-
-function paymentMethodFor(mode) {
-  if (mode === 'gocardless') return 'gocardless_pending';
-  if (mode === 'stripe')     return 'stripe_pending';
-  if (mode === 'bacs')       return 'bacs';
-  if (mode === 'cash')       return 'cash';
-  return null;
+  return mode === 'gocardless' || mode === 'stripe' ? 0 : 14;
 }
 
 // ── Per-mode handlers ──────────────────────────────────────────────────────
@@ -93,22 +85,22 @@ function paymentMethodFor(mode) {
 async function createPerJobInvoice(job, customer, paymentMethod) {
   const num = await nextInvoiceNumber();
   return createInvoice({
-    invoiceNum:    num,
-    customerId:    customer?.id ?? null,
-    customer:      customerSnapshot(customer),
-    lines:         [lineFor(job)],
-    date:          job.date ?? new Date().toISOString().slice(0, 10),
-    dueDate:       null,
-    type:          job.type ?? 'residential',
-    status:        'draft',
-    paymentTerms:  paymentTermsFor(customer?.billingMode || customer?.billing_mode),
+    invoiceNum: num,
+    customerId: customer?.id ?? null,
+    customer: customerSnapshot(customer),
+    lines: [lineFor(job)],
+    date: job.date ?? new Date().toISOString().slice(0, 10),
+    dueDate: null,
+    type: job.type ?? 'residential',
+    status: 'draft',
+    paymentTerms: paymentTermsFor(customer?.billingMode || customer?.billing_mode),
     paymentMethod: paymentMethod ?? null,
-    notes:         '',
+    notes: '',
   });
 }
 
 async function appendToMonthlyInvoice(job, customer) {
-  const ownerId  = await getCurrentUserId();
+  const ownerId = await getCurrentUserId();
   const monthStart = ymKey(job.date ?? new Date());
 
   // Find an existing draft accumulator for this customer + month.
@@ -126,7 +118,7 @@ async function appendToMonthlyInvoice(job, customer) {
   if (existing?.[0]) {
     // Skip if this job already has a line in the invoice (re-completion).
     const lines = Array.isArray(existing[0].lines) ? existing[0].lines : [];
-    if (lines.some(l => l.job_id === job.id)) return existing[0];
+    if (lines.some((l) => l.job_id === job.id)) return existing[0];
     return updateInvoice(existing[0].id, { lines: [...lines, newLine] });
   }
 
@@ -134,15 +126,15 @@ async function appendToMonthlyInvoice(job, customer) {
   // accumulator. The owner can rename it later if they want.
   const num = await nextInvoiceNumber();
   return createInvoice({
-    invoiceNum:   num,
-    customerId:   customer?.id ?? null,
-    customer:     customerSnapshot(customer),
-    lines:        [newLine],
-    date:         monthStart,
-    type:         job.type ?? 'residential',
-    status:       'draft',
+    invoiceNum: num,
+    customerId: customer?.id ?? null,
+    customer: customerSnapshot(customer),
+    lines: [newLine],
+    date: monthStart,
+    type: job.type ?? 'residential',
+    status: 'draft',
     paymentTerms: paymentTermsFor('invoice_monthly'),
-    notes:        `Monthly bundle for ${new Date(monthStart + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`,
+    notes: `Monthly bundle for ${new Date(monthStart + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`,
   });
 }
 
@@ -185,10 +177,34 @@ export async function onJobCompleted(job, customer) {
 
 // Allowed values for UI selects.
 export const BILLING_MODES = [
-  { key: 'invoice_per_job', label: 'Invoice per job',           hint: 'A fresh draft invoice is created each time a job is marked done.' },
-  { key: 'invoice_monthly', label: 'Monthly bundle',            hint: 'Completed jobs accumulate into one draft invoice per month.' },
-  { key: 'gocardless',      label: 'GoCardless (direct debit)', hint: 'Invoice is drafted and queued for automatic collection against the saved mandate.' },
-  { key: 'stripe',          label: 'Stripe (card)',             hint: 'Invoice is drafted and emailed with a Stripe payment link.' },
-  { key: 'bacs',            label: 'BACS (bank transfer)',      hint: 'Invoice is drafted with your bank details. Mark paid when the transfer lands.' },
-  { key: 'cash',            label: 'Cash on the day',           hint: 'A receipt is drafted for your records. Mark paid when you collect.' },
+  {
+    key: 'invoice_per_job',
+    label: 'Invoice per job',
+    hint: 'A fresh draft invoice is created each time a job is marked done.',
+  },
+  {
+    key: 'invoice_monthly',
+    label: 'Monthly bundle',
+    hint: 'Completed jobs accumulate into one draft invoice per month.',
+  },
+  {
+    key: 'gocardless',
+    label: 'GoCardless (direct debit)',
+    hint: 'Invoice is drafted and queued for automatic collection against the saved mandate.',
+  },
+  {
+    key: 'stripe',
+    label: 'Stripe (card)',
+    hint: 'Invoice is drafted and emailed with a Stripe payment link.',
+  },
+  {
+    key: 'bacs',
+    label: 'BACS (bank transfer)',
+    hint: 'Invoice is drafted with your bank details. Mark paid when the transfer lands.',
+  },
+  {
+    key: 'cash',
+    label: 'Cash on the day',
+    hint: 'A receipt is drafted for your records. Mark paid when you collect.',
+  },
 ];

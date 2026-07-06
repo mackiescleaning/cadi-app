@@ -31,7 +31,6 @@ export async function logAudit({ action, category = 'general', detail = {} }) {
       detail,
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn(`audit_log write failed (${action})`, err?.message ?? err);
   }
 }

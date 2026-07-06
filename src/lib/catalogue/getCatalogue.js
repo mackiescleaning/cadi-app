@@ -20,13 +20,17 @@ export async function getCatalogue() {
   if (bidErr) throw bidErr;
   if (!businessId) return emptyCatalogue();
 
-  const [{ data: services, error: sErr },
-         { data: tiers,    error: tErr },
-         { data: units,    error: uErr },
-         { data: mods,     error: mErr }] = await Promise.all([
+  const [
+    { data: services, error: sErr },
+    { data: tiers, error: tErr },
+    { data: units, error: uErr },
+    { data: mods, error: mErr },
+  ] = await Promise.all([
     supabase
       .from('services')
-      .select('id, name, description_included, category, booking_mode, pricing_model, pricing_config, default_duration_mins, status, version, booking_ready, inference_meta, price_low, price_high, price_fixed_basic, updated_at')
+      .select(
+        'id, name, description_included, category, booking_mode, pricing_model, pricing_config, default_duration_mins, status, version, booking_ready, inference_meta, price_low, price_high, price_fixed_basic, updated_at'
+      )
       .eq('business_id', businessId)
       .eq('status', 'live')
       .order('display_order', { ascending: true }),
@@ -40,34 +44,36 @@ export async function getCatalogue() {
   if (mErr) throw mErr;
 
   // Index child rows by service_id so we can stitch in O(N).
-  const tiersByService     = bucketBy(tiers,    'service_id');
-  const unitsByService     = bucketBy(units,    'service_id');
-  const modifiersByService = bucketBy(mods,     'service_id');
+  const tiersByService = bucketBy(tiers, 'service_id');
+  const unitsByService = bucketBy(units, 'service_id');
+  const modifiersByService = bucketBy(mods, 'service_id');
 
-  const built = (services ?? []).map(row => shapeService(row, {
-    tiers:     tiersByService.get(row.id) ?? [],
-    units:     unitsByService.get(row.id) ?? [],
-    modifiers: modifiersByService.get(row.id) ?? [],
-  }));
+  const built = (services ?? []).map((row) =>
+    shapeService(row, {
+      tiers: tiersByService.get(row.id) ?? [],
+      units: unitsByService.get(row.id) ?? [],
+      modifiers: modifiersByService.get(row.id) ?? [],
+    })
+  );
 
   return {
     business: {
-      id:        businessId,
-      name:      null,                       // populated by branding pull elsewhere
+      id: businessId,
+      name: null, // populated by branding pull elsewhere
       divisions: distinctDivisions(built),
-      branding:  null,
+      branding: null,
     },
-    services:    built,
-    version:     latestVersion(services ?? []),
-    updated_at:  latestUpdatedAt(services ?? []),
+    services: built,
+    version: latestVersion(services ?? []),
+    updated_at: latestUpdatedAt(services ?? []),
   };
 }
 
 // Shape one services row + its child rows into the spec contract.
 export function shapeService(row, { tiers, units, modifiers }) {
-  const pm    = row.pricing_model ?? 'flat';
-  const mode  = row.booking_mode  ?? 'enquiry';
-  const meta  = row.inference_meta ?? {};
+  const pm = row.pricing_model ?? 'flat';
+  const mode = row.booking_mode ?? 'enquiry';
+  const meta = row.inference_meta ?? {};
 
   // display_price: { from: bool, amount: number|null }
   // For tiered: lowest-tier price; "from" if the highest tier was a
@@ -79,12 +85,14 @@ export function shapeService(row, { tiers, units, modifiers }) {
     const v = Number(row?.pricing_config?.price ?? row.price_fixed_basic);
     if (Number.isFinite(v)) displayPrice = { from: false, amount: v };
   } else if (pm === 'tiered' && tiers.length) {
-    const lowest = tiers.reduce((min, t) => (Number(t.price) < Number(min.price) ? t : min), tiers[0]);
-    const top    = tiers.reduce((max, t) => (Number(t.price) > Number(max.price) ? t : max), tiers[0]);
+    const lowest = tiers.reduce(
+      (min, t) => (Number(t.price) < Number(min.price) ? t : min),
+      tiers[0]
+    );
     // "from" is true whenever the top tier was a tail-fold OR there's just
     // a price range to show.
     displayPrice = {
-      from:   Boolean(meta?.from_price) || tiers.length > 1,
+      from: Boolean(meta?.from_price) || tiers.length > 1,
       amount: Number(lowest.price),
     };
   } else if (pm === 'flat' || pm === 'tiered') {
@@ -99,57 +107,55 @@ export function shapeService(row, { tiers, units, modifiers }) {
   // the template filled by progression rather than observation. Editors flag
   // these visually so the owner knows to confirm before sharing the menu.
   const tierEstimates = meta?.tier_estimates ?? {};
-  const shapedTiers = tiers.map(t => ({
-    key:          t.tier_key,
-    label:        t.label,
-    price:        Number(t.price),
-    is_default:   Boolean(t.is_default),
+  const shapedTiers = tiers.map((t) => ({
+    key: t.tier_key,
+    label: t.label,
+    price: Number(t.price),
+    is_default: Boolean(t.is_default),
     is_estimated: Boolean(tierEstimates[t.tier_key]),
   }));
 
-  const shapedUnits = units.map(u => ({
-    unit_type:      u.unit_type,
+  const shapedUnits = units.map((u) => ({
+    unit_type: u.unit_type,
     price_per_unit: Number(u.price_per_unit),
-    min_units:      u.min_units != null ? Number(u.min_units) : null,
-    min_charge:     u.min_charge != null ? Number(u.min_charge) : null,
+    min_units: u.min_units != null ? Number(u.min_units) : null,
+    min_charge: u.min_charge != null ? Number(u.min_charge) : null,
   }));
 
-  const shapedMods = modifiers.map(m => ({
-    key:        m.id,
-    label:      m.label,
-    type:       m.type,
-    value:      Number(m.value),
+  const shapedMods = modifiers.map((m) => ({
+    key: m.id,
+    label: m.label,
+    type: m.type,
+    value: Number(m.value),
     default_on: Boolean(m.default_on),
     sort_order: Number(m.sort_order ?? 0),
   }));
 
   // frequency_rates — only for by_frequency, lifted from pricing_config.
-  const frequency_rates = pm === 'by_frequency'
-    ? (row?.pricing_config?.rates ?? null)
-    : null;
+  const frequency_rates = pm === 'by_frequency' ? (row?.pricing_config?.rates ?? null) : null;
 
   return {
-    id:              row.id,
-    name:            row.name,
-    description:     row.description_included ?? null,
-    division:        row.category ?? null,
-    booking_mode:    mode,
-    pricing_model:   pm,
-    pricing_config:  row.pricing_config ?? null,
-    display_price:   displayPrice,
-    duration_mins:   row.default_duration_mins ?? null,
-    tiers:           shapedTiers.length ? shapedTiers : undefined,
-    units:           shapedUnits.length ? shapedUnits : undefined,
+    id: row.id,
+    name: row.name,
+    description: row.description_included ?? null,
+    division: row.category ?? null,
+    booking_mode: mode,
+    pricing_model: pm,
+    pricing_config: row.pricing_config ?? null,
+    display_price: displayPrice,
+    duration_mins: row.default_duration_mins ?? null,
+    tiers: shapedTiers.length ? shapedTiers : undefined,
+    units: shapedUnits.length ? shapedUnits : undefined,
     frequency_rates: frequency_rates ?? undefined,
-    modifiers:       shapedMods,
-    booking_ready:   Boolean(row.booking_ready),
+    modifiers: shapedMods,
+    booking_ready: Boolean(row.booking_ready),
     // Free-form owner-supplied context Front Desk reads when quoting.
     // Seeded from Cadi's onboarding Q&A; owner edits in catalogue editor.
-    cadi_context:    meta?.cadi_context ?? null,
+    cadi_context: meta?.cadi_context ?? null,
     evidence: {
       customer_count: Number(meta?.evidence?.customer_count ?? 0),
-      observed_low:   Number(row.price_low  ?? meta?.evidence?.observed_low  ?? 0) || null,
-      observed_high:  Number(row.price_high ?? meta?.evidence?.observed_high ?? 0) || null,
+      observed_low: Number(row.price_low ?? meta?.evidence?.observed_low ?? 0) || null,
+      observed_high: Number(row.price_high ?? meta?.evidence?.observed_high ?? 0) || null,
     },
   };
 }
@@ -189,9 +195,9 @@ function latestUpdatedAt(services) {
 
 function emptyCatalogue() {
   return {
-    business:   { id: null, name: null, divisions: [], branding: null },
-    services:   [],
-    version:    0,
+    business: { id: null, name: null, divisions: [], branding: null },
+    services: [],
+    version: 0,
     updated_at: null,
   };
 }

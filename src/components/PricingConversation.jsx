@@ -1,33 +1,32 @@
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
 import { Send, Check, RotateCcw, Loader2, ChevronDown } from 'lucide-react';
 
 // ─── Services list (same as PricingSettings) ──────────────────────────────────
 
 const ALL_SERVICES = [
-  { key: 'regular_clean',         label: 'Regular home clean',         cat: 'residential' },
-  { key: 'deep_clean',            label: 'Deep clean',                  cat: 'residential' },
-  { key: 'end_of_tenancy_clean',  label: 'End of tenancy clean',        cat: 'residential' },
-  { key: 'spring_clean',          label: 'Spring clean',                cat: 'residential' },
-  { key: 'post_renovation_clean', label: 'Post-renovation clean',       cat: 'residential' },
-  { key: 'one_off_clean',         label: 'One-off clean',               cat: 'residential' },
-  { key: 'softwash_render',       label: 'Softwash / render clean',     cat: 'exterior' },
-  { key: 'driveway_clean',        label: 'Driveway / pressure wash',    cat: 'exterior' },
-  { key: 'patio_clean',           label: 'Patio clean',                 cat: 'exterior' },
-  { key: 'gutter_clean',          label: 'Gutter clean',                cat: 'exterior' },
-  { key: 'window_clean_exterior', label: 'Window clean (exterior)',      cat: 'exterior' },
-  { key: 'fascia_soffit_clean',   label: 'Fascia & soffit clean',       cat: 'exterior' },
-  { key: 'roof_clean',            label: 'Roof clean / moss treatment', cat: 'exterior' },
-  { key: 'decking_clean',         label: 'Decking clean',               cat: 'exterior' },
-  { key: 'garden_furniture_clean',label: 'Garden furniture clean',      cat: 'exterior' },
-  { key: 'office_clean',          label: 'Office clean',                cat: 'commercial' },
-  { key: 'school_clean',          label: 'School clean',                cat: 'commercial' },
-  { key: 'retail_clean',          label: 'Retail clean',                cat: 'commercial' },
-  { key: 'medical_clean',         label: 'Medical / dental clean',      cat: 'commercial' },
-  { key: 'industrial_clean',      label: 'Industrial clean',            cat: 'commercial' },
-  { key: 'communal_areas_clean',  label: 'Communal areas',              cat: 'commercial' },
-  { key: 'washroom_service',      label: 'Washroom service',            cat: 'commercial' },
+  { key: 'regular_clean', label: 'Regular home clean', cat: 'residential' },
+  { key: 'deep_clean', label: 'Deep clean', cat: 'residential' },
+  { key: 'end_of_tenancy_clean', label: 'End of tenancy clean', cat: 'residential' },
+  { key: 'spring_clean', label: 'Spring clean', cat: 'residential' },
+  { key: 'post_renovation_clean', label: 'Post-renovation clean', cat: 'residential' },
+  { key: 'one_off_clean', label: 'One-off clean', cat: 'residential' },
+  { key: 'softwash_render', label: 'Softwash / render clean', cat: 'exterior' },
+  { key: 'driveway_clean', label: 'Driveway / pressure wash', cat: 'exterior' },
+  { key: 'patio_clean', label: 'Patio clean', cat: 'exterior' },
+  { key: 'gutter_clean', label: 'Gutter clean', cat: 'exterior' },
+  { key: 'window_clean_exterior', label: 'Window clean (exterior)', cat: 'exterior' },
+  { key: 'fascia_soffit_clean', label: 'Fascia & soffit clean', cat: 'exterior' },
+  { key: 'roof_clean', label: 'Roof clean / moss treatment', cat: 'exterior' },
+  { key: 'decking_clean', label: 'Decking clean', cat: 'exterior' },
+  { key: 'garden_furniture_clean', label: 'Garden furniture clean', cat: 'exterior' },
+  { key: 'office_clean', label: 'Office clean', cat: 'commercial' },
+  { key: 'school_clean', label: 'School clean', cat: 'commercial' },
+  { key: 'retail_clean', label: 'Retail clean', cat: 'commercial' },
+  { key: 'medical_clean', label: 'Medical / dental clean', cat: 'commercial' },
+  { key: 'industrial_clean', label: 'Industrial clean', cat: 'commercial' },
+  { key: 'communal_areas_clean', label: 'Communal areas', cat: 'commercial' },
+  { key: 'washroom_service', label: 'Washroom service', cat: 'commercial' },
 ];
 
 // ─── System prompt ────────────────────────────────────────────────────────────
@@ -106,7 +105,7 @@ Start the conversation now.`;
 
 function parseRuleFromText(text) {
   const start = text.indexOf('RULE_JSON_START');
-  const end   = text.indexOf('RULE_JSON_END');
+  const end = text.indexOf('RULE_JSON_END');
   if (start === -1 || end === -1) return null;
   const jsonStr = text.slice(start + 'RULE_JSON_START'.length, end).trim();
   try {
@@ -149,14 +148,18 @@ function RulePreview({ rule }) {
 
       {rule.pricing_method === 'per_bedroom' && (
         <div className="grid grid-cols-5 gap-1 pt-1">
-          {['1','2','3','4','5'].map(n => (
-            amounts[n] != null && (
-              <div key={n} className="bg-white rounded-lg p-1.5 text-center border border-[#99c5ff]/30">
-                <p className="text-[10px] text-gray-400">{n} bed</p>
-                <p className="font-bold text-[#010a4f]">£{amounts[n]}</p>
-              </div>
-            )
-          ))}
+          {['1', '2', '3', '4', '5'].map(
+            (n) =>
+              amounts[n] != null && (
+                <div
+                  key={n}
+                  className="bg-white rounded-lg p-1.5 text-center border border-[#99c5ff]/30"
+                >
+                  <p className="text-[10px] text-gray-400">{n} bed</p>
+                  <p className="font-bold text-[#010a4f]">£{amounts[n]}</p>
+                </div>
+              )
+          )}
         </div>
       )}
 
@@ -181,14 +184,15 @@ function RulePreview({ rule }) {
 
       {rule.pricing_method === 'flat_rate_by_size' && (
         <div className="grid grid-cols-2 gap-1 pt-1">
-          {['small','medium','large','extra_large'].map(s => (
-            amounts[s]?.price != null && (
-              <div key={s} className="bg-white rounded-lg p-1.5 border border-[#99c5ff]/30">
-                <p className="text-[10px] text-gray-400 capitalize">{s.replace('_', ' ')}</p>
-                <p className="font-bold text-[#010a4f]">£{amounts[s].price}</p>
-              </div>
-            )
-          ))}
+          {['small', 'medium', 'large', 'extra_large'].map(
+            (s) =>
+              amounts[s]?.price != null && (
+                <div key={s} className="bg-white rounded-lg p-1.5 border border-[#99c5ff]/30">
+                  <p className="text-[10px] text-gray-400 capitalize">{s.replace('_', ' ')}</p>
+                  <p className="font-bold text-[#010a4f]">£{amounts[s].price}</p>
+                </div>
+              )
+          )}
         </div>
       )}
 
@@ -215,11 +219,13 @@ function ChatBubble({ role, text, rule }) {
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
-        isUser
-          ? 'bg-[#1f48ff] text-white rounded-br-sm'
-          : 'bg-white border border-[#99c5ff]/30 text-[#010a4f] rounded-bl-sm shadow-sm'
-      }`}>
+      <div
+        className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
+          isUser
+            ? 'bg-[#1f48ff] text-white rounded-br-sm'
+            : 'bg-white border border-[#99c5ff]/30 text-[#010a4f] rounded-bl-sm shadow-sm'
+        }`}
+      >
         <p className="whitespace-pre-wrap leading-relaxed">{displayText}</p>
         {rule && <RulePreview rule={rule} />}
       </div>
@@ -230,28 +236,27 @@ function ChatBubble({ role, text, rule }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function PricingConversation({ businessId, onRuleSaved, initialService }) {
-  const { user } = useAuth();
-  const [serviceKey, setServiceKey]   = useState(initialService?.key ?? '');
-  const [messages, setMessages]       = useState([]);
-  const [input, setInput]             = useState('');
-  const [loading, setLoading]         = useState(false);
-  const [pendingRule, setPendingRule]  = useState(null);
-  const [saving, setSaving]           = useState(false);
-  const [saved, setSaved]             = useState(false);
-  const [started, setStarted]         = useState(false);
-  const [error, setError]             = useState(null);
+  const [serviceKey, setServiceKey] = useState(initialService?.key ?? '');
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [pendingRule, setPendingRule] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [error, setError] = useState(null);
 
   const bottomRef = useRef(null);
-  const inputRef  = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const selectedService = ALL_SERVICES.find(s => s.key === serviceKey);
+  const selectedService = ALL_SERVICES.find((s) => s.key === serviceKey);
 
   const startConversation = async (svcKey) => {
-    const svc = ALL_SERVICES.find(s => s.key === svcKey);
+    const svc = ALL_SERVICES.find((s) => s.key === svcKey);
     setStarted(true);
     setMessages([]);
     setPendingRule(null);
@@ -264,14 +269,19 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke('ai-generate', {
-        body: { messages: initMessages, system, model: 'claude-haiku-4-5-20251001', max_tokens: 400 },
+        body: {
+          messages: initMessages,
+          system,
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 400,
+        },
       });
       if (fnError) throw fnError;
       const reply = data?.content?.[0]?.text ?? 'Sorry, something went wrong.';
-      const rule  = parseRuleFromText(reply);
+      const rule = parseRuleFromText(reply);
       if (rule) setPendingRule(rule);
       setMessages([{ role: 'assistant', text: reply, rule }]);
-    } catch (e) {
+    } catch {
       setError('Could not connect to Cadi AI. Please try again.');
       setStarted(false);
     } finally {
@@ -283,7 +293,7 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
     const text = input.trim();
     if (!text || loading) return;
 
-    const newUserMsg  = { role: 'user', text };
+    const newUserMsg = { role: 'user', text };
     const nextHistory = [...messages, newUserMsg];
     setMessages(nextHistory);
     setInput('');
@@ -291,26 +301,31 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
     setPendingRule(null);
     setError(null);
 
-    const svc    = selectedService;
+    const svc = selectedService;
     const system = buildSystemPrompt(serviceKey || null, svc?.label ?? '');
 
-    const apiMessages = nextHistory.map(m => ({
-      role:    m.role,
+    const apiMessages = nextHistory.map((m) => ({
+      role: m.role,
       content: m.role === 'user' ? m.text : cleanMessageText(m.text),
     }));
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke('ai-generate', {
-        body: { messages: apiMessages, system, model: 'claude-haiku-4-5-20251001', max_tokens: 600 },
+        body: {
+          messages: apiMessages,
+          system,
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 600,
+        },
       });
       if (fnError) throw fnError;
       const reply = data?.content?.[0]?.text ?? 'Sorry, something went wrong.';
-      const rule  = parseRuleFromText(reply);
+      const rule = parseRuleFromText(reply);
       if (rule) setPendingRule(rule);
-      setMessages(prev => [...prev, { role: 'assistant', text: reply, rule }]);
-    } catch (e) {
+      setMessages((prev) => [...prev, { role: 'assistant', text: reply, rule }]);
+    } catch {
       setError('Message failed to send. Please try again.');
-      setMessages(prev => prev.filter(m => m !== newUserMsg));
+      setMessages((prev) => prev.filter((m) => m !== newUserMsg));
       setInput(text);
     } finally {
       setLoading(false);
@@ -331,42 +346,40 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
         .eq('service', pendingRule.service)
         .eq('status', 'active');
 
-      const { error: insertError } = await supabase
-        .from('pricing_rules')
-        .insert({
-          business_id:         businessId,
-          service:             pendingRule.service,
-          service_label:       pendingRule.service_label ?? pendingRule.service,
-          category:            pendingRule.category ?? 'residential',
-          pricing_method:      pendingRule.pricing_method,
-          base_amounts:        pendingRule.base_amounts ?? {},
-          frequency_modifiers: pendingRule.frequency_modifiers ?? null,
-          minimum_price:       pendingRule.minimum_price ?? null,
-          status:              'active',
-          version:             1,
-          source:              'conversation',
-        });
+      const { error: insertError } = await supabase.from('pricing_rules').insert({
+        business_id: businessId,
+        service: pendingRule.service,
+        service_label: pendingRule.service_label ?? pendingRule.service,
+        category: pendingRule.category ?? 'residential',
+        pricing_method: pendingRule.pricing_method,
+        base_amounts: pendingRule.base_amounts ?? {},
+        frequency_modifiers: pendingRule.frequency_modifiers ?? null,
+        minimum_price: pendingRule.minimum_price ?? null,
+        status: 'active',
+        version: 1,
+        source: 'conversation',
+      });
 
       if (insertError) throw insertError;
 
       // Save add-ons if any
       if (pendingRule.addons?.length > 0) {
         const addonRows = pendingRule.addons.map((a, i) => ({
-          business_id:            businessId,
-          service:                pendingRule.service,
-          name:                   a.name,
-          price:                  a.price,
+          business_id: businessId,
+          service: pendingRule.service,
+          name: a.name,
+          price: a.price,
           duration_minutes_added: a.duration_minutes_added ?? null,
-          active:                 true,
-          display_mode:           'common',
-          display_order:          i,
+          active: true,
+          display_mode: 'common',
+          display_order: i,
         }));
         await supabase.from('pricing_addons').insert(addonRows);
       }
 
       setSaved(true);
       onRuleSaved?.();
-    } catch (e) {
+    } catch {
       setError('Could not save the rule. Please try again.');
     } finally {
       setSaving(false);
@@ -399,27 +412,36 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
             <div className="relative">
               <select
                 value={serviceKey}
-                onChange={e => setServiceKey(e.target.value)}
+                onChange={(e) => setServiceKey(e.target.value)}
                 className="w-full appearance-none px-3 py-2.5 rounded-xl border border-[#99c5ff]/40 text-sm bg-white focus:outline-none focus:border-[#1f48ff] focus:ring-2 focus:ring-[#1f48ff]/20 pr-8"
               >
                 <option value="">Let Cadi ask me</option>
                 <optgroup label="Residential">
-                  {ALL_SERVICES.filter(s => s.cat === 'residential').map(s => (
-                    <option key={s.key} value={s.key}>{s.label}</option>
+                  {ALL_SERVICES.filter((s) => s.cat === 'residential').map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
                   ))}
                 </optgroup>
                 <optgroup label="Exterior">
-                  {ALL_SERVICES.filter(s => s.cat === 'exterior').map(s => (
-                    <option key={s.key} value={s.key}>{s.label}</option>
+                  {ALL_SERVICES.filter((s) => s.cat === 'exterior').map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
                   ))}
                 </optgroup>
                 <optgroup label="Commercial">
-                  {ALL_SERVICES.filter(s => s.cat === 'commercial').map(s => (
-                    <option key={s.key} value={s.key}>{s.label}</option>
+                  {ALL_SERVICES.filter((s) => s.cat === 'commercial').map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
                   ))}
                 </optgroup>
               </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <ChevronDown
+                size={14}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
             </div>
           </div>
 
@@ -441,7 +463,10 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
   // ── Chat interface ──
 
   return (
-    <div className="bg-white rounded-2xl border border-[#99c5ff]/20 shadow-sm overflow-hidden flex flex-col" style={{ height: '70vh', minHeight: '500px' }}>
+    <div
+      className="bg-white rounded-2xl border border-[#99c5ff]/20 shadow-sm overflow-hidden flex flex-col"
+      style={{ height: '70vh', minHeight: '500px' }}
+    >
       {/* Header */}
       <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
         <div>
@@ -451,7 +476,13 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
           <p className="text-[10px] text-gray-400 mt-0.5">Powered by Cadi AI</p>
         </div>
         <button
-          onClick={() => { setStarted(false); setMessages([]); setPendingRule(null); setSaved(false); setError(null); }}
+          onClick={() => {
+            setStarted(false);
+            setMessages([]);
+            setPendingRule(null);
+            setSaved(false);
+            setError(null);
+          }}
           className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors px-2 py-1 rounded-lg hover:bg-gray-50"
         >
           <RotateCcw size={12} />
@@ -473,7 +504,9 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
         )}
         {error && (
           <div className="text-center">
-            <p className="text-xs text-red-500 bg-red-50 inline-block px-3 py-1.5 rounded-lg">{error}</p>
+            <p className="text-xs text-red-500 bg-red-50 inline-block px-3 py-1.5 rounded-lg">
+              {error}
+            </p>
           </div>
         )}
         <div ref={bottomRef} />
@@ -483,7 +516,8 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
       {pendingRule && !saved && (
         <div className="px-4 py-3 bg-green-50 border-t border-green-100 flex items-center justify-between gap-3">
           <p className="text-xs text-green-700 font-medium">
-            Rule ready to save for <strong>{pendingRule.service_label ?? pendingRule.service}</strong>
+            Rule ready to save for{' '}
+            <strong>{pendingRule.service_label ?? pendingRule.service}</strong>
           </p>
           <button
             onClick={saveRule}
@@ -499,7 +533,8 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
         <div className="px-4 py-3 bg-green-50 border-t border-green-100 flex items-center gap-2">
           <Check size={14} className="text-green-600" />
           <p className="text-xs text-green-700 font-medium">
-            Pricing rule saved for {pendingRule?.service_label ?? pendingRule?.service}. You can test it in the sandbox.
+            Pricing rule saved for {pendingRule?.service_label ?? pendingRule?.service}. You can
+            test it in the sandbox.
           </p>
         </div>
       )}
@@ -510,7 +545,7 @@ export default function PricingConversation({ businessId, onRuleSaved, initialSe
           <textarea
             ref={inputRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder="Type your answer…"

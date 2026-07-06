@@ -29,19 +29,18 @@ import { useAuth } from '../context/AuthContext';
 import {
   getHmrcStatus,
   getHmrcOAuthUrl,
-  disconnectHmrc      as _disconnect,
-  saveNino            as _saveNino,
+  disconnectHmrc as _disconnect,
+  saveNino as _saveNino,
   getHmrcBusinesses,
-  getObligations,
-  submitQuarter       as _submitQuarter,
-  triggerCalculation  as _triggerCalc,
-  getCalculation      as _getCalc,
+  submitQuarter as _submitQuarter,
+  triggerCalculation as _triggerCalc,
+  getCalculation as _getCalc,
   submitQuarterAndCalculate as _submitAndCalc,
   getCurrentTaxYearObligations,
-  triggerBsas         as _triggerBsas,
-  getBsas             as _getBsas,
-  listBsas            as _listBsas,
-  finalDeclaration    as _finalDeclaration,
+  triggerBsas as _triggerBsas,
+  getBsas as _getBsas,
+  listBsas as _listBsas,
+  finalDeclaration as _finalDeclaration,
 } from '../lib/db/hmrcDb';
 
 // ─── Status polling interval (ms) when a connection is active ────────────────
@@ -53,25 +52,29 @@ export function useHmrc() {
   // circuit so we don't poll, don't error, and the UI can render a demo state.
   const isDemo = user?.id === 'demo-user';
 
-  const [status,          setStatus]          = useState(null);   // raw status object
-  const [obligations,     setObligations]     = useState([]);
-  const [businessId,      setBusinessId]      = useState(null);
+  const [status, setStatus] = useState(null); // raw status object
+  const [obligations, setObligations] = useState([]);
+  const [businessId, setBusinessId] = useState(null);
   const [lastCalculation, setLastCalculation] = useState(null);
-  const [bsasData,        setBsasData]        = useState(null);   // most recent BSAS result
-  const [connecting,      setConnecting]      = useState(false);
-  const [loading,         setLoading]         = useState(!isDemo); // no load in demo
-  const [error,           setError]           = useState(null);
+  const [bsasData, setBsasData] = useState(null); // most recent BSAS result
+  const [connecting, setConnecting] = useState(false);
+  const [loading, setLoading] = useState(!isDemo); // no load in demo
+  const [error, setError] = useState(null);
   // Set to true when a previously-connected user's tokens have expired/been cleared.
   // Persisted in localStorage so the message survives page refreshes.
   const [reconnectRequired, setReconnectRequired] = useState(() => {
-    try { return localStorage.getItem('cadi_hmrc_reconnect_required') === '1'; } catch { return false; }
+    try {
+      return localStorage.getItem('cadi_hmrc_reconnect_required') === '1';
+    } catch {
+      return false;
+    }
   });
 
   const pollRef = useRef(null);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const connected = Boolean(status?.connected);
-  const nino      = status?.nino ?? null;
+  const nino = status?.nino ?? null;
 
   // ── Load status on mount + poll ───────────────────────────────────────────────
   const refreshStatus = useCallback(async () => {
@@ -83,15 +86,21 @@ export function useHmrc() {
         const wasConnected = localStorage.getItem('cadi_hmrc_was_connected') === '1';
         if (wasConnected) {
           setReconnectRequired(true);
-          try { localStorage.setItem('cadi_hmrc_reconnect_required', '1'); } catch {}
+          try {
+            localStorage.setItem('cadi_hmrc_reconnect_required', '1');
+          } catch {}
         }
       } else {
         // Currently connected — record this so we can detect future drops.
-        try { localStorage.setItem('cadi_hmrc_was_connected', '1'); } catch {}
+        try {
+          localStorage.setItem('cadi_hmrc_was_connected', '1');
+        } catch {}
         // Clear any stale reconnect flag.
         if (reconnectRequired) {
           setReconnectRequired(false);
-          try { localStorage.removeItem('cadi_hmrc_reconnect_required'); } catch {}
+          try {
+            localStorage.removeItem('cadi_hmrc_reconnect_required');
+          } catch {}
         }
       }
       setStatus(s);
@@ -136,7 +145,10 @@ export function useHmrc() {
 
   /** Redirect the user to HMRC's OAuth consent screen */
   const connectHmrc = useCallback(async () => {
-    if (isDemo) { setError('Sign in to connect HMRC'); return; }
+    if (isDemo) {
+      setError('Sign in to connect HMRC');
+      return;
+    }
     setConnecting(true);
     setError(null);
     try {
@@ -157,7 +169,7 @@ export function useHmrc() {
     setError(null);
     try {
       await _disconnect();
-      setStatus(s => ({ ...s, connected: false, nino: null }));
+      setStatus((s) => ({ ...s, connected: false, nino: null }));
       setObligations([]);
       setBusinessId(null);
       setLastCalculation(null);
@@ -179,7 +191,7 @@ export function useHmrc() {
     setError(null);
     try {
       const result = await _saveNino(ninoValue);
-      setStatus(s => ({ ...s, nino: result.nino }));
+      setStatus((s) => ({ ...s, nino: result.nino }));
       return result;
     } catch (e) {
       setError(e.message);
@@ -190,61 +202,72 @@ export function useHmrc() {
   }, []);
 
   /** Load obligations for the current tax year from HMRC */
-  const fetchObligations = useCallback(async (bizId) => {
-    setConnecting(true);
-    setError(null);
-    try {
-      // If we don't already have the businessId, fetch it first
-      let biz = bizId ?? businessId;
-      if (!biz) {
-        const bizData = await getHmrcBusinesses();
-        const businesses = bizData?.listOfBusinesses ?? bizData?.listOfBusinessDetails ?? bizData?.list ?? [];
-        biz = businesses[0]?.businessId ?? businesses[0]?.id ?? null;
-        if (biz) setBusinessId(biz);
-      }
+  const fetchObligations = useCallback(
+    async (bizId) => {
+      setConnecting(true);
+      setError(null);
+      try {
+        // If we don't already have the businessId, fetch it first
+        let biz = bizId ?? businessId;
+        if (!biz) {
+          const bizData = await getHmrcBusinesses();
+          const businesses =
+            bizData?.listOfBusinesses ?? bizData?.listOfBusinessDetails ?? bizData?.list ?? [];
+          biz = businesses[0]?.businessId ?? businesses[0]?.id ?? null;
+          if (biz) setBusinessId(biz);
+        }
 
-      const data = await getCurrentTaxYearObligations(biz ?? undefined);
-      // HMRC returns { obligations: [{ obligationDetails: [...] }] }
-      const details = data?.obligations?.[0]?.obligationDetails ?? [];
-      setObligations(details);
-      return details;
-    } catch (e) {
-      setError(e.message);
-      return [];
-    } finally {
-      setConnecting(false);
-    }
-  }, [businessId]);
+        const data = await getCurrentTaxYearObligations(biz ?? undefined);
+        // HMRC returns { obligations: [{ obligationDetails: [...] }] }
+        const details = data?.obligations?.[0]?.obligationDetails ?? [];
+        setObligations(details);
+        return details;
+      } catch (e) {
+        setError(e.message);
+        return [];
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [businessId]
+  );
 
   /** Resolve businessId, fetching from HMRC if not yet cached */
-  const resolveBizId = useCallback(async (override) => {
-    if (override) return override;
-    if (businessId) return businessId;
-    const bizData = await getHmrcBusinesses();
-    const businesses = bizData?.listOfBusinesses ?? bizData?.listOfBusinessDetails ?? bizData?.list ?? [];
-    const biz = businesses[0]?.businessId ?? businesses[0]?.id ?? null;
-    if (biz) setBusinessId(biz);
-    if (!biz) throw new Error('No HMRC business found for this account');
-    return biz;
-  }, [businessId]);
+  const resolveBizId = useCallback(
+    async (override) => {
+      if (override) return override;
+      if (businessId) return businessId;
+      const bizData = await getHmrcBusinesses();
+      const businesses =
+        bizData?.listOfBusinesses ?? bizData?.listOfBusinessDetails ?? bizData?.list ?? [];
+      const biz = businesses[0]?.businessId ?? businesses[0]?.id ?? null;
+      if (biz) setBusinessId(biz);
+      if (!biz) throw new Error('No HMRC business found for this account');
+      return biz;
+    },
+    [businessId]
+  );
 
   /** Submit a quarterly period to HMRC */
-  const submitQuarter = useCallback(async (params) => {
-    setConnecting(true);
-    setError(null);
-    try {
-      const biz = await resolveBizId(params.businessId);
-      const result = await _submitQuarter({ ...params, businessId: biz });
-      // Refresh obligations so the submitted period shows as "Fulfilled"
-      await fetchObligations(biz);
-      return result;
-    } catch (e) {
-      setError(e.message);
-      throw e;
-    } finally {
-      setConnecting(false);
-    }
-  }, [resolveBizId, fetchObligations]);
+  const submitQuarter = useCallback(
+    async (params) => {
+      setConnecting(true);
+      setError(null);
+      try {
+        const biz = await resolveBizId(params.businessId);
+        const result = await _submitQuarter({ ...params, businessId: biz });
+        // Refresh obligations so the submitted period shows as "Fulfilled"
+        await fetchObligations(biz);
+        return result;
+      } catch (e) {
+        setError(e.message);
+        throw e;
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [resolveBizId, fetchObligations]
+  );
 
   /** Ask HMRC to produce an in-year tax estimate */
   const triggerCalculation = useCallback(async (taxYear) => {
@@ -277,20 +300,23 @@ export function useHmrc() {
   }, []);
 
   /** Trigger a Business Source Adjustable Summary for the full tax year */
-  const triggerBsas = useCallback(async ({ businessId: bizOverride, periodStart, periodEnd }) => {
-    setConnecting(true);
-    setError(null);
-    try {
-      const biz = await resolveBizId(bizOverride);
-      const result = await _triggerBsas({ businessId: biz, periodStart, periodEnd });
-      return result;
-    } catch (e) {
-      setError(e.message);
-      throw e;
-    } finally {
-      setConnecting(false);
-    }
-  }, [resolveBizId]);
+  const triggerBsas = useCallback(
+    async ({ businessId: bizOverride, periodStart, periodEnd }) => {
+      setConnecting(true);
+      setError(null);
+      try {
+        const biz = await resolveBizId(bizOverride);
+        const result = await _triggerBsas({ businessId: biz, periodStart, periodEnd });
+        return result;
+      } catch (e) {
+        setError(e.message);
+        throw e;
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [resolveBizId]
+  );
 
   /** Fetch a BSAS by calculationId */
   const getBsas = useCallback(async (taxYear, calculationId) => {
@@ -343,22 +369,25 @@ export function useHmrc() {
   }, []);
 
   /** Submit a quarter and immediately trigger + fetch a calculation */
-  const submitAndCalculate = useCallback(async (params) => {
-    setConnecting(true);
-    setError(null);
-    try {
-      const biz = await resolveBizId(params.businessId);
-      const result = await _submitAndCalc({ ...params, businessId: biz });
-      setLastCalculation(result.calculation);
-      await fetchObligations(biz);
-      return result;
-    } catch (e) {
-      setError(e.message);
-      throw e;
-    } finally {
-      setConnecting(false);
-    }
-  }, [resolveBizId, fetchObligations]);
+  const submitAndCalculate = useCallback(
+    async (params) => {
+      setConnecting(true);
+      setError(null);
+      try {
+        const biz = await resolveBizId(params.businessId);
+        const result = await _submitAndCalc({ ...params, businessId: biz });
+        setLastCalculation(result.calculation);
+        await fetchObligations(biz);
+        return result;
+      } catch (e) {
+        setError(e.message);
+        throw e;
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [resolveBizId, fetchObligations]
+  );
 
   return {
     // State

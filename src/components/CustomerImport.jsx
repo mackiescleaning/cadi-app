@@ -5,7 +5,16 @@
 // Steps: source → upload → map columns → preview → done
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { X, Upload, ArrowRight, ArrowLeft, Check, AlertCircle, ChevronDown, Crown } from 'lucide-react';
+import {
+  X,
+  Upload,
+  ArrowRight,
+  ArrowLeft,
+  Check,
+  AlertCircle,
+  ChevronDown,
+  Crown,
+} from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { upsertCustomer } from '../lib/db/customersDb';
 import { bulkInsertRounds, deleteRoundsForCustomer } from '../lib/db/customerRoundsDb';
@@ -27,64 +36,160 @@ const LITE_CAP = 30;
 
 // ─── Cadi fields that imports can fill ────────────────────────────────────────
 const CADI_FIELDS = [
-  { id: 'name',              label: 'Name',                  required: true  },
-  { id: 'email',             label: 'Email'                                  },
-  { id: 'phone',             label: 'Phone'                                  },
-  { id: 'addressLine1',      label: 'Address line 1'                         },
-  { id: 'addressLine2',      label: 'Address line 2'                         },
-  { id: 'town',              label: 'Town / City'                            },
-  { id: 'county',            label: 'County'                                 },
-  { id: 'postcode',          label: 'Postcode'                               },
-  { id: 'frequency',         label: 'Frequency'                              },
-  { id: 'notes',             label: 'Notes'                                  },
-  { id: 'tags',              label: 'Tags (comma-separated)'                 },
+  { id: 'name', label: 'Name', required: true },
+  { id: 'email', label: 'Email' },
+  { id: 'phone', label: 'Phone' },
+  { id: 'addressLine1', label: 'Address line 1' },
+  { id: 'addressLine2', label: 'Address line 2' },
+  { id: 'town', label: 'Town / City' },
+  { id: 'county', label: 'County' },
+  { id: 'postcode', label: 'Postcode' },
+  { id: 'frequency', label: 'Frequency' },
+  { id: 'notes', label: 'Notes' },
+  { id: 'tags', label: 'Tags (comma-separated)' },
   // CleanerPlanner / Squeegee fields
-  { id: 'dueDate',           label: 'Due date'                               },
-  { id: 'jobReference',      label: 'Job reference'                          },
-  { id: 'customerReference', label: 'Customer reference'                     },
-  { id: 'schedule',          label: 'Schedule'                               },
-  { id: 'customerBalance',   label: 'Customer balance (£)'                   },
-  { id: 'pricePerVisit',     label: 'Price per visit (£)'                    },
-  { id: 'roundName',         label: 'Round'                                  },
-  { id: 'accountStatus',     label: 'Status (active/suspended/cancelled)'    },
-  { id: '__skip',            label: '— Skip this column —'                  },
+  { id: 'dueDate', label: 'Due date' },
+  { id: 'jobReference', label: 'Job reference' },
+  { id: 'customerReference', label: 'Customer reference' },
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'customerBalance', label: 'Customer balance (£)' },
+  { id: 'pricePerVisit', label: 'Price per visit (£)' },
+  { id: 'roundName', label: 'Round' },
+  { id: 'accountStatus', label: 'Status (active/suspended/cancelled)' },
+  { id: '__skip', label: '— Skip this column —' },
 ];
 
 // ─── Keyword → Cadi field auto-mapping ────────────────────────────────────────
 const KEYWORD_MAP = [
-  { field: 'name',              keywords: ['name', 'full name', 'customer', 'client', 'contact', 'company', 'company name', 'display name'] },
-  { field: 'email',             keywords: ['email', 'e-mail', 'mail', 'main email'] },
-  { field: 'phone',             keywords: ['phone', 'mobile', 'tel', 'telephone', 'cell', 'main phone', 'work phone', 'alt phone', 'alt. phone'] },
-  { field: 'addressLine1',      keywords: ['address 1', 'address1', 'street', 'address line 1', 'line 1', 'addr1', 'addr', 'billing address', 'bill to', 'ship to', 'billing address street'] },
-  { field: 'addressLine2',      keywords: ['address 2', 'address2', 'address line 2', 'line 2', 'addr2'] },
-  { field: 'town',              keywords: ['town', 'city', 'suburb', 'billing address city'] },
-  { field: 'county',            keywords: ['county', 'region', 'state', 'area', 'billing address state'] },
-  { field: 'postcode',          keywords: ['postcode', 'post code', 'postal', 'zip', 'zipcode', 'billing address postal code'] },
-  { field: 'frequency',         keywords: ['frequency', 'recurring', 'recurrence', 'interval'] },
-  { field: 'notes',             keywords: ['notes', 'note', 'comments', 'comment', 'description', 'memo'] },
-  { field: 'tags',              keywords: ['tags', 'tag', 'labels', 'label', 'category', 'categories'] },
+  {
+    field: 'name',
+    keywords: [
+      'name',
+      'full name',
+      'customer',
+      'client',
+      'contact',
+      'company',
+      'company name',
+      'display name',
+    ],
+  },
+  { field: 'email', keywords: ['email', 'e-mail', 'mail', 'main email'] },
+  {
+    field: 'phone',
+    keywords: [
+      'phone',
+      'mobile',
+      'tel',
+      'telephone',
+      'cell',
+      'main phone',
+      'work phone',
+      'alt phone',
+      'alt. phone',
+    ],
+  },
+  {
+    field: 'addressLine1',
+    keywords: [
+      'address 1',
+      'address1',
+      'street',
+      'address line 1',
+      'line 1',
+      'addr1',
+      'addr',
+      'billing address',
+      'bill to',
+      'ship to',
+      'billing address street',
+    ],
+  },
+  {
+    field: 'addressLine2',
+    keywords: ['address 2', 'address2', 'address line 2', 'line 2', 'addr2'],
+  },
+  { field: 'town', keywords: ['town', 'city', 'suburb', 'billing address city'] },
+  { field: 'county', keywords: ['county', 'region', 'state', 'area', 'billing address state'] },
+  {
+    field: 'postcode',
+    keywords: ['postcode', 'post code', 'postal', 'zip', 'zipcode', 'billing address postal code'],
+  },
+  { field: 'frequency', keywords: ['frequency', 'recurring', 'recurrence', 'interval'] },
+  { field: 'notes', keywords: ['notes', 'note', 'comments', 'comment', 'description', 'memo'] },
+  { field: 'tags', keywords: ['tags', 'tag', 'labels', 'label', 'category', 'categories'] },
   // CleanerPlanner / Squeegee specific
-  { field: 'dueDate',           keywords: ['due date', 'due', 'next due', 'next visit', 'date due', 'duedate'] },
-  { field: 'jobReference',      keywords: ['job ref', 'job reference', 'job no', 'job number', 'jobref', 'job id'] },
-  { field: 'customerReference', keywords: ['customer ref', 'customer reference', 'cust ref', 'account ref', 'account number', 'acc ref', 'ref'] },
-  { field: 'schedule',          keywords: ['schedule', 'cleaning schedule', 'service schedule', 'visit schedule'] },
-  { field: 'customerBalance',   keywords: ['balance', 'customer balance', 'outstanding', 'amount due', 'account balance', 'balance due', 'open balance', 'current balance'] },
-  { field: 'pricePerVisit',     keywords: ['price', 'cost', 'charge', 'amount', 'price per visit', 'job price', 'visit price', 'fee'] },
-  { field: 'roundName',         keywords: ['round', 'round name', 'route', 'route name', 'rounds', 'area round'] },
-  { field: 'accountStatus',     keywords: ['status', 'account status', 'active', 'state', 'customer status'] },
+  {
+    field: 'dueDate',
+    keywords: ['due date', 'due', 'next due', 'next visit', 'date due', 'duedate'],
+  },
+  {
+    field: 'jobReference',
+    keywords: ['job ref', 'job reference', 'job no', 'job number', 'jobref', 'job id'],
+  },
+  {
+    field: 'customerReference',
+    keywords: [
+      'customer ref',
+      'customer reference',
+      'cust ref',
+      'account ref',
+      'account number',
+      'acc ref',
+      'ref',
+    ],
+  },
+  {
+    field: 'schedule',
+    keywords: ['schedule', 'cleaning schedule', 'service schedule', 'visit schedule'],
+  },
+  {
+    field: 'customerBalance',
+    keywords: [
+      'balance',
+      'customer balance',
+      'outstanding',
+      'amount due',
+      'account balance',
+      'balance due',
+      'open balance',
+      'current balance',
+    ],
+  },
+  {
+    field: 'pricePerVisit',
+    keywords: [
+      'price',
+      'cost',
+      'charge',
+      'amount',
+      'price per visit',
+      'job price',
+      'visit price',
+      'fee',
+    ],
+  },
+  {
+    field: 'roundName',
+    keywords: ['round', 'round name', 'route', 'route name', 'rounds', 'area round'],
+  },
+  {
+    field: 'accountStatus',
+    keywords: ['status', 'account status', 'active', 'state', 'customer status'],
+  },
 ];
 
 function autoMap(header) {
   const lower = header.toLowerCase().trim();
   for (const { field, keywords } of KEYWORD_MAP) {
-    if (keywords.some(k => lower === k || lower.includes(k))) return field;
+    if (keywords.some((k) => lower === k || lower.includes(k))) return field;
   }
   return '__skip';
 }
 
 // ─── CleanerPlanner Jobs format detection + parsing ───────────────────────────
 function isCleanerPlannerJobs(headers) {
-  const lower = headers.map(h => h.toLowerCase().trim());
+  const lower = headers.map((h) => h.toLowerCase().trim());
   return lower.includes('cust ref') && lower.includes('round') && lower.includes('job ref');
 }
 
@@ -100,34 +205,53 @@ function buildCleanerPlannerData(rows, existingCustRefs = new Set()) {
   rows.forEach((row, idx) => {
     const get = (col) => (row[col] ?? '').toString().trim();
 
-    const custRef   = get('Cust Ref');
-    const rawName   = get('Name');
-    const address   = get('Address Line 1');
-    const name      = rawName || address; // address fallback for unnamed rows
-    const status    = get('Status').toLowerCase();
+    const custRef = get('Cust Ref');
+    const rawName = get('Name');
+    const address = get('Address Line 1');
+    const name = rawName || address; // address fallback for unnamed rows
+    const status = get('Status').toLowerCase();
     const cancelled = get('Cancelled');
 
-    if (!name) { skipped.push({ row: idx + 2, reason: 'No name or address' }); return; }
-    if (status === 'quote') { skipped.push({ row: idx + 2, reason: 'Quote — skipped' }); return; }
+    if (!name) {
+      skipped.push({ row: idx + 2, reason: 'No name or address' });
+      return;
+    }
+    if (status === 'quote') {
+      skipped.push({ row: idx + 2, reason: 'Quote — skipped' });
+      return;
+    }
 
     const dedupKey = custRef || `${name}::${address}`.toLowerCase();
 
     const accountStatus = cancelled
       ? 'cancelled'
-      : status.includes('suspend') ? 'suspended'
-      : 'active';
+      : status.includes('suspend')
+        ? 'suspended'
+        : 'active';
 
-    const pricePerVisit  = parseCurrency(get('Price') || get('Job Price') || get('Price Per Visit') || get('Visit Price'));
+    const pricePerVisit = parseCurrency(
+      get('Price') || get('Job Price') || get('Price Per Visit') || get('Visit Price')
+    );
     // parseBalance honours CR/DR suffixes (CleanerPlanner and Squeegee both emit them).
     // Falls back to parseCurrency for purely numeric cells.
-    const rawBalance     = get('Balance') || get('Account Balance') || get('Outstanding');
-    const balance        = (parseBalance(rawBalance) ?? parseCurrency(rawBalance)) ?? 0;
-    const dueDate        = parseCleanerDate(get('Due') || get('Next Due') || get('Due Date') || get('Next Clean') || get('Next Visit'));
-    const schedule       = get('Schedule') || get('Frequency') || get('Recurring') || get('Recurrence') || null;
-    const roundName      = get('Round')    || get('Round Name') || get('Route') || null;
-    const jobRef         = get('Job Ref')  || get('Job Reference') || get('Job No') || null;
+    const rawBalance = get('Balance') || get('Account Balance') || get('Outstanding');
+    const balance = parseBalance(rawBalance) ?? parseCurrency(rawBalance) ?? 0;
+    const dueDate = parseCleanerDate(
+      get('Due') || get('Next Due') || get('Due Date') || get('Next Clean') || get('Next Visit')
+    );
+    const schedule =
+      get('Schedule') || get('Frequency') || get('Recurring') || get('Recurrence') || null;
+    const roundName = get('Round') || get('Round Name') || get('Route') || null;
+    const jobRef = get('Job Ref') || get('Job Reference') || get('Job No') || null;
 
-    const round = { jobReference: jobRef, roundName, schedule, pricePerVisit, dueDate, accountStatus };
+    const round = {
+      jobReference: jobRef,
+      roundName,
+      schedule,
+      pricePerVisit,
+      dueDate,
+      accountStatus,
+    };
 
     if (!customerMap.has(dedupKey)) {
       const phone = get('Mobile') || get('Phone') || null;
@@ -140,38 +264,38 @@ function buildCleanerPlannerData(rows, existingCustRefs = new Set()) {
       // try splitting it (defensive — most CP exports have structured cols).
       let line1 = address || null;
       let line2 = get('Address Line 2') || get('Address 2') || null;
-      let town  = get('Town') || get('City') || null;
+      let town = get('Town') || get('City') || null;
       let county = get('County') || get('Region') || null;
       if (!town && !county && line1 && /,/.test(line1)) {
         const parts = splitAddress(line1);
-        line1  = parts.addressLine1 ?? line1;
-        line2  = line2  ?? parts.addressLine2;
-        town   = town   ?? parts.town;
+        line1 = parts.addressLine1 ?? line1;
+        line2 = line2 ?? parts.addressLine2;
+        town = town ?? parts.town;
         county = county ?? parts.county;
       }
 
       customerMap.set(dedupKey, {
         customer: {
           name,
-          addressLine1:      line1,
-          addressLine2:      line2,
+          addressLine1: line1,
+          addressLine2: line2,
           town,
           county,
           postcode,
-          phone:             phone || null,
-          email:             email || null,
-          notes:             get('Account Notes') || get('Notes') || get('Comments') || null,
+          phone: phone || null,
+          email: email || null,
+          notes: get('Account Notes') || get('Notes') || get('Comments') || null,
           customerReference: custRef || null,
           accountStatus,
-          customerBalance:   balance,
+          customerBalance: balance,
           schedule,
           roundName,
           pricePerVisit,
           dueDate,
           tags: [],
         },
-        rounds:  [round],
-        isDupe:  custRef ? existingCustRefs.has(custRef) : false,
+        rounds: [round],
+        isDupe: custRef ? existingCustRefs.has(custRef) : false,
       });
     } else {
       const entry = customerMap.get(dedupKey);
@@ -198,14 +322,31 @@ function parseFrequencyDays(scheduleStr) {
 
 function detectJobType(customerName) {
   const lower = (customerName || '').toLowerCase();
-  const commercial = ['ltd', 'limited', 'plc', 'management', 'lettings', 'school', 'hotel', 'inn', 'lodge', 'apartments', 'surgery', 'clinic', 'detection', 'primary', 'college'];
-  return commercial.some(w => lower.includes(w)) ? 'commercial' : 'exterior';
+  const commercial = [
+    'ltd',
+    'limited',
+    'plc',
+    'management',
+    'lettings',
+    'school',
+    'hotel',
+    'inn',
+    'lodge',
+    'apartments',
+    'surgery',
+    'clinic',
+    'detection',
+    'primary',
+    'college',
+  ];
+  return commercial.some((w) => lower.includes(w)) ? 'commercial' : 'exterior';
 }
 
 function generateJobDatesFromRound(round, windowMonths = 4) {
   const freqDays = parseFrequencyDays(round.schedule);
 
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const windowEnd = new Date(today);
   windowEnd.setMonth(windowEnd.getMonth() + windowMonths);
 
@@ -222,15 +363,13 @@ function generateJobDatesFromRound(round, windowMonths = 4) {
   // Advance from due date (or today if none) to first occurrence on or after today.
   // Use Math.floor so customers who are slightly overdue (< 14 days) stay visible as
   // overdue rather than being bumped a full cycle into the future.
-  const start = round.dueDate
-    ? new Date(round.dueDate + 'T00:00:00')
-    : new Date(today);
+  const start = round.dueDate ? new Date(round.dueDate + 'T00:00:00') : new Date(today);
   if (start < today) {
     const diff = today - start;
     const skips = Math.floor(diff / (freqDays * 86400000));
     start.setDate(start.getDate() + skips * freqDays);
     // If still more than 14 days in the past, advance one more cycle
-    if ((today - start) > 14 * 86400000) {
+    if (today - start > 14 * 86400000) {
       start.setDate(start.getDate() + freqDays);
     }
   }
@@ -248,8 +387,10 @@ function generateJobDatesFromRound(round, windowMonths = 4) {
 
 function fmtJobDate(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
-  const t = new Date(); t.setHours(0, 0, 0, 0);
-  const tom = new Date(t); tom.setDate(tom.getDate() + 1);
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  const tom = new Date(t);
+  tom.setDate(tom.getDate() + 1);
   if (d < t) return 'Overdue';
   if (d.getTime() === t.getTime()) return 'Today';
   if (d.getTime() === tom.getTime()) return 'Tomorrow';
@@ -261,13 +402,47 @@ function fmtJobDate(dateStr) {
 // preamble rows above it (QuickBooks .xls exports have a business-name title,
 // a report title, a date, and a blank row before the actual column headers).
 const HEADER_HINTS = [
-  'name','customer','client','company','contact','display name',
-  'email','phone','mobile','telephone','main phone','fax',
-  'address','street','town','city','county','state','postcode','post code','zip','postal',
-  'balance','open balance','outstanding',
-  'round','route','due','schedule','frequency','ref','job ref','cust ref',
-  'status','tags','notes','memo','comments',
-  'bill to','ship to','billing address',
+  'name',
+  'customer',
+  'client',
+  'company',
+  'contact',
+  'display name',
+  'email',
+  'phone',
+  'mobile',
+  'telephone',
+  'main phone',
+  'fax',
+  'address',
+  'street',
+  'town',
+  'city',
+  'county',
+  'state',
+  'postcode',
+  'post code',
+  'zip',
+  'postal',
+  'balance',
+  'open balance',
+  'outstanding',
+  'round',
+  'route',
+  'due',
+  'schedule',
+  'frequency',
+  'ref',
+  'job ref',
+  'cust ref',
+  'status',
+  'tags',
+  'notes',
+  'memo',
+  'comments',
+  'bill to',
+  'ship to',
+  'billing address',
 ];
 
 function normaliseCell(v) {
@@ -292,8 +467,16 @@ function parseFile(file) {
 
         // Read as array-of-arrays so we can locate the real header row.
         // QuickBooks XLS exports prefix the table with several title/blank rows.
-        const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: false });
-        if (!aoa.length) throw new Error('The sheet appears empty — make sure row 1 is the header row and rows 2+ are your customers.');
+        const aoa = XLSX.utils.sheet_to_json(sheet, {
+          header: 1,
+          defval: '',
+          raw: true,
+          blankrows: false,
+        });
+        if (!aoa.length)
+          throw new Error(
+            'The sheet appears empty — make sure row 1 is the header row and rows 2+ are your customers.'
+          );
 
         // Score each of the first 20 rows for header-likeness; the row with
         // the most header-hint matches (and at least 2 non-empty cells) wins.
@@ -301,14 +484,21 @@ function parseFile(file) {
         let bestScore = 0;
         for (let i = 0; i < Math.min(aoa.length, 20); i++) {
           const row = aoa[i];
-          const cells = row.map(c => String(c ?? '').toLowerCase().trim());
+          const cells = row.map((c) =>
+            String(c ?? '')
+              .toLowerCase()
+              .trim()
+          );
           const nonEmpty = cells.filter(Boolean).length;
           if (nonEmpty < 2) continue;
           const score = cells.reduce((acc, s) => {
             if (!s || s.length > 40) return acc;
-            return acc + (HEADER_HINTS.some(h => s === h || s.includes(h)) ? 1 : 0);
+            return acc + (HEADER_HINTS.some((h) => s === h || s.includes(h)) ? 1 : 0);
           }, 0);
-          if (score > bestScore) { bestScore = score; headerRowIdx = i; }
+          if (score > bestScore) {
+            bestScore = score;
+            headerRowIdx = i;
+          }
         }
 
         const rawHeaderRow = aoa[headerRowIdx] || [];
@@ -316,25 +506,35 @@ function parseFile(file) {
         const headers = rawHeaderRow.map((h, i) => {
           let s = String(h ?? '').trim();
           if (!s) s = `Column ${i + 1}`;
-          if (seen[s] == null) { seen[s] = 1; return s; }
+          if (seen[s] == null) {
+            seen[s] = 1;
+            return s;
+          }
           seen[s]++;
           return `${s} (${seen[s]})`;
         });
 
         const dataRows = aoa.slice(headerRowIdx + 1);
-        const rows = dataRows.map(arr => {
-          const obj = {};
-          headers.forEach((h, i) => { obj[h] = normaliseCell(arr[i]); });
-          return obj;
-        }).filter(row => {
-          const vals = Object.values(row).filter(v => v !== '');
-          if (vals.length === 0) return false;
-          // QuickBooks "Total" / summary footer rows have a single labelled cell
-          if (vals.length <= 2 && /^total\b/i.test(vals[0])) return false;
-          return true;
-        });
+        const rows = dataRows
+          .map((arr) => {
+            const obj = {};
+            headers.forEach((h, i) => {
+              obj[h] = normaliseCell(arr[i]);
+            });
+            return obj;
+          })
+          .filter((row) => {
+            const vals = Object.values(row).filter((v) => v !== '');
+            if (vals.length === 0) return false;
+            // QuickBooks "Total" / summary footer rows have a single labelled cell
+            if (vals.length <= 2 && /^total\b/i.test(vals[0])) return false;
+            return true;
+          });
 
-        if (!rows.length) throw new Error('The sheet appears empty — make sure row 1 is the header row and rows 2+ are your customers.');
+        if (!rows.length)
+          throw new Error(
+            'The sheet appears empty — make sure row 1 is the header row and rows 2+ are your customers.'
+          );
         resolve({ headers, rows });
       } catch (err) {
         reject(err);
@@ -433,9 +633,7 @@ function ModalShell({ onClose, children }) {
         >
           <X size={14} className="text-white" />
         </button>
-        <div className="relative flex flex-col overflow-hidden flex-1">
-          {children}
-        </div>
+        <div className="relative flex flex-col overflow-hidden flex-1">{children}</div>
       </div>
     </div>
   );
@@ -446,19 +644,25 @@ function StepSource({ onSelect }) {
   return (
     <div className="p-6 overflow-y-auto">
       <div className="mb-5">
-        <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-1">Import customers</p>
+        <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-1">
+          Import customers
+        </p>
         <h2 className="text-xl font-black text-white">Where are your customers now?</h2>
-        <p className="text-sm text-[rgba(153,197,255,0.6)] mt-1">Pick your current tool and we'll walk you through the rest.</p>
+        <p className="text-sm text-[rgba(153,197,255,0.6)] mt-1">
+          Pick your current tool and we'll walk you through the rest.
+        </p>
       </div>
       <div className="grid grid-cols-2 gap-2.5">
-        {SOURCES.map(src => (
+        {SOURCES.map((src) => (
           <button
             key={src.id}
             onClick={() => onSelect(src)}
             className="flex items-center gap-3 px-4 py-3.5 rounded-xl border border-[rgba(153,197,255,0.15)] bg-[rgba(153,197,255,0.05)] hover:bg-[rgba(153,197,255,0.12)] hover:border-[rgba(153,197,255,0.3)] transition-all text-left group"
           >
             <span className="text-2xl shrink-0">{src.icon}</span>
-            <span className="text-sm font-bold text-white group-hover:text-[#99c5ff] transition-colors">{src.name}</span>
+            <span className="text-sm font-bold text-white group-hover:text-[#99c5ff] transition-colors">
+              {src.name}
+            </span>
           </button>
         ))}
       </div>
@@ -472,36 +676,45 @@ function StepUpload({ source, onBack, onParsed }) {
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
 
-  const handleFile = useCallback(async (file) => {
-    setError(null);
-    if (!file) return;
-    const name = file.name.toLowerCase();
-    const ok = name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls');
-    if (!ok) {
-      setError('Please upload a CSV or Excel (.xlsx) file.');
-      return;
-    }
-    try {
-      const { headers, rows } = await parseFile(file);
-      if (rows.length === 0) {
-        setError('The file looks empty. Make sure you exported the right sheet.');
+  const handleFile = useCallback(
+    async (file) => {
+      setError(null);
+      if (!file) return;
+      const name = file.name.toLowerCase();
+      const ok = name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls');
+      if (!ok) {
+        setError('Please upload a CSV or Excel (.xlsx) file.');
         return;
       }
-      onParsed({ headers, rows, fileName: file.name });
-    } catch {
-      setError('Could not read that file. Try exporting again or use a different format.');
-    }
-  }, [onParsed]);
+      try {
+        const { headers, rows } = await parseFile(file);
+        if (rows.length === 0) {
+          setError('The file looks empty. Make sure you exported the right sheet.');
+          return;
+        }
+        onParsed({ headers, rows, fileName: file.name });
+      } catch {
+        setError('Could not read that file. Try exporting again or use a different format.');
+      }
+    },
+    [onParsed]
+  );
 
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    setDragging(false);
-    handleFile(e.dataTransfer.files[0]);
-  }, [handleFile]);
+  const handleDrop = useCallback(
+    (e) => {
+      e.preventDefault();
+      setDragging(false);
+      handleFile(e.dataTransfer.files[0]);
+    },
+    [handleFile]
+  );
 
   return (
     <div className="p-6 overflow-y-auto">
-      <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-5 transition-colors">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-5 transition-colors"
+      >
         <ArrowLeft size={12} /> Back
       </button>
       <div className="mb-5">
@@ -517,7 +730,7 @@ function StepUpload({ source, onBack, onParsed }) {
             href={source.sampleFile}
             download
             className="mt-2 flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] transition-colors w-fit"
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <span className="text-[10px]">↓</span> Download sample file to test with
           </a>
@@ -525,7 +738,10 @@ function StepUpload({ source, onBack, onParsed }) {
       </div>
 
       <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
@@ -540,7 +756,9 @@ function StepUpload({ source, onBack, onParsed }) {
         </div>
         <div className="text-center">
           <p className="text-sm font-bold text-white">Drop your file here</p>
-          <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">CSV or Excel (.xlsx) · click to browse</p>
+          <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">
+            CSV or Excel (.xlsx) · click to browse
+          </p>
         </div>
         <input
           ref={inputRef}
@@ -565,16 +783,18 @@ function StepUpload({ source, onBack, onParsed }) {
 function StepMap({ headers, rows, onBack, onConfirm, detectedSource }) {
   const SOURCE_LABEL = {
     'cleaner-planner': 'CleanerPlanner',
-    'squeegee':        'Squeegee',
-    'aworka':          'Aworka',
-    'jobber':          'Jobber',
-    'servicem8':       'ServiceM8',
-    'housecall-pro':   'Housecall Pro',
-    'quickbooks':      'QuickBooks',
+    squeegee: 'Squeegee',
+    aworka: 'Aworka',
+    jobber: 'Jobber',
+    servicem8: 'ServiceM8',
+    'housecall-pro': 'Housecall Pro',
+    quickbooks: 'QuickBooks',
   };
   const [mapping, setMapping] = useState(() => {
     const m = {};
-    headers.forEach(h => { m[h] = autoMap(h); });
+    headers.forEach((h) => {
+      m[h] = autoMap(h);
+    });
     return m;
   });
   const [error, setError] = useState(null);
@@ -592,7 +812,10 @@ function StepMap({ headers, rows, onBack, onConfirm, detectedSource }) {
   return (
     <div className="flex flex-col overflow-hidden">
       <div className="p-6 border-b border-[rgba(153,197,255,0.1)]">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-4 transition-colors">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-4 transition-colors"
+        >
           <ArrowLeft size={12} /> Back
         </button>
         <div className="flex items-center gap-2 flex-wrap">
@@ -609,7 +832,7 @@ function StepMap({ headers, rows, onBack, onConfirm, detectedSource }) {
       </div>
 
       <div className="overflow-y-auto flex-1 px-6 py-4 space-y-2">
-        {headers.map(header => (
+        {headers.map((header) => (
           <div key={header} className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <div className="px-3 py-2 rounded-lg bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.12)] text-xs font-mono text-[rgba(153,197,255,0.7)] truncate">
@@ -625,16 +848,20 @@ function StepMap({ headers, rows, onBack, onConfirm, detectedSource }) {
             <div className="flex-1 relative">
               <select
                 value={mapping[header]}
-                onChange={e => setMapping(m => ({ ...m, [header]: e.target.value }))}
+                onChange={(e) => setMapping((m) => ({ ...m, [header]: e.target.value }))}
                 className="w-full appearance-none px-3 py-2 rounded-lg bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.12)] text-xs text-white focus:outline-none focus:border-[#1f48ff]/50 pr-7"
               >
-                {CADI_FIELDS.map(f => (
+                {CADI_FIELDS.map((f) => (
                   <option key={f.id} value={f.id} style={{ background: '#05124a' }}>
-                    {f.label}{f.required ? ' *' : ''}
+                    {f.label}
+                    {f.required ? ' *' : ''}
                   </option>
                 ))}
               </select>
-              <ChevronDown size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[rgba(153,197,255,0.4)] pointer-events-none" />
+              <ChevronDown
+                size={10}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[rgba(153,197,255,0.4)] pointer-events-none"
+              />
             </div>
           </div>
         ))}
@@ -671,7 +898,10 @@ function buildCustomers(rows, mapping, existingEmails) {
       if (val) c[cadiField] = val;
     });
 
-    if (!c.name) { skipped.push({ row: idx + 2, reason: 'No name' }); return; }
+    if (!c.name) {
+      skipped.push({ row: idx + 2, reason: 'No name' });
+      return;
+    }
 
     // QuickBooks "Bill to" / "Billing Address" cells are one multi-line string.
     // If the mapped addressLine1 contains newlines or looks like a full address,
@@ -693,7 +923,10 @@ function buildCustomers(rows, mapping, existingEmails) {
 
     // Normalise tags → array
     if (c.tags && typeof c.tags === 'string') {
-      c.tags = c.tags.split(',').map(t => t.trim()).filter(Boolean);
+      c.tags = c.tags
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
     } else {
       c.tags = [];
     }
@@ -702,13 +935,16 @@ function buildCustomers(rows, mapping, existingEmails) {
     if (c.accountStatus) {
       const s = c.accountStatus.toLowerCase().trim();
       if (s.includes('suspend')) c.accountStatus = 'suspended';
-      else if (s.includes('cancel') || s.includes('inactive') || s.includes('closed')) c.accountStatus = 'cancelled';
+      else if (s.includes('cancel') || s.includes('inactive') || s.includes('closed'))
+        c.accountStatus = 'cancelled';
       else c.accountStatus = 'active';
     }
 
     // Normalise numeric fields — strip currency symbols
-    if (c.customerBalance) c.customerBalance = parseFloat(String(c.customerBalance).replace(/[^0-9.-]/g, '')) || 0;
-    if (c.pricePerVisit)   c.pricePerVisit   = parseFloat(String(c.pricePerVisit).replace(/[^0-9.-]/g, '')) || null;
+    if (c.customerBalance)
+      c.customerBalance = parseFloat(String(c.customerBalance).replace(/[^0-9.-]/g, '')) || 0;
+    if (c.pricePerVisit)
+      c.pricePerVisit = parseFloat(String(c.pricePerVisit).replace(/[^0-9.-]/g, '')) || null;
 
     // Duplicate check by email
     const isDupe = c.email && existingEmails.has(c.email.toLowerCase());
@@ -720,23 +956,32 @@ function buildCustomers(rows, mapping, existingEmails) {
 }
 
 // ─── Step 4: Preview ──────────────────────────────────────────────────────────
-function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, importing, importError }) {
-
+function StepPreview({
+  rows,
+  mapping,
+  existingEmails,
+  cpData,
+  onBack,
+  onImport,
+  importing,
+  importError,
+}) {
   // ─── CleanerPlanner Jobs preview ────────────────────────────────────────────
   if (cpData) {
     const { entries, skipped } = cpData;
-    const fresh = entries.filter(e => !e.isDupe);
-    const dupes = entries.filter(e => e.isDupe);
+    const fresh = entries.filter((e) => !e.isDupe);
+    const dupes = entries.filter((e) => e.isDupe);
     const totalRounds = entries.reduce((sum, e) => sum + e.rounds.length, 0);
-    const withDueDates = entries.filter(e => e.customer.dueDate).length;
-    const withSchedule = entries.filter(e => e.rounds.some(r => r.schedule)).length;
+    const withDueDates = entries.filter((e) => e.customer.dueDate).length;
 
     // Round name breakdown (top 4 rounds by customer count)
     const roundCounts = {};
-    entries.forEach(e => e.rounds.forEach(r => {
-      const key = r.roundName || 'No round';
-      roundCounts[key] = (roundCounts[key] || 0) + 1;
-    }));
+    entries.forEach((e) =>
+      e.rounds.forEach((r) => {
+        const key = r.roundName || 'No round';
+        roundCounts[key] = (roundCounts[key] || 0) + 1;
+      })
+    );
     const topRounds = Object.entries(roundCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 4);
@@ -744,31 +989,55 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
     return (
       <div className="flex flex-col overflow-hidden">
         <div className="p-6 border-b border-[rgba(153,197,255,0.1)]">
-          <button onClick={onBack} disabled={importing} className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-4 transition-colors disabled:opacity-40">
+          <button
+            onClick={onBack}
+            disabled={importing}
+            className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-4 transition-colors disabled:opacity-40"
+          >
             <ArrowLeft size={12} /> Back
           </button>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-lg">🧹</span>
             <h2 className="text-xl font-black text-white">Ready to import</h2>
           </div>
-          <p className="text-xs text-[rgba(153,197,255,0.5)] mb-3">CleanerPlanner format detected — rounds, due dates and pricing mapped automatically.</p>
+          <p className="text-xs text-[rgba(153,197,255,0.5)] mb-3">
+            CleanerPlanner format detected — rounds, due dates and pricing mapped automatically.
+          </p>
           <div className="flex gap-2">
             <div className="flex-1 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
               <p className="text-lg font-black text-emerald-400">{fresh.length}</p>
-              <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wide mt-0.5">Customers</p>
+              <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wide mt-0.5">
+                Customers
+              </p>
             </div>
             <div className="flex-1 px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.12)] text-center">
-              <p className="text-lg font-black text-[#99c5ff]">{topRounds.length > 0 ? topRounds.length : totalRounds}</p>
-              <p className="text-[10px] text-[rgba(153,197,255,0.5)] font-bold uppercase tracking-wide mt-0.5">Rounds</p>
+              <p className="text-lg font-black text-[#99c5ff]">
+                {topRounds.length > 0 ? topRounds.length : totalRounds}
+              </p>
+              <p className="text-[10px] text-[rgba(153,197,255,0.5)] font-bold uppercase tracking-wide mt-0.5">
+                Rounds
+              </p>
             </div>
-            <div className={`flex-1 px-3 py-2.5 rounded-xl text-center ${withDueDates === entries.length ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-amber-500/10 border border-amber-500/20'}`}>
-              <p className={`text-lg font-black ${withDueDates === entries.length ? 'text-emerald-400' : 'text-amber-400'}`}>{withDueDates}</p>
-              <p className={`text-[10px] font-bold uppercase tracking-wide mt-0.5 ${withDueDates === entries.length ? 'text-emerald-400/70' : 'text-amber-400/70'}`}>Due dates</p>
+            <div
+              className={`flex-1 px-3 py-2.5 rounded-xl text-center ${withDueDates === entries.length ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-amber-500/10 border border-amber-500/20'}`}
+            >
+              <p
+                className={`text-lg font-black ${withDueDates === entries.length ? 'text-emerald-400' : 'text-amber-400'}`}
+              >
+                {withDueDates}
+              </p>
+              <p
+                className={`text-[10px] font-bold uppercase tracking-wide mt-0.5 ${withDueDates === entries.length ? 'text-emerald-400/70' : 'text-amber-400/70'}`}
+              >
+                Due dates
+              </p>
             </div>
             {dupes.length > 0 && (
               <div className="flex-1 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
                 <p className="text-lg font-black text-amber-400">{dupes.length}</p>
-                <p className="text-[10px] text-amber-400/70 font-bold uppercase tracking-wide mt-0.5">Update</p>
+                <p className="text-[10px] text-amber-400/70 font-bold uppercase tracking-wide mt-0.5">
+                  Update
+                </p>
               </div>
             )}
           </div>
@@ -776,7 +1045,10 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
           {topRounds.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {topRounds.map(([name, count]) => (
-                <span key={name} className="text-[10px] px-2 py-1 rounded-full bg-[rgba(153,197,255,0.08)] border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.6)]">
+                <span
+                  key={name}
+                  className="text-[10px] px-2 py-1 rounded-full bg-[rgba(153,197,255,0.08)] border border-[rgba(153,197,255,0.15)] text-[rgba(153,197,255,0.6)]"
+                >
                   {name} · {count}
                 </span>
               ))}
@@ -791,7 +1063,10 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
           {withDueDates < entries.length && (
             <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/15 text-xs text-amber-300/80">
               <AlertCircle size={13} className="shrink-0 mt-0.5 text-amber-400" />
-              {entries.length - withDueDates} customer{entries.length - withDueDates !== 1 ? 's' : ''} have no due date in this file — they'll be added to your customer list but won't appear on the schedule until you set a date.
+              {entries.length - withDueDates} customer
+              {entries.length - withDueDates !== 1 ? 's' : ''} have no due date in this file —
+              they'll be added to your customer list but won't appear on the schedule until you set
+              a date.
             </div>
           )}
         </div>
@@ -831,7 +1106,8 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
           )}
           {skipped.length > 0 && (
             <div className="px-3 py-2.5 rounded-xl bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.1)] text-xs text-[rgba(153,197,255,0.5)]">
-              {skipped.length} row{skipped.length !== 1 ? 's' : ''} skipped (quotes, missing names, or cancelled).
+              {skipped.length} row{skipped.length !== 1 ? 's' : ''} skipped (quotes, missing names,
+              or cancelled).
             </div>
           )}
         </div>
@@ -855,7 +1131,8 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
               </>
             ) : (
               <>
-                Import {entries.length} customer{entries.length !== 1 ? 's' : ''} + {totalRounds} round{totalRounds !== 1 ? 's' : ''}
+                Import {entries.length} customer{entries.length !== 1 ? 's' : ''} + {totalRounds}{' '}
+                round{totalRounds !== 1 ? 's' : ''}
                 <ArrowRight size={14} />
               </>
             )}
@@ -867,32 +1144,42 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
 
   // ─── Standard CSV/Excel preview ─────────────────────────────────────────────
   const { customers, skipped } = buildCustomers(rows, mapping, existingEmails);
-  const fresh = customers.filter(c => !c.isDupe);
-  const dupes = customers.filter(c => c.isDupe);
+  const fresh = customers.filter((c) => !c.isDupe);
+  const dupes = customers.filter((c) => c.isDupe);
   const allSkipped = customers.length === 0 && skipped.length > 0;
 
   return (
     <div className="flex flex-col overflow-hidden">
       <div className="p-6 border-b border-[rgba(153,197,255,0.1)]">
-        <button onClick={onBack} disabled={importing} className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-4 transition-colors disabled:opacity-40">
+        <button
+          onClick={onBack}
+          disabled={importing}
+          className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-4 transition-colors disabled:opacity-40"
+        >
           <ArrowLeft size={12} /> Back
         </button>
         <h2 className="text-xl font-black text-white">Ready to import</h2>
         <div className="flex gap-3 mt-3">
           <div className="flex-1 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
             <p className="text-lg font-black text-emerald-400">{fresh.length}</p>
-            <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wide mt-0.5">New customers</p>
+            <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wide mt-0.5">
+              New customers
+            </p>
           </div>
           {dupes.length > 0 && (
             <div className="flex-1 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
               <p className="text-lg font-black text-amber-400">{dupes.length}</p>
-              <p className="text-[10px] text-amber-400/70 font-bold uppercase tracking-wide mt-0.5">Will update</p>
+              <p className="text-[10px] text-amber-400/70 font-bold uppercase tracking-wide mt-0.5">
+                Will update
+              </p>
             </div>
           )}
           {skipped.length > 0 && (
             <div className="flex-1 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
               <p className="text-lg font-black text-red-400">{skipped.length}</p>
-              <p className="text-[10px] text-red-400/70 font-bold uppercase tracking-wide mt-0.5">Skipped</p>
+              <p className="text-[10px] text-red-400/70 font-bold uppercase tracking-wide mt-0.5">
+                Skipped
+              </p>
             </div>
           )}
         </div>
@@ -931,7 +1218,8 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
         )}
         {dupes.length > 0 && (
           <div className="px-3 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/15 text-xs text-amber-400/80">
-            Customers marked "update" already exist in Cadi (matched by email). We'll update their details with the imported data.
+            Customers marked "update" already exist in Cadi (matched by email). We'll update their
+            details with the imported data.
           </div>
         )}
       </div>
@@ -940,7 +1228,8 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
         {allSkipped && (
           <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
             <AlertCircle size={14} className="shrink-0 mt-0.5" />
-            All {skipped.length} rows were skipped because no Name value was found. Go back and make sure a column is mapped to "Name".
+            All {skipped.length} rows were skipped because no Name value was found. Go back and make
+            sure a column is mapped to "Name".
           </div>
         )}
         {importError && (
@@ -972,7 +1261,16 @@ function StepPreview({ rows, mapping, existingEmails, cpData, onBack, onImport, 
 }
 
 // ─── Step 5: Done — celebration screen ────────────────────────────────────────
-function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewScheduler, batchId, onUndo }) {
+function StepDone({
+  imported,
+  rounds,
+  jobs,
+  upcomingJobs = [],
+  onClose,
+  onViewScheduler,
+  batchId,
+  onUndo,
+}) {
   const hasSchedule = jobs > 0;
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -995,11 +1293,11 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
   // Confetti squares — fired once on mount
   const confetti = Array.from({ length: 24 }, (_, i) => ({
     id: i,
-    left:  `${(i * 4.2 + 2) % 94}%`,
+    left: `${(i * 4.2 + 2) % 94}%`,
     delay: `${(i * 0.07) % 0.75}s`,
-    dur:   `${0.95 + (i % 6) * 0.15}s`,
-    color: ['#1f48ff','#10b981','#f59e0b','#a78bfa','#f472b6','#34d399'][i % 6],
-    size:  `${5 + (i % 4)}px`,
+    dur: `${0.95 + (i % 6) * 0.15}s`,
+    color: ['#1f48ff', '#10b981', '#f59e0b', '#a78bfa', '#f472b6', '#34d399'][i % 6],
+    size: `${5 + (i % 4)}px`,
   }));
 
   return (
@@ -1048,7 +1346,7 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
 
       {/* Confetti burst */}
       <div className="absolute inset-x-0 top-0 h-56 pointer-events-none overflow-hidden">
-        {confetti.map(c => (
+        {confetti.map((c) => (
           <div
             key={c.id}
             className="_conf absolute rounded-sm"
@@ -1068,11 +1366,13 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
       {/* Soft emerald glow behind icon */}
       <div
         className="absolute top-0 left-1/2 -translate-x-1/2 w-72 h-48 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(16,185,129,0.18) 0%, transparent 70%)' }}
+        style={{
+          background:
+            'radial-gradient(ellipse at 50% 0%, rgba(16,185,129,0.18) 0%, transparent 70%)',
+        }}
       />
 
       <div className="relative p-6 flex flex-col items-center gap-5 overflow-y-auto">
-
         {/* Animated icon + ring */}
         <div className="relative mt-4 flex items-center justify-center">
           <div className="_ring absolute w-16 h-16 rounded-full bg-emerald-400/30" />
@@ -1083,7 +1383,9 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
 
         {/* Count-up headline */}
         <div className="_up1 text-center">
-          <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-emerald-400/70 mb-1">Import complete</p>
+          <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-emerald-400/70 mb-1">
+            Import complete
+          </p>
           <h2 className="text-4xl font-black text-white leading-none">
             {displayCount.toLocaleString()}
           </h2>
@@ -1104,10 +1406,12 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
             <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[rgba(153,197,255,0.4)] mb-2 text-center">
               Your schedule starts here ↓
             </p>
-            <div className="rounded-2xl border border-[rgba(153,197,255,0.12)] overflow-hidden"
-                 style={{ background: 'rgba(153,197,255,0.03)' }}>
+            <div
+              className="rounded-2xl border border-[rgba(153,197,255,0.12)] overflow-hidden"
+              style={{ background: 'rgba(153,197,255,0.03)' }}
+            >
               {upcomingJobs.map((job, i) => {
-                const isPast  = job.date < todayStr;
+                const isPast = job.date < todayStr;
                 const isToday = job.date === todayStr;
                 return (
                   <div
@@ -1115,16 +1419,24 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
                     className={`flex items-center gap-3 px-4 py-3 ${i < upcomingJobs.length - 1 ? 'border-b border-[rgba(153,197,255,0.07)]' : ''}`}
                   >
                     {/* Date pill */}
-                    <span className={`text-[11px] font-black shrink-0 px-2.5 py-1 rounded-full ${
-                      isPast  ? 'bg-amber-500/20 text-amber-300' :
-                      isToday ? 'bg-emerald-500/20 text-emerald-300' :
-                                'bg-[rgba(31,72,255,0.25)] text-[#99c5ff]'
-                    }`}>
+                    <span
+                      className={`text-[11px] font-black shrink-0 px-2.5 py-1 rounded-full ${
+                        isPast
+                          ? 'bg-amber-500/20 text-amber-300'
+                          : isToday
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'bg-[rgba(31,72,255,0.25)] text-[#99c5ff]'
+                      }`}
+                    >
                       {fmtJobDate(job.date)}
                     </span>
-                    <span className="text-sm font-semibold text-white truncate flex-1">{job.customer}</span>
+                    <span className="text-sm font-semibold text-white truncate flex-1">
+                      {job.customer}
+                    </span>
                     {job.price > 0 && (
-                      <span className="text-sm font-black text-emerald-400 shrink-0">£{job.price}</span>
+                      <span className="text-sm font-black text-emerald-400 shrink-0">
+                        £{job.price}
+                      </span>
                     )}
                   </div>
                 );
@@ -1178,7 +1490,6 @@ function StepDone({ imported, rounds, jobs, upcomingJobs = [], onClose, onViewSc
             </button>
           )}
         </div>
-
       </div>
     </div>
   );
@@ -1192,16 +1503,24 @@ function CapModal({ total, onUpgrade, onPick, onImportRecent }) {
         className="relative w-full max-w-md rounded-2xl overflow-hidden border border-[rgba(153,197,255,0.15)]"
         style={{ background: 'linear-gradient(160deg, #010b52 0%, #040e3e 60%, #0d1e78 100%)' }}
       >
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
-          backgroundImage: 'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)',
-          backgroundSize: '28px 28px',
-        }} />
+        <div
+          className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)',
+            backgroundSize: '28px 28px',
+          }}
+        />
         <div className="relative p-6">
           <div className="text-3xl mb-4">🏢</div>
-          <h2 className="text-xl font-black text-white mb-2">You've got {total} customers — that's a real business.</h2>
+          <h2 className="text-xl font-black text-white mb-2">
+            You've got {total} customers — that's a real business.
+          </h2>
           <p className="text-sm text-[rgba(153,197,255,0.7)] leading-relaxed mb-6">
-            Cadi Lite holds your first {LITE_CAP} to get you started. Pro unlocks the rest plus automated reminders, recurring invoices, and profit tracking per customer.
-            <br /><br />
+            Cadi Lite holds your first {LITE_CAP} to get you started. Pro unlocks the rest plus
+            automated reminders, recurring invoices, and profit tracking per customer.
+            <br />
+            <br />
             What would you like to do?
           </p>
 
@@ -1214,7 +1533,9 @@ function CapModal({ total, onUpgrade, onPick, onImportRecent }) {
               <Crown size={18} className="text-white shrink-0" />
               <div>
                 <p className="text-sm font-black text-white">Upgrade to Pro — £39/month</p>
-                <p className="text-xs text-[rgba(255,255,255,0.7)] mt-0.5">Unlock all {total} customers and everything else.</p>
+                <p className="text-xs text-[rgba(255,255,255,0.7)] mt-0.5">
+                  Unlock all {total} customers and everything else.
+                </p>
               </div>
             </button>
 
@@ -1224,10 +1545,14 @@ function CapModal({ total, onUpgrade, onPick, onImportRecent }) {
               onClick={onPick}
               className="w-full flex items-center gap-3 p-4 rounded-xl border border-[rgba(153,197,255,0.2)] bg-[rgba(153,197,255,0.05)] hover:bg-[rgba(153,197,255,0.1)] transition-colors text-left"
             >
-              <div className="w-9 h-9 rounded-lg bg-[rgba(153,197,255,0.1)] flex items-center justify-center shrink-0 text-sm font-black text-[#99c5ff]">{LITE_CAP}</div>
+              <div className="w-9 h-9 rounded-lg bg-[rgba(153,197,255,0.1)] flex items-center justify-center shrink-0 text-sm font-black text-[#99c5ff]">
+                {LITE_CAP}
+              </div>
               <div>
                 <p className="text-sm font-bold text-white">Choose my first {LITE_CAP}</p>
-                <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">Pick which customers to bring in now. Upgrade later when you're ready.</p>
+                <p className="text-xs text-[rgba(153,197,255,0.5)] mt-0.5">
+                  Pick which customers to bring in now. Upgrade later when you're ready.
+                </p>
               </div>
             </button>
 
@@ -1256,9 +1581,12 @@ function CustomerPicker({ customers, onConfirm, onBack }) {
   });
 
   const toggle = (i) => {
-    setSelected(prev => {
+    setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(i)) { next.delete(i); return next; }
+      if (next.has(i)) {
+        next.delete(i);
+        return next;
+      }
       if (next.size >= LITE_CAP) return prev; // cap reached
       next.add(i);
       return next;
@@ -1268,23 +1596,35 @@ function CustomerPicker({ customers, onConfirm, onBack }) {
   return (
     <div className="flex flex-col overflow-hidden max-h-[85vh]">
       <div className="p-5 border-b border-[rgba(153,197,255,0.1)] shrink-0">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-3 transition-colors">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-xs text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] mb-3 transition-colors"
+        >
           <ArrowLeft size={12} /> Back
         </button>
-        <h2 className="text-lg font-black text-white">Which {LITE_CAP} customers do you want in Cadi first?</h2>
-        <p className="text-xs text-[rgba(153,197,255,0.5)] mt-1">The rest stay safe and load in when you upgrade.</p>
+        <h2 className="text-lg font-black text-white">
+          Which {LITE_CAP} customers do you want in Cadi first?
+        </h2>
+        <p className="text-xs text-[rgba(153,197,255,0.5)] mt-1">
+          The rest stay safe and load in when you upgrade.
+        </p>
         <div className="flex items-center justify-between mt-3">
-          <span className="text-sm font-bold text-[#4f78ff]">{selected.size} of {LITE_CAP} selected</span>
+          <span className="text-sm font-bold text-[#4f78ff]">
+            {selected.size} of {LITE_CAP} selected
+          </span>
           <select
             value={sort}
-            onChange={e => setSort(e.target.value)}
+            onChange={(e) => setSort(e.target.value)}
             className="text-xs px-2 py-1.5 rounded-lg bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.15)] text-white"
           >
             <option value="name">Alphabetical</option>
           </select>
         </div>
         <div className="h-1.5 bg-[rgba(153,197,255,0.1)] rounded-full mt-2">
-          <div className="h-full bg-[#4f78ff] rounded-full transition-all" style={{ width: `${(selected.size / LITE_CAP) * 100}%` }} />
+          <div
+            className="h-full bg-[#4f78ff] rounded-full transition-all"
+            style={{ width: `${(selected.size / LITE_CAP) * 100}%` }}
+          />
         </div>
       </div>
 
@@ -1302,13 +1642,15 @@ function CustomerPicker({ customers, onConfirm, onBack }) {
                 isSelected
                   ? 'bg-[#4f78ff]/15 border-[#4f78ff]/40'
                   : atCap
-                  ? 'opacity-30 border-transparent cursor-not-allowed'
-                  : 'border-[rgba(153,197,255,0.1)] hover:bg-[rgba(153,197,255,0.05)] hover:border-[rgba(153,197,255,0.2)]'
+                    ? 'opacity-30 border-transparent cursor-not-allowed'
+                    : 'border-[rgba(153,197,255,0.1)] hover:bg-[rgba(153,197,255,0.05)] hover:border-[rgba(153,197,255,0.2)]'
               }`}
             >
-              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
-                isSelected ? 'bg-[#4f78ff] border-[#4f78ff]' : 'border-[rgba(153,197,255,0.3)]'
-              }`}>
+              <div
+                className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                  isSelected ? 'bg-[#4f78ff] border-[#4f78ff]' : 'border-[rgba(153,197,255,0.3)]'
+                }`}
+              >
                 {isSelected && <Check size={9} className="text-white" strokeWidth={3} />}
               </div>
               <div className="w-7 h-7 rounded-full bg-[rgba(31,72,255,0.2)] flex items-center justify-center shrink-0 text-xs font-bold text-[#99c5ff]">
@@ -1317,7 +1659,9 @@ function CustomerPicker({ customers, onConfirm, onBack }) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-white truncate">{c.data.name}</p>
                 {(c.data.email || c.data.postcode) && (
-                  <p className="text-[10px] text-[rgba(153,197,255,0.4)] truncate">{[c.data.email, c.data.postcode].filter(Boolean).join(' · ')}</p>
+                  <p className="text-[10px] text-[rgba(153,197,255,0.4)] truncate">
+                    {[c.data.email, c.data.postcode].filter(Boolean).join(' · ')}
+                  </p>
                 )}
               </div>
             </button>
@@ -1342,19 +1686,24 @@ function CustomerPicker({ customers, onConfirm, onBack }) {
 async function storePendingCustomers(customers) {
   const { data: bizId } = await supabase.rpc('my_business_id');
   if (!bizId || !customers.length) return;
-  const rows = customers.map(c => ({ business_id: bizId, customer_data: c.data }));
+  const rows = customers.map((c) => ({ business_id: bizId, customer_data: c.data }));
   await supabase.from('pending_customers').insert(rows);
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
-export default function CustomerImport({ onClose, onImported, onViewScheduler, existingCustomers = [] }) {
+export default function CustomerImport({
+  onClose,
+  onImported,
+  onViewScheduler,
+  existingCustomers = [],
+}) {
   const { isPro } = usePlan();
   const [step, setStep] = useState('source'); // source | upload | map | preview | cap | pick | done
   const [source, setSource] = useState(null);
   const [csvData, setCsvData] = useState(null); // { headers, rows, fileName }
   const [detectedSource, setDetectedSource] = useState(null);
   const [mapping, setMapping] = useState(null);
-  const [cpData, setCpData] = useState(null);   // CleanerPlanner Jobs: { entries, skipped }
+  const [cpData, setCpData] = useState(null); // CleanerPlanner Jobs: { entries, skipped }
   const [importing, setImporting] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
   const [importedRoundCount, setImportedRoundCount] = useState(0);
@@ -1368,12 +1717,21 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
 
   const handleUndoImport = async () => {
     if (!lastImportBatchId) return;
-    if (!window.confirm('Undo this import? Every customer, round and job created by this run will be permanently deleted.')) return;
+    if (
+      !window.confirm(
+        'Undo this import? Every customer, round and job created by this run will be permanently deleted.'
+      )
+    )
+      return;
     try {
       const r = await rollbackBatch(lastImportBatchId);
-      try { localStorage.removeItem('cadi_last_import_batch'); } catch {}
+      try {
+        localStorage.removeItem('cadi_last_import_batch');
+      } catch {}
       setLastImportBatchId(null);
-      window.alert(`Reversed: ${r.customers} customers, ${r.rounds} rounds, ${r.jobs} jobs, ${r.recurringJobs} recurring rules removed.`);
+      window.alert(
+        `Reversed: ${r.customers} customers, ${r.rounds} rounds, ${r.jobs} jobs, ${r.recurringJobs} recurring rules removed.`
+      );
       onImported?.();
       onClose?.();
     } catch (err) {
@@ -1381,8 +1739,12 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
     }
   };
 
-  const existingEmails   = new Set(existingCustomers.map(c => c.email?.toLowerCase()).filter(Boolean));
-  const existingCustRefs = new Set(existingCustomers.map(c => c.customer_reference).filter(Boolean));
+  const existingEmails = new Set(
+    existingCustomers.map((c) => c.email?.toLowerCase()).filter(Boolean)
+  );
+  const existingCustRefs = new Set(
+    existingCustomers.map((c) => c.customer_reference).filter(Boolean)
+  );
 
   // CleanerPlanner Jobs import: create customers, rounds, then auto-schedule jobs.
   // Every row created here is stamped with the same import_batch_id so the
@@ -1399,12 +1761,18 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
     for (let i = 0; i < entries.length; i++) {
       const { customer, rounds } = entries[i];
       try {
-        const saved = await upsertCustomer({ ...customer, importBatchId: batchId, source: customer.source ?? 'import:cleaner-planner' });
+        const saved = await upsertCustomer({
+          ...customer,
+          importBatchId: batchId,
+          source: customer.source ?? 'import:cleaner-planner',
+        });
         count++;
         if (rounds.length > 0 && saved?.id) {
           try {
             await deleteRoundsForCustomer(saved.id);
-            await bulkInsertRounds(rounds.map(r => ({ ...r, customerId: saved.id, importBatchId: batchId })));
+            await bulkInsertRounds(
+              rounds.map((r) => ({ ...r, customerId: saved.id, importBatchId: batchId }))
+            );
             roundCount += rounds.length;
           } catch (re) {
             console.warn(`Rounds insert failed for row ${i}: ${re?.message}`);
@@ -1413,24 +1781,25 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
           // Build scheduled jobs for the next 4 months
           const jobType = detectJobType(customer.name);
           for (const round of rounds) {
-            if (round.accountStatus === 'cancelled' || round.accountStatus === 'suspended') continue;
+            if (round.accountStatus === 'cancelled' || round.accountStatus === 'suspended')
+              continue;
             const dates = generateJobDatesFromRound(round, 4);
             for (const date of dates) {
               jobsToCreate.push({
-                customerId:   saved.id,
-                customer:     customer.name,
+                customerId: saved.id,
+                customer: customer.name,
                 addressLine1: customer.addressLine1 || null,
                 addressLine2: customer.addressLine2 || null,
-                town:         customer.town || null,
-                county:       customer.county || null,
-                postcode:     customer.postcode || '',
+                town: customer.town || null,
+                county: customer.county || null,
+                postcode: customer.postcode || '',
                 date,
-                type:         jobType,
-                service:      round.roundName || 'Window clean',
-                price:        round.pricePerVisit || 0,
-                recurrence:   round.schedule || 'one-off',
-                isRecurring:  (parseFrequencyDays(round.schedule) ?? 0) > 0,
-                notes:        round.jobReference ? `Job ref: ${round.jobReference}` : '',
+                type: jobType,
+                service: round.roundName || 'Window clean',
+                price: round.pricePerVisit || 0,
+                recurrence: round.schedule || 'one-off',
+                isRecurring: (parseFrequencyDays(round.schedule) ?? 0) > 0,
+                notes: round.jobReference ? `Job ref: ${round.jobReference}` : '',
                 importBatchId: batchId,
               });
             }
@@ -1457,7 +1826,7 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
     const todayStr = new Date().toISOString().slice(0, 10);
     const upcoming = jobsToCreate
       .sort((a, b) => a.date.localeCompare(b.date))
-      .filter(j => j.date >= todayStr)
+      .filter((j) => j.date >= todayStr)
       .slice(0, 5);
 
     setImporting(false);
@@ -1467,7 +1836,19 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
       setImportedJobCount(jobCount);
       setImportedUpcomingJobs(upcoming);
       setLastImportBatchId(batchId);
-      try { localStorage.setItem('cadi_last_import_batch', JSON.stringify({ id: batchId, at: Date.now(), source: 'cleaner-planner', customers: count, rounds: roundCount, jobs: jobCount })); } catch {}
+      try {
+        localStorage.setItem(
+          'cadi_last_import_batch',
+          JSON.stringify({
+            id: batchId,
+            at: Date.now(),
+            source: 'cleaner-planner',
+            customers: count,
+            rounds: roundCount,
+            jobs: jobCount,
+          })
+        );
+      } catch {}
       setStep('done');
       onImported?.();
     } else {
@@ -1478,11 +1859,9 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
   const handleImportCP = async (entries) => {
     // Resolve existing customer ids so upsert updates rather than inserts duplicates
     const refToId = new Map(
-      existingCustomers
-        .filter(c => c.customer_reference)
-        .map(c => [c.customer_reference, c.id])
+      existingCustomers.filter((c) => c.customer_reference).map((c) => [c.customer_reference, c.id])
     );
-    const resolved = entries.map(e => ({
+    const resolved = entries.map((e) => ({
       ...e,
       customer: {
         ...e.customer,
@@ -1491,9 +1870,9 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
     }));
 
     if (!isPro) {
-      const fresh = resolved.filter(e => !e.isDupe);
+      const fresh = resolved.filter((e) => !e.isDupe);
       if (fresh.length > LITE_CAP) {
-        const dupes = resolved.filter(e => e.isDupe);
+        const dupes = resolved.filter((e) => e.isDupe);
         await doImportCP([...fresh.slice(0, LITE_CAP), ...dupes]);
         return;
       }
@@ -1517,13 +1896,22 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
       }
     }
     if (overflow.length > 0) {
-      try { await storePendingCustomers(overflow); } catch (e) { console.warn('pending_customers store failed', e); }
+      try {
+        await storePendingCustomers(overflow);
+      } catch (e) {
+        console.warn('pending_customers store failed', e);
+      }
     }
     setImporting(false);
     if (count > 0) {
       setImportedCount(count);
       setLastImportBatchId(batchId);
-      try { localStorage.setItem('cadi_last_import_batch', JSON.stringify({ id: batchId, at: Date.now(), source: 'csv', customers: count })); } catch {}
+      try {
+        localStorage.setItem(
+          'cadi_last_import_batch',
+          JSON.stringify({ id: batchId, at: Date.now(), source: 'csv', customers: count })
+        );
+      } catch {}
       setStep('done');
       onImported?.();
     } else {
@@ -1533,7 +1921,7 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
   };
 
   const handleImport = async (customers) => {
-    const freshCustomers = customers.filter(c => !c.isDupe);
+    const freshCustomers = customers.filter((c) => !c.isDupe);
     if (!isPro && freshCustomers.length > LITE_CAP) {
       setPendingCustomers(customers);
       setShowCap(true);
@@ -1561,7 +1949,7 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
 
   const handlePickerConfirm = async (selectedIndices) => {
     setShowPicker(false);
-    const toImport = selectedIndices.map(i => pendingCustomers[i]);
+    const toImport = selectedIndices.map((i) => pendingCustomers[i]);
     const overflow = pendingCustomers.filter((_, i) => !selectedIndices.includes(i));
     await doImport(toImport, overflow);
   };
@@ -1571,7 +1959,10 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
       <ModalShell onClose={onClose}>
         {step === 'source' && (
           <StepSource
-            onSelect={(src) => { setSource(src); setStep('upload'); }}
+            onSelect={(src) => {
+              setSource(src);
+              setStep('upload');
+            }}
           />
         )}
         {step === 'upload' && (
@@ -1598,7 +1989,10 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
             rows={csvData.rows}
             detectedSource={detectedSource}
             onBack={() => setStep('upload')}
-            onConfirm={(m) => { setMapping(m); setStep('preview'); }}
+            onConfirm={(m) => {
+              setMapping(m);
+              setStep('preview');
+            }}
           />
         )}
         {step === 'preview' && (
@@ -1607,7 +2001,7 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
             mapping={mapping ?? {}}
             existingEmails={existingEmails}
             cpData={cpData}
-            onBack={() => cpData ? setStep('upload') : setStep('map')}
+            onBack={() => (cpData ? setStep('upload') : setStep('map'))}
             onImport={cpData ? handleImportCP : handleImport}
             importing={importing}
             importError={importError}
@@ -1644,13 +2038,19 @@ export default function CustomerImport({ onClose, onImported, onViewScheduler, e
             className="relative w-full max-w-md max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-[rgba(153,197,255,0.15)] overflow-hidden"
             style={{ background: 'linear-gradient(145deg, #010a4f 0%, #05124a 50%, #0d1e78 100%)' }}
           >
-            <button onClick={() => setShowPicker(false)} className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+            <button
+              onClick={() => setShowPicker(false)}
+              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+            >
               <X size={14} className="text-white" />
             </button>
             <CustomerPicker
               customers={pendingCustomers}
               onConfirm={handlePickerConfirm}
-              onBack={() => { setShowPicker(false); setShowCap(true); }}
+              onBack={() => {
+                setShowPicker(false);
+                setShowCap(true);
+              }}
             />
           </div>
         </div>

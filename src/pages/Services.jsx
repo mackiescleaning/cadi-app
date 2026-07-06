@@ -5,14 +5,30 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  Plus, MoreHorizontal, ChevronDown, ChevronUp, X, AlertCircle, Check,
-  Pencil, Copy, Trash2, MessageSquare,
+  Plus,
+  MoreHorizontal,
+  ChevronDown,
+  ChevronUp,
+  X,
+  AlertCircle,
+  Check,
+  Copy,
+  Trash2,
+  MessageSquare,
 } from 'lucide-react';
 import {
-  listServices, createService, updateService, deleteService,
-  setServiceActive, duplicateService,
-  formatPricingSummary, formatDuration, getFrequencyLabels, serviceHasPricing,
-  countServicesNeedingPricing, seedServicesFromOnboarding,
+  listServices,
+  createService,
+  updateService,
+  deleteService,
+  setServiceActive,
+  duplicateService,
+  formatPricingSummary,
+  formatDuration,
+  getFrequencyLabels,
+  serviceHasPricing,
+  countServicesNeedingPricing,
+  seedServicesFromOnboarding,
 } from '../lib/db/servicesDb';
 import { supabase } from '../lib/supabase';
 import ServiceChat from '../components/ServiceChat';
@@ -25,19 +41,46 @@ import FrontDeskPreview from '../components/FrontDeskPreview';
 const SERVICE_CATALOGUE = {
   residential: [
     { label: 'Regular Cleaning', items: ['Weekly Clean', 'Fortnightly Clean', 'Monthly Clean'] },
-    { label: 'One-off & Specialist', items: ['Deep Clean', 'End of Tenancy', 'Move In / Move Out', 'Spring Clean', 'After Party Clean'] },
+    {
+      label: 'One-off & Specialist',
+      items: [
+        'Deep Clean',
+        'End of Tenancy',
+        'Move In / Move Out',
+        'Spring Clean',
+        'After Party Clean',
+      ],
+    },
     { label: 'Holiday & Short-Let', items: ['Airbnb Turnover', 'Holiday Let Changeover'] },
-    { label: 'Add-ons', items: ['Oven Clean', 'Carpet Clean', 'Inside Windows', 'Ironing Service'] },
+    {
+      label: 'Add-ons',
+      items: ['Oven Clean', 'Carpet Clean', 'Inside Windows', 'Ironing Service'],
+    },
   ],
   commercial: [
-    { label: 'Office & Retail', items: ['Daily Office Clean', 'Weekly Office Clean', 'Retail Clean'] },
-    { label: 'Education & Healthcare', items: ['School / College', 'Nursery / Childcare', 'Medical Practice', 'Care Home'] },
+    {
+      label: 'Office & Retail',
+      items: ['Daily Office Clean', 'Weekly Office Clean', 'Retail Clean'],
+    },
+    {
+      label: 'Education & Healthcare',
+      items: ['School / College', 'Nursery / Childcare', 'Medical Practice', 'Care Home'],
+    },
     { label: 'Hospitality', items: ['Restaurant / Cafe', 'Hotel', 'Pub / Bar', 'Event Venue'] },
-    { label: 'Specialist', items: ['Post-Construction Clean', 'Periodic Deep Clean', 'Industrial / Warehouse'] },
+    {
+      label: 'Specialist',
+      items: ['Post-Construction Clean', 'Periodic Deep Clean', 'Industrial / Warehouse'],
+    },
   ],
   exterior: [
-    { label: 'Window Cleaning', items: ['Residential Windows', 'Commercial Windows', 'Conservatory Glass'] },
-    { label: 'Gutters & Roofline', items: ['Gutter Clearing', 'Fascia & Soffit Clean', 'Roof Moss Removal'] },
+    {
+      label: 'Window Cleaning',
+      items: ['Residential Windows', 'Commercial Windows', 'Conservatory Glass'],
+    },
+    {
+      label: 'Gutters & Roofline',
+      items: ['Gutter Clearing', 'Fascia & Soffit Clean', 'Roof Moss Removal'],
+    },
     { label: 'Jet Washing', items: ['Driveway Jet Wash', 'Patio / Decking', 'Path & Steps'] },
     { label: 'Building Exterior', items: ['Render Wash', 'UPVC Restoration', 'Solar Panel Clean'] },
   ],
@@ -51,59 +94,59 @@ export const SECTORS = {
   residential: {
     label: 'Residential',
     accent: '#1f48ff',
-    bar:    'bg-[#1f48ff]',
-    chip:   'bg-[#1f48ff]/15 text-[#99c5ff] border-[#1f48ff]/30',
-    soft:   'from-[#1f48ff]/10',
-    icon:   '🏠',
+    bar: 'bg-[#1f48ff]',
+    chip: 'bg-[#1f48ff]/15 text-[#99c5ff] border-[#1f48ff]/30',
+    soft: 'from-[#1f48ff]/10',
+    icon: '🏠',
   },
   exterior: {
     label: 'Exterior',
     accent: '#10b981',
-    bar:    'bg-emerald-500',
-    chip:   'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-    soft:   'from-emerald-500/10',
-    icon:   '🪟',
+    bar: 'bg-emerald-500',
+    chip: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    soft: 'from-emerald-500/10',
+    icon: '🪟',
   },
   commercial: {
     label: 'Commercial',
     accent: '#f59e0b',
-    bar:    'bg-orange-500',
-    chip:   'bg-orange-500/15 text-orange-300 border-orange-500/30',
-    soft:   'from-orange-500/10',
-    icon:   '🏢',
+    bar: 'bg-orange-500',
+    chip: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
+    soft: 'from-orange-500/10',
+    icon: '🏢',
   },
 };
 
 const CATEGORIES = [
   { key: 'residential', label: SECTORS.residential.label },
-  { key: 'exterior',    label: SECTORS.exterior.label    },
-  { key: 'commercial',  label: SECTORS.commercial.label  },
+  { key: 'exterior', label: SECTORS.exterior.label },
+  { key: 'commercial', label: SECTORS.commercial.label },
 ];
 
 const PRICING_TYPES = [
   { value: 'per_size', label: 'By property size (2 bed, 3 bed…)' },
-  { value: 'hourly',   label: 'Hourly rate'                       },
-  { value: 'fixed',    label: 'Single fixed price'                },
-  { value: 'per_sqm',  label: 'Per square metre'                  },
-  { value: 'per_room', label: 'Per room'                          },
-  { value: 'custom',   label: 'Custom (quote each job)'           },
+  { value: 'hourly', label: 'Hourly rate' },
+  { value: 'fixed', label: 'Single fixed price' },
+  { value: 'per_sqm', label: 'Per square metre' },
+  { value: 'per_room', label: 'Per room' },
+  { value: 'custom', label: 'Custom (quote each job)' },
 ];
 
 const DEFAULT_SIZE_TIERS = [
   { label: 'Studio / 1 bed', price: '' },
-  { label: '2 bed',          price: '' },
-  { label: '3 bed',          price: '' },
-  { label: '4 bed',          price: '' },
-  { label: '5 bed+',         price: '' },
+  { label: '2 bed', price: '' },
+  { label: '3 bed', price: '' },
+  { label: '4 bed', price: '' },
+  { label: '5 bed+', price: '' },
 ];
 
 const FREQ_OPTIONS = [
-  { key: 'frequency_one_off',    label: 'One-off'      },
-  { key: 'frequency_weekly',     label: 'Weekly'       },
+  { key: 'frequency_one_off', label: 'One-off' },
+  { key: 'frequency_weekly', label: 'Weekly' },
   { key: 'frequency_fortnightly', label: 'Fortnightly' },
-  { key: 'frequency_monthly',    label: 'Monthly'      },
-  { key: 'frequency_quarterly',  label: 'Quarterly'    },
-  { key: 'frequency_annually',   label: 'Annually'     },
+  { key: 'frequency_monthly', label: 'Monthly' },
+  { key: 'frequency_quarterly', label: 'Quarterly' },
+  { key: 'frequency_annually', label: 'Annually' },
 ];
 
 const EMPTY_FORM = {
@@ -112,7 +155,7 @@ const EMPTY_FORM = {
   description_included: '',
   description_excluded: '',
   pricing_type: 'per_size',
-  pricing_matrix: DEFAULT_SIZE_TIERS.map(t => ({ ...t })),
+  pricing_matrix: DEFAULT_SIZE_TIERS.map((t) => ({ ...t })),
   price_hourly_rate: '',
   price_hourly_minimum_hours: '',
   price_fixed_basic: '',
@@ -147,9 +190,13 @@ function numericField(val) {
 }
 
 function formToRecord(form) {
-  const matrix = form.pricing_type === 'per_size'
-    ? (form.pricing_matrix ?? []).filter(r => r.label?.trim() && r.price !== '').map(r => ({ label: r.label.trim(), price: parseFloat(r.price) })).filter(r => !isNaN(r.price))
-    : null;
+  const matrix =
+    form.pricing_type === 'per_size'
+      ? (form.pricing_matrix ?? [])
+          .filter((r) => r.label?.trim() && r.price !== '')
+          .map((r) => ({ label: r.label.trim(), price: parseFloat(r.price) }))
+          .filter((r) => !isNaN(r.price))
+      : null;
   return {
     category: form.category,
     name: form.name.trim(),
@@ -186,8 +233,8 @@ function formToRecord(form) {
 
 function recordToForm(record) {
   const matrix = record.pricing_matrix?.length
-    ? record.pricing_matrix.map(r => ({ label: r.label, price: String(r.price) }))
-    : DEFAULT_SIZE_TIERS.map(t => ({ ...t }));
+    ? record.pricing_matrix.map((r) => ({ label: r.label, price: String(r.price) }))
+    : DEFAULT_SIZE_TIERS.map((t) => ({ ...t }));
   return {
     ...EMPTY_FORM,
     ...record,
@@ -226,7 +273,7 @@ function AccordionSection({ title, filledCount, totalCount, children, defaultOpe
     <div className="border border-[rgba(153,197,255,0.15)] rounded-xl overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-4 py-3 bg-[rgba(153,197,255,0.05)] hover:bg-[rgba(153,197,255,0.1)] transition-colors text-left"
       >
         <span className="text-sm font-bold text-white">{title}</span>
@@ -236,7 +283,11 @@ function AccordionSection({ title, filledCount, totalCount, children, defaultOpe
               {filledCount} of {totalCount}
             </span>
           )}
-          {open ? <ChevronUp size={14} className="text-[#99c5ff]" /> : <ChevronDown size={14} className="text-[#99c5ff]" />}
+          {open ? (
+            <ChevronUp size={14} className="text-[#99c5ff]" />
+          ) : (
+            <ChevronDown size={14} className="text-[#99c5ff]" />
+          )}
         </div>
       </button>
       {open && <div className="px-4 py-4 space-y-4">{children}</div>}
@@ -249,7 +300,8 @@ function AccordionSection({ title, filledCount, totalCount, children, defaultOpe
 function FieldLabel({ children, required }) {
   return (
     <label className="block text-xs font-bold text-[#99c5ff] mb-1.5 uppercase tracking-wider">
-      {children}{required && <span className="text-[#4f78ff] ml-0.5">*</span>}
+      {children}
+      {required && <span className="text-[#4f78ff] ml-0.5">*</span>}
     </label>
   );
 }
@@ -264,7 +316,7 @@ function TextInput({ value, onChange, placeholder, error, className = '' }) {
       <input
         type="text"
         value={value}
-        onChange={e => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className={`w-full px-3 py-2.5 rounded-lg bg-[rgba(153,197,255,0.07)] border text-white text-sm placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#4f78ff] transition-colors ${
           error ? 'border-red-400' : 'border-[rgba(153,197,255,0.2)]'
@@ -279,7 +331,7 @@ function TextArea({ value, onChange, placeholder, rows = 3 }) {
   return (
     <textarea
       value={value}
-      onChange={e => onChange(e.target.value)}
+      onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
       className="w-full px-3 py-2.5 rounded-lg bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.2)] text-white text-sm placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#4f78ff] transition-colors resize-none"
@@ -289,14 +341,20 @@ function TextArea({ value, onChange, placeholder, rows = 3 }) {
 
 function NumberInput({ value, onChange, placeholder, prefix, suffix, className = '' }) {
   return (
-    <div className={`flex items-center bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.2)] rounded-lg overflow-hidden focus-within:border-[#4f78ff] transition-colors ${className}`}>
-      {prefix && <span className="px-3 text-sm text-[rgba(153,197,255,0.6)] border-r border-[rgba(153,197,255,0.2)]">{prefix}</span>}
+    <div
+      className={`flex items-center bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.2)] rounded-lg overflow-hidden focus-within:border-[#4f78ff] transition-colors ${className}`}
+    >
+      {prefix && (
+        <span className="px-3 text-sm text-[rgba(153,197,255,0.6)] border-r border-[rgba(153,197,255,0.2)]">
+          {prefix}
+        </span>
+      )}
       <input
         type="number"
         min="0"
         step="0.01"
         value={value}
-        onChange={e => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="flex-1 px-3 py-2.5 bg-transparent text-white text-sm placeholder-[rgba(153,197,255,0.3)] focus:outline-none"
       />
@@ -309,7 +367,7 @@ function NumberInput({ value, onChange, placeholder, prefix, suffix, className =
 
 function PricingMatrixEditor({ rows, onChange }) {
   const updateRow = (i, field, val) => {
-    const next = rows.map((r, idx) => idx === i ? { ...r, [field]: val } : r);
+    const next = rows.map((r, idx) => (idx === i ? { ...r, [field]: val } : r));
     onChange(next);
   };
   const addRow = () => onChange([...rows, { label: '', price: '' }]);
@@ -318,7 +376,8 @@ function PricingMatrixEditor({ rows, onChange }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-[rgba(153,197,255,0.5)]">
-        Set a price for each size you offer. Front Desk will ask the customer how many bedrooms and quote the right price automatically.
+        Set a price for each size you offer. Front Desk will ask the customer how many bedrooms and
+        quote the right price automatically.
       </p>
       <div className="space-y-2">
         {rows.map((row, i) => (
@@ -326,18 +385,20 @@ function PricingMatrixEditor({ rows, onChange }) {
             <input
               type="text"
               value={row.label}
-              onChange={e => updateRow(i, 'label', e.target.value)}
+              onChange={(e) => updateRow(i, 'label', e.target.value)}
               placeholder="e.g. 2 bed"
               className="flex-1 px-3 py-2 rounded-lg bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.2)] text-white text-sm placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#4f78ff]"
             />
             <div className="flex items-center bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.2)] rounded-lg overflow-hidden focus-within:border-[#4f78ff] w-28">
-              <span className="px-2 text-sm text-[rgba(153,197,255,0.6)] border-r border-[rgba(153,197,255,0.2)]">£</span>
+              <span className="px-2 text-sm text-[rgba(153,197,255,0.6)] border-r border-[rgba(153,197,255,0.2)]">
+                £
+              </span>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={row.price}
-                onChange={e => updateRow(i, 'price', e.target.value)}
+                onChange={(e) => updateRow(i, 'price', e.target.value)}
                 placeholder="0.00"
                 className="flex-1 px-2 py-2 bg-transparent text-white text-sm placeholder-[rgba(153,197,255,0.3)] focus:outline-none"
               />
@@ -364,64 +425,111 @@ function PricingMatrixEditor({ rows, onChange }) {
 }
 
 function PricingFields({ form, patch }) {
-  if (form.pricing_type === 'per_size') return (
-    <PricingMatrixEditor
-      rows={form.pricing_matrix ?? DEFAULT_SIZE_TIERS.map(t => ({ ...t }))}
-      onChange={matrix => patch({ pricing_matrix: matrix })}
-    />
-  );
+  if (form.pricing_type === 'per_size')
+    return (
+      <PricingMatrixEditor
+        rows={form.pricing_matrix ?? DEFAULT_SIZE_TIERS.map((t) => ({ ...t }))}
+        onChange={(matrix) => patch({ pricing_matrix: matrix })}
+      />
+    );
 
-  if (form.pricing_type === 'hourly') return (
-    <div className="grid grid-cols-2 gap-3">
-      <div>
-        <FieldLabel>Rate per hour</FieldLabel>
-        <NumberInput prefix="£" value={form.price_hourly_rate} onChange={v => patch({ price_hourly_rate: v })} placeholder="0.00" suffix="/hr" />
+  if (form.pricing_type === 'hourly')
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <FieldLabel>Rate per hour</FieldLabel>
+          <NumberInput
+            prefix="£"
+            value={form.price_hourly_rate}
+            onChange={(v) => patch({ price_hourly_rate: v })}
+            placeholder="0.00"
+            suffix="/hr"
+          />
+        </div>
+        <div>
+          <FieldLabel>Minimum hours</FieldLabel>
+          <NumberInput
+            value={form.price_hourly_minimum_hours}
+            onChange={(v) => patch({ price_hourly_minimum_hours: v })}
+            placeholder="e.g. 2"
+          />
+        </div>
       </div>
-      <div>
-        <FieldLabel>Minimum hours</FieldLabel>
-        <NumberInput value={form.price_hourly_minimum_hours} onChange={v => patch({ price_hourly_minimum_hours: v })} placeholder="e.g. 2" />
-      </div>
-    </div>
-  );
+    );
 
-  if (form.pricing_type === 'fixed') return (
-    <div className="space-y-3">
-      <p className="text-xs text-[rgba(153,197,255,0.5)]">One fixed price regardless of size. Use "By property size" if you charge differently per bedroom.</p>
-      <NumberInput prefix="£" value={form.price_fixed_basic} onChange={v => patch({ price_fixed_basic: v })} placeholder="0.00" />
-    </div>
-  );
+  if (form.pricing_type === 'fixed')
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-[rgba(153,197,255,0.5)]">
+          One fixed price regardless of size. Use "By property size" if you charge differently per
+          bedroom.
+        </p>
+        <NumberInput
+          prefix="£"
+          value={form.price_fixed_basic}
+          onChange={(v) => patch({ price_fixed_basic: v })}
+          placeholder="0.00"
+        />
+      </div>
+    );
 
-  if (form.pricing_type === 'per_sqm') return (
-    <div className="grid grid-cols-2 gap-3">
-      <div>
-        <FieldLabel>Rate per m²</FieldLabel>
-        <NumberInput prefix="£" value={form.price_per_sqm} onChange={v => patch({ price_per_sqm: v })} placeholder="0.00" suffix="/m²" />
+  if (form.pricing_type === 'per_sqm')
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <FieldLabel>Rate per m²</FieldLabel>
+          <NumberInput
+            prefix="£"
+            value={form.price_per_sqm}
+            onChange={(v) => patch({ price_per_sqm: v })}
+            placeholder="0.00"
+            suffix="/m²"
+          />
+        </div>
+        <div>
+          <FieldLabel>Minimum charge</FieldLabel>
+          <NumberInput
+            prefix="£"
+            value={form.price_per_sqm_minimum}
+            onChange={(v) => patch({ price_per_sqm_minimum: v })}
+            placeholder="0.00"
+          />
+        </div>
       </div>
-      <div>
-        <FieldLabel>Minimum charge</FieldLabel>
-        <NumberInput prefix="£" value={form.price_per_sqm_minimum} onChange={v => patch({ price_per_sqm_minimum: v })} placeholder="0.00" />
-      </div>
-    </div>
-  );
+    );
 
-  if (form.pricing_type === 'per_room') return (
-    <div className="grid grid-cols-2 gap-3">
-      <div>
-        <FieldLabel>Per room</FieldLabel>
-        <NumberInput prefix="£" value={form.price_per_room} onChange={v => patch({ price_per_room: v })} placeholder="0.00" />
+  if (form.pricing_type === 'per_room')
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <FieldLabel>Per room</FieldLabel>
+          <NumberInput
+            prefix="£"
+            value={form.price_per_room}
+            onChange={(v) => patch({ price_per_room: v })}
+            placeholder="0.00"
+          />
+        </div>
+        <div>
+          <FieldLabel>Per bathroom (optional)</FieldLabel>
+          <NumberInput
+            prefix="£"
+            value={form.price_per_bathroom}
+            onChange={(v) => patch({ price_per_bathroom: v })}
+            placeholder="0.00"
+          />
+        </div>
       </div>
-      <div>
-        <FieldLabel>Per bathroom (optional)</FieldLabel>
-        <NumberInput prefix="£" value={form.price_per_bathroom} onChange={v => patch({ price_per_bathroom: v })} placeholder="0.00" />
-      </div>
-    </div>
-  );
+    );
 
-  if (form.pricing_type === 'custom') return (
-    <div className="p-3 rounded-lg bg-[rgba(79,120,255,0.1)] border border-[rgba(79,120,255,0.25)]">
-      <p className="text-xs text-[#99c5ff]">Front Desk will gather enquiry details and flag this job for you to quote manually.</p>
-    </div>
-  );
+  if (form.pricing_type === 'custom')
+    return (
+      <div className="p-3 rounded-lg bg-[rgba(79,120,255,0.1)] border border-[rgba(79,120,255,0.25)]">
+        <p className="text-xs text-[#99c5ff]">
+          Front Desk will gather enquiry details and flag this job for you to quote manually.
+        </p>
+      </div>
+    );
 
   return null;
 }
@@ -430,39 +538,42 @@ function PricingFields({ form, patch }) {
 
 const CAT_TABS = [
   { key: 'residential', label: 'Residential' },
-  { key: 'exterior',    label: 'Exterior'    },
-  { key: 'commercial',  label: 'Commercial'  },
+  { key: 'exterior', label: 'Exterior' },
+  { key: 'commercial', label: 'Commercial' },
 ];
 
 function CatalogueModal({ existingNames, onAdd, onCustom, onClose }) {
   const [tab, setTab] = useState('residential');
   const [selected, setSelected] = useState({}); // name → true
 
-  const existingSet = new Set((existingNames || []).map(n => n.toLowerCase()));
+  const existingSet = new Set((existingNames || []).map((n) => n.toLowerCase()));
 
   const toggleItem = (name) => {
     if (existingSet.has(name.toLowerCase())) return;
-    setSelected(s => ({ ...s, [name]: !s[name] }));
+    setSelected((s) => ({ ...s, [name]: !s[name] }));
   };
 
-  const tabItems = (SERVICE_CATALOGUE[tab] || []).flatMap(g => g.items);
-  const allAvailable = tabItems.filter(n => !existingSet.has(n.toLowerCase()));
-  const tabSelected = tabItems.filter(n => selected[n]);
-  const allTabSelected = allAvailable.length > 0 && allAvailable.every(n => selected[n]);
+  const tabItems = (SERVICE_CATALOGUE[tab] || []).flatMap((g) => g.items);
+  const allAvailable = tabItems.filter((n) => !existingSet.has(n.toLowerCase()));
+  const allTabSelected = allAvailable.length > 0 && allAvailable.every((n) => selected[n]);
 
   const toggleAll = () => {
     if (allTabSelected) {
       const next = { ...selected };
-      tabItems.forEach(n => { delete next[n]; });
+      tabItems.forEach((n) => {
+        delete next[n];
+      });
       setSelected(next);
     } else {
       const next = { ...selected };
-      allAvailable.forEach(n => { next[n] = true; });
+      allAvailable.forEach((n) => {
+        next[n] = true;
+      });
       setSelected(next);
     }
   };
 
-  const selectedNames = Object.keys(selected).filter(k => selected[k]);
+  const selectedNames = Object.keys(selected).filter((k) => selected[k]);
   const totalCount = selectedNames.length;
 
   const handleAdd = async () => {
@@ -476,24 +587,36 @@ function CatalogueModal({ existingNames, onAdd, onCustom, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
           <h2 className="text-lg font-semibold text-gray-900">Add services</h2>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500"><X size={18} /></button>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Category tabs */}
         <div className="flex gap-1 px-5 pb-3">
-          {CAT_TABS.map(c => {
-            const count = (SERVICE_CATALOGUE[c.key] || []).flatMap(g => g.items).filter(n => selected[n]).length;
+          {CAT_TABS.map((c) => {
+            const count = (SERVICE_CATALOGUE[c.key] || [])
+              .flatMap((g) => g.items)
+              .filter((n) => selected[n]).length;
             return (
               <button
                 key={c.key}
                 onClick={() => setTab(c.key)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  tab === c.key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  tab === c.key
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
                 {c.label}
                 {count > 0 && (
-                  <span className={`text-xs rounded-full px-1.5 py-0.5 ${tab === c.key ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-700'}`}>
+                  <span
+                    className={`text-xs rounded-full px-1.5 py-0.5 ${tab === c.key ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-700'}`}
+                  >
                     {count}
                   </span>
                 )}
@@ -516,11 +639,13 @@ function CatalogueModal({ existingNames, onAdd, onCustom, onClose }) {
 
         {/* Service chips */}
         <div className="flex-1 overflow-y-auto px-5 pb-4 space-y-5">
-          {(SERVICE_CATALOGUE[tab] || []).map(group => (
+          {(SERVICE_CATALOGUE[tab] || []).map((group) => (
             <div key={group.label}>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{group.label}</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                {group.label}
+              </p>
               <div className="flex flex-wrap gap-2">
-                {group.items.map(name => {
+                {group.items.map((name) => {
                   const already = existingSet.has(name.toLowerCase());
                   const isSelected = selected[name];
                   return (
@@ -532,11 +657,18 @@ function CatalogueModal({ existingNames, onAdd, onCustom, onClose }) {
                         already
                           ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-default'
                           : isSelected
-                          ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                          : 'bg-white border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600'
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                            : 'bg-white border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600'
                       }`}
                     >
-                      {already ? <span className="flex items-center gap-1"><Check size={12} className="text-gray-400" />{name}</span> : name}
+                      {already ? (
+                        <span className="flex items-center gap-1">
+                          <Check size={12} className="text-gray-400" />
+                          {name}
+                        </span>
+                      ) : (
+                        name
+                      )}
                     </button>
                   );
                 })}
@@ -552,7 +684,9 @@ function CatalogueModal({ existingNames, onAdd, onCustom, onClose }) {
             disabled={!totalCount}
             className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
           >
-            {totalCount > 0 ? `Add ${totalCount} service${totalCount !== 1 ? 's' : ''} →` : 'Select services above'}
+            {totalCount > 0
+              ? `Add ${totalCount} service${totalCount !== 1 ? 's' : ''} →`
+              : 'Select services above'}
           </button>
           <button
             onClick={onCustom}
@@ -571,20 +705,29 @@ function CatalogueModal({ existingNames, onAdd, onCustom, onClose }) {
 function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
   const navigate = useNavigate();
   const isEdit = !!initialData?.id;
-  const [form, setForm] = useState(isEdit ? recordToForm(initialData) : { ...EMPTY_FORM, category: initialData?.category ?? 'residential' });
+  const [form, setForm] = useState(
+    isEdit
+      ? recordToForm(initialData)
+      : { ...EMPTY_FORM, category: initialData?.category ?? 'residential' }
+  );
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
-  const patch = useCallback((fields) => setForm(f => ({ ...f, ...fields })), []);
+  const patch = useCallback((fields) => setForm((f) => ({ ...f, ...fields })), []);
 
-  const countOptional = (fields) => fields.filter(f => form[f] && String(form[f]).trim()).length;
+  const countOptional = (fields) => fields.filter((f) => form[f] && String(form[f]).trim()).length;
 
   const handleSubmit = async (andAdd = false) => {
     const errs = validate(form);
-    if (Object.keys(errs).length) { setErrors(errs); return; }
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      return;
+    }
     setSaving(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         navigate('/login');
         return;
@@ -601,8 +744,8 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
       } else {
         onSave(form.name);
       }
-    } catch (e) {
-      setErrors({ _global: 'Something didn\'t save. Try again or come back in a minute.' });
+    } catch {
+      setErrors({ _global: "Something didn't save. Try again or come back in a minute." });
     } finally {
       setSaving(false);
     }
@@ -615,10 +758,14 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
         style={{ background: 'linear-gradient(160deg, #010b52 0%, #040e3e 60%, #0d1e78 100%)' }}
       >
         {/* Grid texture */}
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
-          backgroundImage: 'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)',
-          backgroundSize: '28px 28px',
-        }} />
+        <div
+          className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(153,197,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(153,197,255,1) 1px,transparent 1px)',
+            backgroundSize: '28px 28px',
+          }}
+        />
 
         {/* Header */}
         <div className="relative flex items-center justify-between px-5 py-4 border-b border-[rgba(153,197,255,0.12)] shrink-0">
@@ -626,16 +773,21 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
             <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-0.5">
               {isEdit ? 'Edit service' : 'Add a service'}
             </p>
-            <p className="text-xs text-[rgba(153,197,255,0.5)]">This is what Front Desk quotes from, so be specific.</p>
+            <p className="text-xs text-[rgba(153,197,255,0.5)]">
+              This is what Front Desk quotes from, so be specific.
+            </p>
           </div>
-          <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+          >
             <X size={14} className="text-white" />
           </button>
         </div>
 
         {/* Body */}
         <div className="relative flex-1 overflow-y-auto px-5 py-5 space-y-5">
-
           {errors._global && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/20 border border-red-500/30">
               <AlertCircle size={14} className="text-red-400 mt-0.5 shrink-0" />
@@ -647,7 +799,7 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
           <div>
             <FieldLabel required>Category</FieldLabel>
             <div className="grid grid-cols-3 gap-2">
-              {CATEGORIES.map(c => (
+              {CATEGORIES.map((c) => (
                 <button
                   key={c.key}
                   type="button"
@@ -669,7 +821,7 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
             <FieldLabel required>Service name</FieldLabel>
             <TextInput
               value={form.name}
-              onChange={v => patch({ name: v })}
+              onChange={(v) => patch({ name: v })}
               placeholder='e.g. "Regular weekly clean"'
               error={errors.name}
             />
@@ -680,15 +832,30 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
           <div>
             <FieldLabel required>How do you price this?</FieldLabel>
             <div className="space-y-2">
-              {PRICING_TYPES.map(pt => (
+              {PRICING_TYPES.map((pt) => (
                 <label key={pt.value} className="flex items-center gap-3 cursor-pointer group">
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                    form.pricing_type === pt.value ? 'border-[#4f78ff] bg-[#4f78ff]' : 'border-[rgba(153,197,255,0.3)] group-hover:border-[#4f78ff]'
-                  }`}>
-                    {form.pricing_type === pt.value && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                      form.pricing_type === pt.value
+                        ? 'border-[#4f78ff] bg-[#4f78ff]'
+                        : 'border-[rgba(153,197,255,0.3)] group-hover:border-[#4f78ff]'
+                    }`}
+                  >
+                    {form.pricing_type === pt.value && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                    )}
                   </div>
-                  <input type="radio" className="sr-only" checked={form.pricing_type === pt.value} onChange={() => patch({ pricing_type: pt.value })} />
-                  <span className={`text-sm ${form.pricing_type === pt.value ? 'text-white font-semibold' : 'text-[rgba(153,197,255,0.7)]'}`}>{pt.label}</span>
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    checked={form.pricing_type === pt.value}
+                    onChange={() => patch({ pricing_type: pt.value })}
+                  />
+                  <span
+                    className={`text-sm ${form.pricing_type === pt.value ? 'text-white font-semibold' : 'text-[rgba(153,197,255,0.7)]'}`}
+                  >
+                    {pt.label}
+                  </span>
                 </label>
               ))}
             </div>
@@ -706,13 +873,13 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
             <div className="flex gap-2">
               <NumberInput
                 value={form.duration_value}
-                onChange={v => patch({ duration_value: v })}
+                onChange={(v) => patch({ duration_value: v })}
                 placeholder="e.g. 2"
                 className="flex-1"
               />
               <select
                 value={form.duration_unit}
-                onChange={e => patch({ duration_unit: e.target.value })}
+                onChange={(e) => patch({ duration_unit: e.target.value })}
                 className="px-3 py-2.5 rounded-lg bg-[rgba(153,197,255,0.07)] border border-[rgba(153,197,255,0.2)] text-white text-sm focus:outline-none focus:border-[#4f78ff]"
               >
                 <option value="minutes">Minutes</option>
@@ -720,7 +887,9 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
                 <option value="days">Days</option>
               </select>
             </div>
-            <FieldHelper>Roughly how long does this take? Helps Cadi build accurate schedules.</FieldHelper>
+            <FieldHelper>
+              Roughly how long does this take? Helps Cadi build accurate schedules.
+            </FieldHelper>
           </div>
 
           {/* Optional sections */}
@@ -733,16 +902,18 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
               <FieldLabel>What's included</FieldLabel>
               <TextArea
                 value={form.description_included}
-                onChange={v => patch({ description_included: v })}
+                onChange={(v) => patch({ description_included: v })}
                 placeholder='e.g. "Hoovering, dusting, kitchen and bathrooms, bins emptied."'
               />
-              <FieldHelper>Front Desk reads this when quoting. The more detail, the better the quote.</FieldHelper>
+              <FieldHelper>
+                Front Desk reads this when quoting. The more detail, the better the quote.
+              </FieldHelper>
             </div>
             <div>
               <FieldLabel>What's not included</FieldLabel>
               <TextArea
                 value={form.description_excluded}
-                onChange={v => patch({ description_excluded: v })}
+                onChange={(v) => patch({ description_excluded: v })}
                 placeholder='e.g. "Oven cleaning, inside windows, ironing."'
               />
               <FieldHelper>Stops Front Desk over-promising.</FieldHelper>
@@ -758,33 +929,44 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
               <FieldLabel>Pricing notes</FieldLabel>
               <TextArea
                 value={form.pricing_notes}
-                onChange={v => patch({ pricing_notes: v })}
+                onChange={(v) => patch({ pricing_notes: v })}
                 placeholder='e.g. "Add £15 for parking in central areas. Discount 10% for fortnightly bookings."'
               />
-              <FieldHelper>Tell Front Desk how to adjust the price in different situations. Plain English is fine.</FieldHelper>
+              <FieldHelper>
+                Tell Front Desk how to adjust the price in different situations. Plain English is
+                fine.
+              </FieldHelper>
             </div>
           </AccordionSection>
 
           <AccordionSection
             title="Frequency options"
-            filledCount={FREQ_OPTIONS.filter(f => form[f.key]).length}
+            filledCount={FREQ_OPTIONS.filter((f) => form[f.key]).length}
             totalCount={FREQ_OPTIONS.length}
           >
             <div>
-              <FieldHelper className="mb-3">How can customers book this? Affects what Front Desk offers.</FieldHelper>
+              <FieldHelper className="mb-3">
+                How can customers book this? Affects what Front Desk offers.
+              </FieldHelper>
               <div className="grid grid-cols-2 gap-2">
-                {FREQ_OPTIONS.map(f => (
+                {FREQ_OPTIONS.map((f) => (
                   <label key={f.key} className="flex items-center gap-2.5 cursor-pointer group">
                     <button
                       type="button"
                       onClick={() => patch({ [f.key]: !form[f.key] })}
                       className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
-                        form[f.key] ? 'bg-[#4f78ff] border-[#4f78ff]' : 'border-[rgba(153,197,255,0.3)] group-hover:border-[#4f78ff]'
+                        form[f.key]
+                          ? 'bg-[#4f78ff] border-[#4f78ff]'
+                          : 'border-[rgba(153,197,255,0.3)] group-hover:border-[#4f78ff]'
                       }`}
                     >
                       {form[f.key] && <Check size={10} className="text-white" strokeWidth={3} />}
                     </button>
-                    <span className={`text-sm ${form[f.key] ? 'text-white font-semibold' : 'text-[rgba(153,197,255,0.6)]'}`}>{f.label}</span>
+                    <span
+                      className={`text-sm ${form[f.key] ? 'text-white font-semibold' : 'text-[rgba(153,197,255,0.6)]'}`}
+                    >
+                      {f.label}
+                    </span>
                   </label>
                 ))}
               </div>
@@ -800,21 +982,36 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
               <label className="flex items-center gap-3 cursor-pointer">
                 <button
                   type="button"
-                  onClick={() => patch({ service_area_uses_default: !form.service_area_uses_default })}
+                  onClick={() =>
+                    patch({ service_area_uses_default: !form.service_area_uses_default })
+                  }
                   className={`w-10 h-5 rounded-full flex items-center transition-all ${
-                    form.service_area_uses_default ? 'bg-[#4f78ff] justify-end' : 'bg-[rgba(153,197,255,0.15)] justify-start'
+                    form.service_area_uses_default
+                      ? 'bg-[#4f78ff] justify-end'
+                      : 'bg-[rgba(153,197,255,0.15)] justify-start'
                   } px-0.5`}
                 >
                   <div className="w-4 h-4 rounded-full bg-white shadow-sm" />
                 </button>
-                <span className="text-sm text-[rgba(153,197,255,0.8)]">Same as your business profile (default)</span>
+                <span className="text-sm text-[rgba(153,197,255,0.8)]">
+                  Same as your business profile (default)
+                </span>
               </label>
               {!form.service_area_uses_default && (
                 <div>
-                  <FieldHelper>Enter postcodes or area names where you offer this service.</FieldHelper>
+                  <FieldHelper>
+                    Enter postcodes or area names where you offer this service.
+                  </FieldHelper>
                   <TextInput
                     value={(form.service_area_custom ?? []).join(', ')}
-                    onChange={v => patch({ service_area_custom: v.split(',').map(s => s.trim()).filter(Boolean) })}
+                    onChange={(v) =>
+                      patch({
+                        service_area_custom: v
+                          .split(',')
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
                     placeholder="SW1, SW4, Clapham, Brixton..."
                   />
                 </div>
@@ -831,7 +1028,7 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
               <FieldLabel>Materials & equipment notes</FieldLabel>
               <TextArea
                 value={form.materials_equipment_notes}
-                onChange={v => patch({ materials_equipment_notes: v })}
+                onChange={(v) => patch({ materials_equipment_notes: v })}
                 placeholder='e.g. "Customer provides hoover. We bring all chemicals and cloths."'
               />
               <FieldHelper>Front Desk uses this to set expectations with customers.</FieldHelper>
@@ -847,7 +1044,7 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
               <FieldLabel>Private notes</FieldLabel>
               <TextArea
                 value={form.private_notes}
-                onChange={v => patch({ private_notes: v })}
+                onChange={(v) => patch({ private_notes: v })}
                 placeholder="Only you can see this. Useful for supplier costs, job memories, etc."
               />
               <FieldHelper>Only you can see this.</FieldHelper>
@@ -866,7 +1063,9 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
               type="button"
               onClick={() => patch({ is_active: !form.is_active })}
               className={`w-12 h-6 rounded-full flex items-center transition-all px-0.5 ${
-                form.is_active ? 'bg-[#4f78ff] justify-end' : 'bg-[rgba(153,197,255,0.15)] justify-start'
+                form.is_active
+                  ? 'bg-[#4f78ff] justify-end'
+                  : 'bg-[rgba(153,197,255,0.15)] justify-start'
               }`}
             >
               <div className="w-5 h-5 rounded-full bg-white shadow-sm" />
@@ -887,7 +1086,9 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
               type="button"
               onClick={() => patch({ site_visit_required: !form.site_visit_required })}
               className={`w-12 h-6 rounded-full flex items-center transition-all px-0.5 ${
-                form.site_visit_required ? 'bg-[#4f78ff] justify-end' : 'bg-[rgba(153,197,255,0.15)] justify-start'
+                form.site_visit_required
+                  ? 'bg-[#4f78ff] justify-end'
+                  : 'bg-[rgba(153,197,255,0.15)] justify-start'
               }`}
             >
               <div className="w-5 h-5 rounded-full bg-white shadow-sm" />
@@ -915,7 +1116,11 @@ function ServiceModal({ initialData, onSave, onClose, onSaveAndAdd }) {
               Save and add another
             </button>
           )}
-          <button type="button" onClick={onClose} className="text-sm text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] font-semibold px-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-sm text-[rgba(153,197,255,0.5)] hover:text-[#99c5ff] font-semibold px-2"
+          >
             Cancel
           </button>
         </div>
@@ -932,10 +1137,16 @@ function DeleteModal({ serviceName, onConfirm, onCancel, deleting }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
         <h3 className="font-black text-gray-900 text-lg mb-2">Delete this service?</h3>
         <p className="text-sm text-gray-500 mb-6">
-          Delete <span className="font-semibold text-gray-800">{serviceName}</span>? Front Desk won't quote on it again. This can't be undone.
+          Delete <span className="font-semibold text-gray-800">{serviceName}</span>? Front Desk
+          won't quote on it again. This can't be undone.
         </p>
         <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-50 transition-colors">Cancel</button>
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
           <button
             onClick={onConfirm}
             disabled={deleting}
@@ -1000,7 +1211,9 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
       {!hasPricing && service.is_active && (
         <div className="relative flex items-center gap-1.5 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20">
           <AlertCircle size={12} className="text-amber-400 shrink-0" />
-          <p className="text-xs text-amber-300 font-medium">Add pricing so Front Desk can quote this.</p>
+          <p className="text-xs text-amber-300 font-medium">
+            Add pricing so Front Desk can quote this.
+          </p>
         </div>
       )}
 
@@ -1009,7 +1222,9 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex-1 min-w-0">
             <h3 className="font-black text-white text-sm leading-tight">{service.name}</h3>
-            <span className={`mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${sector.chip}`}>
+            <span
+              className={`mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${sector.chip}`}
+            >
               <span className="text-[11px] leading-none">{sector.icon}</span>
               {sector.label}
             </span>
@@ -1022,7 +1237,9 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
               title={service.is_active ? 'Pause this service' : 'Reactivate this service'}
               aria-label={service.is_active ? 'Pause service' : 'Reactivate service'}
               className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-all ${
-                service.is_active ? 'bg-[#1f48ff] justify-end' : 'bg-[rgba(153,197,255,0.12)] justify-start'
+                service.is_active
+                  ? 'bg-[#1f48ff] justify-end'
+                  : 'bg-[rgba(153,197,255,0.12)] justify-start'
               } ${toggling ? 'opacity-60' : ''}`}
             >
               <div className="w-4 h-4 rounded-full bg-white shadow-sm" />
@@ -1030,7 +1247,7 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
             {/* Menu */}
             <div className="relative">
               <button
-                onClick={() => setMenuOpen(o => !o)}
+                onClick={() => setMenuOpen((o) => !o)}
                 aria-label="More actions"
                 className="w-7 h-7 rounded-lg border border-[rgba(153,197,255,0.15)] bg-white/5 flex items-center justify-center hover:bg-white/10 hover:border-[rgba(153,197,255,0.3)] transition-colors"
               >
@@ -1043,14 +1260,32 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
                     className="absolute right-0 top-9 z-20 rounded-xl border border-[rgba(153,197,255,0.15)] shadow-2xl w-44 py-1 overflow-hidden"
                     style={{ background: 'linear-gradient(145deg, #05124a 0%, #0a1860 100%)' }}
                   >
-                    <button onClick={() => { setMenuOpen(false); onEdit(service); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-white hover:bg-white/5 transition-colors">
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onEdit(service);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-white hover:bg-white/5 transition-colors"
+                    >
                       <MessageSquare size={13} className="text-[#99c5ff]" /> Edit with Cadi
                     </button>
-                    <button onClick={() => { setMenuOpen(false); onDuplicate(service.id); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-white hover:bg-white/5 transition-colors">
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onDuplicate(service.id);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-white hover:bg-white/5 transition-colors"
+                    >
                       <Copy size={13} className="text-[#99c5ff]" /> Duplicate
                     </button>
                     <div className="h-px bg-[rgba(153,197,255,0.1)] my-1" />
-                    <button onClick={() => { setMenuOpen(false); onDelete(service); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-300 hover:bg-red-500/10 transition-colors">
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onDelete(service);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-300 hover:bg-red-500/10 transition-colors"
+                    >
                       <Trash2 size={13} className="text-red-400" /> Delete
                     </button>
                   </div>
@@ -1069,16 +1304,22 @@ function ServiceCard({ service, onEdit, onDuplicate, onDelete, onToggleActive })
 
         {/* Pricing + duration */}
         <div className="flex items-center gap-3 mt-3 mb-3">
-          <span className={`text-base font-black tabular-nums ${hasPricing ? 'text-emerald-300' : 'text-amber-300'}`}>
+          <span
+            className={`text-base font-black tabular-nums ${hasPricing ? 'text-emerald-300' : 'text-amber-300'}`}
+          >
             {pricing}
           </span>
-          {duration && <span className="text-[11px] text-[rgba(153,197,255,0.4)] font-semibold">{duration}</span>}
+          {duration && (
+            <span className="text-[11px] text-[rgba(153,197,255,0.4)] font-semibold">
+              {duration}
+            </span>
+          )}
         </div>
 
         {/* Frequency pills */}
         {freq.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {freq.map(f => (
+            {freq.map((f) => (
               <span
                 key={f}
                 className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/5 text-[rgba(153,197,255,0.7)] border border-[rgba(153,197,255,0.12)]"
@@ -1099,8 +1340,8 @@ function EmptyState({ category, onAdd, onUseTemplate, onChat, onImport }) {
   const navigate = useNavigate();
   const examples = {
     residential: ['regular domestic clean', 'deep clean', 'end of tenancy'],
-    exterior:    ['window cleaning', 'gutter clearance', 'pressure washing'],
-    commercial:  ['office clean', 'school clean', 'retail clean'],
+    exterior: ['window cleaning', 'gutter clearance', 'pressure washing'],
+    commercial: ['office clean', 'school clean', 'retail clean'],
   };
   const sector = SECTORS[category] ?? SECTORS.residential;
   const label = sector.label;
@@ -1204,21 +1445,23 @@ export default function Services() {
   const handleTemplateApplied = async ({ pack, count }) => {
     const refreshed = await listServices({ includeInactive: true });
     setServices(refreshed);
-    setAttentionCount(refreshed.filter(s => s.is_active && !serviceHasPricing(s)).length);
+    setAttentionCount(refreshed.filter((s) => s.is_active && !serviceHasPricing(s)).length);
     setToast(`${count} services added from "${pack.label}". Tweak prices anytime.`);
   };
 
   const handleImporterApplied = async ({ count }) => {
     const refreshed = await listServices({ includeInactive: true });
     setServices(refreshed);
-    setAttentionCount(refreshed.filter(s => s.is_active && !serviceHasPricing(s)).length);
+    setAttentionCount(refreshed.filter((s) => s.is_active && !serviceHasPricing(s)).length);
     setToast(`${count} services imported from your price list. Edit any of them anytime.`);
   };
   const [showPreview, setShowPreview] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         navigate('/login');
         return;
@@ -1242,16 +1485,18 @@ export default function Services() {
           await seedServicesFromOnboarding(onboardingServices, customService);
           const seeded = await listServices({ includeInactive: true });
           setServices(seeded);
-          setAttentionCount(seeded.filter(s => s.is_active && !serviceHasPricing(s)).length);
+          setAttentionCount(seeded.filter((s) => s.is_active && !serviceHasPricing(s)).length);
           if (seeded.length > 0) {
             // Open the conversational builder automatically for first-time setup
             const chatAlreadyOpened = localStorage.getItem('cadi_services_chat_opened');
             if (!chatAlreadyOpened) {
               localStorage.setItem('cadi_services_chat_opened', '1');
-              const serviceNames = seeded.map(s => s.name);
+              const serviceNames = seeded.map((s) => s.name);
               setChatSession({ context: 'first_setup', onboardingServices: serviceNames });
             } else {
-              setToast(`${seeded.length} service${seeded.length !== 1 ? 's' : ''} imported. Add pricing so Front Desk can quote them.`);
+              setToast(
+                `${seeded.length} service${seeded.length !== 1 ? 's' : ''} imported. Add pricing so Front Desk can quote them.`
+              );
             }
           }
           return;
@@ -1277,24 +1522,40 @@ export default function Services() {
   }, [load]);
 
   const openAdd = () => setChatSession({ context: 'add_new' });
-  const openCustomAdd = (category = activeCategory) => { setCatalogueOpen(false); setModal({ mode: 'add', data: { category } }); };
+  const openCustomAdd = (category = activeCategory) => {
+    setCatalogueOpen(false);
+    setModal({ mode: 'add', data: { category } });
+  };
   const openEdit = (service) => setChatSession({ context: 'edit', editService: service });
 
   const handleCatalogueAdd = async (names) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         navigate('/login');
         return;
       }
-      await Promise.all(names.map(name => {
-        const cat = Object.entries(SERVICE_CATALOGUE).find(([, groups]) =>
-          groups.some(g => g.items.includes(name))
-        )?.[0] ?? 'residential';
-        return createService({ name, category: cat, pricing_type: 'custom', frequency_one_off: true, is_active: true });
-      }));
+      await Promise.all(
+        names.map((name) => {
+          const cat =
+            Object.entries(SERVICE_CATALOGUE).find(([, groups]) =>
+              groups.some((g) => g.items.includes(name))
+            )?.[0] ?? 'residential';
+          return createService({
+            name,
+            category: cat,
+            pricing_type: 'custom',
+            frequency_one_off: true,
+            is_active: true,
+          });
+        })
+      );
       setCatalogueOpen(false);
-      setToast(`${names.length} service${names.length !== 1 ? 's' : ''} added. Now add your pricing.`);
+      setToast(
+        `${names.length} service${names.length !== 1 ? 's' : ''} added. Now add your pricing.`
+      );
       load();
     } catch (e) {
       console.error('[CatalogueAdd] error:', e?.message, e?.code);
@@ -1318,7 +1579,7 @@ export default function Services() {
       await duplicateService(id);
       setToast('Service duplicated.');
       load();
-    } catch (e) {
+    } catch {
       setToast('Something went wrong. Try again.');
     }
   };
@@ -1331,7 +1592,7 @@ export default function Services() {
       setDeleteTarget(null);
       setToast(`${deleteTarget.name} removed.`);
       load();
-    } catch (e) {
+    } catch {
       setToast('Something went wrong. Try again.');
     } finally {
       setDeleting(false);
@@ -1342,8 +1603,8 @@ export default function Services() {
     try {
       await setServiceActive(id, isActive);
       load();
-    } catch (e) {
-      setToast('Couldn\'t update that service. Try again in a moment.');
+    } catch {
+      setToast("Couldn't update that service. Try again in a moment.");
     }
   };
 
@@ -1353,8 +1614,8 @@ export default function Services() {
     load();
   };
 
-  const byCategory = (cat) => services.filter(s => s.category === cat);
-  const countByCategory = (cat) => services.filter(s => s.category === cat).length;
+  const byCategory = (cat) => services.filter((s) => s.category === cat);
+  const countByCategory = (cat) => services.filter((s) => s.category === cat).length;
   const visible = byCategory(activeCategory);
 
   return (
@@ -1366,10 +1627,13 @@ export default function Services() {
       <div className="relative bg-[#010a4f]/80 backdrop-blur-sm border-b border-[rgba(153,197,255,0.1)] px-5 sm:px-6 py-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-1">Services Menu</p>
+            <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#99c5ff] mb-1">
+              Services Menu
+            </p>
             <h2 className="text-xl font-black text-white mb-1">Your services menu</h2>
             <p className="text-xs text-[rgba(153,197,255,0.6)] max-w-md">
-              Like a restaurant menu, but for the services you sell. This is what Front Desk uses to quote your customers.
+              Like a restaurant menu, but for the services you sell. This is what Front Desk uses to
+              quote your customers.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -1422,9 +1686,14 @@ export default function Services() {
         <div className="mx-5 mt-4 flex items-start gap-3 px-4 py-3 rounded-xl bg-[#1f48ff]/10 border border-[#1f48ff]/25">
           <AlertCircle size={14} className="text-[#99c5ff] mt-0.5 shrink-0" />
           <p className="text-sm text-[#99c5ff] flex-1">
-            Heads up — anything in your services menu is what Front Desk will quote on. Keep it accurate and Front Desk will do the selling for you.
+            Heads up — anything in your services menu is what Front Desk will quote on. Keep it
+            accurate and Front Desk will do the selling for you.
           </p>
-          <button onClick={() => setFirstVisitBanner(false)} aria-label="Dismiss" className="shrink-0 text-[rgba(153,197,255,0.5)] hover:text-white transition-colors">
+          <button
+            onClick={() => setFirstVisitBanner(false)}
+            aria-label="Dismiss"
+            className="shrink-0 text-[rgba(153,197,255,0.5)] hover:text-white transition-colors"
+          >
             <X size={14} />
           </button>
         </div>
@@ -1435,11 +1704,17 @@ export default function Services() {
         <div className="mx-5 mt-3 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/25">
           <AlertCircle size={14} className="text-amber-400 shrink-0" />
           <p className="text-sm text-amber-200 flex-1">
-            You have <span className="font-bold text-amber-100">{attentionCount} service{attentionCount !== 1 ? 's' : ''}</span> that need pricing added before Front Desk can quote them.
+            You have{' '}
+            <span className="font-bold text-amber-100">
+              {attentionCount} service{attentionCount !== 1 ? 's' : ''}
+            </span>{' '}
+            that need pricing added before Front Desk can quote them.
           </p>
           <button
             onClick={() => {
-              const unpricedNames = services.filter(s => s.is_active && !serviceHasPricing(s)).map(s => s.name);
+              const unpricedNames = services
+                .filter((s) => s.is_active && !serviceHasPricing(s))
+                .map((s) => s.name);
               setChatSession({ context: 'first_setup', onboardingServices: unpricedNames });
             }}
             className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-amber-950 text-xs font-bold transition-colors"
@@ -1452,7 +1727,7 @@ export default function Services() {
       {/* Category tabs */}
       <div className="px-5 sm:px-6 mt-5">
         <div className="flex gap-1 border-b border-[rgba(153,197,255,0.12)] overflow-x-auto no-scrollbar">
-          {CATEGORIES.map(c => {
+          {CATEGORIES.map((c) => {
             const sector = SECTORS[c.key];
             const isActive = activeCategory === c.key;
             const count = countByCategory(c.key);
@@ -1461,18 +1736,18 @@ export default function Services() {
                 key={c.key}
                 onClick={() => setActiveCategory(c.key)}
                 className={`relative px-4 py-2.5 text-sm font-bold transition-all -mb-px whitespace-nowrap flex items-center gap-2 ${
-                  isActive
-                    ? 'text-white'
-                    : 'text-[rgba(153,197,255,0.45)] hover:text-[#99c5ff]'
+                  isActive ? 'text-white' : 'text-[rgba(153,197,255,0.45)] hover:text-[#99c5ff]'
                 }`}
               >
                 <span className={`text-[13px] ${isActive ? '' : 'opacity-50'}`}>{sector.icon}</span>
                 <span>{c.label}</span>
-                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md tabular-nums ${
-                  isActive
-                    ? `${sector.chip}`
-                    : 'bg-white/5 text-[rgba(153,197,255,0.5)] border border-[rgba(153,197,255,0.1)]'
-                }`}>
+                <span
+                  className={`text-[10px] font-black px-1.5 py-0.5 rounded-md tabular-nums ${
+                    isActive
+                      ? `${sector.chip}`
+                      : 'bg-white/5 text-[rgba(153,197,255,0.5)] border border-[rgba(153,197,255,0.1)]'
+                  }`}
+                >
                   {count}
                 </span>
                 {isActive && (
@@ -1503,7 +1778,7 @@ export default function Services() {
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {visible.map(s => (
+            {visible.map((s) => (
               <ServiceCard
                 key={s.id}
                 service={s}
@@ -1518,8 +1793,13 @@ export default function Services() {
               onClick={() => openAdd()}
               className="group flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[rgba(153,197,255,0.15)] rounded-xl py-12 hover:border-[#99c5ff] hover:bg-[rgba(153,197,255,0.05)] transition-all"
             >
-              <Plus size={20} className="text-[rgba(153,197,255,0.4)] group-hover:text-[#99c5ff] transition-colors" />
-              <span className="text-sm text-[rgba(153,197,255,0.5)] group-hover:text-white font-semibold transition-colors">Add a service</span>
+              <Plus
+                size={20}
+                className="text-[rgba(153,197,255,0.4)] group-hover:text-[#99c5ff] transition-colors"
+              />
+              <span className="text-sm text-[rgba(153,197,255,0.5)] group-hover:text-white font-semibold transition-colors">
+                Add a service
+              </span>
             </button>
           </div>
         )}
@@ -1528,7 +1808,7 @@ export default function Services() {
       {/* Catalogue picker */}
       {catalogueOpen && (
         <CatalogueModal
-          existingNames={services.map(s => s.name)}
+          existingNames={services.map((s) => s.name)}
           onAdd={handleCatalogueAdd}
           onCustom={() => openCustomAdd(activeCategory)}
           onClose={() => setCatalogueOpen(false)}

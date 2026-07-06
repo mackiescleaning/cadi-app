@@ -19,11 +19,8 @@ export async function createRecurringJob(rule) {
 export async function bulkCreateRecurringJobs(rules) {
   if (!rules.length) return [];
   const ownerId = await getCurrentUserId();
-  const rows = rules.map(r => ruleToRow(r, ownerId));
-  const { data, error } = await supabase
-    .from('recurring_jobs')
-    .insert(rows)
-    .select('*');
+  const rows = rules.map((r) => ruleToRow(r, ownerId));
+  const { data, error } = await supabase.from('recurring_jobs').insert(rows).select('*');
   if (error) throw error;
   return (data ?? []).map(rowToRule);
 }
@@ -127,24 +124,24 @@ export async function materialiseVisits(rule, customer, { from, until } = {}) {
   const dates = generateVisitDates(rule, { from, until });
   if (!dates.length) return [];
 
-  const jobs = dates.map(date => ({
-    customerId:   rule.customerId ?? customer?.id ?? null,
-    customer:     customer?.name ?? '',
+  const jobs = dates.map((date) => ({
+    customerId: rule.customerId ?? customer?.id ?? null,
+    customer: customer?.name ?? '',
     addressLine1: customer?.address_line1 ?? null,
     addressLine2: customer?.address_line2 ?? null,
-    town:         customer?.town ?? null,
-    county:       customer?.county ?? null,
-    postcode:     customer?.postcode ?? '',
+    town: customer?.town ?? null,
+    county: customer?.county ?? null,
+    postcode: customer?.postcode ?? '',
     date,
-    startHour:    rule.preferredHour ?? 9,
-    durationHrs:  rule.durationHrs ?? 1,
-    type:         rule.type ?? 'residential',
-    service:      rule.service ?? '',
-    price:        rule.price ?? 0,
-    recurrence:   ruleToRecurrenceLabel(rule),
-    isRecurring:  rule.freq !== 'one-off',
-    notes:        rule.notes ?? '',
-    seriesId:     rule.id,
+    startHour: rule.preferredHour ?? 9,
+    durationHrs: rule.durationHrs ?? 1,
+    type: rule.type ?? 'residential',
+    service: rule.service ?? '',
+    price: rule.price ?? 0,
+    recurrence: ruleToRecurrenceLabel(rule),
+    isRecurring: rule.freq !== 'one-off',
+    notes: rule.notes ?? '',
+    seriesId: rule.id,
   }));
   await bulkCreateJobs(jobs);
   return jobs;
@@ -153,9 +150,9 @@ export async function materialiseVisits(rule, customer, { from, until } = {}) {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function freqToDays(freq, interval) {
-  if (freq === 'daily')   return interval;
-  if (freq === 'weekly')  return 7 * interval;
-  if (freq === 'monthly') return 30 * interval;  // approximate; calendar-correct monthly comes in v2
+  if (freq === 'daily') return interval;
+  if (freq === 'weekly') return 7 * interval;
+  if (freq === 'monthly') return 30 * interval; // approximate; calendar-correct monthly comes in v2
   return 0;
 }
 
@@ -165,53 +162,53 @@ function ruleToRecurrenceLabel(rule) {
   if (rule.freq === 'weekly' && interval === 1) return 'weekly';
   if (rule.freq === 'weekly' && interval === 2) return 'fortnightly';
   if (rule.freq === 'monthly' && interval === 1) return 'monthly';
-  return `every ${interval} ${rule.freq === 'daily' ? 'day' : rule.freq.replace('ly','')}${interval > 1 ? 's' : ''}`;
+  return `every ${interval} ${rule.freq === 'daily' ? 'day' : rule.freq.replace('ly', '')}${interval > 1 ? 's' : ''}`;
 }
 
 function ruleToRow(r, ownerId, { partial = false } = {}) {
   const row = {};
   if (!partial) row.owner_id = ownerId;
-  if ('customerId'      in r) row.customer_id      = r.customerId ?? null;
-  if ('service'         in r) row.service          = r.service;
-  if ('type'            in r) row.type             = r.type;
-  if ('price'           in r) row.price            = r.price;
-  if ('durationHrs'     in r) row.duration_hrs     = r.durationHrs;
-  if ('assignees'       in r) row.assignees        = r.assignees;
-  if ('assigneeIds'     in r) row.assignee_ids     = r.assigneeIds;
-  if ('freq'            in r) row.freq             = r.freq;
-  if ('freqInterval'    in r) row.freq_interval    = r.freqInterval;
-  if ('anchorDate'      in r) row.anchor_date      = r.anchorDate;
-  if ('preferredHour'   in r) row.preferred_hour   = r.preferredHour;
-  if ('endDate'         in r) row.end_date         = r.endDate;
-  if ('status'          in r) row.status           = r.status;
-  if ('notes'           in r) row.notes            = r.notes;
-  if ('source'          in r) row.source           = r.source;
-  if ('importBatchId'   in r) row.import_batch_id  = r.importBatchId;
+  if ('customerId' in r) row.customer_id = r.customerId ?? null;
+  if ('service' in r) row.service = r.service;
+  if ('type' in r) row.type = r.type;
+  if ('price' in r) row.price = r.price;
+  if ('durationHrs' in r) row.duration_hrs = r.durationHrs;
+  if ('assignees' in r) row.assignees = r.assignees;
+  if ('assigneeIds' in r) row.assignee_ids = r.assigneeIds;
+  if ('freq' in r) row.freq = r.freq;
+  if ('freqInterval' in r) row.freq_interval = r.freqInterval;
+  if ('anchorDate' in r) row.anchor_date = r.anchorDate;
+  if ('preferredHour' in r) row.preferred_hour = r.preferredHour;
+  if ('endDate' in r) row.end_date = r.endDate;
+  if ('status' in r) row.status = r.status;
+  if ('notes' in r) row.notes = r.notes;
+  if ('source' in r) row.source = r.source;
+  if ('importBatchId' in r) row.import_batch_id = r.importBatchId;
   return row;
 }
 
 function rowToRule(row) {
   return {
-    id:             row.id,
-    ownerId:        row.owner_id,
-    customerId:     row.customer_id,
-    service:        row.service,
-    type:           row.type,
-    price:          Number(row.price) || 0,
-    durationHrs:    Number(row.duration_hrs) || 1,
-    assignees:      row.assignees ?? [],
-    assigneeIds:    row.assignee_ids ?? [],
-    freq:           row.freq,
-    freqInterval:   row.freq_interval ?? 1,
-    anchorDate:     row.anchor_date,
-    preferredHour:  Number(row.preferred_hour) || 9,
-    endDate:        row.end_date,
-    status:         row.status,
-    notes:          row.notes ?? '',
-    source:         row.source ?? 'manual',
-    importBatchId:  row.import_batch_id ?? null,
-    createdAt:      row.created_at,
-    updatedAt:      row.updated_at,
+    id: row.id,
+    ownerId: row.owner_id,
+    customerId: row.customer_id,
+    service: row.service,
+    type: row.type,
+    price: Number(row.price) || 0,
+    durationHrs: Number(row.duration_hrs) || 1,
+    assignees: row.assignees ?? [],
+    assigneeIds: row.assignee_ids ?? [],
+    freq: row.freq,
+    freqInterval: row.freq_interval ?? 1,
+    anchorDate: row.anchor_date,
+    preferredHour: Number(row.preferred_hour) || 9,
+    endDate: row.end_date,
+    status: row.status,
+    notes: row.notes ?? '',
+    source: row.source ?? 'manual',
+    importBatchId: row.import_batch_id ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -221,8 +218,8 @@ function rowToRule(row) {
 // when written to the jobs.date column). This caller wants the calendar
 // date the user sees, not the UTC instant.
 function iso(d) {
-  const y  = d.getFullYear();
-  const m  = String(d.getMonth() + 1).padStart(2, '0');
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${dd}`;
 }
@@ -252,16 +249,20 @@ export async function materialiseVisitsForCustomers(customerIds, { weeks = 12 } 
   const ownerId = await getCurrentUserId();
 
   // Window
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const horizon = new Date(today); horizon.setDate(horizon.getDate() + weeks * 7);
-  const from  = iso(today);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const horizon = new Date(today);
+  horizon.setDate(horizon.getDate() + weeks * 7);
+  const from = iso(today);
   const until = iso(horizon);
 
   // Load all active rules + customers in one go
   const [{ data: rules, error: rErr }, { data: customers, error: cErr }] = await Promise.all([
     supabase
       .from('recurring_jobs')
-      .select('id, customer_id, service, type, price, duration_hrs, freq, freq_interval, anchor_date, preferred_hour, notes, route_cluster, route_order')
+      .select(
+        'id, customer_id, service, type, price, duration_hrs, freq, freq_interval, anchor_date, preferred_hour, notes, route_cluster, route_order'
+      )
       .eq('owner_id', ownerId)
       .eq('status', 'active')
       .in('customer_id', customerIds),
@@ -275,48 +276,56 @@ export async function materialiseVisitsForCustomers(customerIds, { weeks = 12 } 
 
   if (!rules?.length) return { rulesProcessed: 0, jobsCreated: 0, skipped: 0 };
 
-  const customersById = new Map((customers ?? []).map(c => [c.id, c]));
+  const customersById = new Map((customers ?? []).map((c) => [c.id, c]));
 
   // Idempotency: find which series already have jobs inside the window so we
   // don't double-write.
-  const ruleIds = rules.map(r => r.id);
+  const ruleIds = rules.map((r) => r.id);
   const { data: existing } = await supabase
     .from('jobs')
     .select('series_id')
     .in('series_id', ruleIds)
     .gte('date', from)
     .lt('date', until);
-  const alreadyMaterialised = new Set((existing ?? []).map(j => j.series_id));
+  const alreadyMaterialised = new Set((existing ?? []).map((j) => j.series_id));
 
-  let rulesProcessed = 0, jobsCreated = 0, skipped = 0;
+  let rulesProcessed = 0,
+    jobsCreated = 0,
+    skipped = 0;
 
   for (const row of rules) {
     rulesProcessed++;
-    if (alreadyMaterialised.has(row.id)) { skipped++; continue; }
+    if (alreadyMaterialised.has(row.id)) {
+      skipped++;
+      continue;
+    }
     const customer = customersById.get(row.customer_id);
-    if (!customer) { skipped++; continue; }
+    if (!customer) {
+      skipped++;
+      continue;
+    }
 
     // Snake_case row → camelCase rule expected by generateVisitDates +
     // materialiseVisits.
     const rule = {
-      id:            row.id,
-      customerId:    row.customer_id,
-      service:       row.service,
-      type:          row.type,
-      price:         Number(row.price) || 0,
-      durationHrs:   row.duration_hrs ? Number(row.duration_hrs) : 1,
+      id: row.id,
+      customerId: row.customer_id,
+      service: row.service,
+      type: row.type,
+      price: Number(row.price) || 0,
+      durationHrs: row.duration_hrs ? Number(row.duration_hrs) : 1,
       preferredHour: row.preferred_hour ?? 9,
-      freq:          row.freq,
-      freqInterval:  row.freq_interval ?? 1,
-      anchorDate:    row.anchor_date,
-      notes:         row.notes,
+      freq: row.freq,
+      freqInterval: row.freq_interval ?? 1,
+      anchorDate: row.anchor_date,
+      notes: row.notes,
     };
     try {
       const inserted = await materialiseVisits(rule, customer, { from, until });
       jobsCreated += inserted.length;
     } catch (e) {
       // Don't let one bad rule poison the whole batch — log + continue.
-      // eslint-disable-next-line no-console
+
       console.warn(`Failed to materialise visits for rule ${row.id}:`, e?.message ?? e);
       skipped++;
     }

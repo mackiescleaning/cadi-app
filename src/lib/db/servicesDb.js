@@ -31,21 +31,39 @@ export async function listServicesForFrontDesk() {
   // Front Desk must call this (never read inactive services).
   const { data, error } = await supabase
     .from('services')
-    .select([
-      'id', 'category', 'name',
-      'description_included', 'description_excluded',
-      'pricing_type', 'pricing_matrix',
-      'price_hourly_rate', 'price_hourly_minimum_hours',
-      'price_fixed_basic', 'price_fixed_standard', 'price_fixed_premium',
-      'price_per_sqm', 'price_per_sqm_minimum',
-      'price_per_room', 'price_per_bathroom',
-      'pricing_notes',
-      'duration_value', 'duration_unit',
-      'frequency_one_off', 'frequency_weekly', 'frequency_fortnightly',
-      'frequency_monthly', 'frequency_quarterly', 'frequency_annually',
-      'service_area_uses_default', 'service_area_custom',
-      'materials_equipment_notes', 'site_visit_required',
-    ].join(','))
+    .select(
+      [
+        'id',
+        'category',
+        'name',
+        'description_included',
+        'description_excluded',
+        'pricing_type',
+        'pricing_matrix',
+        'price_hourly_rate',
+        'price_hourly_minimum_hours',
+        'price_fixed_basic',
+        'price_fixed_standard',
+        'price_fixed_premium',
+        'price_per_sqm',
+        'price_per_sqm_minimum',
+        'price_per_room',
+        'price_per_bathroom',
+        'pricing_notes',
+        'duration_value',
+        'duration_unit',
+        'frequency_one_off',
+        'frequency_weekly',
+        'frequency_fortnightly',
+        'frequency_monthly',
+        'frequency_quarterly',
+        'frequency_annually',
+        'service_area_uses_default',
+        'service_area_custom',
+        'materials_equipment_notes',
+        'site_visit_required',
+      ].join(',')
+    )
     .eq('is_active', true)
     .order('display_order', { ascending: true })
     .order('created_at', { ascending: true });
@@ -55,11 +73,7 @@ export async function listServicesForFrontDesk() {
 }
 
 export async function getService(id) {
-  const { data, error } = await supabase
-    .from('services')
-    .select('*')
-    .eq('id', id)
-    .single();
+  const { data, error } = await supabase.from('services').select('*').eq('id', id).single();
   if (error) throw error;
   return data;
 }
@@ -77,18 +91,21 @@ export async function countServicesNeedingPricing() {
   // Services that are active but have no usable pricing — Front Desk can't quote these.
   const { data, error } = await supabase
     .from('services')
-    .select('id, pricing_type, price_hourly_rate, price_fixed_basic, price_fixed_standard, price_fixed_premium, price_per_sqm, price_per_room')
+    .select(
+      'id, pricing_type, price_hourly_rate, price_fixed_basic, price_fixed_standard, price_fixed_premium, price_per_sqm, price_per_room'
+    )
     .eq('is_active', true);
   if (error) throw error;
   if (!data) return 0;
-  return data.filter(s => !serviceHasPricing(s)).length;
+  return data.filter((s) => !serviceHasPricing(s)).length;
 }
 
 export function serviceHasPricing(s) {
   if (s.pricing_type === 'custom') return true;
-  if (s.pricing_type === 'per_size') return !!(s.pricing_matrix?.some(r => r.price > 0));
+  if (s.pricing_type === 'per_size') return !!s.pricing_matrix?.some((r) => r.price > 0);
   if (s.pricing_type === 'hourly') return !!s.price_hourly_rate;
-  if (s.pricing_type === 'fixed') return !!(s.price_fixed_basic || s.price_fixed_standard || s.price_fixed_premium);
+  if (s.pricing_type === 'fixed')
+    return !!(s.price_fixed_basic || s.price_fixed_standard || s.price_fixed_premium);
   if (s.pricing_type === 'per_sqm') return !!s.price_per_sqm;
   if (s.pricing_type === 'per_room') return !!s.price_per_room;
   return false;
@@ -96,10 +113,11 @@ export function serviceHasPricing(s) {
 
 export function formatPricingSummary(s) {
   if (s.pricing_type === 'per_size') {
-    const priced = (s.pricing_matrix ?? []).filter(r => r.price > 0);
+    const priced = (s.pricing_matrix ?? []).filter((r) => r.price > 0);
     if (!priced.length) return 'Price needed';
-    const prices = priced.map(r => r.price);
-    const min = Math.min(...prices), max = Math.max(...prices);
+    const prices = priced.map((r) => r.price);
+    const min = Math.min(...prices),
+      max = Math.max(...prices);
     return min === max ? `£${min} by size` : `£${min} – £${max} by size`;
   }
   if (s.pricing_type === 'hourly') {
@@ -109,7 +127,9 @@ export function formatPricingSummary(s) {
     return str;
   }
   if (s.pricing_type === 'fixed') {
-    const prices = [s.price_fixed_basic, s.price_fixed_standard, s.price_fixed_premium].filter(Boolean);
+    const prices = [s.price_fixed_basic, s.price_fixed_standard, s.price_fixed_premium].filter(
+      Boolean
+    );
     if (!prices.length) return 'Price needed';
     if (prices.length === 1) return `£${prices[0]} fixed`;
     return `£${Math.min(...prices)} – £${Math.max(...prices)} fixed`;
@@ -163,11 +183,11 @@ export async function createService(fields) {
 export async function bulkCreateServices(servicesList) {
   if (!servicesList?.length) return [];
   const businessId = await getBusinessId();
-  const existing   = await listServices({ includeInactive: true });
+  const existing = await listServices({ includeInactive: true });
   const startOrder = existing.length;
   const rows = servicesList.map((s, i) => ({
     ...s,
-    business_id:   businessId,
+    business_id: businessId,
     display_order: startOrder + i,
   }));
   const { data, error } = await supabase.from('services').insert(rows).select();
@@ -187,10 +207,7 @@ export async function updateService(id, fields) {
 }
 
 export async function deleteService(id) {
-  const { error } = await supabase
-    .from('services')
-    .delete()
-    .eq('id', id);
+  const { error } = await supabase.from('services').delete().eq('id', id);
   if (error) throw error;
 }
 
@@ -200,33 +217,60 @@ export async function setServiceActive(id, isActive) {
 
 export async function duplicateService(id) {
   const original = await getService(id);
-  const { id: _id, created_at, updated_at, ...fields } = original;
-  return createService({ ...fields, name: `${fields.name} (copy)`, display_order: fields.display_order + 1 });
+  const { id: _id, created_at: _created_at, updated_at: _updated_at, ...fields } = original;
+  return createService({
+    ...fields,
+    name: `${fields.name} (copy)`,
+    display_order: fields.display_order + 1,
+  });
 }
 
 // ── Onboarding bridge ─────────────────────────────────────────────────────────
 
 const CATEGORY_MAP = {
   // residential
-  'Weekly Clean': 'residential', 'Fortnightly Clean': 'residential', 'Monthly Clean': 'residential',
-  'Deep Clean': 'residential', 'End of Tenancy': 'residential', 'Move In / Move Out': 'residential',
-  'Spring Clean': 'residential', 'After Party Clean': 'residential',
-  'Airbnb Turnover': 'residential', 'Holiday Let Changeover': 'residential',
-  'Oven Clean': 'residential', 'Carpet Clean': 'residential',
-  'Inside Windows': 'residential', 'Ironing Service': 'residential',
+  'Weekly Clean': 'residential',
+  'Fortnightly Clean': 'residential',
+  'Monthly Clean': 'residential',
+  'Deep Clean': 'residential',
+  'End of Tenancy': 'residential',
+  'Move In / Move Out': 'residential',
+  'Spring Clean': 'residential',
+  'After Party Clean': 'residential',
+  'Airbnb Turnover': 'residential',
+  'Holiday Let Changeover': 'residential',
+  'Oven Clean': 'residential',
+  'Carpet Clean': 'residential',
+  'Inside Windows': 'residential',
+  'Ironing Service': 'residential',
   // commercial
-  'Daily Office Clean': 'commercial', 'Weekly Office Clean': 'commercial', 'Retail Clean': 'commercial',
-  'School / College': 'commercial', 'Nursery / Childcare': 'commercial',
-  'Medical Practice': 'commercial', 'Care Home': 'commercial',
-  'Restaurant / Cafe': 'commercial', 'Hotel': 'commercial',
-  'Pub / Bar': 'commercial', 'Event Venue': 'commercial',
-  'Post-Construction Clean': 'commercial', 'Periodic Deep Clean': 'commercial',
+  'Daily Office Clean': 'commercial',
+  'Weekly Office Clean': 'commercial',
+  'Retail Clean': 'commercial',
+  'School / College': 'commercial',
+  'Nursery / Childcare': 'commercial',
+  'Medical Practice': 'commercial',
+  'Care Home': 'commercial',
+  'Restaurant / Cafe': 'commercial',
+  Hotel: 'commercial',
+  'Pub / Bar': 'commercial',
+  'Event Venue': 'commercial',
+  'Post-Construction Clean': 'commercial',
+  'Periodic Deep Clean': 'commercial',
   'Industrial / Warehouse': 'commercial',
   // exterior
-  'Residential Windows': 'exterior', 'Commercial Windows': 'exterior', 'Conservatory Glass': 'exterior',
-  'Gutter Clearing': 'exterior', 'Fascia & Soffit Clean': 'exterior', 'Roof Moss Removal': 'exterior',
-  'Driveway Jet Wash': 'exterior', 'Patio / Decking': 'exterior', 'Path & Steps': 'exterior',
-  'Render Wash': 'exterior', 'UPVC Restoration': 'exterior', 'Solar Panel Clean': 'exterior',
+  'Residential Windows': 'exterior',
+  'Commercial Windows': 'exterior',
+  'Conservatory Glass': 'exterior',
+  'Gutter Clearing': 'exterior',
+  'Fascia & Soffit Clean': 'exterior',
+  'Roof Moss Removal': 'exterior',
+  'Driveway Jet Wash': 'exterior',
+  'Patio / Decking': 'exterior',
+  'Path & Steps': 'exterior',
+  'Render Wash': 'exterior',
+  'UPVC Restoration': 'exterior',
+  'Solar Panel Clean': 'exterior',
 };
 
 const FREQUENCY_DEFAULTS = {
@@ -263,7 +307,10 @@ export async function seedServicesFromOnboarding(serviceNames, customServiceText
 
   // Custom services from free-text field
   if (customServiceText) {
-    const extras = customServiceText.split(',').map(s => s.trim()).filter(Boolean);
+    const extras = customServiceText
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     for (const name of extras) {
       toInsert.push({
         business_id: businessId,

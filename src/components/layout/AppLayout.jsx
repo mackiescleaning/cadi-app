@@ -1,25 +1,39 @@
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import CadiWordmark from '../CadiWordmark';
 import {
-  LayoutDashboard, Calculator, CalendarDays, Users,
-  PoundSterling, Settings, Menu, X,
-  TrendingUp, MapPin, FileText, ClipboardCheck,
-  GraduationCap, ClipboardList, Lock,
-  Briefcase, Star, Network, CheckSquare,
-  ShoppingBag, GitBranch, MessageSquare, Bell, Inbox, UtensilsCrossed, Receipt,
-  CalendarClock, ChevronRight, CreditCard,
+  LayoutDashboard,
+  CalendarDays,
+  Users,
+  PoundSterling,
+  Settings,
+  Menu,
+  X,
+  TrendingUp,
+  ClipboardCheck,
+  ClipboardList,
+  Lock,
+  Briefcase,
+  Star,
+  Network,
+  CheckSquare,
+  ShoppingBag,
+  GitBranch,
+  MessageSquare,
+  Inbox,
+  Receipt,
+  CalendarClock,
+  CreditCard,
 } from 'lucide-react';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { usePlan } from '../../hooks/usePlan';
 import { useClientContext } from '../../context/ClientContext';
-import { MoreHorizontal, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { UpgradeModal } from '../UpgradePrompt';
 
 // ── Section definitions ───────────────────────────────────────────────────────
 
-const RUN_COLOR  = '#0d1a5e';
 const GROW_COLOR = '#059669';
 const EARN_COLOR = '#C2410C';
 
@@ -27,16 +41,16 @@ const NAV_SECTIONS = [
   {
     id: 'run',
     label: 'Run your business',
-    color: EARN_COLOR,   // accent only; bg stays navy
+    color: EARN_COLOR, // accent only; bg stays navy
     accent: '#3b5bdb',
     items: [
-      { path: '/scheduler',  label: 'Schedule',        icon: CalendarDays  },
-      { path: '/customers',  label: 'Customers',       icon: Users         },
-      { path: '/services',   label: 'Services',        icon: ClipboardCheck },
-      { path: '/payments',   label: 'Payments',        icon: CreditCard    },
-      { path: '/money',      label: 'Money',           icon: PoundSterling },
-      { path: '/accounts',   label: 'Accounting',      icon: PoundSterling },
-      { path: '/staff',      label: 'Staff',           icon: Users         },
+      { path: '/scheduler', label: 'Schedule', icon: CalendarDays },
+      { path: '/customers', label: 'Customers', icon: Users },
+      { path: '/services', label: 'Services', icon: ClipboardCheck },
+      { path: '/payments', label: 'Payments', icon: CreditCard },
+      { path: '/money', label: 'Money', icon: PoundSterling },
+      { path: '/accounts', label: 'Accounting', icon: PoundSterling },
+      { path: '/staff', label: 'Staff', icon: Users },
     ],
     tagline: 'RUN',
     accentColor: '#4f78ff',
@@ -45,9 +59,9 @@ const NAV_SECTIONS = [
     id: 'grow',
     label: 'Grow your margins',
     items: [
-      { path: '/scaling',    label: 'Cadi AI',         icon: TrendingUp },
-      { path: '/business-lab', label: 'Business Lab',  icon: Briefcase },
-      { path: '/review',     label: 'Annual Review',   icon: ClipboardList },
+      { path: '/scaling', label: 'Cadi AI', icon: TrendingUp },
+      { path: '/business-lab', label: 'Business Lab', icon: Briefcase },
+      { path: '/review', label: 'Annual Review', icon: ClipboardList },
     ],
     tagline: 'GROW',
     accentColor: GROW_COLOR,
@@ -56,15 +70,15 @@ const NAV_SECTIONS = [
     id: 'earn',
     label: 'Connect to more work',
     items: [
-      { path: '/connect',              label: 'Dashboard',        icon: LayoutDashboard, end: true },
-      { path: '/connect/marketplace',  label: 'Marketplace',      icon: ShoppingBag   },
-      { path: '/connect/pipeline',     label: 'Current Work',     icon: GitBranch     },
-      { path: '/connect/completion',   label: 'Work Completion',  icon: CheckSquare   },
-      { path: '/connect/connections',  label: 'FM Connections',   icon: Network       },
-      { path: '/connect/reputation',   label: 'My Profile',       icon: Star          },
-      { path: '/connect/earnings',     label: 'Earnings',         icon: PoundSterling },
-      { path: '/connect/comms',        label: 'Messages',         icon: MessageSquare },
-      { path: '/connect/invoice',      label: 'Invoicing',        icon: Receipt       },
+      { path: '/connect', label: 'Dashboard', icon: LayoutDashboard, end: true },
+      { path: '/connect/marketplace', label: 'Marketplace', icon: ShoppingBag },
+      { path: '/connect/pipeline', label: 'Current Work', icon: GitBranch },
+      { path: '/connect/completion', label: 'Work Completion', icon: CheckSquare },
+      { path: '/connect/connections', label: 'FM Connections', icon: Network },
+      { path: '/connect/reputation', label: 'My Profile', icon: Star },
+      { path: '/connect/earnings', label: 'Earnings', icon: PoundSterling },
+      { path: '/connect/comms', label: 'Messages', icon: MessageSquare },
+      { path: '/connect/invoice', label: 'Invoicing', icon: Receipt },
     ],
     tagline: 'CONNECT',
     accentColor: EARN_COLOR,
@@ -72,77 +86,90 @@ const NAV_SECTIONS = [
   {
     id: 'account',
     label: 'Account',
-    items: [
-      { path: '/settings', label: 'Settings', icon: Settings },
-    ],
+    items: [{ path: '/settings', label: 'Settings', icon: Settings }],
     tagline: 'ACCOUNT',
     accentColor: '#6b7280',
   },
 ];
 
 // Flat nav for matching active route
-const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap(s => s.items);
+const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap((s) => s.items);
 
 const TAB_GUIDES = {
-  '/front-desk':                     "Your Front Desk inbox — review and approve actions from your three AI agents.",
-  '/front-desk/sales-manager':       "Sales Manager — handles inbound enquiries, quotes and bookings.",
-  '/front-desk/review-agent':        "Review Agent — sends review requests after every completed job.",
-  '/front-desk/operations-manager':  "Operations Manager — reminders, team schedules, check-ins and payment matching.",
-  '/dashboard':    "Your mission control — health score, leaderboard, badges and daily activity all in one place.",
-  '/calculator':   "Pricing engine — generate instant quotes using UK market data.",
-  '/scheduler':    "Book and manage every job — daily schedule, status tracking and team assignment.",
-  '/customers':    "Your client database — notes, addresses, star ratings and full job history.",
-  '/money':        "Your financial dashboard — income, expenses, tax reserve and payment logging.",
-  '/payments':     "Invoices, quotes, and payment processor setup — Stripe and GoCardless.",
-  '/accounts':     "Bookkeeping and compliance — MTD submissions, mileage and year-end figures.",
-  '/scaling':      "Cadi AI — growth strategies, pricing analysis and AI-powered insights.",
-  '/business-lab': "Business Lab — tools and experiments to grow your margins.",
-  '/staff':        "Team management — staff profiles, skills, availability and job assignments.",
-  '/review':       "Annual Review — 90-day sprint goals and year-on-year progress.",
-  '/settings':     "Settings — update your profile, hourly rate, services and preferences.",
+  '/front-desk': 'Your Front Desk inbox — review and approve actions from your three AI agents.',
+  '/front-desk/sales-manager': 'Sales Manager — handles inbound enquiries, quotes and bookings.',
+  '/front-desk/review-agent': 'Review Agent — sends review requests after every completed job.',
+  '/front-desk/operations-manager':
+    'Operations Manager — reminders, team schedules, check-ins and payment matching.',
+  '/dashboard':
+    'Your mission control — health score, leaderboard, badges and daily activity all in one place.',
+  '/calculator': 'Pricing engine — generate instant quotes using UK market data.',
+  '/scheduler': 'Book and manage every job — daily schedule, status tracking and team assignment.',
+  '/customers': 'Your client database — notes, addresses, star ratings and full job history.',
+  '/money': 'Your financial dashboard — income, expenses, tax reserve and payment logging.',
+  '/payments': 'Invoices, quotes, and payment processor setup — Stripe and GoCardless.',
+  '/accounts': 'Bookkeeping and compliance — MTD submissions, mileage and year-end figures.',
+  '/scaling': 'Cadi AI — growth strategies, pricing analysis and AI-powered insights.',
+  '/business-lab': 'Business Lab — tools and experiments to grow your margins.',
+  '/staff': 'Team management — staff profiles, skills, availability and job assignments.',
+  '/review': 'Annual Review — 90-day sprint goals and year-on-year progress.',
+  '/settings': 'Settings — update your profile, hourly rate, services and preferences.',
 };
 
 const PRO_TAB_REASONS = {
-  '/money':        'Track income, expenses, tax reserve and P&L — your full financial picture.',
-  '/accounts':     'File MTD submissions, claim mileage and see your year-end figures ready to go.',
-  '/scaling':      'Growth strategies, pricing analysis and AI-powered insights.',
+  '/money': 'Track income, expenses, tax reserve and P&L — your full financial picture.',
+  '/accounts': 'File MTD submissions, claim mileage and see your year-end figures ready to go.',
+  '/scaling': 'Growth strategies, pricing analysis and AI-powered insights.',
   '/business-lab': 'Business Lab tools to grow your margins.',
-  '/staff':        'Manage staff profiles, skills, availability and job assignments.',
-  '/review':       'Set 90-day sprint goals and track performance year on year.',
+  '/staff': 'Manage staff profiles, skills, availability and job assignments.',
+  '/review': 'Set 90-day sprint goals and track performance year on year.',
 };
 
 // Section persistence key
 const SECTION_STATE_KEY = 'cadi_nav_sections';
 
 function getSectionState() {
-  try { return JSON.parse(localStorage.getItem(SECTION_STATE_KEY)) || {}; } catch { return {}; }
+  try {
+    return JSON.parse(localStorage.getItem(SECTION_STATE_KEY)) || {};
+  } catch {
+    return {};
+  }
 }
 function saveSectionState(s) {
-  try { localStorage.setItem(SECTION_STATE_KEY, JSON.stringify(s)); } catch {}
+  try {
+    localStorage.setItem(SECTION_STATE_KEY, JSON.stringify(s));
+  } catch {}
 }
 
 // Last-viewed sub-tab per section
 const LAST_TAB_KEY = 'cadi_last_tab';
 function getLastTabs() {
-  try { return JSON.parse(localStorage.getItem(LAST_TAB_KEY)) || {}; } catch { return {}; }
+  try {
+    return JSON.parse(localStorage.getItem(LAST_TAB_KEY)) || {};
+  } catch {
+    return {};
+  }
 }
 function saveLastTab(sectionId, path) {
-  const t = getLastTabs(); t[sectionId] = path;
-  try { localStorage.setItem(LAST_TAB_KEY, JSON.stringify(t)); } catch {}
+  const t = getLastTabs();
+  t[sectionId] = path;
+  try {
+    localStorage.setItem(LAST_TAB_KEY, JSON.stringify(t));
+  } catch {}
 }
 
 export default function AppLayout() {
-  const [mobileMenuOpen, setMobileMenuOpen]         = useState(false);
-  const [hoveredNav, setHoveredNav]                 = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [hoveredNav, setHoveredNav] = useState(null);
   const [upgradeModalReason, setUpgradeModalReason] = useState(null);
-  const [upgradeBanner, setUpgradeBanner]           = useState(null);
-  const [mobileSectionId, setMobileSectionId]       = useState('run'); // active mobile section
-  const [collapsed, setCollapsed]                   = useState(() => getSectionState());
-  const [pendingActions, setPendingActions]          = useState(0);
+  const [upgradeBanner, setUpgradeBanner] = useState(null);
+  const [, setMobileSectionId] = useState('run'); // active mobile section
+  const [collapsed, setCollapsed] = useState(() => getSectionState());
+  const [pendingActions, setPendingActions] = useState(0);
 
-  const location  = useLocation();
-  const navigate  = useNavigate();
-  const { user, profile, signOut, refreshProfile } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
   const { isPro, isTabLocked } = usePlan();
   const { isAccountant, activeClient, clients, switchClient, exitClientView } = useClientContext();
   const [logoUrl, setLogoUrl] = useState('');
@@ -151,10 +178,15 @@ export default function AppLayout() {
     if (!user || user.id === 'demo-user') return;
     (async () => {
       try {
-        const { data } = await supabase.from('business_settings').select('setup_data').eq('owner_id', user.id).maybeSingle();
+        const { data } = await supabase
+          .from('business_settings')
+          .select('setup_data')
+          .eq('owner_id', user.id)
+          .maybeSingle();
         setLogoUrl(data?.setup_data?.logo_url || '');
       } catch {}
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the signed-in user changes
   }, [user?.id]);
 
   // Pending agent actions — Realtime subscription (no polling)
@@ -164,7 +196,11 @@ export default function AppLayout() {
 
     const setup = async () => {
       try {
-        const { data: biz } = await supabase.from('businesses').select('id').eq('owner_user_id', user.id).maybeSingle();
+        const { data: biz } = await supabase
+          .from('businesses')
+          .select('id')
+          .eq('owner_user_id', user.id)
+          .maybeSingle();
         if (!biz) return;
 
         const recount = async () => {
@@ -180,25 +216,34 @@ export default function AppLayout() {
 
         channel = supabase
           .channel(`pending-actions-${biz.id}`)
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'agent_actions',
-            filter: `business_id=eq.${biz.id}`,
-          }, recount)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'agent_actions',
+              filter: `business_id=eq.${biz.id}`,
+            },
+            recount
+          )
           .subscribe();
       } catch {}
     };
 
     setup();
-    return () => { if (channel) supabase.removeChannel(channel); };
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-subscribe only when the signed-in user changes
   }, [user?.id]);
 
   // Track last-viewed tab per section and active mobile section
   useEffect(() => {
-    const active = NAV_SECTIONS.find(s => s.items.some(i => location.pathname.startsWith(i.path)));
+    const active = NAV_SECTIONS.find((s) =>
+      s.items.some((i) => location.pathname.startsWith(i.path))
+    );
     if (active) {
-      const item = active.items.find(i => location.pathname.startsWith(i.path));
+      const item = active.items.find((i) => location.pathname.startsWith(i.path));
       if (item) saveLastTab(active.id, item.path);
       setMobileSectionId(active.id);
     }
@@ -213,31 +258,47 @@ export default function AppLayout() {
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
-      const { data } = await supabase.from('profiles').select('plan, subscription_tier').maybeSingle();
-      const activated = data?.subscription_tier === 'pro' || data?.subscription_tier === 'max' || data?.plan === 'pro';
+      const { data } = await supabase
+        .from('profiles')
+        .select('plan, subscription_tier')
+        .maybeSingle();
+      const activated =
+        data?.subscription_tier === 'pro' ||
+        data?.subscription_tier === 'max' ||
+        data?.plan === 'pro';
       if (activated) {
         clearInterval(interval);
         window.location.reload();
       } else if (attempts >= 20) {
         clearInterval(interval);
-        setUpgradeBanner({ message: 'Payment received — tap here to activate.', warn: true, reload: true });
+        setUpgradeBanner({
+          message: 'Payment received — tap here to activate.',
+          warn: true,
+          reload: true,
+        });
       }
     }, 1500);
     return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
-  const handleSignOut = async () => { await signOut(); navigate('/login'); };
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
 
-  const handleNavClick = useCallback((path, e) => {
-    if (isTabLocked(path)) {
-      e.preventDefault();
-      const reason = PRO_TAB_REASONS[path] || 'Upgrade to Cadi Pro to unlock this feature.';
-      setUpgradeModalReason(reason);
-    }
-  }, [isTabLocked]);
+  const handleNavClick = useCallback(
+    (path, e) => {
+      if (isTabLocked(path)) {
+        e.preventDefault();
+        const reason = PRO_TAB_REASONS[path] || 'Upgrade to Cadi Pro to unlock this feature.';
+        setUpgradeModalReason(reason);
+      }
+    },
+    [isTabLocked]
+  );
 
   const toggleSection = (id) => {
-    setCollapsed(prev => {
+    setCollapsed((prev) => {
       const next = { ...prev, [id]: !prev[id] };
       saveSectionState(next);
       return next;
@@ -245,35 +306,65 @@ export default function AppLayout() {
   };
 
   const currentLabel =
-    location.pathname === '/dashboard' ? 'Dashboard' :
-    location.pathname === '/front-desk' ? 'Front Desk' :
-    location.pathname.startsWith('/front-desk/sales-manager') ? 'Sales Manager' :
-    location.pathname.startsWith('/front-desk/review-agent') ? 'Review Agent' :
-    location.pathname.startsWith('/front-desk/operations-manager') ? 'Operations Manager' :
-    ALL_NAV_ITEMS.find(i => location.pathname.startsWith(i.path))?.label || 'Cadi';
+    location.pathname === '/dashboard'
+      ? 'Dashboard'
+      : location.pathname === '/front-desk'
+        ? 'Front Desk'
+        : location.pathname.startsWith('/front-desk/sales-manager')
+          ? 'Sales Manager'
+          : location.pathname.startsWith('/front-desk/review-agent')
+            ? 'Review Agent'
+            : location.pathname.startsWith('/front-desk/operations-manager')
+              ? 'Operations Manager'
+              : ALL_NAV_ITEMS.find((i) => location.pathname.startsWith(i.path))?.label || 'Cadi';
 
   const userInitial = profile?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U';
-  const userName    = profile?.business_name || profile?.first_name || 'Your Business';
-  const planLabel   = isPro ? 'Cadi Pro' : 'Free plan';
+  const userName = profile?.business_name || profile?.first_name || 'Your Business';
+  const planLabel = isPro ? 'Cadi Pro' : 'Free plan';
 
   // ── Front Desk expandable nav group ─────────────────────────────────────────
   function FrontDeskNavGroup({ onNavigate }) {
     const [open, setOpen] = useState(() => {
-      try { return localStorage.getItem('cadi_fd_nav_open') !== '0'; } catch { return true; }
+      try {
+        return localStorage.getItem('cadi_fd_nav_open') !== '0';
+      } catch {
+        return true;
+      }
     });
     const isFrontDeskActive = location.pathname.startsWith('/front-desk');
 
-    const toggle = () => setOpen(v => {
-      const next = !v;
-      try { localStorage.setItem('cadi_fd_nav_open', next ? '1' : '0'); } catch {}
-      return next;
-    });
+    const toggle = () =>
+      setOpen((v) => {
+        const next = !v;
+        try {
+          localStorage.setItem('cadi_fd_nav_open', next ? '1' : '0');
+        } catch {}
+        return next;
+      });
 
     const items = [
-      { path: '/front-desk',                    label: 'Inbox',               badge: pendingActions, icon: Inbox },
-      { path: '/front-desk/sales-manager',      label: 'Sales Manager',       icon: MessageSquare,  accent: '#3b5bdb' },
-      { path: '/front-desk/review-agent',       label: 'Review Agent',        icon: Star,           accent: '#059669', comingSoon: true },
-      { path: '/front-desk/operations-manager', label: 'Operations Manager',  icon: CalendarClock,  accent: '#C2410C', proOnly: true, comingSoon: true },
+      { path: '/front-desk', label: 'Inbox', badge: pendingActions, icon: Inbox },
+      {
+        path: '/front-desk/sales-manager',
+        label: 'Sales Manager',
+        icon: MessageSquare,
+        accent: '#3b5bdb',
+      },
+      {
+        path: '/front-desk/review-agent',
+        label: 'Review Agent',
+        icon: Star,
+        accent: '#059669',
+        comingSoon: true,
+      },
+      {
+        path: '/front-desk/operations-manager',
+        label: 'Operations Manager',
+        icon: CalendarClock,
+        accent: '#C2410C',
+        proOnly: true,
+        comingSoon: true,
+      },
     ];
 
     return (
@@ -282,9 +373,17 @@ export default function AppLayout() {
           onClick={toggle}
           className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors ${isFrontDeskActive ? 'bg-white/5' : ''}`}
         >
-          <span className="w-1.5 h-4 rounded-full shrink-0" style={{ backgroundColor: '#4f78ff' }} />
+          <span
+            className="w-1.5 h-4 rounded-full shrink-0"
+            style={{ backgroundColor: '#4f78ff' }}
+          />
           <span className="flex-1 text-left">
-            <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: '#4f78ff' }}>FRONT DESK</span>
+            <span
+              className="text-[10px] font-black tracking-widest uppercase"
+              style={{ color: '#4f78ff' }}
+            >
+              FRONT DESK
+            </span>
             <span className="block text-[10px] text-[#99c5ff]/40 leading-tight">Your AI staff</span>
           </span>
           {pendingActions > 0 && (
@@ -301,8 +400,10 @@ export default function AppLayout() {
         {open && (
           <div className="mt-0.5 space-y-0.5 pl-2">
             {items.map(({ path, label, badge, icon: Icon, accent, proOnly, comingSoon }) => {
-              const locked    = proOnly && !isPro && !comingSoon;
-              const isActive  = location.pathname === path || (path !== '/front-desk' && location.pathname.startsWith(path));
+              const locked = proOnly && !isPro && !comingSoon;
+              const isActive =
+                location.pathname === path ||
+                (path !== '/front-desk' && location.pathname.startsWith(path));
               return (
                 <NavLink
                   key={path}
@@ -315,7 +416,11 @@ export default function AppLayout() {
                         ? 'text-white'
                         : 'text-[#99c5ff] hover:bg-white/10 hover:text-white'
                   }`}
-                  style={isActive ? { backgroundColor: '#4f78ff33', borderLeft: '2px solid #4f78ff' } : {}}
+                  style={
+                    isActive
+                      ? { backgroundColor: '#4f78ff33', borderLeft: '2px solid #4f78ff' }
+                      : {}
+                  }
                 >
                   <Icon size={15} className="shrink-0" />
                   <span className="flex-1 truncate">{label}</span>
@@ -327,7 +432,10 @@ export default function AppLayout() {
                   {comingSoon && (
                     <span
                       className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded-full"
-                      style={{ backgroundColor: (accent || '#4f78ff') + '33', color: accent || '#4f78ff' }}
+                      style={{
+                        backgroundColor: (accent || '#4f78ff') + '33',
+                        color: accent || '#4f78ff',
+                      }}
                     >
                       SOON
                     </span>
@@ -345,7 +453,6 @@ export default function AppLayout() {
   // ── Sidebar section renderer ────────────────────────────────────────────────
   function SidebarSection({ section, onNavigate }) {
     const isOpen = !collapsed[section.id];
-    const isSectionActive = section.items.some(i => location.pathname.startsWith(i.path));
     const isTourActive = !profile?.dashboard_tour_complete;
 
     return (
@@ -361,17 +468,24 @@ export default function AppLayout() {
           />
           <span className="flex-1 text-left">
             <span className="flex items-center gap-1.5">
-              <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: section.accentColor }}>
+              <span
+                className="text-[10px] font-black tracking-widest uppercase"
+                style={{ color: section.accentColor }}
+              >
                 {section.tagline}
               </span>
               {section.id === 'earn' && (
-                <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full tracking-wider"
-                  style={{ background: 'rgba(194,65,12,0.25)', color: '#C2410C' }}>
+                <span
+                  className="text-[8px] font-black px-1.5 py-0.5 rounded-full tracking-wider"
+                  style={{ background: 'rgba(194,65,12,0.25)', color: '#C2410C' }}
+                >
                   BETA
                 </span>
               )}
             </span>
-            <span className="block text-[10px] text-[#99c5ff]/40 leading-tight">{section.label}</span>
+            <span className="block text-[10px] text-[#99c5ff]/40 leading-tight">
+              {section.label}
+            </span>
           </span>
           <ChevronDown
             size={12}
@@ -385,9 +499,11 @@ export default function AppLayout() {
             {section.items.map(({ path, label, icon: Icon, comingSoon, badge, end }) => {
               const badgeCount = badge === 'pendingActions' ? pendingActions : 0;
               const locked = isTabLocked(path);
-              const guide  = TAB_GUIDES[path];
+              const guide = TAB_GUIDES[path];
               const isHovered = hoveredNav === path;
-              const isActive  = end ? location.pathname === path : location.pathname.startsWith(path);
+              const isActive = end
+                ? location.pathname === path
+                : location.pathname.startsWith(path);
 
               return (
                 <div
@@ -400,12 +516,17 @@ export default function AppLayout() {
                     to={comingSoon ? '/connect' : path}
                     end={end}
                     onClick={(e) => {
-                      if (comingSoon) { e.preventDefault(); navigate('/connect'); return; }
+                      if (comingSoon) {
+                        e.preventDefault();
+                        navigate('/connect');
+                        return;
+                      }
                       handleNavClick(path, e);
                       onNavigate?.();
                     }}
                     className={({ isActive: navActive }) => {
-                      const active = navActive || (comingSoon && location.pathname === '/connect' && isActive);
+                      const active =
+                        navActive || (comingSoon && location.pathname === '/connect' && isActive);
                       return `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
                         locked
                           ? 'text-[#99c5ff]/40 hover:bg-white/5'
@@ -416,7 +537,12 @@ export default function AppLayout() {
                     }}
                     style={({ isActive: navActive }) => {
                       const active = navActive && !comingSoon;
-                      return active ? { backgroundColor: section.accentColor + '33', borderLeft: `2px solid ${section.accentColor}` } : {};
+                      return active
+                        ? {
+                            backgroundColor: section.accentColor + '33',
+                            borderLeft: `2px solid ${section.accentColor}`,
+                          }
+                        : {};
                     }}
                   >
                     <Icon size={16} className="shrink-0" />
@@ -427,8 +553,10 @@ export default function AppLayout() {
                       </span>
                     )}
                     {comingSoon && (
-                      <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded-full"
-                        style={{ backgroundColor: EARN_COLOR + '33', color: EARN_COLOR }}>
+                      <span
+                        className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded-full"
+                        style={{ backgroundColor: EARN_COLOR + '33', color: EARN_COLOR }}
+                      >
                         SOON
                       </span>
                     )}
@@ -456,14 +584,13 @@ export default function AppLayout() {
   // ── Mobile bottom section picker ─────────────────────────────────────────────
   const MOBILE_SECTIONS = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-    { id: 'run',   label: 'Run',   icon: CalendarDays, color: '#4f78ff' },
-    { id: 'grow',  label: 'Grow',  icon: TrendingUp,  color: GROW_COLOR },
-    { id: 'earn',  label: 'Connect',  icon: Star,        color: EARN_COLOR },
+    { id: 'run', label: 'Run', icon: CalendarDays, color: '#4f78ff' },
+    { id: 'grow', label: 'Grow', icon: TrendingUp, color: GROW_COLOR },
+    { id: 'earn', label: 'Connect', icon: Star, color: EARN_COLOR },
   ];
 
   return (
     <div className="flex h-full min-h-screen bg-[#f0f4ff]">
-
       {upgradeModalReason && (
         <UpgradeModal reason={upgradeModalReason} onClose={() => setUpgradeModalReason(null)} />
       )}
@@ -479,14 +606,19 @@ export default function AppLayout() {
 
       {/* ── DESKTOP SIDEBAR ── */}
       <aside className="hidden md:flex flex-col w-64 min-h-screen bg-[#010a4f] text-white fixed left-0 top-0 bottom-0 z-40">
-
         {/* Brand */}
         <div className="px-5 py-5 border-b border-white/10">
           {logoUrl ? (
             <div className="flex items-center gap-3">
-              <img src={logoUrl} alt="Business logo" className="h-9 w-9 rounded-xl object-contain bg-white/10 p-0.5 shrink-0" />
+              <img
+                src={logoUrl}
+                alt="Business logo"
+                className="h-9 w-9 rounded-xl object-contain bg-white/10 p-0.5 shrink-0"
+              />
               <div className="min-w-0">
-                <p className="text-sm font-bold text-white truncate">{profile?.business_name || 'My Business'}</p>
+                <p className="text-sm font-bold text-white truncate">
+                  {profile?.business_name || 'My Business'}
+                </p>
                 <p className="text-[10px] text-[#99c5ff] tracking-wide">powered by Cadi</p>
               </div>
             </div>
@@ -499,7 +631,6 @@ export default function AppLayout() {
         </div>
 
         <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-1">
-
           {/* Dashboard — always visible above sections */}
           <div
             onMouseEnter={() => setHoveredNav('/dashboard')}
@@ -528,7 +659,7 @@ export default function AppLayout() {
 
           <div className="border-t border-white/10 my-2" />
 
-          {NAV_SECTIONS.map(section => (
+          {NAV_SECTIONS.map((section) => (
             <SidebarSection key={section.id} section={section} />
           ))}
         </nav>
@@ -536,7 +667,11 @@ export default function AppLayout() {
         {!isPro && (
           <div className="px-4 pb-4">
             <button
-              onClick={() => setUpgradeModalReason('Unlock every feature in Cadi — money tracking, HMRC MTD, open banking, GoCardless and more.')}
+              onClick={() =>
+                setUpgradeModalReason(
+                  'Unlock every feature in Cadi — money tracking, HMRC MTD, open banking, GoCardless and more.'
+                )
+              }
               className="w-full py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black hover:bg-[#3a5eff] transition-colors"
             >
               Upgrade to Pro — £39/mo
@@ -546,10 +681,17 @@ export default function AppLayout() {
 
         <div className="px-4 py-4 border-t border-white/10">
           <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-white/5">
-            {logoUrl
-              ? <img src={logoUrl} alt="" className="w-8 h-8 rounded-full object-contain bg-white/10 p-0.5 shrink-0" />
-              : <div className="w-8 h-8 rounded-full bg-[#1f48ff] flex items-center justify-center text-xs font-bold shrink-0">{userInitial}</div>
-            }
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt=""
+                className="w-8 h-8 rounded-full object-contain bg-white/10 p-0.5 shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-[#1f48ff] flex items-center justify-center text-xs font-bold shrink-0">
+                {userInitial}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white truncate">{userName}</p>
               <p className="text-xs text-[#99c5ff]">{planLabel}</p>
@@ -560,13 +702,14 @@ export default function AppLayout() {
 
       {/* ── MAIN CONTENT ── */}
       <div className="flex-1 flex flex-col md:pl-64 min-w-0">
-
         {/* Accountant client switcher banner */}
         {isAccountant && (
           <div className="sticky top-0 z-40 bg-[#010a4f] border-b border-[rgba(153,197,255,0.15)] px-4 md:px-8 py-2 flex items-center gap-3">
-            <span className="text-xs font-bold text-[rgba(153,197,255,0.5)] shrink-0">Viewing as accountant:</span>
+            <span className="text-xs font-bold text-[rgba(153,197,255,0.5)] shrink-0">
+              Viewing as accountant:
+            </span>
             <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto">
-              {clients.map(c => (
+              {clients.map((c) => (
                 <button
                   key={c.owner_id}
                   onClick={() => switchClient(c)}
@@ -574,7 +717,8 @@ export default function AppLayout() {
                     activeClient?.owner_id === c.owner_id
                       ? 'bg-[#1f48ff] text-white'
                       : 'bg-[rgba(153,197,255,0.08)] text-[rgba(153,197,255,0.7)] hover:bg-[rgba(153,197,255,0.15)]'
-                  }`}>
+                  }`}
+                >
                   {c.business_name || c.owner_name || `${c.owner_id.slice(0, 8)}…`}
                 </button>
               ))}
@@ -582,7 +726,8 @@ export default function AppLayout() {
             {activeClient && (
               <button
                 onClick={exitClientView}
-                className="shrink-0 text-xs text-[rgba(153,197,255,0.4)] hover:text-white transition-colors font-medium">
+                className="shrink-0 text-xs text-[rgba(153,197,255,0.4)] hover:text-white transition-colors font-medium"
+              >
                 Exit client view
               </button>
             )}
@@ -601,7 +746,9 @@ export default function AppLayout() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
-            <span className={`hidden sm:block text-xs font-semibold px-3 py-1.5 rounded-full ${isPro ? 'bg-[#99c5ff]/30 text-[#1f48ff]' : 'bg-gray-100 text-gray-500'}`}>
+            <span
+              className={`hidden sm:block text-xs font-semibold px-3 py-1.5 rounded-full ${isPro ? 'bg-[#99c5ff]/30 text-[#1f48ff]' : 'bg-gray-100 text-gray-500'}`}
+            >
               {planLabel}
             </span>
             {!isPro && (
@@ -625,21 +772,35 @@ export default function AppLayout() {
           {isTabLocked(location.pathname) ? (
             <div className="flex items-center justify-center min-h-[60vh]">
               <div className="w-full max-w-md">
-                <div className="rounded-2xl overflow-hidden border border-[#1f48ff]/20 text-center"
-                  style={{ background: 'linear-gradient(135deg, #010a4f 0%, #0d1e78 100%)' }}>
+                <div
+                  className="rounded-2xl overflow-hidden border border-[#1f48ff]/20 text-center"
+                  style={{ background: 'linear-gradient(135deg, #010a4f 0%, #0d1e78 100%)' }}
+                >
                   <div className="px-6 py-10">
                     <div className="text-4xl mb-4">🔒</div>
                     <p className="text-lg font-black text-white mb-2">Cadi Pro feature</p>
                     <p className="text-sm text-white/50 mb-6">
-                      {PRO_TAB_REASONS[Object.keys(PRO_TAB_REASONS).find(k => location.pathname.startsWith(k))] || 'Upgrade to unlock this feature.'}
+                      {PRO_TAB_REASONS[
+                        Object.keys(PRO_TAB_REASONS).find((k) => location.pathname.startsWith(k))
+                      ] || 'Upgrade to unlock this feature.'}
                     </p>
                     <button
-                      onClick={() => setUpgradeModalReason(PRO_TAB_REASONS[Object.keys(PRO_TAB_REASONS).find(k => location.pathname.startsWith(k))] || 'Upgrade to Cadi Pro.')}
+                      onClick={() =>
+                        setUpgradeModalReason(
+                          PRO_TAB_REASONS[
+                            Object.keys(PRO_TAB_REASONS).find((k) =>
+                              location.pathname.startsWith(k)
+                            )
+                          ] || 'Upgrade to Cadi Pro.'
+                        )
+                      }
                       className="px-6 py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black text-sm rounded-xl transition-all shadow-lg"
                     >
                       Upgrade to Pro — £39/month
                     </button>
-                    <p className="text-[10px] text-white/25 mt-3">Cancel anytime · Powered by Stripe</p>
+                    <p className="text-[10px] text-white/25 mt-3">
+                      Cancel anytime · Powered by Stripe
+                    </p>
                   </div>
                 </div>
               </div>
@@ -653,14 +814,20 @@ export default function AppLayout() {
       {/* ── MOBILE SIDEBAR OVERLAY ── */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMobileMenuOpen(false)}
+          />
           <aside className="absolute left-0 top-0 bottom-0 w-72 bg-[#010a4f] text-white flex flex-col">
             <div className="px-5 py-5 border-b border-white/10 flex items-center justify-between">
               <div>
                 <CadiWordmark height={24} />
                 <p className="text-[10px] text-[#99c5ff] mt-1 tracking-wide">Business OS</p>
               </div>
-              <button onClick={() => setMobileMenuOpen(false)} className="p-2 rounded-lg hover:bg-white/10">
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 rounded-lg hover:bg-white/10"
+              >
                 <X size={18} className="text-[#99c5ff]" />
               </button>
             </div>
@@ -681,15 +848,22 @@ export default function AppLayout() {
               <div className="border-t border-white/10 mb-3" />
               <FrontDeskNavGroup onNavigate={() => setMobileMenuOpen(false)} />
               <div className="border-t border-white/10 my-2" />
-              {NAV_SECTIONS.map(section => (
-                <SidebarSection key={section.id} section={section} onNavigate={() => setMobileMenuOpen(false)} />
+              {NAV_SECTIONS.map((section) => (
+                <SidebarSection
+                  key={section.id}
+                  section={section}
+                  onNavigate={() => setMobileMenuOpen(false)}
+                />
               ))}
             </nav>
 
             {!isPro && (
               <div className="px-4 pb-4">
                 <button
-                  onClick={() => { setMobileMenuOpen(false); setUpgradeModalReason('Unlock every feature in Cadi.'); }}
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setUpgradeModalReason('Unlock every feature in Cadi.');
+                  }}
                   className="w-full py-2.5 rounded-xl bg-[#1f48ff] text-white text-xs font-black"
                 >
                   Upgrade to Pro — £39/mo
@@ -699,7 +873,9 @@ export default function AppLayout() {
 
             <div className="px-4 py-4 border-t border-white/10">
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-white/5">
-                <div className="w-8 h-8 rounded-full bg-[#1f48ff] flex items-center justify-center text-xs font-bold">{userInitial}</div>
+                <div className="w-8 h-8 rounded-full bg-[#1f48ff] flex items-center justify-center text-xs font-bold">
+                  {userInitial}
+                </div>
                 <div>
                   <p className="text-sm font-semibold text-white">{userName}</p>
                   <p className="text-xs text-[#99c5ff]">{planLabel}</p>
@@ -713,16 +889,20 @@ export default function AppLayout() {
       {/* ── MOBILE BOTTOM NAV ── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#010a4f] border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
         <div className="flex">
-          {MOBILE_SECTIONS.map(({ id, label, icon: Icon, path, color }) => {
+          {MOBILE_SECTIONS.map(({ id, label, icon: Icon, color }) => {
             const isDashboard = id === 'dashboard';
-            const sectionItems = !isDashboard ? NAV_SECTIONS.find(s => s.id === id)?.items || [] : [];
+            const sectionItems = !isDashboard
+              ? NAV_SECTIONS.find((s) => s.id === id)?.items || []
+              : [];
             const isSectionActive = isDashboard
               ? location.pathname === '/dashboard'
-              : sectionItems.some(i => location.pathname.startsWith(i.path)) ||
+              : sectionItems.some((i) => location.pathname.startsWith(i.path)) ||
                 (id === 'earn' && location.pathname.startsWith('/connect'));
 
             const lastTabs = getLastTabs();
-            const dest = isDashboard ? '/dashboard' : (lastTabs[id] || sectionItems[0]?.path || '/connect');
+            const dest = isDashboard
+              ? '/dashboard'
+              : lastTabs[id] || sectionItems[0]?.path || '/connect';
 
             return (
               <button
@@ -737,8 +917,10 @@ export default function AppLayout() {
                   isSectionActive ? 'text-white' : 'text-[#99c5ff]/60'
                 }`}
               >
-                <div className={`p-1.5 rounded-lg transition-colors`}
-                  style={isSectionActive ? { backgroundColor: color || '#1f48ff' } : {}}>
+                <div
+                  className={`p-1.5 rounded-lg transition-colors`}
+                  style={isSectionActive ? { backgroundColor: color || '#1f48ff' } : {}}
+                >
                   <Icon size={16} />
                 </div>
                 <span>{label}</span>

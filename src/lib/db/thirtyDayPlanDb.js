@@ -12,10 +12,7 @@ const PHASE_3_STEPS = ['hire_sales_manager', 'install_widget'];
 // ── Read ──────────────────────────────────────────────────────────────────────
 
 export async function getProgress() {
-  const { data, error } = await supabase
-    .from('onboarding_progress')
-    .select('*')
-    .maybeSingle();
+  const { data, error } = await supabase.from('onboarding_progress').select('*').maybeSingle();
   if (error) throw error;
   return data ?? null;
 }
@@ -51,7 +48,7 @@ export async function markStepComplete(stepKey, phase = 1, metadata = {}) {
   const { data, error } = await supabase
     .from('onboarding_steps')
     .update({
-      status:       'completed',
+      status: 'completed',
       completed_at: new Date().toISOString(),
       metadata,
     })
@@ -77,8 +74,8 @@ export async function markStepInProgress(stepKey, phase = 1) {
 
 export async function checkAndCompletePhase1() {
   const steps = await getSteps(1);
-  const allComplete = PHASE_1_STEPS.every(key =>
-    steps.find(s => s.step_key === key)?.status === 'completed',
+  const allComplete = PHASE_1_STEPS.every(
+    (key) => steps.find((s) => s.step_key === key)?.status === 'completed'
   );
   if (!allComplete) return { completed: false };
 
@@ -89,7 +86,7 @@ export async function checkAndCompletePhase1() {
     .from('onboarding_progress')
     .update({
       phase_1_completed_at: new Date().toISOString(),
-      current_phase:        2,
+      current_phase: 2,
     })
     .eq('id', progress.id);
   if (error) throw error;
@@ -100,7 +97,9 @@ export async function checkAndCompletePhase1() {
     if (biz) {
       await supabase.rpc('initialise_phase2_plan', { p_business_id: biz.id });
     }
-  } catch { /* non-fatal — migration handles seeding for existing businesses */ }
+  } catch {
+    /* non-fatal — migration handles seeding for existing businesses */
+  }
 
   return { completed: true, alreadyDone: false };
 }
@@ -112,7 +111,7 @@ export async function syncPhase2Steps({ bankConnected, walkthroughDone, reportVi
   const updates = [];
 
   const shouldComplete = (key, condition) => {
-    const step = steps.find(s => s.step_key === key);
+    const step = steps.find((s) => s.step_key === key);
     if (!step || step.status === 'completed') return false;
     return condition;
   };
@@ -138,8 +137,8 @@ export async function checkAndCompletePhase2() {
   // Only run if all 3 Phase 2 steps exist
   if (steps.length < 3) return { completed: false };
 
-  const allComplete = PHASE_2_STEPS.every(key =>
-    steps.find(s => s.step_key === key)?.status === 'completed',
+  const allComplete = PHASE_2_STEPS.every(
+    (key) => steps.find((s) => s.step_key === key)?.status === 'completed'
   );
   if (!allComplete) return { completed: false };
 
@@ -150,7 +149,7 @@ export async function checkAndCompletePhase2() {
     .from('onboarding_progress')
     .update({
       phase_2_completed_at: new Date().toISOString(),
-      current_phase:        3,
+      current_phase: 3,
     })
     .eq('id', progress.id);
   if (error) throw error;
@@ -165,7 +164,7 @@ export async function syncPhase1Steps({ customerCount, jobCount, templateSaved }
   const updates = [];
 
   const shouldComplete = (key, condition) => {
-    const step = steps.find(s => s.step_key === key);
+    const step = steps.find((s) => s.step_key === key);
     if (!step || step.status === 'completed') return false;
     return condition;
   };
@@ -190,8 +189,8 @@ export async function syncPhase1Steps({ customerCount, jobCount, templateSaved }
 export async function getPhase1Stats() {
   const [steps, progress] = await Promise.all([getSteps(1), getProgress()]);
 
-  const customersStep = steps.find(s => s.step_key === 'add_customers');
-  const firstJobStep  = steps.find(s => s.step_key === 'first_job');
+  const customersStep = steps.find((s) => s.step_key === 'add_customers');
+  const firstJobStep = steps.find((s) => s.step_key === 'first_job');
 
   const { data: connections } = await supabase
     .from('payment_connections')
@@ -200,7 +199,7 @@ export async function getPhase1Stats() {
     .limit(1)
     .maybeSingle();
 
-  const started   = progress?.phase_1_started_at  ? new Date(progress.phase_1_started_at)  : null;
+  const started = progress?.phase_1_started_at ? new Date(progress.phase_1_started_at) : null;
   const completed = progress?.phase_1_completed_at ? new Date(progress.phase_1_completed_at) : null;
   let durationLabel = null;
   if (started && completed) {
@@ -215,8 +214,8 @@ export async function getPhase1Stats() {
   }
 
   return {
-    customerCount:  customersStep?.metadata?.count ?? null,
-    firstJobDate:   firstJobStep?.metadata?.date   ?? null,
+    customerCount: customersStep?.metadata?.count ?? null,
+    firstJobDate: firstJobStep?.metadata?.date ?? null,
     firstJobCustomer: firstJobStep?.metadata?.customer_name ?? null,
     processorConnected,
     durationLabel,
@@ -226,9 +225,7 @@ export async function getPhase1Stats() {
 export async function getPhase2Stats() {
   const [steps, progress] = await Promise.all([getSteps(2), getProgress()]);
 
-  const bankStep      = steps.find(s => s.step_key === 'connect_open_banking');
-  const walkStep      = steps.find(s => s.step_key === 'financial_walkthrough');
-  const reportStep    = steps.find(s => s.step_key === 'first_weekly_report');
+  const walkStep = steps.find((s) => s.step_key === 'financial_walkthrough');
 
   // Reconciliation stats from transactions
   const { count: reconCount } = await supabase
@@ -241,8 +238,10 @@ export async function getPhase2Stats() {
     .from('invoices')
     .select('lines')
     .in('status', ['sent', 'viewed', 'overdue']);
-  const unpaidTotal = (unpaidRows ?? []).reduce((sum, inv) =>
-    sum + (inv.lines ?? []).reduce((s, l) => s + (l.rate ?? 0) * (l.qty ?? 1), 0), 0);
+  const unpaidTotal = (unpaidRows ?? []).reduce(
+    (sum, inv) => sum + (inv.lines ?? []).reduce((s, l) => s + (l.rate ?? 0) * (l.qty ?? 1), 0),
+    0
+  );
 
   const focusArea = walkStep?.metadata?.focus_area ?? null;
 
@@ -259,7 +258,7 @@ export async function getPhase2Stats() {
     ? Math.round((Date.now() - new Date(conn.connected_at).getTime()) / 86400000)
     : null;
 
-  const started   = progress?.phase_2_started_at  ? new Date(progress.phase_2_started_at)  : null;
+  const started = progress?.phase_2_started_at ? new Date(progress.phase_2_started_at) : null;
   const completed = progress?.phase_2_completed_at ? new Date(progress.phase_2_completed_at) : null;
   let durationLabel = null;
   if (started && completed) {
@@ -269,7 +268,7 @@ export async function getPhase2Stats() {
 
   return {
     daysAnalysed,
-    reconCount:   reconCount ?? 0,
+    reconCount: reconCount ?? 0,
     unpaidTotal,
     focusArea,
     durationLabel,
@@ -283,7 +282,7 @@ export async function syncPhase3Steps({ smActive, widgetInstalled }) {
   const updates = [];
 
   const shouldComplete = (key, condition) => {
-    const step = steps.find(s => s.step_key === key);
+    const step = steps.find((s) => s.step_key === key);
     if (!step || step.status === 'completed') return false;
     return condition;
   };
@@ -304,8 +303,8 @@ export async function checkAndCompletePhase3() {
   const steps = await getSteps(3);
   if (steps.length < PHASE_3_STEPS.length) return { completed: false };
 
-  const allComplete = PHASE_3_STEPS.every(key =>
-    steps.find(s => s.step_key === key)?.status === 'completed',
+  const allComplete = PHASE_3_STEPS.every(
+    (key) => steps.find((s) => s.step_key === key)?.status === 'completed'
   );
   if (!allComplete) return { completed: false };
 
@@ -316,7 +315,7 @@ export async function checkAndCompletePhase3() {
     .from('onboarding_progress')
     .update({
       phase_3_completed_at: new Date().toISOString(),
-      current_phase:        4,
+      current_phase: 4,
     })
     .eq('id', progress.id);
   if (error) throw error;
@@ -338,7 +337,7 @@ export async function getPhase3Stats() {
     .maybeSingle();
 
   return {
-    inquiryCount:  inquiryCount ?? 0,
+    inquiryCount: inquiryCount ?? 0,
     widgetEnabled: !!widgetConfig?.enabled,
   };
 }

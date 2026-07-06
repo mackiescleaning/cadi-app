@@ -20,41 +20,44 @@ import {
 // Streamed status copy — plays even if the network is fast, so the wait
 // itself feels like Cadi at work.
 const PARSING_COPY = [
-  { atMs: 0,     text: "Reading your list…" },
-  { atMs: 2500,  text: "Finding customers…" },
-  { atMs: 5500,  text: "Spotting prices and frequencies…" },
-  { atMs: 9000,  text: "Working out due dates…" },
-  { atMs: 13000, text: "Nearly there…" },
+  { atMs: 0, text: 'Reading your list…' },
+  { atMs: 2500, text: 'Finding customers…' },
+  { atMs: 5500, text: 'Spotting prices and frequencies…' },
+  { atMs: 9000, text: 'Working out due dates…' },
+  { atMs: 13000, text: 'Nearly there…' },
 ];
 
 const ACCEPT = '.csv,.xlsx,.xls,.pdf,.jpg,.jpeg,.png,.webp,.heic,.txt';
 
 export default function StepUpload({ session, onAdvance }) {
   const navigate = useNavigate();
-  const [tab, setTab]                 = useState('file'); // 'file' | 'paste' | 'skip'
-  const [imports, setImports]         = useState([]);
-  const [pasteText, setPasteText]     = useState('');
+  const [tab, setTab] = useState('file'); // 'file' | 'paste' | 'skip'
+  const [imports, setImports] = useState([]);
+  const [pasteText, setPasteText] = useState('');
   const [pasteSaving, setPasteSaving] = useState(false);
-  const [dragging, setDragging]       = useState(false);
-  const [phase, setPhase]             = useState('idle'); // 'idle' | 'parsing' | 'done' | 'error'
-  const [statusCopy, setStatusCopy]   = useState(PARSING_COPY[0].text);
-  const [error, setError]             = useState(null);
-  const fileInputRef                  = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [phase, setPhase] = useState('idle'); // 'idle' | 'parsing' | 'done' | 'error'
+  const [statusCopy, setStatusCopy] = useState(PARSING_COPY[0].text);
+  const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
 
   // Initial load — pick up any imports from a previous session resume.
   useEffect(() => {
-    listImportsForSession(session.id).then(setImports).catch(() => {});
+    listImportsForSession(session.id)
+      .then(setImports)
+      .catch(() => {});
   }, [session.id]);
 
   // Status-copy stream during parsing.
   useEffect(() => {
     if (phase !== 'parsing') return;
-    const t0 = Date.now();
     const timers = PARSING_COPY.map(({ atMs, text }) =>
       setTimeout(() => setStatusCopy(text), atMs)
     );
     // Failsafe to advance copy through the list as wall-clock passes.
-    return () => { timers.forEach(clearTimeout); };
+    return () => {
+      timers.forEach(clearTimeout);
+    };
   }, [phase]);
 
   // Poll for parse status. Also runs a server-side watchdog every cycle:
@@ -70,29 +73,41 @@ export default function StepUpload({ session, onAdvance }) {
       await failStuckImports(session.id, 180).catch(() => {});
       const fresh = await listImportsForSession(session.id);
       setImports(fresh);
-      const allDone = fresh.length > 0 && fresh.every(i => i.parse_status === 'parsed' || i.parse_status === 'failed');
+      const allDone =
+        fresh.length > 0 &&
+        fresh.every((i) => i.parse_status === 'parsed' || i.parse_status === 'failed');
       if (allDone) {
         clearInterval(poll);
-        const successful   = fresh.filter(i => i.parse_status === 'parsed');
-        const failedCount  = fresh.filter(i => i.parse_status === 'failed').length;
-        const totalCount   = successful.reduce((s, i) => s + (i.raw_row_count || 0), 0);
+        const successful = fresh.filter((i) => i.parse_status === 'parsed');
+        const failedCount = fresh.filter((i) => i.parse_status === 'failed').length;
+        const totalCount = successful.reduce((s, i) => s + (i.raw_row_count || 0), 0);
         if (successful.length > 0) {
           setPhase('done');
           if (failedCount > 0) {
-            setStatusCopy(`Found ${totalCount} customer${totalCount === 1 ? '' : 's'}. ${failedCount} file${failedCount === 1 ? '' : 's'} couldn't be read.`);
+            setStatusCopy(
+              `Found ${totalCount} customer${totalCount === 1 ? '' : 's'}. ${failedCount} file${failedCount === 1 ? '' : 's'} couldn't be read.`
+            );
           } else {
-            setStatusCopy(totalCount > 0
-              ? `Found ${totalCount} customer${totalCount === 1 ? '' : 's'} across ${fresh.length} file${fresh.length === 1 ? '' : 's'}.`
-              : `Couldn't pick out any customers. Try a different file?`);
+            setStatusCopy(
+              totalCount > 0
+                ? `Found ${totalCount} customer${totalCount === 1 ? '' : 's'} across ${fresh.length} file${fresh.length === 1 ? '' : 's'}.`
+                : `Couldn't pick out any customers. Try a different file?`
+            );
           }
         } else {
           setPhase('error');
-          const firstErr = fresh.find(i => i.parse_error)?.parse_error;
-          setError(firstErr || "Couldn't read those files. Try a clearer photo, or paste the text directly.");
+          const firstErr = fresh.find((i) => i.parse_error)?.parse_error;
+          setError(
+            firstErr ||
+              "Couldn't read those files. Try a clearer photo, or paste the text directly."
+          );
         }
       }
     }, 1500);
-    return () => { cancelled = true; clearInterval(poll); };
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
   }, [phase, session.id]);
 
   const handleFiles = async (fileList) => {
@@ -102,7 +117,7 @@ export default function StepUpload({ session, onAdvance }) {
 
     // Validate types up front so the user gets one clear error instead of
     // half-uploading then failing.
-    const bad = files.find(f => !sourceTypeForFile(f));
+    const bad = files.find((f) => !sourceTypeForFile(f));
     if (bad) {
       setError(`I can't read "${bad.name}" — try CSV, PDF, photo (JPG/PNG), or paste the text.`);
       return;
@@ -120,12 +135,16 @@ export default function StepUpload({ session, onAdvance }) {
       for (const file of files) {
         const imp = await createFileImport({ sessionId: session.id, file });
         created.push(imp);
-        setImports(prev => [...prev, imp]);
+        setImports((prev) => [...prev, imp]);
       }
       // Parses run in parallel; Sonnet handles concurrency fine.
-      await Promise.all(created.map(imp => triggerParse(imp.id).catch(e => {
-        console.warn(`parse trigger failed for ${imp.id}:`, e?.message);
-      })));
+      await Promise.all(
+        created.map((imp) =>
+          triggerParse(imp.id).catch((e) => {
+            console.warn(`parse trigger failed for ${imp.id}:`, e?.message);
+          })
+        )
+      );
     } catch (e) {
       setError(e?.message ?? "Couldn't upload that. Try again?");
       setPhase('error');
@@ -140,7 +159,7 @@ export default function StepUpload({ session, onAdvance }) {
     setStatusCopy(PARSING_COPY[0].text);
     try {
       const imp = await createTextImport({ sessionId: session.id, text: pasteText });
-      setImports(prev => [...prev, imp]);
+      setImports((prev) => [...prev, imp]);
       await triggerParse(imp.id).catch(() => {});
       setPasteText('');
     } catch (e) {
@@ -154,8 +173,8 @@ export default function StepUpload({ session, onAdvance }) {
   const handleRemove = async (imp) => {
     try {
       await deleteImport(imp.id, imp.storage_path);
-      setImports(prev => prev.filter(i => i.id !== imp.id));
-    } catch (e) {
+      setImports((prev) => prev.filter((i) => i.id !== imp.id));
+    } catch {
       setError("Couldn't remove that one. Try refreshing.");
     }
   };
@@ -198,7 +217,8 @@ export default function StepUpload({ session, onAdvance }) {
             Get your customers in.
           </h1>
           <p className="text-sm text-[#010a4f]/60 max-w-md mx-auto">
-            Spreadsheets, screenshots of your diary, exports from other software — drop it all in. I'll sort it.
+            Spreadsheets, screenshots of your diary, exports from other software — drop it all in.
+            I'll sort it.
           </p>
         </div>
 
@@ -206,13 +226,16 @@ export default function StepUpload({ session, onAdvance }) {
           <>
             <div className="flex border border-[#1f48ff]/15 rounded-xl mb-4 overflow-hidden">
               {[
-                { key: 'file',  label: '📂 Upload files' },
+                { key: 'file', label: '📂 Upload files' },
                 { key: 'paste', label: '✏ Paste text' },
-                { key: 'skip',  label: 'No list yet' },
-              ].map(t => (
+                { key: 'skip', label: 'No list yet' },
+              ].map((t) => (
                 <button
                   key={t.key}
-                  onClick={() => { setTab(t.key); setError(null); }}
+                  onClick={() => {
+                    setTab(t.key);
+                    setError(null);
+                  }}
                   className={`flex-1 py-2.5 text-xs font-bold transition-colors ${
                     tab === t.key
                       ? 'bg-[#1f48ff]/8 text-[#010a4f] border-b-2 border-[#1f48ff]'
@@ -226,9 +249,12 @@ export default function StepUpload({ session, onAdvance }) {
 
             {tab === 'file' && (
               <label
-                onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
                 onDragLeave={() => setDragging(false)}
-                onDrop={e => {
+                onDrop={(e) => {
                   e.preventDefault();
                   setDragging(false);
                   handleFiles(e.dataTransfer?.files);
@@ -244,13 +270,14 @@ export default function StepUpload({ session, onAdvance }) {
                   type="file"
                   multiple
                   accept={ACCEPT}
-                  onChange={e => handleFiles(e.target.files)}
+                  onChange={(e) => handleFiles(e.target.files)}
                   className="hidden"
                 />
                 <Upload size={36} className="text-[#1f48ff] mb-3" />
                 <p className="text-base font-black text-[#010a4f] mb-1">Drop your files here</p>
                 <p className="text-xs text-[#010a4f]/60 max-w-xs">
-                  Multiple files at once is fine. CSVs, photos of your diary, PDFs, screenshots — drop them all in.
+                  Multiple files at once is fine. CSVs, photos of your diary, PDFs, screenshots —
+                  drop them all in.
                 </p>
                 <span className="mt-4 px-4 py-2 rounded-lg bg-[#1f48ff] text-white text-xs font-bold">
                   Or browse files…
@@ -265,9 +292,11 @@ export default function StepUpload({ session, onAdvance }) {
               <div className="space-y-3">
                 <textarea
                   value={pasteText}
-                  onChange={e => setPasteText(e.target.value)}
+                  onChange={(e) => setPasteText(e.target.value)}
                   rows={10}
-                  placeholder={"Just type or paste — anything goes. For example:\n\nMrs Smith - 12 Acacia Ave SW19 - £25 fortnightly\nGarveston Hall - £56 weekly\nMonday 9am - Dowling £22 windows…"}
+                  placeholder={
+                    'Just type or paste — anything goes. For example:\n\nMrs Smith - 12 Acacia Ave SW19 - £25 fortnightly\nGarveston Hall - £56 weekly\nMonday 9am - Dowling £22 windows…'
+                  }
                   className="w-full rounded-xl border border-[#1f48ff]/15 bg-[#f0f4ff] text-[#010a4f] text-sm p-3 sm:p-4 placeholder-[#010a4f]/35 font-mono focus:outline-none focus:border-[#1f48ff] resize-y"
                 />
                 <button
@@ -282,9 +311,12 @@ export default function StepUpload({ session, onAdvance }) {
 
             {tab === 'skip' && (
               <div className="rounded-2xl border border-[#1f48ff]/15 bg-white p-6 text-center">
-                <p className="text-sm text-[#010a4f]/75 mb-2">No customer list yet — that's fine.</p>
+                <p className="text-sm text-[#010a4f]/75 mb-2">
+                  No customer list yet — that's fine.
+                </p>
                 <p className="text-xs text-[#010a4f]/60 mb-5">
-                  You can add customers one at a time later. We'll finish onboarding and drop you on the Customers tab.
+                  You can add customers one at a time later. We'll finish onboarding and drop you on
+                  the Customers tab.
                 </p>
                 <button
                   onClick={goSkip}
@@ -308,36 +340,41 @@ export default function StepUpload({ session, onAdvance }) {
             stacking. */}
         {imports.length > 0 && phase !== 'error' && (
           <div className="mt-5 space-y-2">
-            {imports.map(imp => {
+            {imports.map((imp) => {
               const failed = imp.parse_status === 'failed';
               return (
                 <div
                   key={imp.id}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${
-                    failed
-                      ? 'border-red-200 bg-red-50'
-                      : 'border-[#1f48ff]/15 bg-[#f0f4ff]'
+                    failed ? 'border-red-200 bg-red-50' : 'border-[#1f48ff]/15 bg-[#f0f4ff]'
                   }`}
                 >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                    failed
-                      ? 'bg-red-50 border border-red-200'
-                      : 'bg-[#1f48ff]/8 border border-[#1f48ff]/15'
-                  }`}>
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      failed
+                        ? 'bg-red-50 border border-red-200'
+                        : 'bg-[#1f48ff]/8 border border-[#1f48ff]/15'
+                    }`}
+                  >
                     <FileText size={14} className={failed ? 'text-red-600' : 'text-[#1f48ff]'} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-[#010a4f] truncate">
                       {imp.storage_path?.split('/').pop() || 'pasted text'}
                     </p>
-                    <p className={`text-[10px] leading-snug ${failed ? 'text-red-600' : 'text-[#010a4f]/60'}`}>
-                      {imp.parse_status === 'parsed'  && `✓ ${imp.raw_row_count || 0} customers found`}
+                    <p
+                      className={`text-[10px] leading-snug ${failed ? 'text-red-600' : 'text-[#010a4f]/60'}`}
+                    >
+                      {imp.parse_status === 'parsed' &&
+                        `✓ ${imp.raw_row_count || 0} customers found`}
                       {imp.parse_status === 'parsing' && 'Reading…'}
                       {imp.parse_status === 'pending' && 'Queued…'}
                       {failed && (imp.parse_error?.slice(0, 90) || 'Could not read this one')}
                     </p>
                   </div>
-                  {imp.parse_status === 'parsed' && <Check size={14} className="text-emerald-600 shrink-0" />}
+                  {imp.parse_status === 'parsed' && (
+                    <Check size={14} className="text-emerald-600 shrink-0" />
+                  )}
                   {failed && (
                     <button
                       onClick={() => triggerParse(imp.id).catch(() => {})}
@@ -368,7 +405,7 @@ export default function StepUpload({ session, onAdvance }) {
                 type="file"
                 multiple
                 accept={ACCEPT}
-                onChange={e => handleFiles(e.target.files)}
+                onChange={(e) => handleFiles(e.target.files)}
                 className="hidden"
               />
               <span className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-[#1f48ff]/15 bg-[#f0f4ff] text-[#1f48ff] text-xs font-bold cursor-pointer hover:border-[#1f48ff] hover:bg-[#1f48ff]/8 transition-all">
@@ -382,7 +419,9 @@ export default function StepUpload({ session, onAdvance }) {
         {phase === 'parsing' && (
           <div className="mt-8 text-center">
             <ReadingAnimation />
-            <p className="text-base font-bold text-[#010a4f] mt-6 mb-1 transition-all duration-500">{statusCopy}</p>
+            <p className="text-base font-bold text-[#010a4f] mt-6 mb-1 transition-all duration-500">
+              {statusCopy}
+            </p>
             <p className="text-xs text-[#010a4f]/60">Hang on — I'm being thorough.</p>
           </div>
         )}
@@ -412,7 +451,10 @@ export default function StepUpload({ session, onAdvance }) {
               {error || "I couldn't read those files."}
             </p>
             <button
-              onClick={() => { setPhase('idle'); setError(null); }}
+              onClick={() => {
+                setPhase('idle');
+                setError(null);
+              }}
               className="px-5 py-2.5 rounded-xl bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-sm font-black"
             >
               Try again
@@ -426,40 +468,43 @@ export default function StepUpload({ session, onAdvance }) {
 
       {/* Sticky CTA bar — appears the moment a file lands. Disabled while
           any file is still parsing; live count of parsed customers shown. */}
-      {imports.length > 0 && phase !== 'error' && (() => {
-        const parsedCount   = imports.filter(i => i.parse_status === 'parsed').length;
-        const failedCount   = imports.filter(i => i.parse_status === 'failed').length;
-        const inFlightCount = imports.length - parsedCount - failedCount;
-        const totalCustomers = imports.reduce((s, i) => s + (i.raw_row_count || 0), 0);
-        const ready = inFlightCount === 0 && parsedCount > 0;
-        const label = ready
-          ? `Done — review ${totalCustomers} customer${totalCustomers === 1 ? '' : 's'} →`
-          : inFlightCount > 0
-            ? `Reading ${inFlightCount} file${inFlightCount === 1 ? '' : 's'}…`
-            : 'Add at least one readable file';
-        return (
-          <div className="sticky bottom-0 left-0 right-0 z-20 bg-white/90 backdrop-blur-md border-t border-[#1f48ff]/15">
-            <div className="max-w-2xl mx-auto px-4 sm:px-6 py-3">
-              <button
-                onClick={goReview}
-                disabled={!ready}
-                className={`w-full py-3.5 rounded-xl text-sm font-black shadow-lg transition-all ${
-                  ready
-                    ? 'bg-[#1f48ff] hover:bg-[#3a5eff] text-white shadow-[#1f48ff]/25'
-                    : 'bg-[#f0f4ff] border border-[#1f48ff]/15 text-[#010a4f]/45 cursor-not-allowed shadow-none'
-                }`}
-              >
-                {label}
-              </button>
-              {failedCount > 0 && ready && (
-                <p className="text-[11px] text-amber-700 mt-2 text-center">
-                  {failedCount} file{failedCount === 1 ? '' : 's'} couldn't be read — remove and try a different format, or carry on.
-                </p>
-              )}
+      {imports.length > 0 &&
+        phase !== 'error' &&
+        (() => {
+          const parsedCount = imports.filter((i) => i.parse_status === 'parsed').length;
+          const failedCount = imports.filter((i) => i.parse_status === 'failed').length;
+          const inFlightCount = imports.length - parsedCount - failedCount;
+          const totalCustomers = imports.reduce((s, i) => s + (i.raw_row_count || 0), 0);
+          const ready = inFlightCount === 0 && parsedCount > 0;
+          const label = ready
+            ? `Done — review ${totalCustomers} customer${totalCustomers === 1 ? '' : 's'} →`
+            : inFlightCount > 0
+              ? `Reading ${inFlightCount} file${inFlightCount === 1 ? '' : 's'}…`
+              : 'Add at least one readable file';
+          return (
+            <div className="sticky bottom-0 left-0 right-0 z-20 bg-white/90 backdrop-blur-md border-t border-[#1f48ff]/15">
+              <div className="max-w-2xl mx-auto px-4 sm:px-6 py-3">
+                <button
+                  onClick={goReview}
+                  disabled={!ready}
+                  className={`w-full py-3.5 rounded-xl text-sm font-black shadow-lg transition-all ${
+                    ready
+                      ? 'bg-[#1f48ff] hover:bg-[#3a5eff] text-white shadow-[#1f48ff]/25'
+                      : 'bg-[#f0f4ff] border border-[#1f48ff]/15 text-[#010a4f]/45 cursor-not-allowed shadow-none'
+                  }`}
+                >
+                  {label}
+                </button>
+                {failedCount > 0 && ready && (
+                  <p className="text-[11px] text-amber-700 mt-2 text-center">
+                    {failedCount} file{failedCount === 1 ? '' : 's'} couldn't be read — remove and
+                    try a different format, or carry on.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
     </div>
   );
 }
@@ -481,9 +526,18 @@ function ReadingAnimation() {
         ._cadi_ring { animation: _cadi_ring 1.8s ease-out infinite; }
         ._cadi_pulse { animation: _cadi_pulse 1.8s ease-in-out infinite; }
       `}</style>
-      <div className="absolute inset-0 rounded-full border-2 border-[#1f48ff]/40 _cadi_ring" style={{ animationDelay: '0s' }} />
-      <div className="absolute inset-0 rounded-full border-2 border-[#1f48ff]/40 _cadi_ring" style={{ animationDelay: '0.6s' }} />
-      <div className="absolute inset-0 rounded-full border-2 border-[#1f48ff]/40 _cadi_ring" style={{ animationDelay: '1.2s' }} />
+      <div
+        className="absolute inset-0 rounded-full border-2 border-[#1f48ff]/40 _cadi_ring"
+        style={{ animationDelay: '0s' }}
+      />
+      <div
+        className="absolute inset-0 rounded-full border-2 border-[#1f48ff]/40 _cadi_ring"
+        style={{ animationDelay: '0.6s' }}
+      />
+      <div
+        className="absolute inset-0 rounded-full border-2 border-[#1f48ff]/40 _cadi_ring"
+        style={{ animationDelay: '1.2s' }}
+      />
       <div className="absolute inset-2 rounded-full bg-gradient-to-br from-[#1f48ff] to-[#99c5ff] _cadi_pulse shadow-2xl shadow-[#1f48ff]/40" />
     </div>
   );

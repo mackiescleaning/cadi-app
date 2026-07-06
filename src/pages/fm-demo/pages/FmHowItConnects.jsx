@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import {
-  PlusCircle, Smartphone, MapPin, CheckSquare, ThumbsUp,
-  PoundSterling, Star, TrendingUp, ArrowDown, Zap,
+  PlusCircle,
+  Smartphone,
+  MapPin,
+  CheckSquare,
+  ThumbsUp,
+  PoundSterling,
+  Star,
+  TrendingUp,
+  Zap,
 } from 'lucide-react';
 
 const STEPS = [
@@ -18,8 +25,8 @@ const STEPS = [
     id: 'pipeline',
     side: 'cleaner',
     icon: Smartphone,
-    label: 'Appears in cleaner\'s pipeline',
-    sub: 'The job instantly lands in the cleaner\'s Cadi Connect app — no phone call, no WhatsApp group.',
+    label: "Appears in cleaner's pipeline",
+    sub: "The job instantly lands in the cleaner's Cadi Connect app — no phone call, no WhatsApp group.",
     detail: 'Sarah Mitchell sees it in Job Pipeline · 2 min after creation · Match score 94',
     color: '#a78bfa',
   },
@@ -64,7 +71,7 @@ const STEPS = [
     side: 'fm',
     icon: Star,
     label: 'FM rates the visit',
-    sub: 'Quick quality rating from the FM feeds directly into the cleaner\'s Cadi Score — transparent, trackable.',
+    sub: "Quick quality rating from the FM feeds directly into the cleaner's Cadi Score — transparent, trackable.",
     detail: '5 stars · "On time, excellent photos, no issues raised" · Britannia Group',
     color: '#fbbf24',
   },
@@ -80,23 +87,28 @@ const STEPS = [
 ];
 
 const LIVE_EVENTS = [
-  { time: '06:01', event: 'Sarah checked in at Next – Luton The Mall', type: 'geo',    icon: MapPin      },
-  { time: '06:04', event: 'Before photo 1 of 3 uploaded',          type: 'photo',  icon: Zap         },
-  { time: '07:58', event: 'After photos submitted — 4 of 4',       type: 'photo',  icon: Zap         },
-  { time: '07:59', event: 'Geo check-out locked · ±4m accuracy',   type: 'geo',    icon: MapPin      },
-  { time: '08:01', event: 'Job BF-2026-0081 entered QA Queue',      type: 'qa',     icon: CheckSquare },
-  { time: '09:14', event: 'Approved by James Harper',               type: 'approve',icon: ThumbsUp    },
-  { time: '09:14', event: 'Earnings updated — £92 pending payment', type: 'pay',    icon: PoundSterling },
-  { time: '09:15', event: 'Cadi Score updated: 94 → 96',           type: 'score',  icon: TrendingUp  },
+  { time: '06:01', event: 'Sarah checked in at Next – Luton The Mall', type: 'geo', icon: MapPin },
+  { time: '06:04', event: 'Before photo 1 of 3 uploaded', type: 'photo', icon: Zap },
+  { time: '07:58', event: 'After photos submitted — 4 of 4', type: 'photo', icon: Zap },
+  { time: '07:59', event: 'Geo check-out locked · ±4m accuracy', type: 'geo', icon: MapPin },
+  { time: '08:01', event: 'Job BF-2026-0081 entered QA Queue', type: 'qa', icon: CheckSquare },
+  { time: '09:14', event: 'Approved by James Harper', type: 'approve', icon: ThumbsUp },
+  {
+    time: '09:14',
+    event: 'Earnings updated — £92 pending payment',
+    type: 'pay',
+    icon: PoundSterling,
+  },
+  { time: '09:15', event: 'Cadi Score updated: 94 → 96', type: 'score', icon: TrendingUp },
 ];
 
 const EVENT_COLORS = {
-  geo:    { color: '#34d399', bg: 'rgba(52,211,153,0.1)',  border: 'rgba(52,211,153,0.25)'  },
-  photo:  { color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.25)' },
-  qa:     { color: '#fbbf24', bg: 'rgba(251,191,36,0.1)',  border: 'rgba(251,191,36,0.25)'  },
-  approve:{ color: '#4f78ff', bg: 'rgba(79,120,255,0.1)',  border: 'rgba(79,120,255,0.25)'  },
-  pay:    { color: '#34d399', bg: 'rgba(52,211,153,0.1)',  border: 'rgba(52,211,153,0.25)'  },
-  score:  { color: '#4f78ff', bg: 'rgba(79,120,255,0.1)',  border: 'rgba(79,120,255,0.25)'  },
+  geo: { color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.25)' },
+  photo: { color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.25)' },
+  qa: { color: '#fbbf24', bg: 'rgba(251,191,36,0.1)', border: 'rgba(251,191,36,0.25)' },
+  approve: { color: '#4f78ff', bg: 'rgba(79,120,255,0.1)', border: 'rgba(79,120,255,0.25)' },
+  pay: { color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.25)' },
+  score: { color: '#4f78ff', bg: 'rgba(79,120,255,0.1)', border: 'rgba(79,120,255,0.25)' },
 };
 
 function StepCard({ step, index, active, onClick }) {
@@ -106,15 +118,20 @@ function StepCard({ step, index, active, onClick }) {
     <div className={`flex gap-4 ${isFm ? 'flex-row' : 'flex-row-reverse'}`}>
       {/* Connector line + dot */}
       <div className="flex flex-col items-center shrink-0" style={{ width: 40 }}>
-        {index > 0 && <div className="w-px flex-1 min-h-6" style={{ background: 'rgba(255,255,255,0.08)' }} />}
+        {index > 0 && (
+          <div className="w-px flex-1 min-h-6" style={{ background: 'rgba(255,255,255,0.08)' }} />
+        )}
         <button
           onClick={onClick}
           className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-all"
           style={{
-            background: active ? `rgba(${step.color === '#4f78ff' ? '79,120,255' : step.color === '#a78bfa' ? '167,139,250' : step.color === '#34d399' ? '52,211,153' : '251,191,36'},0.25)` : 'rgba(255,255,255,0.07)',
+            background: active
+              ? `rgba(${step.color === '#4f78ff' ? '79,120,255' : step.color === '#a78bfa' ? '167,139,250' : step.color === '#34d399' ? '52,211,153' : '251,191,36'},0.25)`
+              : 'rgba(255,255,255,0.07)',
             border: `1px solid ${active ? step.color : 'rgba(255,255,255,0.12)'}`,
             boxShadow: active ? `0 0 16px ${step.color}33` : 'none',
-          }}>
+          }}
+        >
           <Icon size={16} style={{ color: active ? step.color : 'rgba(255,255,255,0.3)' }} />
         </button>
         <div className="w-px flex-1 min-h-6" style={{ background: 'rgba(255,255,255,0.08)' }} />
@@ -127,18 +144,29 @@ function StepCard({ step, index, active, onClick }) {
         style={{
           background: active ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.03)',
           border: active ? `1px solid ${step.color}55` : '1px solid rgba(255,255,255,0.07)',
-        }}>
+        }}
+      >
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest"
-            style={{ background: isFm ? 'rgba(79,120,255,0.15)' : 'rgba(167,139,250,0.15)', color: isFm ? '#4f78ff' : '#a78bfa' }}>
+          <span
+            className="text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest"
+            style={{
+              background: isFm ? 'rgba(79,120,255,0.15)' : 'rgba(167,139,250,0.15)',
+              color: isFm ? '#4f78ff' : '#a78bfa',
+            }}
+          >
             {isFm ? 'FM Portal' : 'Cleaner App'}
           </span>
         </div>
         <div className="text-white font-bold text-sm">{step.label}</div>
         <div className="text-white/45 text-xs mt-1 leading-relaxed">{step.sub}</div>
         {active && (
-          <div className="mt-3 px-3 py-2 rounded-xl text-[10px] font-mono text-white/50 leading-relaxed"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div
+            className="mt-3 px-3 py-2 rounded-xl text-[10px] font-mono text-white/50 leading-relaxed"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
             {step.detail}
           </div>
         )}
@@ -156,8 +184,10 @@ export default function FmHowItConnects() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* ── Left: flow diagram ── */}
-      <div className="flex-1 overflow-y-auto px-8 py-6" style={{ borderRight: '1px solid rgba(255,255,255,0.07)' }}>
-
+      <div
+        className="flex-1 overflow-y-auto px-8 py-6"
+        style={{ borderRight: '1px solid rgba(255,255,255,0.07)' }}
+      >
         {/* Legend */}
         <div className="flex items-center gap-4 mb-6">
           <div className="flex items-center gap-1.5">
@@ -185,22 +215,38 @@ export default function FmHowItConnects() {
         </div>
 
         {/* Loop arrow */}
-        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl mt-2"
-          style={{ background: 'rgba(79,120,255,0.08)', border: '1px solid rgba(79,120,255,0.2)' }}>
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(79,120,255,0.15)' }}>
+        <div
+          className="flex items-center gap-3 px-4 py-3 rounded-2xl mt-2"
+          style={{ background: 'rgba(79,120,255,0.08)', border: '1px solid rgba(79,120,255,0.2)' }}
+        >
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: 'rgba(79,120,255,0.15)' }}
+          >
             <TrendingUp size={14} style={{ color: '#4f78ff' }} />
           </div>
           <div>
             <div className="text-white/70 text-xs font-bold">Flywheel effect</div>
-            <div className="text-white/35 text-[10px] mt-0.5">Higher Cadi Score → more job matches → more completions → higher score. The platform rewards reliable cleaners automatically.</div>
+            <div className="text-white/35 text-[10px] mt-0.5">
+              Higher Cadi Score → more job matches → more completions → higher score. The platform
+              rewards reliable cleaners automatically.
+            </div>
           </div>
         </div>
       </div>
 
       {/* ── Right: live event log ── */}
       <div className="w-80 flex-shrink-0 overflow-y-auto px-5 py-6">
-        <div className="text-white/35 text-[10px] font-black uppercase tracking-widest mb-4">Live event log</div>
-        <div className="mb-3 px-3 py-2 rounded-xl text-xs text-white/40" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="text-white/35 text-[10px] font-black uppercase tracking-widest mb-4">
+          Live event log
+        </div>
+        <div
+          className="mb-3 px-3 py-2 rounded-xl text-xs text-white/40"
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.07)',
+          }}
+        >
           Next – Luton The Mall · BF-2026-0081 · Today
         </div>
 
@@ -209,9 +255,18 @@ export default function FmHowItConnects() {
             const Icon = ev.icon;
             const style = EVENT_COLORS[ev.type];
             return (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-xl"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: style.bg, border: `1px solid ${style.border}` }}>
+              <div
+                key={i}
+                className="flex items-start gap-3 p-3 rounded-xl"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                }}
+              >
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background: style.bg, border: `1px solid ${style.border}` }}
+                >
                   <Icon size={12} style={{ color: style.color }} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -225,7 +280,9 @@ export default function FmHowItConnects() {
 
         {/* Data stats */}
         <div className="mt-5 space-y-2">
-          <div className="text-white/35 text-[10px] font-black uppercase tracking-widest mb-3">This visit — data generated</div>
+          <div className="text-white/35 text-[10px] font-black uppercase tracking-widest mb-3">
+            This visit — data generated
+          </div>
           {[
             { label: 'GPS coordinates', value: '4 points' },
             { label: 'Photos uploaded', value: '7' },
@@ -234,8 +291,14 @@ export default function FmHowItConnects() {
             { label: 'Time on site', value: '1h 57m' },
             { label: 'FM actions required', value: '1 click' },
           ].map(({ label, value }) => (
-            <div key={label} className="flex items-center justify-between px-3 py-2 rounded-xl"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <div
+              key={label}
+              className="flex items-center justify-between px-3 py-2 rounded-xl"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.07)',
+              }}
+            >
               <span className="text-white/40 text-[11px]">{label}</span>
               <span className="text-white font-bold text-[11px]">{value}</span>
             </div>
@@ -243,8 +306,16 @@ export default function FmHowItConnects() {
         </div>
 
         {/* Vs before */}
-        <div className="mt-5 rounded-2xl p-4" style={{ background: 'rgba(194,65,12,0.08)', border: '1px solid rgba(194,65,12,0.2)' }}>
-          <div className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: '#C2410C' }}>Before Cadi</div>
+        <div
+          className="mt-5 rounded-2xl p-4"
+          style={{ background: 'rgba(194,65,12,0.08)', border: '1px solid rgba(194,65,12,0.2)' }}
+        >
+          <div
+            className="text-[10px] font-black uppercase tracking-widest mb-2"
+            style={{ color: '#C2410C' }}
+          >
+            Before Cadi
+          </div>
           <div className="space-y-1.5 text-[11px] text-white/45 leading-relaxed">
             <div>→ Paper sheets faxed / emailed</div>
             <div>→ Manual 4-weekly KPI audits</div>

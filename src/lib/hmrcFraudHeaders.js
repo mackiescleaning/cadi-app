@@ -14,8 +14,6 @@
  */
 
 const DEVICE_ID_KEY = 'cadi_hmrc_device_id';
-const PUBLIC_IP_CACHE_KEY = 'cadi_hmrc_public_ip';
-const PUBLIC_IP_TTL_MS = 10 * 60 * 1000; // 10 min — HMRC wants a "recent" IP
 
 /**
  * Stable per-browser device ID. Generated once, persisted in localStorage.
@@ -25,7 +23,7 @@ export function getDeviceId() {
   try {
     let id = localStorage.getItem(DEVICE_ID_KEY);
     if (!id) {
-      id = (crypto.randomUUID?.() ?? fallbackUuid());
+      id = crypto.randomUUID?.() ?? fallbackUuid();
       localStorage.setItem(DEVICE_ID_KEY, id);
     }
     return id;
@@ -35,8 +33,8 @@ export function getDeviceId() {
 }
 
 function fallbackUuid() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0;
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
@@ -71,7 +69,7 @@ function formatWindowSize() {
 /** URL-encoded comma-separated list of installed browser plugins */
 function formatBrowserPlugins() {
   try {
-    const plugins = Array.from(navigator.plugins || []).map(p => p.name);
+    const plugins = Array.from(navigator.plugins || []).map((p) => p.name);
     if (plugins.length === 0) return encodeURIComponent('none');
     return plugins.map(encodeURIComponent).join(',');
   } catch {
@@ -108,15 +106,15 @@ async function getPublicIp() {
 export async function collectDeviceInfo({ userId } = {}) {
   const { ip, timestamp } = await getPublicIp();
   return {
-    deviceId:        getDeviceId(),
-    userAgent:       navigator.userAgent ?? '',
-    browserPlugins:  formatBrowserPlugins(),
-    doNotTrack:      formatDnt(),
-    screens:         formatScreens(),
-    windowSize:      formatWindowSize(),
-    timezone:        formatTimezoneOffset(),
-    publicIp:        ip,
+    deviceId: getDeviceId(),
+    userAgent: navigator.userAgent ?? '',
+    browserPlugins: formatBrowserPlugins(),
+    doNotTrack: formatDnt(),
+    screens: formatScreens(),
+    windowSize: formatWindowSize(),
+    timezone: formatTimezoneOffset(),
+    publicIp: ip,
     publicIpTimestamp: timestamp,
-    userId:          userId ?? null,
+    userId: userId ?? null,
   };
 }

@@ -1,4 +1,17 @@
-import { CheckCircle2, Circle, Clock, MapPin, Users, Target, Zap, FileCheck, UserCheck, Truck, Phone, Mail, ChevronRight, AlertTriangle, Shield, Building2, CalendarCheck, HardHat } from 'lucide-react';
+import {
+  CheckCircle2,
+  Circle,
+  Clock,
+  MapPin,
+  Target,
+  Zap,
+  FileCheck,
+  UserCheck,
+  Phone,
+  Mail,
+  AlertTriangle,
+  Shield,
+} from 'lucide-react';
 
 const MOB_PHASES = [
   {
@@ -123,8 +136,12 @@ const SITES = [
 ];
 
 const TUPE_ITEMS = [
-  { label: 'Employee liability information requested from outgoing contractor', done: true,  date: '13 May 2026' },
-  { label: 'Individual staff consultation meetings scheduled', done: true,  date: '14 May 2026' },
+  {
+    label: 'Employee liability information requested from outgoing contractor',
+    done: true,
+    date: '13 May 2026',
+  },
+  { label: 'Individual staff consultation meetings scheduled', done: true, date: '14 May 2026' },
   { label: 'Right-to-work documentation verified for all 18 staff', done: false },
   { label: 'DBS checks initiated (18 staff)', done: false },
   { label: 'Payroll records transferred to Britannia systems', done: false },
@@ -162,33 +179,40 @@ const CONTACTS = [
 ];
 
 const TIER_COLOR = { 1: '#ef4444', 2: '#f59e0b', 3: '#10b981' };
-const TIER_BG   = { 1: '#fef2f2', 2: '#fffbeb', 3: '#f0fdf4' };
+const TIER_BG = { 1: '#fef2f2', 2: '#fffbeb', 3: '#f0fdf4' };
 
 const STATUS_CHIP = {
-  live:    { label: 'Live',        bg: '#f0fdf4', color: '#16a34a', dot: '#10b981' },
-  survey:  { label: 'Survey booked', bg: '#fffbeb', color: '#b45309', dot: '#f59e0b' },
-  pending: { label: 'Pending',    bg: '#f8fafc', color: '#64748b', dot: '#94a3b8' },
+  live: { label: 'Live', bg: '#f0fdf4', color: '#16a34a', dot: '#10b981' },
+  survey: { label: 'Survey booked', bg: '#fffbeb', color: '#b45309', dot: '#f59e0b' },
+  pending: { label: 'Pending', bg: '#f8fafc', color: '#64748b', dot: '#94a3b8' },
 };
 
 export default function ClientMobilisation() {
-  const doneCount    = TUPE_ITEMS.filter(i => i.done).length;
+  const doneCount = TUPE_ITEMS.filter((i) => i.done).length;
   const tupeProgress = Math.round((doneCount / TUPE_ITEMS.length) * 100);
-  const liveSites    = SITES.filter(s => s.status === 'live').length;
 
   return (
     <div className="p-5 md:p-7 space-y-6 max-w-4xl mx-auto">
-
       {/* Hero — phase timeline */}
-      <div className="rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(135deg,#010a4f 0%,#0d1b6e 100%)' }}>
+      <div
+        className="rounded-2xl overflow-hidden"
+        style={{ background: 'linear-gradient(135deg,#010a4f 0%,#0d1b6e 100%)' }}
+      >
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Mobilisation Plan</div>
+              <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">
+                Mobilisation Plan
+              </div>
               <h2 className="text-xl font-black text-white leading-tight">Asda Stores Ltd</h2>
-              <div className="text-sm text-white/60 mt-0.5">6 sites · Contract + Exterior · Day 12 of mobilisation</div>
+              <div className="text-sm text-white/60 mt-0.5">
+                6 sites · Contract + Exterior · Day 12 of mobilisation
+              </div>
             </div>
             <div className="flex flex-col items-end gap-1">
-              <div className="text-[10px] font-black text-amber-400/80 uppercase tracking-widest">Target go-live</div>
+              <div className="text-[10px] font-black text-amber-400/80 uppercase tracking-widest">
+                Target go-live
+              </div>
               <div className="text-lg font-black text-white">01 Jul 2026</div>
               <div className="text-[10px] text-white/40">38 days remaining</div>
             </div>
@@ -199,29 +223,37 @@ export default function ClientMobilisation() {
             {/* Connector line */}
             <div className="absolute top-4 left-4 right-4 h-px bg-white/10" />
             <div className="flex justify-between relative z-10">
-              {MOB_PHASES.map((ph, i) => {
+              {MOB_PHASES.map((ph) => {
                 const Icon = ph.Icon;
                 return (
                   <div key={ph.id} className="flex flex-col items-center gap-1.5 flex-1">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${
-                      ph.done
-                        ? 'bg-[#4f78ff] border-[#4f78ff]'
-                        : ph.active
-                        ? 'bg-amber-400 border-amber-400'
-                        : ph.partial
-                        ? 'bg-amber-400/30 border-amber-400'
-                        : 'bg-white/5 border-white/15'
-                    }`}>
-                      {ph.done
-                        ? <CheckCircle2 size={14} className="text-white" />
-                        : ph.active
-                        ? <span className="text-[9px] font-black text-white">12</span>
-                        : <Icon size={13} className={ph.partial ? 'text-amber-400' : 'text-white/30'} />
-                      }
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${
+                        ph.done
+                          ? 'bg-[#4f78ff] border-[#4f78ff]'
+                          : ph.active
+                            ? 'bg-amber-400 border-amber-400'
+                            : ph.partial
+                              ? 'bg-amber-400/30 border-amber-400'
+                              : 'bg-white/5 border-white/15'
+                      }`}
+                    >
+                      {ph.done ? (
+                        <CheckCircle2 size={14} className="text-white" />
+                      ) : ph.active ? (
+                        <span className="text-[9px] font-black text-white">12</span>
+                      ) : (
+                        <Icon
+                          size={13}
+                          className={ph.partial ? 'text-amber-400' : 'text-white/30'}
+                        />
+                      )}
                     </div>
-                    <div className={`text-[9px] font-bold text-center leading-tight hidden sm:block ${
-                      ph.done ? 'text-[#4f78ff]' : ph.active ? 'text-amber-400' : 'text-white/30'
-                    }`}>
+                    <div
+                      className={`text-[9px] font-bold text-center leading-tight hidden sm:block ${
+                        ph.done ? 'text-[#4f78ff]' : ph.active ? 'text-amber-400' : 'text-white/30'
+                      }`}
+                    >
                       {ph.label}
                     </div>
                   </div>
@@ -234,33 +266,53 @@ export default function ClientMobilisation() {
           <div className="mt-5 bg-amber-400/10 border border-amber-400/20 rounded-xl px-4 py-3 flex gap-3 items-start">
             <Clock size={15} className="text-amber-400 mt-0.5 shrink-0" />
             <div>
-              <div className="text-xs font-bold text-amber-300">Currently in: People &amp; TUPE — Day 12 of 28</div>
-              <div className="text-[11px] text-white/50 mt-0.5">18 staff transferring. Individual consultations underway. Britannia HR are managing the full process — you'll receive a completion report by 09 Jun 2026.</div>
+              <div className="text-xs font-bold text-amber-300">
+                Currently in: People &amp; TUPE — Day 12 of 28
+              </div>
+              <div className="text-[11px] text-white/50 mt-0.5">
+                18 staff transferring. Individual consultations underway. Britannia HR are managing
+                the full process — you'll receive a completion report by 09 Jun 2026.
+              </div>
             </div>
           </div>
         </div>
 
         {/* Phase detail rows */}
         <div className="border-t border-white/10">
-          {MOB_PHASES.map((ph, i) => {
+          {MOB_PHASES.map((ph) => {
             const Icon = ph.Icon;
             return (
-              <div key={ph.id} className={`px-6 py-3.5 flex items-center gap-4 border-b border-white/5 last:border-0 ${ph.active ? 'bg-amber-400/5' : ''}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                  ph.done ? 'bg-[#4f78ff]/20' : ph.active ? 'bg-amber-400/20' : 'bg-white/5'
-                }`}>
-                  <Icon size={12} className={ph.done ? 'text-[#4f78ff]' : ph.active ? 'text-amber-400' : 'text-white/25'} />
+              <div
+                key={ph.id}
+                className={`px-6 py-3.5 flex items-center gap-4 border-b border-white/5 last:border-0 ${ph.active ? 'bg-amber-400/5' : ''}`}
+              >
+                <div
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                    ph.done ? 'bg-[#4f78ff]/20' : ph.active ? 'bg-amber-400/20' : 'bg-white/5'
+                  }`}
+                >
+                  <Icon
+                    size={12}
+                    className={
+                      ph.done ? 'text-[#4f78ff]' : ph.active ? 'text-amber-400' : 'text-white/25'
+                    }
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className={`text-xs font-bold ${ph.done ? 'text-white/70' : ph.active ? 'text-amber-300' : 'text-white/30'}`}>
+                  <div
+                    className={`text-xs font-bold ${ph.done ? 'text-white/70' : ph.active ? 'text-amber-300' : 'text-white/30'}`}
+                  >
                     {ph.label}
                   </div>
                   <div className="text-[11px] text-white/35 truncate">{ph.desc}</div>
                 </div>
-                <div className={`text-[10px] font-bold shrink-0 ${
-                  ph.done ? 'text-[#4f78ff]' : ph.active ? 'text-amber-400' : 'text-white/20'
-                }`}>
-                  {ph.done ? '✓ ' : ''}{ph.date}
+                <div
+                  className={`text-[10px] font-bold shrink-0 ${
+                    ph.done ? 'text-[#4f78ff]' : ph.active ? 'text-amber-400' : 'text-white/20'
+                  }`}
+                >
+                  {ph.done ? '✓ ' : ''}
+                  {ph.date}
                 </div>
               </div>
             );
@@ -273,20 +325,35 @@ export default function ClientMobilisation() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-black text-[#010a4f]">Site Rollout Schedule</h3>
           <div className="flex items-center gap-3 text-[10px] font-bold text-gray-400">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />T1 — named supervisor</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />T2 — area cover</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />T3 — remote</span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />
+              T1 — named supervisor
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+              T2 — area cover
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+              T3 — remote
+            </span>
           </div>
         </div>
 
         <div className="space-y-2">
-          {SITES.map(site => {
-            const chip   = STATUS_CHIP[site.status];
+          {SITES.map((site) => {
+            const chip = STATUS_CHIP[site.status];
             const tColor = TIER_COLOR[site.tier];
-            const tBg    = TIER_BG[site.tier];
+            const tBg = TIER_BG[site.tier];
             return (
-              <div key={site.id} className="bg-white rounded-2xl border border-gray-100 px-4 py-3.5 flex items-center gap-4">
-                <div className="px-2 py-1 rounded-lg text-[10px] font-black shrink-0" style={{ background: tBg, color: tColor }}>
+              <div
+                key={site.id}
+                className="bg-white rounded-2xl border border-gray-100 px-4 py-3.5 flex items-center gap-4"
+              >
+                <div
+                  className="px-2 py-1 rounded-lg text-[10px] font-black shrink-0"
+                  style={{ background: tBg, color: tColor }}
+                >
                   T{site.tier}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -300,7 +367,10 @@ export default function ClientMobilisation() {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold" style={{ background: chip.bg, color: chip.color }}>
+                  <div
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold"
+                    style={{ background: chip.bg, color: chip.color }}
+                  >
                     <div className="w-1.5 h-1.5 rounded-full" style={{ background: chip.dot }} />
                     {chip.label}
                   </div>
@@ -320,7 +390,9 @@ export default function ClientMobilisation() {
         <div className="mt-3 bg-[#f0fdf4] border border-emerald-200 rounded-xl px-4 py-3 flex gap-2 items-start">
           <CheckCircle2 size={14} className="text-emerald-600 mt-0.5 shrink-0" />
           <div className="text-[11px] text-emerald-800">
-            <strong>2 Tier 1 sites are live now</strong> — Luton and Birmingham have been operational since 22 May. Named supervisors are in place and first daily schedules completed without issue.
+            <strong>2 Tier 1 sites are live now</strong> — Luton and Birmingham have been
+            operational since 22 May. Named supervisors are in place and first daily schedules
+            completed without issue.
           </div>
         </div>
       </div>
@@ -333,10 +405,14 @@ export default function ClientMobilisation() {
               <UserCheck size={16} className="text-[#4f78ff]" />
               <h3 className="text-sm font-black text-[#010a4f]">TUPE Tracker</h3>
             </div>
-            <div className="text-[11px] text-gray-400 mt-0.5">18 staff transferring · Window closes 09 Jun 2026 (Day 28)</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">
+              18 staff transferring · Window closes 09 Jun 2026 (Day 28)
+            </div>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-black text-[#010a4f]">{doneCount}/{TUPE_ITEMS.length}</div>
+            <div className="text-2xl font-black text-[#010a4f]">
+              {doneCount}/{TUPE_ITEMS.length}
+            </div>
             <div className="text-[10px] text-gray-400">steps complete</div>
           </div>
         </div>
@@ -350,7 +426,10 @@ export default function ClientMobilisation() {
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all"
-              style={{ width: `${tupeProgress}%`, background: 'linear-gradient(90deg,#4f78ff,#818cf8)' }}
+              style={{
+                width: `${tupeProgress}%`,
+                background: 'linear-gradient(90deg,#4f78ff,#818cf8)',
+              }}
             />
           </div>
         </div>
@@ -358,13 +437,21 @@ export default function ClientMobilisation() {
         {/* Checklist */}
         <div className="space-y-2">
           {TUPE_ITEMS.map((item, i) => (
-            <div key={i} className={`flex items-start gap-3 px-3 py-2.5 rounded-xl ${item.done ? 'bg-[#f0fdf4]' : 'bg-gray-50'}`}>
-              {item.done
-                ? <CheckCircle2 size={15} className="text-emerald-500 mt-0.5 shrink-0" />
-                : <Circle size={15} className="text-gray-300 mt-0.5 shrink-0" />
-              }
+            <div
+              key={i}
+              className={`flex items-start gap-3 px-3 py-2.5 rounded-xl ${item.done ? 'bg-[#f0fdf4]' : 'bg-gray-50'}`}
+            >
+              {item.done ? (
+                <CheckCircle2 size={15} className="text-emerald-500 mt-0.5 shrink-0" />
+              ) : (
+                <Circle size={15} className="text-gray-300 mt-0.5 shrink-0" />
+              )}
               <div className="flex-1 min-w-0">
-                <div className={`text-xs font-medium ${item.done ? 'text-emerald-800' : 'text-gray-600'}`}>{item.label}</div>
+                <div
+                  className={`text-xs font-medium ${item.done ? 'text-emerald-800' : 'text-gray-600'}`}
+                >
+                  {item.label}
+                </div>
                 {item.done && item.date && (
                   <div className="text-[10px] text-emerald-600 mt-0.5">Completed {item.date}</div>
                 )}
@@ -376,7 +463,8 @@ export default function ClientMobilisation() {
         <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 flex gap-2">
           <AlertTriangle size={13} className="text-amber-600 mt-0.5 shrink-0" />
           <div className="text-[11px] text-amber-800">
-            <strong>Action required:</strong> Britannia HR will contact you by 30 May to collect right-to-work documents. No action needed before then.
+            <strong>Action required:</strong> Britannia HR will contact you by 30 May to collect
+            right-to-work documents. No action needed before then.
           </div>
         </div>
       </div>
@@ -385,10 +473,13 @@ export default function ClientMobilisation() {
       <div>
         <h3 className="text-sm font-black text-[#010a4f] mb-3">Your Britannia Team</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {CONTACTS.map(c => (
+          {CONTACTS.map((c) => (
             <div key={c.name} className="bg-white rounded-2xl border border-gray-100 p-4">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-black text-white shrink-0" style={{ background: c.color }}>
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-black text-white shrink-0"
+                  style={{ background: c.color }}
+                >
                   {c.avatar}
                 </div>
                 <div className="min-w-0">
@@ -398,11 +489,17 @@ export default function ClientMobilisation() {
               </div>
               <div className="text-[10px] text-gray-500 mb-3 leading-relaxed">{c.note}</div>
               <div className="space-y-1.5">
-                <a href={`tel:${c.phone}`} className="flex items-center gap-2 text-[11px] text-gray-600 hover:text-[#4f78ff] transition-colors">
+                <a
+                  href={`tel:${c.phone}`}
+                  className="flex items-center gap-2 text-[11px] text-gray-600 hover:text-[#4f78ff] transition-colors"
+                >
                   <Phone size={11} className="text-gray-400 shrink-0" />
                   <span>{c.phone}</span>
                 </a>
-                <a href={`mailto:${c.email}`} className="flex items-center gap-2 text-[11px] text-gray-600 hover:text-[#4f78ff] transition-colors truncate">
+                <a
+                  href={`mailto:${c.email}`}
+                  className="flex items-center gap-2 text-[11px] text-gray-600 hover:text-[#4f78ff] transition-colors truncate"
+                >
                   <Mail size={11} className="text-gray-400 shrink-0" />
                   <span className="truncate">{c.email}</span>
                 </a>
@@ -417,34 +514,79 @@ export default function ClientMobilisation() {
         <h3 className="text-sm font-black text-[#010a4f] mb-4">What happens next</h3>
         <div className="space-y-3">
           {[
-            { date: '28 May', label: 'Tier 2 site surveys', detail: 'Milton Keynes & Watford — Ravi Patel will confirm access requirements with you.', icon: MapPin, color: '#4f78ff' },
-            { date: '30 May', label: 'TUPE document request', detail: 'Britannia HR will contact you to collect right-to-work docs for transferring staff.', icon: UserCheck, color: '#f59e0b' },
-            { date: '09 Jun', label: 'TUPE window closes', detail: 'All 18 staff formally transferred to Britannia payroll. Completion report sent to you.', icon: CheckCircle2, color: '#10b981' },
-            { date: '15 Jun', label: 'Tier 2 sites go live', detail: 'Milton Keynes and Watford begin daily cleaning schedules. Live tracking enabled.', icon: Zap, color: '#4f78ff' },
-            { date: '01 Jul', label: 'Full rollout complete', detail: 'All 6 sites operational. First KPI audit report published within 30 days.', icon: Shield, color: '#10b981' },
+            {
+              date: '28 May',
+              label: 'Tier 2 site surveys',
+              detail:
+                'Milton Keynes & Watford — Ravi Patel will confirm access requirements with you.',
+              icon: MapPin,
+              color: '#4f78ff',
+            },
+            {
+              date: '30 May',
+              label: 'TUPE document request',
+              detail:
+                'Britannia HR will contact you to collect right-to-work docs for transferring staff.',
+              icon: UserCheck,
+              color: '#f59e0b',
+            },
+            {
+              date: '09 Jun',
+              label: 'TUPE window closes',
+              detail:
+                'All 18 staff formally transferred to Britannia payroll. Completion report sent to you.',
+              icon: CheckCircle2,
+              color: '#10b981',
+            },
+            {
+              date: '15 Jun',
+              label: 'Tier 2 sites go live',
+              detail:
+                'Milton Keynes and Watford begin daily cleaning schedules. Live tracking enabled.',
+              icon: Zap,
+              color: '#4f78ff',
+            },
+            {
+              date: '01 Jul',
+              label: 'Full rollout complete',
+              detail: 'All 6 sites operational. First KPI audit report published within 30 days.',
+              icon: Shield,
+              color: '#10b981',
+            },
           ].map((item, i) => {
             const Icon = item.icon;
             return (
               <div key={i} className="flex gap-4 items-start">
                 <div className="flex flex-col items-center shrink-0">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: item.color + '15' }}>
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ background: item.color + '15' }}
+                  >
                     <Icon size={14} style={{ color: item.color }} />
                   </div>
-                  {i < 4 && <div className="w-px flex-1 mt-1.5 mb-0" style={{ background: '#e2e8f0', minHeight: 20 }} />}
+                  {i < 4 && (
+                    <div
+                      className="w-px flex-1 mt-1.5 mb-0"
+                      style={{ background: '#e2e8f0', minHeight: 20 }}
+                    />
+                  )}
                 </div>
                 <div className="pb-3 flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <div className="text-[10px] font-black" style={{ color: item.color }}>{item.date}</div>
+                    <div className="text-[10px] font-black" style={{ color: item.color }}>
+                      {item.date}
+                    </div>
                     <div className="text-xs font-bold text-[#010a4f]">{item.label}</div>
                   </div>
-                  <div className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{item.detail}</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
+                    {item.detail}
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
       </div>
-
     </div>
   );
 }

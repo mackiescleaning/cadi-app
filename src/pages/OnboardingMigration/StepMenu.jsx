@@ -4,7 +4,17 @@
 // Lock-in writes to the live `services` table and advances to the reveal.
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Pencil, Sparkles, RotateCw, Trash2, Plus, AlertCircle, TrendingUp, MessageSquare, PlusCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  Sparkles,
+  RotateCw,
+  Trash2,
+  Plus,
+  AlertCircle,
+  TrendingUp,
+  MessageSquare,
+  PlusCircle,
+} from 'lucide-react';
 import {
   generateMenuDraft,
   saveMenuDraft,
@@ -13,18 +23,22 @@ import {
 } from '../../lib/db/onboardingDb';
 
 const DIVISION_META = {
-  residential: { label: 'Residential', accent: '#1f48ff', hint: 'Homes, holiday lets, end-of-tenancy.' },
-  exterior:    { label: 'Exterior',    accent: '#10b981', hint: 'Windows, gutters, soft-wash.' },
-  commercial:  { label: 'Commercial',  accent: '#f59e0b', hint: 'Offices, pubs, contracts.' },
-  unknown:     { label: 'Other',       accent: '#99c5ff', hint: 'Anything Cadi couldn’t auto-classify.' },
+  residential: {
+    label: 'Residential',
+    accent: '#1f48ff',
+    hint: 'Homes, holiday lets, end-of-tenancy.',
+  },
+  exterior: { label: 'Exterior', accent: '#10b981', hint: 'Windows, gutters, soft-wash.' },
+  commercial: { label: 'Commercial', accent: '#f59e0b', hint: 'Offices, pubs, contracts.' },
+  unknown: { label: 'Other', accent: '#99c5ff', hint: 'Anything Cadi couldn’t auto-classify.' },
 };
 
 export default function StepMenu({ session, onAdvance }) {
-  const [menu, setMenu]           = useState(null);
-  const [loading, setLoading]     = useState(true);
+  const [menu, setMenu] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [committing, setCommitting] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  const [error, setError]         = useState(null);
+  const [error, setError] = useState(null);
 
   const load = async (regenerate = false) => {
     try {
@@ -38,13 +52,19 @@ export default function StepMenu({ session, onAdvance }) {
     }
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save the in-memory edits back to the cached draft so a reload picks
   // them up. Throttled lightly via blur events on inputs.
   const persist = async (next) => {
     setMenu(next);
-    try { await saveMenuDraft(session.id, next); } catch { /* silent */ }
+    try {
+      await saveMenuDraft(session.id, next);
+    } catch {
+      /* silent */
+    }
   };
 
   const totalServices = useMemo(() => {
@@ -60,7 +80,7 @@ export default function StepMenu({ session, onAdvance }) {
       const { inserted, updated } = await commitMenuToServices(session.id, menu);
       // Edge case: nothing landed (empty menu). Stay on this step and warn.
       if (inserted === 0 && updated === 0) {
-        setError("Nothing to lock in — add at least one service.");
+        setError('Nothing to lock in — add at least one service.');
         setCommitting(false);
         return;
       }
@@ -79,7 +99,9 @@ export default function StepMenu({ session, onAdvance }) {
             <Sparkles size={20} className="text-[#1f48ff]" />
           </div>
           <p className="text-sm font-bold text-[#010a4f] mb-1">Drafting your menu…</p>
-          <p className="text-[11px] text-[#010a4f]/60">Reading your customers' services and prices.</p>
+          <p className="text-[11px] text-[#010a4f]/60">
+            Reading your customers' services and prices.
+          </p>
         </div>
       </div>
     );
@@ -94,7 +116,9 @@ export default function StepMenu({ session, onAdvance }) {
               try {
                 await updateStep(session.id, 'review');
                 onAdvance({ ...session, step: 'review' });
-              } catch (e) { setError(e?.message ?? "Couldn't go back."); }
+              } catch (e) {
+                setError(e?.message ?? "Couldn't go back.");
+              }
             }}
             className="flex items-center gap-1.5 text-xs font-bold text-[#1f48ff] hover:text-[#010a4f] transition-colors px-2 py-1.5 rounded-lg hover:bg-[#f0f4ff]"
           >
@@ -110,11 +134,13 @@ export default function StepMenu({ session, onAdvance }) {
             Your service menu.
           </h1>
           <p className="text-sm text-[#010a4f]/75 max-w-md mx-auto mb-3">
-            Built from your real customers — the services you already deliver, at the prices you already charge.
+            Built from your real customers — the services you already deliver, at the prices you
+            already charge.
           </p>
           {totalServices > 0 && (
             <p className="text-[11px] text-[#010a4f]/60">
-              <span className="font-bold text-[#010a4f]">{totalServices}</span> service{totalServices === 1 ? '' : 's'}, ready to lock in
+              <span className="font-bold text-[#010a4f]">{totalServices}</span> service
+              {totalServices === 1 ? '' : 's'}, ready to lock in
             </p>
           )}
         </div>
@@ -122,7 +148,10 @@ export default function StepMenu({ session, onAdvance }) {
         {/* Regenerate button — small, top of cards. */}
         <div className="flex justify-end mb-3">
           <button
-            onClick={() => { setRegenerating(true); load(true); }}
+            onClick={() => {
+              setRegenerating(true);
+              load(true);
+            }}
             disabled={regenerating}
             className="flex items-center gap-1.5 text-[11px] font-bold text-[#1f48ff] hover:text-[#010a4f] px-2.5 py-1.5 rounded-lg hover:bg-[#f0f4ff] transition-colors disabled:opacity-50"
           >
@@ -141,7 +170,8 @@ export default function StepMenu({ session, onAdvance }) {
         )}
 
         {(menu?.sections ?? []).map((section, sIdx) => {
-          const meta = DIVISION_META[String(section.division ?? '').toLowerCase()] ?? DIVISION_META.unknown;
+          const meta =
+            DIVISION_META[String(section.division ?? '').toLowerCase()] ?? DIVISION_META.unknown;
           return (
             <section key={`${section.division}-${sIdx}`} className="mb-8">
               <div className="flex items-center gap-3 mb-3 px-1">
@@ -149,7 +179,11 @@ export default function StepMenu({ session, onAdvance }) {
                 <h2 className="text-sm font-black text-[#010a4f]">{meta.label}</h2>
                 <span
                   className="text-[11px] font-bold px-2 py-0.5 rounded-full border"
-                  style={{ borderColor: `${meta.accent}50`, color: meta.accent, background: `${meta.accent}15` }}
+                  style={{
+                    borderColor: `${meta.accent}50`,
+                    color: meta.accent,
+                    background: `${meta.accent}15`,
+                  }}
                 >
                   {section.services?.length ?? 0}
                 </span>
@@ -186,7 +220,7 @@ export default function StepMenu({ session, onAdvance }) {
                   onAnswer={(answer) => {
                     const next = structuredClone(menu);
                     next.sections[sIdx].question_answered = true;
-                    next.sections[sIdx].question_answer   = answer;
+                    next.sections[sIdx].question_answer = answer;
                     persist(next);
                   }}
                 />
@@ -250,14 +284,16 @@ export default function StepMenu({ session, onAdvance }) {
                       tier_of: null,
                     });
                     // Pop the just-added suggestion off the suggestion list.
-                    next.sections[sIdx].suggestions = (next.sections[sIdx].suggestions ?? [])
-                      .filter(s => s.name !== sug.name);
+                    next.sections[sIdx].suggestions = (
+                      next.sections[sIdx].suggestions ?? []
+                    ).filter((s) => s.name !== sug.name);
                     persist(next);
                   }}
                   onDismiss={(sug) => {
                     const next = structuredClone(menu);
-                    next.sections[sIdx].suggestions = (next.sections[sIdx].suggestions ?? [])
-                      .filter(s => s.name !== sug.name);
+                    next.sections[sIdx].suggestions = (
+                      next.sections[sIdx].suggestions ?? []
+                    ).filter((s) => s.name !== sug.name);
                     persist(next);
                   }}
                 />
@@ -287,7 +323,11 @@ export default function StepMenu({ session, onAdvance }) {
                 : 'bg-[#1f48ff] hover:bg-[#3a5eff] shadow-[#1f48ff]/25'
             }`}
           >
-            {committing ? 'Locking it in…' : totalServices === 0 ? 'Add a service to lock in' : `Lock in ${totalServices} service${totalServices === 1 ? '' : 's'} →`}
+            {committing
+              ? 'Locking it in…'
+              : totalServices === 0
+                ? 'Add a service to lock in'
+                : `Lock in ${totalServices} service${totalServices === 1 ? '' : 's'} →`}
           </button>
         </div>
       </div>
@@ -300,10 +340,12 @@ export default function StepMenu({ session, onAdvance }) {
 function ServiceCard({ service, accent, onChange, onDelete }) {
   const [draft, setDraft] = useState(service);
   const [showSources, setShowSources] = useState(false);
-  useEffect(() => { setDraft(service); }, [service]);
+  useEffect(() => {
+    setDraft(service);
+  }, [service]);
 
   const v = (k, fallback = '') => draft[k] ?? fallback;
-  const set = (k, val) => setDraft(prev => ({ ...prev, [k]: val }));
+  const set = (k, val) => setDraft((prev) => ({ ...prev, [k]: val }));
   const commit = (k, val) => {
     set(k, val);
     onChange({ [k]: val });
@@ -319,13 +361,16 @@ function ServiceCard({ service, accent, onChange, onDelete }) {
       }`}
     >
       <div className="relative pl-4 pr-3 pt-3 pb-3">
-        <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: isEstimated ? '#f59e0b' : accent }} />
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1"
+          style={{ background: isEstimated ? '#f59e0b' : accent }}
+        />
 
         <div className="flex items-start gap-2 mb-2">
           <input
             type="text"
             value={v('name')}
-            onChange={e => set('name', e.target.value)}
+            onChange={(e) => set('name', e.target.value)}
             onBlur={() => onChange({ name: draft.name })}
             placeholder="Service name"
             className="flex-1 min-w-0 bg-transparent border-0 border-b border-transparent hover:border-[#1f48ff]/15 focus:border-[#1f48ff] focus:outline-none text-sm font-black text-[#010a4f] py-0.5 placeholder-[#010a4f]/35"
@@ -343,13 +388,21 @@ function ServiceCard({ service, accent, onChange, onDelete }) {
                 Estimated
               </span>
             )}
-            <span className={`text-[10px] font-bold ${isEstimated ? 'text-amber-700' : 'text-emerald-600'}`}>£</span>
+            <span
+              className={`text-[10px] font-bold ${isEstimated ? 'text-amber-700' : 'text-emerald-600'}`}
+            >
+              £
+            </span>
             <input
               type="number"
               inputMode="decimal"
               value={v('suggested_price', '')}
-              onChange={e => set('suggested_price', e.target.value === '' ? null : Number(e.target.value))}
-              onBlur={() => onChange({ suggested_price: draft.suggested_price, is_estimated: false })}
+              onChange={(e) =>
+                set('suggested_price', e.target.value === '' ? null : Number(e.target.value))
+              }
+              onBlur={() =>
+                onChange({ suggested_price: draft.suggested_price, is_estimated: false })
+              }
               placeholder="—"
               className={`w-16 text-right bg-transparent border-0 border-b border-transparent hover:border-[#1f48ff]/15 focus:border-[#1f48ff] focus:outline-none text-sm font-black py-0.5 tabular-nums placeholder-[#010a4f]/35 ${
                 isEstimated ? 'text-amber-700' : 'text-emerald-600'
@@ -384,7 +437,7 @@ function ServiceCard({ service, accent, onChange, onDelete }) {
 
         <textarea
           value={v('description')}
-          onChange={e => set('description', e.target.value)}
+          onChange={(e) => set('description', e.target.value)}
           onBlur={() => onChange({ description: draft.description })}
           placeholder="One short description — what's included."
           rows={2}
@@ -394,17 +447,20 @@ function ServiceCard({ service, accent, onChange, onDelete }) {
         <div className="mt-2 flex items-center gap-3 text-[11px] flex-wrap">
           {Number(v('customer_count', 0)) > 0 && (
             <span className="text-[#010a4f]/60">
-              <span className="font-bold text-[#010a4f]">{v('customer_count')}</span> customer{v('customer_count') === 1 ? '' : 's'}
+              <span className="font-bold text-[#010a4f]">{v('customer_count')}</span> customer
+              {v('customer_count') === 1 ? '' : 's'}
             </span>
           )}
-          {v('price_low') != null && v('price_high') != null && Number(v('price_low')) !== Number(v('price_high')) && (
-            <span className="text-[#010a4f]/60">
-              Range £{Number(v('price_low'))}–£{Number(v('price_high'))}
-            </span>
-          )}
+          {v('price_low') != null &&
+            v('price_high') != null &&
+            Number(v('price_low')) !== Number(v('price_high')) && (
+              <span className="text-[#010a4f]/60">
+                Range £{Number(v('price_low'))}–£{Number(v('price_high'))}
+              </span>
+            )}
           {sourcePrices.length > 0 && (
             <button
-              onClick={() => setShowSources(s => !s)}
+              onClick={() => setShowSources((s) => !s)}
               className="text-[11px] font-bold text-[#1f48ff] hover:text-[#010a4f] transition-colors"
             >
               {showSources ? 'Hide source prices' : `Show source prices (${sourcePrices.length})`}
@@ -448,8 +504,8 @@ function ServiceCard({ service, accent, onChange, onDelete }) {
             <TrendingUp size={12} className="text-[#1f48ff] shrink-0 mt-0.5" />
             <p className="text-[11px] text-[#010a4f]/75 leading-snug">
               You charge between <span className="font-bold">£{Number(v('price_low'))}</span> and
-              <span className="font-bold"> £{Number(v('price_high'))}</span> for the same job — worth a look.
-              Your Monday money report will keep an eye on this.
+              <span className="font-bold"> £{Number(v('price_high'))}</span> for the same job —
+              worth a look. Your Monday money report will keep an eye on this.
             </p>
           </div>
         )}
@@ -478,7 +534,10 @@ function CadiQuestion({ question, accent, onAnswer, onSkip }) {
           <MessageSquare size={13} style={{ color: accent }} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: accent }}>
+          <p
+            className="text-[10px] font-bold uppercase tracking-wider mb-1"
+            style={{ color: accent }}
+          >
             Cadi's asking
           </p>
           <p className="text-sm text-[#010a4f] leading-snug">{question}</p>
@@ -489,13 +548,15 @@ function CadiQuestion({ question, accent, onAnswer, onSkip }) {
         <input
           type="text"
           value={answer}
-          onChange={e => setAnswer(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && answer.trim()) onAnswer(answer.trim()); }}
+          onChange={(e) => setAnswer(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && answer.trim()) onAnswer(answer.trim());
+          }}
           placeholder="Type your answer, or just rename the tiers below…"
           className="flex-1 text-[12px] bg-[#f0f4ff] border border-[#1f48ff]/15 rounded-lg px-3 py-1.5 text-[#010a4f] placeholder-[#010a4f]/45 focus:outline-none focus:border-[#1f48ff]"
         />
         <button
-          onClick={() => answer.trim() ? onAnswer(answer.trim()) : onSkip()}
+          onClick={() => (answer.trim() ? onAnswer(answer.trim()) : onSkip())}
           className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-[#f0f4ff] hover:bg-[#f0f4ff] text-[#1f48ff] hover:text-[#010a4f] transition-all"
         >
           {answer.trim() ? 'Save' : 'Skip'}
@@ -512,9 +573,21 @@ function CadiQuestion({ question, accent, onAnswer, onSkip }) {
 // in the edge function — the user changes it here when they know better.
 
 const MODE_META = {
-  instant:     { label: 'Instant book',  color: '#10b981', hint: 'Customers see a fixed price and book straight in.' },
-  quick_quote: { label: 'Quick quote',   color: '#1f48ff', hint: 'Customers pick a tier / unit, see their price, then book.' },
-  enquiry:     { label: 'Enquiry only',  color: '#99c5ff', hint: 'Customers send an enquiry — you reply with a price.' },
+  instant: {
+    label: 'Instant book',
+    color: '#10b981',
+    hint: 'Customers see a fixed price and book straight in.',
+  },
+  quick_quote: {
+    label: 'Quick quote',
+    color: '#1f48ff',
+    hint: 'Customers pick a tier / unit, see their price, then book.',
+  },
+  enquiry: {
+    label: 'Enquiry only',
+    color: '#99c5ff',
+    hint: 'Customers send an enquiry — you reply with a price.',
+  },
 };
 
 function BookingModePill({ value, isOutlier, onChange }) {
@@ -525,7 +598,7 @@ function BookingModePill({ value, isOutlier, onChange }) {
     const isUpgradeToInstant = next === 'instant' && value !== 'instant';
     if (isUpgradeToInstant) {
       const ok = window.confirm(
-        "Lock as an instant-bookable price?\n\nCustomers will be able to book this service without you confirming. Only switch this on if the price is genuinely fixed for everyone."
+        'Lock as an instant-bookable price?\n\nCustomers will be able to book this service without you confirming. Only switch this on if the price is genuinely fixed for everyone.'
       );
       if (!ok) return;
     }
@@ -539,21 +612,23 @@ function BookingModePill({ value, isOutlier, onChange }) {
       </span>
       <select
         value={value || 'enquiry'}
-        onChange={e => handleChange(e.target.value)}
+        onChange={(e) => handleChange(e.target.value)}
         title={current.hint}
-        disabled={isOutlier}    /* outliers stay enquiry — can't auto-book a custom exception */
+        disabled={isOutlier} /* outliers stay enquiry — can't auto-book a custom exception */
         className="text-[11px] font-bold rounded-md px-2 py-0.5 border focus:outline-none focus:ring-2 focus:ring-[#1f48ff]/25 disabled:opacity-60"
         style={{
-          borderColor:  `${current.color}55`,
-          background:   `${current.color}15`,
-          color:        current.color,
+          borderColor: `${current.color}55`,
+          background: `${current.color}15`,
+          color: current.color,
         }}
       >
         <option value="enquiry">Enquiry only</option>
         <option value="quick_quote">Quick quote</option>
         <option value="instant">Instant book</option>
       </select>
-      <span className="text-[10px] text-[#010a4f]/45 truncate hidden sm:inline">{current.hint}</span>
+      <span className="text-[10px] text-[#010a4f]/45 truncate hidden sm:inline">
+        {current.hint}
+      </span>
     </div>
   );
 }

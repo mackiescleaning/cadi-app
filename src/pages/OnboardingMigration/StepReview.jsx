@@ -6,7 +6,17 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, X, Pencil, AlertCircle, Calendar, RotateCw, MapPin, ArrowLeft, Trash2 } from 'lucide-react';
+import {
+  Check,
+  X,
+  Pencil,
+  AlertCircle,
+  Calendar,
+  RotateCw,
+  MapPin,
+  ArrowLeft,
+  Trash2,
+} from 'lucide-react';
 import {
   listParsedForSession,
   updateParsedCustomer,
@@ -23,8 +33,8 @@ import { lookupPostcode, searchAddresses } from '../../lib/postcode';
 
 const CATEGORIES = [
   { key: 'residential', label: 'Residential', accent: '#1f48ff' },
-  { key: 'exterior',    label: 'Exterior',    accent: '#10b981' },
-  { key: 'commercial',  label: 'Commercial',  accent: '#f59e0b' },
+  { key: 'exterior', label: 'Exterior', accent: '#10b981' },
+  { key: 'commercial', label: 'Commercial', accent: '#f59e0b' },
 ];
 
 // Quick-pick service chips by division. Hand-picked so most cleaning
@@ -34,22 +44,39 @@ const CATEGORIES = [
 // language the owner thinks in. Don't be cute.
 const SERVICE_SUGGESTIONS = {
   residential: [
-    'Regular clean', 'Deep clean', 'End of tenancy',
-    'Airbnb turnover', 'Oven clean', 'Carpet clean',
+    'Regular clean',
+    'Deep clean',
+    'End of tenancy',
+    'Airbnb turnover',
+    'Oven clean',
+    'Carpet clean',
   ],
   exterior: [
-    'Windows', 'Gutters', 'Conservatory',
-    'Fascia & soffit', 'Driveway', 'Patio',
-    'Softwash', 'Roof',
+    'Windows',
+    'Gutters',
+    'Conservatory',
+    'Fascia & soffit',
+    'Driveway',
+    'Patio',
+    'Softwash',
+    'Roof',
   ],
   commercial: [
     // Interior commercial
-    'Office clean', 'Retail clean', 'Pub / restaurant',
-    'Periodic deep', 'Contract clean', 'School',
+    'Office clean',
+    'Retail clean',
+    'Pub / restaurant',
+    'Periodic deep',
+    'Contract clean',
+    'School',
     // Commercial-exterior — windows / gutters / etc done for businesses,
     // typically larger jobs at higher prices than the residential equivalents.
-    'Commercial windows', 'Commercial gutters', 'Commercial fascia & soffit',
-    'Commercial driveway / car park', 'Commercial pressure wash', 'Commercial softwash',
+    'Commercial windows',
+    'Commercial gutters',
+    'Commercial fascia & soffit',
+    'Commercial driveway / car park',
+    'Commercial pressure wash',
+    'Commercial softwash',
   ],
 };
 
@@ -59,30 +86,30 @@ const BUCKETS = [
     label: 'Ready to schedule',
     blurb: "Frequency and date both clear — I'll book these straight away.",
     badgeStyle: 'bg-emerald-50 text-emerald-600 border-emerald-200',
-    barColor:   '#10b981',
+    barColor: '#10b981',
   },
   {
     key: 'nearly',
     label: 'Nearly there',
     blurb: 'Got the frequency, need a date to start from.',
     badgeStyle: 'bg-amber-50 text-amber-700 border-amber-200',
-    barColor:   '#f59e0b',
+    barColor: '#f59e0b',
   },
   {
     key: 'decision',
     label: 'Needs a decision',
-    blurb: "One-offs and ad-hoc. Add a frequency to schedule them, or keep on file.",
+    blurb: 'One-offs and ad-hoc. Add a frequency to schedule them, or keep on file.',
     badgeStyle: 'bg-[#f0f4ff] text-[#1f48ff] border-[#1f48ff]/15',
-    barColor:   '#1f48ff',
+    barColor: '#1f48ff',
   },
 ];
 
 export default function StepReview({ session, onAdvance }) {
   const navigate = useNavigate();
-  const [rows, setRows]         = useState(null); // null = loading
+  const [rows, setRows] = useState(null); // null = loading
   const [committing, setCommitting] = useState(false);
-  const [error, setError]       = useState(null);
-  const [edits, setEdits]       = useState({});  // pending edits by row id
+  const [error, setError] = useState(null);
+  const [edits, setEdits] = useState({}); // pending edits by row id
   // Refs to each rendered ParsedRow so the "X still need details" banner
   // can scroll the first unready card into view + open its edit drawer.
   const rowRefs = useRef(new Map());
@@ -98,18 +125,20 @@ export default function StepReview({ session, onAdvance }) {
     }
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const grouped = useMemo(() => {
     const out = { ready: [], nearly: [], decision: [] };
-    (rows ?? []).forEach(r => (out[r.bucket] ?? out.decision).push(r));
+    (rows ?? []).forEach((r) => (out[r.bucket] ?? out.decision).push(r));
     return out;
   }, [rows]);
 
-  const kept = (rows ?? []).filter(r => r.keep);
+  const kept = (rows ?? []).filter((r) => r.keep);
   const keptCount = kept.length;
-  const readyKept   = kept.filter(r => customerReadiness(r).ready);
-  const notReadyKept = kept.filter(r => !customerReadiness(r).ready);
+  const readyKept = kept.filter((r) => customerReadiness(r).ready);
+  const notReadyKept = kept.filter((r) => !customerReadiness(r).ready);
   const allReady = keptCount > 0 && notReadyKept.length === 0;
 
   // Click handler for the banner + disabled CTA. Finds the first kept-but-
@@ -120,7 +149,7 @@ export default function StepReview({ session, onAdvance }) {
     let target;
     if (cycleId) {
       // "Next" — find the next unready row after the one we just focused
-      const idx = notReadyKept.findIndex(r => r.id === cycleId);
+      const idx = notReadyKept.findIndex((r) => r.id === cycleId);
       target = notReadyKept[(idx + 1) % notReadyKept.length];
     } else {
       target = notReadyKept[0];
@@ -133,14 +162,18 @@ export default function StepReview({ session, onAdvance }) {
     setFocusedRowId(target.id);
     setForceExpandId(target.id);
     // Clear the glow after ~1.6s so it doesn't stick around.
-    window.setTimeout(() => setFocusedRowId(curr => (curr === target.id ? null : curr)), 1600);
+    window.setTimeout(() => setFocusedRowId((curr) => (curr === target.id ? null : curr)), 1600);
   };
 
   // Count distinct customers across the kept jobs so the user sees "168 jobs
   // for 53 customers" rather than just "168 jobs" (which is misleading).
   const distinctCustomerKey = (r) => {
     if (r.customer_ref && String(r.customer_ref).trim()) return `ref:${r.customer_ref.trim()}`;
-    return `np:${String(r.name ?? '').trim().toLowerCase()}::${String(r.postcode ?? '').replace(/\s/g, '').toUpperCase()}`;
+    return `np:${String(r.name ?? '')
+      .trim()
+      .toLowerCase()}::${String(r.postcode ?? '')
+      .replace(/\s/g, '')
+      .toUpperCase()}`;
   };
   const distinctCustomers = new Set(kept.map(distinctCustomerKey)).size;
 
@@ -196,12 +229,15 @@ export default function StepReview({ session, onAdvance }) {
             Here's what I found.
           </h1>
           <p className="text-sm text-[#010a4f]/60 max-w-md mx-auto mb-3">
-            Read the cards. Fix anything I got wrong, add a frequency or a date where I left one blank, then bring them in.
+            Read the cards. Fix anything I got wrong, add a frequency or a date where I left one
+            blank, then bring them in.
           </p>
           {keptCount > 0 && (
             <p className="text-[11px] text-[#010a4f]/60">
-              <span className="font-bold text-[#010a4f]">{keptCount}</span> job{keptCount === 1 ? '' : 's'} across
-              <span className="font-bold text-[#010a4f]"> {distinctCustomers}</span> customer{distinctCustomers === 1 ? '' : 's'}
+              <span className="font-bold text-[#010a4f]">{keptCount}</span> job
+              {keptCount === 1 ? '' : 's'} across
+              <span className="font-bold text-[#010a4f]"> {distinctCustomers}</span> customer
+              {distinctCustomers === 1 ? '' : 's'}
             </p>
           )}
         </div>
@@ -232,46 +268,62 @@ export default function StepReview({ session, onAdvance }) {
           }}
         />
 
-        {BUCKETS.map(b => {
+        {BUCKETS.map((b) => {
           const items = grouped[b.key];
           if (!items.length) return null;
           return (
             <section key={b.key} className="mb-8">
               <div className="flex items-center gap-3 mb-3 px-1">
                 <h2 className="text-sm font-black text-[#010a4f]">{b.label}</h2>
-                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${b.badgeStyle}`}>
+                <span
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${b.badgeStyle}`}
+                >
                   {items.length}
                 </span>
                 <p className="text-[11px] text-[#010a4f]/60 hidden sm:block">{b.blurb}</p>
               </div>
               <div className="space-y-2.5">
-                {items.map(row => (
+                {items.map((row) => (
                   <ParsedRow
                     key={row.id}
                     row={row}
                     bucket={b}
                     refSetter={(el) => {
                       if (el) rowRefs.current.set(row.id, el);
-                      else    rowRefs.current.delete(row.id);
+                      else rowRefs.current.delete(row.id);
                     }}
                     isFocused={focusedRowId === row.id}
                     forceExpand={forceExpandId === row.id}
-                    onForceExpandConsumed={() => setForceExpandId(curr => (curr === row.id ? null : curr))}
+                    onForceExpandConsumed={() =>
+                      setForceExpandId((curr) => (curr === row.id ? null : curr))
+                    }
                     edits={edits[row.id] ?? {}}
-                    setEdits={(patch) => setEdits(prev => ({ ...prev, [row.id]: { ...(prev[row.id] ?? {}), ...patch } }))}
+                    setEdits={(patch) =>
+                      setEdits((prev) => ({
+                        ...prev,
+                        [row.id]: { ...(prev[row.id] ?? {}), ...patch },
+                      }))
+                    }
                     onSave={async (patch) => {
                       const next = await updateParsedCustomer(row.id, patch);
-                      setRows(prev => prev.map(r => r.id === row.id ? next : r));
-                      setEdits(prev => { const { [row.id]: _, ...rest } = prev; return rest; });
+                      setRows((prev) => prev.map((r) => (r.id === row.id ? next : r)));
+                      setEdits((prev) => {
+                        const { [row.id]: _, ...rest } = prev;
+                        return rest;
+                      });
                     }}
                     onDelete={async () => {
                       // Hard delete — confirm so a mis-tap doesn't nuke a row.
                       const label = row.name || row.address || 'this customer';
-                      if (!window.confirm(`Delete ${label}? They won't be brought into Cadi.`)) return;
+                      if (!window.confirm(`Delete ${label}? They won't be brought into Cadi.`))
+                        return;
                       try {
                         await deleteParsedCustomer(row.id);
-                        setRows(prev => prev.filter(r => r.id !== row.id));
-                        setEdits(prev => { const { [row.id]: _, ...rest } = prev; return rest; });
+                        setRows((prev) => prev.filter((r) => r.id !== row.id));
+                        setEdits((prev) => {
+                          const { [row.id]: _, ...rest } = prev;
+                          return rest;
+                        });
                       } catch (e) {
                         setError(e?.message ?? "Couldn't delete that one.");
                       }
@@ -305,7 +357,9 @@ export default function StepReview({ session, onAdvance }) {
             >
               <AlertCircle size={11} className="text-amber-600 shrink-0" />
               <span className="flex-1">
-                <span className="font-bold">{notReadyKept.length}</span> of <span className="font-bold">{keptCount}</span> still need details before they can land.
+                <span className="font-bold">{notReadyKept.length}</span> of{' '}
+                <span className="font-bold">{keptCount}</span> still need details before they can
+                land.
               </span>
               <span className="text-[10px] font-bold text-amber-700 shrink-0">
                 {focusedRowId ? 'Next →' : 'Take me to one →'}
@@ -326,7 +380,7 @@ export default function StepReview({ session, onAdvance }) {
             {committing
               ? 'Bringing them in…'
               : keptCount === 0
-                ? "Nothing kept — toggle a few in"
+                ? 'Nothing kept — toggle a few in'
                 : !allReady
                   ? `${readyKept.length} ready · ${notReadyKept.length} need details — fix them →`
                   : `Bring in ${readyKept.length} job${readyKept.length === 1 ? '' : 's'} for ${distinctCustomers} customer${distinctCustomers === 1 ? '' : 's'} →`}
@@ -339,7 +393,18 @@ export default function StepReview({ session, onAdvance }) {
 
 // ── Per-row card with inline edit ─────────────────────────────────────────────
 
-function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, isFocused, forceExpand, onForceExpandConsumed }) {
+function ParsedRow({
+  row,
+  bucket,
+  edits,
+  setEdits,
+  onSave,
+  onDelete,
+  refSetter,
+  isFocused,
+  forceExpand,
+  onForceExpandConsumed,
+}) {
   const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -353,13 +418,16 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
   }, [forceExpand, onForceExpandConsumed]);
 
   // Current "draft" value for any field — edits override row values.
-  const v = (field) => edits[field] !== undefined ? edits[field] : row[field];
+  const v = (field) => (edits[field] !== undefined ? edits[field] : row[field]);
 
   const dirty = Object.keys(edits).length > 0;
   const keepValue = v('keep');
 
   const saveAll = async () => {
-    if (!dirty) { setExpanded(false); return; }
+    if (!dirty) {
+      setExpanded(false);
+      return;
+    }
     setSaving(true);
     try {
       // If frequency_raw changed, recompute rrule client-side.
@@ -390,8 +458,8 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
     }
   };
 
-  const category = CATEGORIES.find(c => c.key === v('category'));
-  const accent   = category?.accent ?? '#1f48ff';
+  const category = CATEGORIES.find((c) => c.key === v('category'));
+  const accent = category?.accent ?? '#1f48ff';
 
   // Live readiness against the current draft values so the user sees the
   // warning fade away as they fill the missing pieces.
@@ -417,8 +485,10 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
           <input
             type="text"
             value={v('name') || ''}
-            onChange={e => setEdits({ name: e.target.value })}
-            onBlur={() => { if (edits.name !== undefined) quickSave({ name: edits.name }); }}
+            onChange={(e) => setEdits({ name: e.target.value })}
+            onBlur={() => {
+              if (edits.name !== undefined) quickSave({ name: edits.name });
+            }}
             placeholder="No name yet — type one"
             className="flex-1 min-w-0 bg-transparent border-0 border-b border-transparent hover:border-[#1f48ff]/15 focus:border-[#1f48ff] focus:outline-none text-sm font-black text-[#010a4f] py-0.5 placeholder-[#010a4f]/35"
           />
@@ -426,15 +496,23 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
             type="number"
             inputMode="decimal"
             value={v('price') ?? ''}
-            onChange={e => setEdits({ price: e.target.value === '' ? null : Number(e.target.value) })}
-            onBlur={() => { if (edits.price !== undefined) quickSave({ price: edits.price }); }}
+            onChange={(e) =>
+              setEdits({ price: e.target.value === '' ? null : Number(e.target.value) })
+            }
+            onBlur={() => {
+              if (edits.price !== undefined) quickSave({ price: edits.price });
+            }}
             placeholder="£?"
             className="w-16 text-right bg-transparent border-0 border-b border-transparent hover:border-[#1f48ff]/15 focus:border-[#1f48ff] focus:outline-none text-sm font-black text-emerald-600 py-0.5 tabular-nums placeholder-[#010a4f]/35"
           />
           <button
             onClick={() => quickSave({ keep: !keepValue })}
             aria-label={keepValue ? 'Drop' : 'Keep'}
-            title={keepValue ? 'Drop from this commit (kept in review)' : 'Keep — bring this one into Cadi'}
+            title={
+              keepValue
+                ? 'Drop from this commit (kept in review)'
+                : 'Keep — bring this one into Cadi'
+            }
             className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all shrink-0 ${
               keepValue
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
@@ -462,19 +540,26 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
           <input
             type="text"
             value={v('service_label') || ''}
-            onChange={e => setEdits({ service_label: e.target.value })}
-            onBlur={() => { if (edits.service_label !== undefined) quickSave({ service_label: edits.service_label }); }}
+            onChange={(e) => setEdits({ service_label: e.target.value })}
+            onBlur={() => {
+              if (edits.service_label !== undefined)
+                quickSave({ service_label: edits.service_label });
+            }}
             placeholder="Service?"
             className="flex-1 min-w-[120px] bg-transparent border-0 border-b border-transparent hover:border-[#1f48ff]/15 focus:border-[#1f48ff] focus:outline-none text-xs text-[#1f48ff] py-0.5 placeholder-[#010a4f]/35"
           />
           <select
             value={v('category') || ''}
-            onChange={e => quickSave({ category: e.target.value || null })}
+            onChange={(e) => quickSave({ category: e.target.value || null })}
             className="text-[10px] font-bold bg-[#f0f4ff] border rounded-md px-1.5 py-0.5 text-[#010a4f] focus:outline-none focus:border-[#1f48ff]"
             style={{ borderColor: `${accent}40` }}
           >
             <option value="">No division</option>
-            {CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+            {CATEGORIES.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -487,12 +572,14 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
           currentService={v('service_label')}
           currentServices={v('service_labels')}
           accent={accent}
-          onChange={(labels) => quickSave({
-            service_labels: labels,
-            // Keep service_label in sync with the first selection so legacy
-            // single-value code paths still show something sensible.
-            service_label: labels[0] ?? null,
-          })}
+          onChange={(labels) =>
+            quickSave({
+              service_labels: labels,
+              // Keep service_label in sync with the first selection so legacy
+              // single-value code paths still show something sensible.
+              service_label: labels[0] ?? null,
+            })
+          }
         />
       </div>
 
@@ -519,8 +606,11 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
       {bucket.key === 'decision' && keepValue && (
         <FrequencyPrompt
           value={v('frequency_raw') || ''}
-          onChange={val => setEdits({ frequency_raw: val })}
-          onCommit={() => { if (edits.frequency_raw !== undefined) quickSave({ frequency_raw: edits.frequency_raw }); }}
+          onChange={(val) => setEdits({ frequency_raw: val })}
+          onCommit={() => {
+            if (edits.frequency_raw !== undefined)
+              quickSave({ frequency_raw: edits.frequency_raw });
+          }}
           saving={saving}
         />
       )}
@@ -529,7 +619,7 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
       {bucket.key === 'nearly' && keepValue && (
         <DatePrompt
           value={v('anchor_date') || ''}
-          onChange={val => setEdits({ anchor_date: val, anchor_type: 'next_due' })}
+          onChange={(val) => setEdits({ anchor_date: val, anchor_type: 'next_due' })}
           onCommit={() => {
             if (edits.anchor_date !== undefined) {
               quickSave({ anchor_date: edits.anchor_date, anchor_type: 'next_due' });
@@ -544,26 +634,28 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
           we project forward by the customer's frequency to land on the real
           next clean date. No "(rolled from)" note — the math just IS the
           customer's next clean. */}
-      {bucket.key === 'ready' && keepValue && (() => {
-        const next = rollAnchorForward(v('anchor_date'), v('frequency_rrule'));
-        return (
-          <div className="px-4 pb-2 -mt-1 flex items-center gap-2 text-[11px] text-emerald-600 font-semibold flex-wrap">
-            <RotateCw size={11} />
-            <span>{rruleHumanise(v('frequency_rrule'))}</span>
-            {next && (
-              <>
-                <span className="text-[#010a4f]/30">·</span>
-                <Calendar size={11} />
-                <span>{ukDate(next)}</span>
-              </>
-            )}
-          </div>
-        );
-      })()}
+      {bucket.key === 'ready' &&
+        keepValue &&
+        (() => {
+          const next = rollAnchorForward(v('anchor_date'), v('frequency_rrule'));
+          return (
+            <div className="px-4 pb-2 -mt-1 flex items-center gap-2 text-[11px] text-emerald-600 font-semibold flex-wrap">
+              <RotateCw size={11} />
+              <span>{rruleHumanise(v('frequency_rrule'))}</span>
+              {next && (
+                <>
+                  <span className="text-[#010a4f]/30">·</span>
+                  <Calendar size={11} />
+                  <span>{ukDate(next)}</span>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
       {/* Show more / Edit details toggle */}
       <button
-        onClick={() => setExpanded(o => !o)}
+        onClick={() => setExpanded((o) => !o)}
         className="w-full text-left px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#010a4f]/45 hover:text-[#1f48ff] border-t border-[#1f48ff]/15 flex items-center gap-1.5 transition-colors"
       >
         <Pencil size={10} /> {expanded ? 'Hide details' : 'Edit details'}
@@ -578,9 +670,23 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
             address={v('address') ?? ''}
             onChange={(patch) => setEdits(patch)}
           />
-          <EditField label="Phone"     value={v('phone')          ?? ''} onChange={val => setEdits({ phone:     val })} />
-          <EditField label="Email"     value={v('email')          ?? ''} onChange={val => setEdits({ email:     val })} type="email" />
-          <EditField label="Frequency" value={v('frequency_raw')  ?? ''} onChange={val => setEdits({ frequency_raw: val })} placeholder="weekly / fortnightly / 4-weekly / one-off" />
+          <EditField
+            label="Phone"
+            value={v('phone') ?? ''}
+            onChange={(val) => setEdits({ phone: val })}
+          />
+          <EditField
+            label="Email"
+            value={v('email') ?? ''}
+            onChange={(val) => setEdits({ email: val })}
+            type="email"
+          />
+          <EditField
+            label="Frequency"
+            value={v('frequency_raw') ?? ''}
+            onChange={(val) => setEdits({ frequency_raw: val })}
+            placeholder="weekly / fortnightly / 4-weekly / one-off"
+          />
           {/* Next due / Last clean — anchor_date stores either, distinguished
               by anchor_type. CleanerPlanner exports often give a "last done"
               instead of "next due"; surface both so the owner can correct
@@ -593,27 +699,44 @@ function ParsedRow({ row, bucket, edits, setEdits, onSave, onDelete, refSetter, 
             value={
               v('anchor_type') === 'last_done'
                 ? ''
-                : (rollAnchorForward(v('anchor_date'), v('frequency_rrule')) ?? v('anchor_date') ?? '')
+                : (rollAnchorForward(v('anchor_date'), v('frequency_rrule')) ??
+                  v('anchor_date') ??
+                  '')
             }
-            onChange={val => setEdits({ anchor_date: val, anchor_type: 'next_due' })}
+            onChange={(val) => setEdits({ anchor_date: val, anchor_type: 'next_due' })}
             type="date"
           />
           <EditField
             label="Last clean"
             value={v('anchor_type') === 'last_done' ? (v('anchor_date') ?? '') : ''}
-            onChange={val => setEdits({ anchor_date: val, anchor_type: 'last_done' })}
+            onChange={(val) => setEdits({ anchor_date: val, anchor_type: 'last_done' })}
             type="date"
           />
-          <EditField label="Day pref"  value={v('day_preference') ?? ''} onChange={val => setEdits({ day_preference: val })} placeholder="Tuesdays / mornings / after 3pm" />
-          <EditField label="Cust ref"  value={v('customer_ref')   ?? ''} onChange={val => setEdits({ customer_ref: val })} placeholder="from your old software" />
+          <EditField
+            label="Day pref"
+            value={v('day_preference') ?? ''}
+            onChange={(val) => setEdits({ day_preference: val })}
+            placeholder="Tuesdays / mornings / after 3pm"
+          />
+          <EditField
+            label="Cust ref"
+            value={v('customer_ref') ?? ''}
+            onChange={(val) => setEdits({ customer_ref: val })}
+            placeholder="from your old software"
+          />
           <EditField
             label="Balance (£)"
             value={v('outstanding_balance') ?? ''}
-            onChange={val => setEdits({ outstanding_balance: val === '' ? null : Number(val) })}
+            onChange={(val) => setEdits({ outstanding_balance: val === '' ? null : Number(val) })}
             type="number"
             placeholder="0.00"
           />
-          <EditField label="Notes"     value={v('notes')          ?? ''} onChange={val => setEdits({ notes: val })} multiline />
+          <EditField
+            label="Notes"
+            value={v('notes') ?? ''}
+            onChange={(val) => setEdits({ notes: val })}
+            multiline
+          />
           <div className="flex gap-2 pt-1">
             <button
               onClick={saveAll}
@@ -645,21 +768,22 @@ function ServiceChips({ category, currentService, currentServices, accent, onCha
   if (!category || !suggestions) return null;
 
   // Resolve effective selection — array preferred, single-value fallback.
-  const selected = Array.isArray(currentServices) && currentServices.length
-    ? currentServices
-    : (currentService ? [currentService] : []);
+  const selected =
+    Array.isArray(currentServices) && currentServices.length
+      ? currentServices
+      : currentService
+        ? [currentService]
+        : [];
 
   // Case-insensitive equality so we light the right chip even when Cadi's
   // capitalisation differs from our suggestion (e.g. "windows" vs "Windows").
   const eq = (a, b) => String(a ?? '').toLowerCase() === String(b ?? '').toLowerCase();
-  const isOn = (label) => selected.some(s => eq(s, label));
-  const customExtras = selected.filter(s => !suggestions.some(sug => eq(sug, s)));
+  const isOn = (label) => selected.some((s) => eq(s, label));
+  const customExtras = selected.filter((s) => !suggestions.some((sug) => eq(sug, s)));
 
   const toggle = (label) => {
-    const present = selected.find(s => eq(s, label));
-    const next = present
-      ? selected.filter(s => !eq(s, label))
-      : [...selected, label];
+    const present = selected.find((s) => eq(s, label));
+    const next = present ? selected.filter((s) => !eq(s, label)) : [...selected, label];
     onChange(next);
   };
 
@@ -668,7 +792,7 @@ function ServiceChips({ category, currentService, currentServices, accent, onCha
       <span className="text-[9px] font-bold uppercase tracking-wider text-[#010a4f]/45 mr-0.5">
         Services:
       </span>
-      {suggestions.map(label => {
+      {suggestions.map((label) => {
         const active = isOn(label);
         return (
           <button
@@ -680,19 +804,29 @@ function ServiceChips({ category, currentService, currentServices, accent, onCha
                 ? 'text-white shadow-sm'
                 : 'text-[#010a4f]/75 border-[#1f48ff]/15 bg-[#f0f4ff] hover:border-[#1f48ff]/40 hover:text-[#010a4f]'
             }`}
-            style={active
-              ? { background: `${accent}25`, borderColor: `${accent}80`, boxShadow: `inset 0 0 0 1px ${accent}40` }
-              : undefined}
+            style={
+              active
+                ? {
+                    background: `${accent}25`,
+                    borderColor: `${accent}80`,
+                    boxShadow: `inset 0 0 0 1px ${accent}40`,
+                  }
+                : undefined
+            }
             aria-pressed={active}
           >
-            {active && <span aria-hidden="true" className="mr-0.5">✓</span>}
+            {active && (
+              <span aria-hidden="true" className="mr-0.5">
+                ✓
+              </span>
+            )}
             {label}
           </button>
         );
       })}
       {/* Custom labels (anything not in the suggestion set) — show as
           coloured chips with an X so users can remove them too. */}
-      {customExtras.map(label => (
+      {customExtras.map((label) => (
         <button
           key={`custom-${label}`}
           type="button"
@@ -713,32 +847,32 @@ function ServiceChips({ category, currentService, currentServices, accent, onCha
 function EditField({ label, value, onChange, type = 'text', placeholder, multiline }) {
   return (
     <label className="block">
-      <span className="block text-[10px] font-bold uppercase tracking-wider text-[#010a4f]/60 mb-0.5">{label}</span>
-      {multiline
-        ? (
-          <textarea
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            placeholder={placeholder}
-            rows={2}
-            className="w-full rounded-lg border border-[#1f48ff]/15 bg-white px-2.5 py-1.5 text-xs text-[#010a4f] placeholder-[#010a4f]/35 focus:outline-none focus:border-[#1f48ff] resize-y"
-          />
-        )
-        : (
-          <input
-            type={type}
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            placeholder={placeholder}
-            className="w-full rounded-lg border border-[#1f48ff]/15 bg-white px-2.5 py-1.5 text-xs text-[#010a4f] placeholder-[#010a4f]/35 focus:outline-none focus:border-[#1f48ff]"
-          />
-        )}
+      <span className="block text-[10px] font-bold uppercase tracking-wider text-[#010a4f]/60 mb-0.5">
+        {label}
+      </span>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={2}
+          className="w-full rounded-lg border border-[#1f48ff]/15 bg-white px-2.5 py-1.5 text-xs text-[#010a4f] placeholder-[#010a4f]/35 focus:outline-none focus:border-[#1f48ff] resize-y"
+        />
+      ) : (
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full rounded-lg border border-[#1f48ff]/15 bg-white px-2.5 py-1.5 text-xs text-[#010a4f] placeholder-[#010a4f]/35 focus:outline-none focus:border-[#1f48ff]"
+        />
+      )}
     </label>
   );
 }
 
 // ── Decision-bucket nudge: prompt the user to type a frequency ──────────────
-function FrequencyPrompt({ value, onChange, onCommit, saving }) {
+function FrequencyPrompt({ value, onChange, onCommit }) {
   const f = parseFrequency(value);
   const valid = Boolean(f);
   return (
@@ -750,16 +884,23 @@ function FrequencyPrompt({ value, onChange, onCommit, saving }) {
         <input
           type="text"
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onChange={(e) => onChange(e.target.value)}
           onBlur={onCommit}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onCommit(); } }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              onCommit();
+            }
+          }}
           placeholder="weekly / fortnightly / 4-weekly / one-off"
           className="flex-1 rounded-lg border border-[#1f48ff]/15 bg-white px-2.5 py-1.5 text-xs text-[#010a4f] placeholder-[#010a4f]/35 focus:outline-none focus:border-[#1f48ff]"
         />
       </div>
       {value && (
         <p className={`text-[10px] mt-1 ${valid ? 'text-emerald-600' : 'text-amber-700'}`}>
-          {valid ? `Read as ${rruleHumanise(freqToRrule(f))}` : "Couldn't read that. Try 'weekly', 'fortnightly', '4-weekly'…"}
+          {valid
+            ? `Read as ${rruleHumanise(freqToRrule(f))}`
+            : "Couldn't read that. Try 'weekly', 'fortnightly', '4-weekly'…"}
         </p>
       )}
     </div>
@@ -767,7 +908,7 @@ function FrequencyPrompt({ value, onChange, onCommit, saving }) {
 }
 
 // ── Nearly-bucket nudge: prompt for next-due date ───────────────────────────
-function DatePrompt({ value, onChange, onCommit, saving }) {
+function DatePrompt({ value, onChange, onCommit }) {
   return (
     <div className="mx-3 mb-3 mt-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
       <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700 mb-1.5 flex items-center gap-1.5">
@@ -777,7 +918,7 @@ function DatePrompt({ value, onChange, onCommit, saving }) {
         <input
           type="date"
           value={value || ''}
-          onChange={e => onChange(e.target.value)}
+          onChange={(e) => onChange(e.target.value)}
           onBlur={onCommit}
           className="flex-1 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-[#010a4f] focus:outline-none focus:border-amber-400"
         />
@@ -794,8 +935,8 @@ function PostcodeLookupBlock({ postcode, address, onChange }) {
   const [pcStatus, setPcStatus] = useState('idle');
   const [pcResult, setPcResult] = useState(null);
 
-  const [streetQuery,   setStreetQuery]   = useState('');
-  const [streetStatus,  setStreetStatus]  = useState('idle'); // 'idle' | 'searching' | 'results' | 'none'
+  const [streetQuery, setStreetQuery] = useState('');
+  const [streetStatus, setStreetStatus] = useState('idle'); // 'idle' | 'searching' | 'results' | 'none'
   const [streetResults, setStreetResults] = useState([]);
 
   const doPostcodeLookup = async (raw) => {
@@ -803,7 +944,10 @@ function PostcodeLookupBlock({ postcode, address, onChange }) {
     setPcStatus('loading');
     setPcResult(null);
     const r = await lookupPostcode(raw);
-    if (!r) { setPcStatus('error'); return; }
+    if (!r) {
+      setPcStatus('error');
+      return;
+    }
     setPcStatus('ok');
     setPcResult(r);
     onChange({ postcode: r.postcode });
@@ -863,9 +1007,18 @@ function PostcodeLookupBlock({ postcode, address, onChange }) {
           <input
             type="text"
             value={postcode}
-            onChange={e => { onChange({ postcode: e.target.value.toUpperCase() }); setPcStatus('idle'); setPcResult(null); }}
+            onChange={(e) => {
+              onChange({ postcode: e.target.value.toUpperCase() });
+              setPcStatus('idle');
+              setPcResult(null);
+            }}
             onBlur={() => doPostcodeLookup(postcode)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); doPostcodeLookup(postcode); } }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                doPostcodeLookup(postcode);
+              }
+            }}
             placeholder="SW19 1AA"
             className="flex-1 rounded-lg border border-[#1f48ff]/15 bg-white px-2.5 py-1.5 text-xs text-[#010a4f] placeholder-[#010a4f]/35 focus:outline-none focus:border-[#1f48ff] uppercase"
           />
@@ -900,14 +1053,16 @@ function PostcodeLookupBlock({ postcode, address, onChange }) {
       {/* Don't know the postcode? Find it from the street name. */}
       <details className="group">
         <summary className="cursor-pointer text-[10px] font-bold text-[#1f48ff] hover:text-[#010a4f] inline-flex items-center gap-1">
-          <span className="opacity-60 group-open:rotate-90 transition-transform inline-block">▸</span>
+          <span className="opacity-60 group-open:rotate-90 transition-transform inline-block">
+            ▸
+          </span>
           Don't know the postcode? Find by street
         </summary>
         <div className="mt-1.5 space-y-1.5 pl-3 border-l border-[#1f48ff]/15">
           <input
             type="text"
             value={streetQuery}
-            onChange={e => setStreetQuery(e.target.value)}
+            onChange={(e) => setStreetQuery(e.target.value)}
             placeholder='e.g. "Gaveston Drive Stirling"'
             className="w-full rounded-lg border border-[#1f48ff]/15 bg-white px-2.5 py-1.5 text-xs text-[#010a4f] placeholder-[#010a4f]/35 focus:outline-none focus:border-[#1f48ff]"
           />
@@ -941,7 +1096,7 @@ function PostcodeLookupBlock({ postcode, address, onChange }) {
       <EditField
         label="Address"
         value={address}
-        onChange={val => onChange({ address: val })}
+        onChange={(val) => onChange({ address: val })}
         placeholder="Street, town, county"
       />
     </div>
@@ -981,9 +1136,12 @@ function ukDate(d) {
   if (isNaN(date.getTime())) return d;
   const now = new Date();
   const sameYear = date.getFullYear() === now.getFullYear();
-  return date.toLocaleDateString('en-GB', sameYear
-    ? { day: 'numeric', month: 'short' }
-    : { day: 'numeric', month: 'short', year: 'numeric' });
+  return date.toLocaleDateString(
+    'en-GB',
+    sameYear
+      ? { day: 'numeric', month: 'short' }
+      : { day: 'numeric', month: 'short', year: 'numeric' }
+  );
 }
 
 // ── Bulk-apply service bar ──────────────────────────────────────────────────
@@ -993,10 +1151,17 @@ function ukDate(d) {
 // chose in Step 1, and applies the chosen service to every blank card.
 
 const SUGGESTIONS_BY_DIVISION = {
-  exterior:    ['Windows', 'Gutters', 'Conservatory', 'Fascia & soffit', 'Driveway', 'Softwash'],
+  exterior: ['Windows', 'Gutters', 'Conservatory', 'Fascia & soffit', 'Driveway', 'Softwash'],
   residential: ['Regular clean', 'Deep clean', 'End of tenancy', 'Oven clean', 'Carpet clean'],
-  commercial:  ['Office clean', 'Retail clean', 'Contract clean', 'Periodic deep',
-                'Commercial windows', 'Commercial gutters', 'Commercial pressure wash'],
+  commercial: [
+    'Office clean',
+    'Retail clean',
+    'Contract clean',
+    'Periodic deep',
+    'Commercial windows',
+    'Commercial gutters',
+    'Commercial pressure wash',
+  ],
 };
 
 // ── Bulk-apply division bar ────────────────────────────────────────────────
@@ -1006,16 +1171,21 @@ const SUGGESTIONS_BY_DIVISION = {
 // Step 1) so the common case is one tap.
 
 const DIVISION_PICKER = [
-  { key: 'residential', label: 'Residential', accent: '#1f48ff', hint: 'Homes, holiday lets, end-of-tenancy.' },
-  { key: 'exterior',    label: 'Exterior',    accent: '#10b981', hint: 'Windows, gutters, soft-wash.' },
-  { key: 'commercial',  label: 'Commercial',  accent: '#f59e0b', hint: 'Offices, pubs, contracts.' },
+  {
+    key: 'residential',
+    label: 'Residential',
+    accent: '#1f48ff',
+    hint: 'Homes, holiday lets, end-of-tenancy.',
+  },
+  { key: 'exterior', label: 'Exterior', accent: '#10b981', hint: 'Windows, gutters, soft-wash.' },
+  { key: 'commercial', label: 'Commercial', accent: '#f59e0b', hint: 'Offices, pubs, contracts.' },
 ];
 
 function BulkDivisionBar({ rows, divisionsPicked, onApply }) {
   const [applying, setApplying] = useState(false);
 
   const missingCount = useMemo(
-    () => (rows ?? []).filter(r => !String(r.category ?? '').trim()).length,
+    () => (rows ?? []).filter((r) => !String(r.category ?? '').trim()).length,
     [rows]
   );
 
@@ -1025,13 +1195,17 @@ function BulkDivisionBar({ rows, divisionsPicked, onApply }) {
   // confusing them with categories they don't even offer). If they picked
   // none, fall back to all three.
   const offered = divisionsPicked?.length
-    ? DIVISION_PICKER.filter(d => divisionsPicked.includes(d.key))
+    ? DIVISION_PICKER.filter((d) => divisionsPicked.includes(d.key))
     : DIVISION_PICKER;
 
   const apply = async (key) => {
     if (applying) return;
     setApplying(true);
-    try { await onApply(key); } finally { setApplying(false); }
+    try {
+      await onApply(key);
+    } finally {
+      setApplying(false);
+    }
   };
 
   return (
@@ -1051,7 +1225,7 @@ function BulkDivisionBar({ rows, divisionsPicked, onApply }) {
       </div>
 
       <div className="flex flex-wrap gap-1.5 pl-9">
-        {offered.map(d => (
+        {offered.map((d) => (
           <button
             key={d.key}
             onClick={() => apply(d.key)}
@@ -1060,8 +1234,8 @@ function BulkDivisionBar({ rows, divisionsPicked, onApply }) {
             className="text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all disabled:opacity-50"
             style={{
               borderColor: `${d.accent}55`,
-              background:  `${d.accent}15`,
-              color:       d.accent,
+              background: `${d.accent}15`,
+              color: d.accent,
             }}
           >
             All as {d.label}
@@ -1077,10 +1251,12 @@ function BulkServiceBar({ rows, divisions, onApply }) {
   const [applying, setApplying] = useState(false);
 
   const missingCount = useMemo(
-    () => (rows ?? []).filter(r =>
-      !(String(r.service_label ?? '').trim()) &&
-      !(Array.isArray(r.service_labels) && r.service_labels.length)
-    ).length,
+    () =>
+      (rows ?? []).filter(
+        (r) =>
+          !String(r.service_label ?? '').trim() &&
+          !(Array.isArray(r.service_labels) && r.service_labels.length)
+      ).length,
     [rows]
   );
 
@@ -1089,14 +1265,18 @@ function BulkServiceBar({ rows, divisions, onApply }) {
   // Pull suggestion chips from whatever divisions the user picked in Step 1.
   // Falls back to "Windows" as the safest single suggestion if nothing was set.
   const chips = (divisions?.length ? divisions : ['exterior'])
-    .flatMap(d => SUGGESTIONS_BY_DIVISION[d] ?? [])
+    .flatMap((d) => SUGGESTIONS_BY_DIVISION[d] ?? [])
     .filter((v, i, a) => v && a.indexOf(v) === i)
     .slice(0, 8);
 
   const apply = async (label) => {
     if (applying) return;
     setApplying(true);
-    try { await onApply(label); } finally { setApplying(false); }
+    try {
+      await onApply(label);
+    } finally {
+      setApplying(false);
+    }
   };
 
   return (
@@ -1107,7 +1287,8 @@ function BulkServiceBar({ rows, divisions, onApply }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-black text-[#010a4f] leading-snug">
-            {missingCount} customer{missingCount === 1 ? '' : 's'} still need{missingCount === 1 ? 's' : ''} a service.
+            {missingCount} customer{missingCount === 1 ? '' : 's'} still need
+            {missingCount === 1 ? 's' : ''} a service.
           </p>
           <p className="text-[11px] text-[#010a4f]/60 leading-snug mt-0.5">
             Tap one to set it on every blank card at once. You can fine-tune per customer after.
@@ -1116,7 +1297,7 @@ function BulkServiceBar({ rows, divisions, onApply }) {
       </div>
 
       <div className="flex flex-wrap gap-1.5 mb-2">
-        {chips.map(label => (
+        {chips.map((label) => (
           <button
             key={label}
             onClick={() => apply(label)}
@@ -1132,13 +1313,23 @@ function BulkServiceBar({ rows, divisions, onApply }) {
         <input
           type="text"
           value={custom}
-          onChange={e => setCustom(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && custom.trim()) { apply(custom.trim()); setCustom(''); } }}
+          onChange={(e) => setCustom(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && custom.trim()) {
+              apply(custom.trim());
+              setCustom('');
+            }
+          }}
           placeholder="Or type a custom service…"
           className="flex-1 text-[12px] bg-white border border-[#1f48ff]/15 rounded-lg px-3 py-1.5 text-[#010a4f] placeholder-[#010a4f]/35 focus:outline-none focus:border-[#1f48ff]"
         />
         <button
-          onClick={() => { if (custom.trim()) { apply(custom.trim()); setCustom(''); } }}
+          onClick={() => {
+            if (custom.trim()) {
+              apply(custom.trim());
+              setCustom('');
+            }
+          }}
           disabled={applying || !custom.trim()}
           className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-[#1f48ff] hover:bg-[#3a5eff] text-white disabled:bg-[#f0f4ff] disabled:text-[#010a4f]/45 transition-all"
         >

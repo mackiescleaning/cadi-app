@@ -15,32 +15,33 @@
 //   accountsData — live from useAccountsData hook
 //   onNavigate   — switch to another tab
 
-import { useState, useMemo, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { TrendingUp } from "lucide-react";
-import FirstVisitCoach from "../components/FirstVisitCoach";
-import { supabase } from "../lib/supabase";
-import { getCurrentUserId } from "../lib/db/authDb";
-import { greenCanvas, glassDark, CONNECT_RADII, ON_DARK } from "../lib/connectTheme";
+import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { TrendingUp } from 'lucide-react';
+import FirstVisitCoach from '../components/FirstVisitCoach';
+import { supabase } from '../lib/supabase';
+import { getCurrentUserId } from '../lib/db/authDb';
+import { greenCanvas, glassDark, CONNECT_RADII } from '../lib/connectTheme';
 
 // ─── Goals coach (first-visit) ────────────────────────────────────────────────
 const AMBITIONS = [
-  { id: 'steady',        label: 'Steady & sustainable' },
-  { id: 'growing_fast',  label: 'Growing fast' },
-  { id: 'scaling',       label: 'Scaling hard' },
+  { id: 'steady', label: 'Steady & sustainable' },
+  { id: 'growing_fast', label: 'Growing fast' },
+  { id: 'scaling', label: 'Scaling hard' },
 ];
 
 function BusinessLabGoalsCoach() {
-  const [saving, setSaving]                 = useState(false);
+  const [saving, setSaving] = useState(false);
   const [currentRevenue, setCurrentRevenue] = useState('');
-  const [targetRevenue, setTargetRevenue]   = useState('');
+  const [targetRevenue, setTargetRevenue] = useState('');
   const [currentClients, setCurrentClients] = useState('');
-  const [targetClients, setTargetClients]   = useState('');
-  const [targetDate, setTargetDate]         = useState('');
-  const [ambition, setAmbition]             = useState('');
+  const [targetClients, setTargetClients] = useState('');
+  const [targetDate, setTargetDate] = useState('');
+  const [ambition, setAmbition] = useState('');
 
-  const lbl = "text-[10px] font-bold uppercase tracking-wider text-[#059669]";
-  const inp = "w-full bg-white border border-[#059669]/15 rounded-lg px-3 py-2 text-sm text-[#010a4f] focus:outline-none focus:border-[#059669]/50";
+  const lbl = 'text-[10px] font-bold uppercase tracking-wider text-[#059669]';
+  const inp =
+    'w-full bg-white border border-[#059669]/15 rounded-lg px-3 py-2 text-sm text-[#010a4f] focus:outline-none focus:border-[#059669]/50';
 
   const persist = async () => {
     setSaving(true);
@@ -49,10 +50,12 @@ function BusinessLabGoalsCoach() {
       if (!ownerId) return;
       const monthlyTarget = Number(targetRevenue || 0);
       if (monthlyTarget) {
-        await supabase.from('business_settings').upsert(
-          { owner_id: ownerId, annual_target: monthlyTarget * 12 },
-          { onConflict: 'owner_id' }
-        );
+        await supabase
+          .from('business_settings')
+          .upsert(
+            { owner_id: ownerId, annual_target: monthlyTarget * 12 },
+            { onConflict: 'owner_id' }
+          );
       }
       const { data: row } = await supabase
         .from('business_settings')
@@ -63,16 +66,15 @@ function BusinessLabGoalsCoach() {
       const next = {
         ...setup,
         current_revenue: Number(currentRevenue || 0) || null,
-        target_revenue:  Number(targetRevenue  || 0) || null,
+        target_revenue: Number(targetRevenue || 0) || null,
         current_clients: Number(currentClients || 0) || null,
-        target_clients:  Number(targetClients  || 0) || null,
-        target_date:     targetDate || null,
-        ambition:        ambition || null,
+        target_clients: Number(targetClients || 0) || null,
+        target_date: targetDate || null,
+        ambition: ambition || null,
       };
-      await supabase.from('business_settings').upsert(
-        { owner_id: ownerId, setup_data: next },
-        { onConflict: 'owner_id' }
-      );
+      await supabase
+        .from('business_settings')
+        .upsert({ owner_id: ownerId, setup_data: next }, { onConflict: 'owner_id' });
     } finally {
       setSaving(false);
     }
@@ -91,41 +93,77 @@ function BusinessLabGoalsCoach() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className={lbl}>Current monthly revenue (£)</label>
-          <input type="number" inputMode="numeric" min="0" value={currentRevenue}
-            onChange={e => setCurrentRevenue(e.target.value)} placeholder="0" className={inp} />
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            value={currentRevenue}
+            onChange={(e) => setCurrentRevenue(e.target.value)}
+            placeholder="0"
+            className={inp}
+          />
         </div>
         <div>
           <label className={lbl}>Target monthly revenue (£)</label>
-          <input type="number" inputMode="numeric" min="0" value={targetRevenue}
-            onChange={e => setTargetRevenue(e.target.value)} placeholder="0" className={inp} />
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            value={targetRevenue}
+            onChange={(e) => setTargetRevenue(e.target.value)}
+            placeholder="0"
+            className={inp}
+          />
         </div>
         <div>
           <label className={lbl}>Current clients</label>
-          <input type="number" inputMode="numeric" min="0" value={currentClients}
-            onChange={e => setCurrentClients(e.target.value)} placeholder="0" className={inp} />
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            value={currentClients}
+            onChange={(e) => setCurrentClients(e.target.value)}
+            placeholder="0"
+            className={inp}
+          />
         </div>
         <div>
           <label className={lbl}>Target clients</label>
-          <input type="number" inputMode="numeric" min="0" value={targetClients}
-            onChange={e => setTargetClients(e.target.value)} placeholder="0" className={inp} />
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            value={targetClients}
+            onChange={(e) => setTargetClients(e.target.value)}
+            placeholder="0"
+            className={inp}
+          />
         </div>
         <div className="sm:col-span-2">
           <label className={lbl}>Target date</label>
-          <input type="date" value={targetDate}
-            onChange={e => setTargetDate(e.target.value)} className={inp} />
+          <input
+            type="date"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            className={inp}
+          />
         </div>
         <div className="sm:col-span-2">
           <label className={lbl}>Ambition</label>
           <div className="flex flex-wrap gap-2 mt-1.5">
-            {AMBITIONS.map(a => {
+            {AMBITIONS.map((a) => {
               const on = ambition === a.id;
               return (
-                <button key={a.id} type="button" onClick={() => setAmbition(on ? '' : a.id)}
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setAmbition(on ? '' : a.id)}
                   className={`text-[12px] font-bold px-3 py-1.5 rounded-full border transition-colors ${
                     on
                       ? 'bg-[#059669] text-white border-[#059669]'
                       : 'bg-[#f0f4ff] text-[#010a4f] border-[#059669]/15 hover:border-[#059669]/40'
-                  }`}>
+                  }`}
+                >
                   {a.label}
                 </button>
               );
@@ -139,8 +177,11 @@ function BusinessLabGoalsCoach() {
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 const DEFAULT_ACCOUNTS = {
-  vatRegistered: false, taxRate: 0.20,
-  ytdIncome: 0, annualTarget: 0, annualProfit: 0,
+  vatRegistered: false,
+  taxRate: 0.2,
+  ytdIncome: 0,
+  annualTarget: 0,
+  annualProfit: 0,
   ytdExpenses: 0,
 };
 
@@ -153,23 +194,32 @@ function currentTaxYearLabel() {
 // ─── Tax helpers (2025/26 rates) ──────────────────────────────────────────────
 function calcSoleTax(profit) {
   const pa = 12570;
-  const taxable  = Math.max(0, profit - pa);
-  const basic    = Math.min(taxable, 37700) * 0.20;
-  const higher   = Math.max(0, taxable - 37700) * 0.40;
-  const ni       = Math.max(0, profit - pa) * 0.09;
-  const total    = basic + higher + ni;
+  const taxable = Math.max(0, profit - pa);
+  const basic = Math.min(taxable, 37700) * 0.2;
+  const higher = Math.max(0, taxable - 37700) * 0.4;
+  const ni = Math.max(0, profit - pa) * 0.09;
+  const total = basic + higher + ni;
   return { basic, higher, ni, total, takeHome: profit - total };
 }
 
 function calcLtdTax(profit, salary) {
-  const rate     = profit > 250000 ? 0.25 : profit > 50000 ? 0.19 + ((profit-50000)/200000)*0.06 : 0.19;
-  const corpP    = Math.max(0, profit - salary);
-  const corpTax  = corpP * rate;
-  const afterC   = corpP - corpTax;
-  const salTax   = Math.min(Math.max(0,salary-12570), 37700) * 0.20 + Math.max(0,salary-12570-37700)*0.40;
-  const divTax   = Math.min(Math.max(0,afterC-500), Math.max(0,37700-Math.max(0,salary-12570))) * 0.0875
-                 + Math.max(0, afterC-500-Math.max(0,37700-Math.max(0,salary-12570))) * 0.3375;
-  return { corpTax, salTax, divTax, totalTax: corpTax+salTax+divTax, takeHome: salary+afterC-salTax-divTax };
+  const rate =
+    profit > 250000 ? 0.25 : profit > 50000 ? 0.19 + ((profit - 50000) / 200000) * 0.06 : 0.19;
+  const corpP = Math.max(0, profit - salary);
+  const corpTax = corpP * rate;
+  const afterC = corpP - corpTax;
+  const salTax =
+    Math.min(Math.max(0, salary - 12570), 37700) * 0.2 + Math.max(0, salary - 12570 - 37700) * 0.4;
+  const divTax =
+    Math.min(Math.max(0, afterC - 500), Math.max(0, 37700 - Math.max(0, salary - 12570))) * 0.0875 +
+    Math.max(0, afterC - 500 - Math.max(0, 37700 - Math.max(0, salary - 12570))) * 0.3375;
+  return {
+    corpTax,
+    salTax,
+    divTax,
+    totalTax: corpTax + salTax + divTax,
+    takeHome: salary + afterC - salTax - divTax,
+  };
 }
 
 function calcEmployerNI(annualWage) {
@@ -177,34 +227,56 @@ function calcEmployerNI(annualWage) {
 }
 
 // ─── Format ───────────────────────────────────────────────────────────────────
-const fmt  = n => `£${Math.round(Math.abs(+n)).toLocaleString()}`;
-const fmt2 = n => `£${Math.abs(+n).toFixed(2)}`;
-const pct  = n => `${Math.round(+n)}%`;
+const fmt = (n) => `£${Math.round(Math.abs(+n)).toLocaleString()}`;
+const pct = (n) => `${Math.round(+n)}%`;
 
 // ─── Shared UI (dark glassmorphism) ───────────────────────────────────────────
-const Card = ({ children, className = "" }) =>
-  <div className={`relative overflow-hidden rounded-xl border border-[rgba(153,197,255,0.12)] ${className}`}
-    style={{ background: 'linear-gradient(145deg, #052e1c 0%, #064e3b 50%, #065f46 100%)' }}>
+const Card = ({ children, className = '' }) => (
+  <div
+    className={`relative overflow-hidden rounded-xl border border-[rgba(153,197,255,0.12)] ${className}`}
+    style={{ background: 'linear-gradient(145deg, #052e1c 0%, #064e3b 50%, #065f46 100%)' }}
+  >
     <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#99c5ff]/40 to-transparent" />
     <div className="relative">{children}</div>
-  </div>;
+  </div>
+);
 
-const SL = ({ children, className = "" }) =>
-  <p className={`text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.5)] ${className}`}>{children}</p>;
+const SL = ({ children, className = '' }) => (
+  <p
+    className={`text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.5)] ${className}`}
+  >
+    {children}
+  </p>
+);
 
-function Chip({ children, color = "blue" }) {
+function Chip({ children, color = 'blue' }) {
   const s = {
-    blue:"bg-[#059669]/20 text-[#99c5ff] border-[#059669]/30", green:"bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
-    warn:"bg-amber-500/15 text-amber-400 border-amber-500/25", red:"bg-red-500/15 text-red-400 border-red-500/25",
-    navy:"bg-white/10 text-white border-white/20", sky:"bg-[#99c5ff]/10 text-[#99c5ff] border-[#99c5ff]/20",
-    gray:"bg-white/5 text-[rgba(153,197,255,0.5)] border-white/10", orange:"bg-orange-500/15 text-orange-400 border-orange-500/25",
+    blue: 'bg-[#059669]/20 text-[#99c5ff] border-[#059669]/30',
+    green: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+    warn: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+    red: 'bg-red-500/15 text-red-400 border-red-500/25',
+    navy: 'bg-white/10 text-white border-white/20',
+    sky: 'bg-[#99c5ff]/10 text-[#99c5ff] border-[#99c5ff]/20',
+    gray: 'bg-white/5 text-[rgba(153,197,255,0.5)] border-white/10',
+    orange: 'bg-orange-500/15 text-orange-400 border-orange-500/25',
   };
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold border ${s[color]}`}>{children}</span>;
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold border ${s[color]}`}
+    >
+      {children}
+    </span>
+  );
 }
 
-function Alert({ type = "blue", children }) {
-  const s = { warn:"bg-amber-500/10 border-amber-500/25 text-amber-300", green:"bg-emerald-500/10 border-emerald-500/25 text-emerald-300", blue:"bg-[#059669]/10 border-[#059669]/25 text-[#99c5ff]", gold:"bg-yellow-500/10 border-yellow-500/25 text-yellow-300" };
-  const icons = { warn:"!", green:"✓", blue:"i", gold:"→" };
+function Alert({ type = 'blue', children }) {
+  const s = {
+    warn: 'bg-amber-500/10 border-amber-500/25 text-amber-300',
+    green: 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300',
+    blue: 'bg-[#059669]/10 border-[#059669]/25 text-[#99c5ff]',
+    gold: 'bg-yellow-500/10 border-yellow-500/25 text-yellow-300',
+  };
+  const icons = { warn: '!', green: '✓', blue: 'i', gold: '→' };
   return (
     <div className={`flex gap-3 p-3 border text-sm leading-relaxed rounded-xl ${s[type]}`}>
       <span className="shrink-0 mt-0.5 text-xs font-bold w-4 text-center">{icons[type]}</span>
@@ -217,20 +289,31 @@ function Slider({ label, value, min, max, step, onChange, display, hint }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <label className="text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.45)]">{label}</label>
+        <label className="text-[10px] font-bold tracking-[0.12em] uppercase text-[rgba(153,197,255,0.45)]">
+          {label}
+        </label>
         <span className="text-sm font-black tabular-nums text-white">{display ?? value}</span>
       </div>
-      <input type="range" min={min} max={max} step={step} value={value}
-        onChange={e => onChange(parseFloat(e.target.value))}
-        className="w-full accent-[#059669]" />
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full accent-[#059669]"
+      />
       {hint && <p className="text-xs text-[rgba(153,197,255,0.35)]">{hint}</p>}
     </div>
   );
 }
 
-function RStat({ label, value, accent = "text-white", sub }) {
+function RStat({ label, value, accent = 'text-white', sub }) {
   return (
-    <div className="rounded-xl border border-[rgba(134,239,172,0.14)] p-3" style={{ background: 'linear-gradient(135deg, #064e3b 0%, #047857 100%)' }}>
+    <div
+      className="rounded-xl border border-[rgba(134,239,172,0.14)] p-3"
+      style={{ background: 'linear-gradient(135deg, #064e3b 0%, #047857 100%)' }}
+    >
       <SL className="mb-1">{label}</SL>
       <p className={`text-xl font-black tabular-nums ${accent}`}>{value}</p>
       {sub && <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">{sub}</p>}
@@ -240,15 +323,34 @@ function RStat({ label, value, accent = "text-white", sub }) {
 
 function WFRow({ label, value, pctOf, color, bold = false, indent = false }) {
   const barPct = Math.max(Math.min((Math.abs(value) / Math.max(pctOf, 1)) * 100, 100), 1);
-  const colorMap = { blue:"bg-[#059669]", green:"bg-emerald-500", red:"bg-red-500", amber:"bg-amber-500", navy:"bg-white/20", gray:"bg-white/10" };
+  const colorMap = {
+    blue: 'bg-[#059669]',
+    green: 'bg-emerald-500',
+    red: 'bg-red-500',
+    amber: 'bg-amber-500',
+    navy: 'bg-white/20',
+    gray: 'bg-white/10',
+  };
   return (
-    <div className={`flex items-center gap-3 py-2 ${indent?"pl-4":""} ${bold?"border-t border-[rgba(153,197,255,0.1)] pt-3 mt-1":""}`}>
-      <span className={`text-xs w-36 shrink-0 ${bold?"font-semibold text-white":"text-[rgba(153,197,255,0.5)]"}`}>{label}</span>
+    <div
+      className={`flex items-center gap-3 py-2 ${indent ? 'pl-4' : ''} ${bold ? 'border-t border-[rgba(153,197,255,0.1)] pt-3 mt-1' : ''}`}
+    >
+      <span
+        className={`text-xs w-36 shrink-0 ${bold ? 'font-semibold text-white' : 'text-[rgba(153,197,255,0.5)]'}`}
+      >
+        {label}
+      </span>
       <div className="flex-1 h-4 bg-[rgba(153,197,255,0.06)] rounded-lg overflow-hidden">
-        <div className={`h-full ${colorMap[color]||"bg-white/10"} rounded-lg transition-all duration-500`} style={{width:`${barPct}%`}} />
+        <div
+          className={`h-full ${colorMap[color] || 'bg-white/10'} rounded-lg transition-all duration-500`}
+          style={{ width: `${barPct}%` }}
+        />
       </div>
-      <span className={`text-xs font-mono w-20 text-right shrink-0 ${bold?`font-bold text-sm ${color==="green"?"text-emerald-400":color==="red"?"text-red-400":"text-white"}`:color==="red"?"text-red-400 font-semibold":color==="green"?"text-emerald-400 font-semibold":color==="amber"?"text-amber-400 font-semibold":"text-[rgba(153,197,255,0.6)]"}`}>
-        {value < 0 ? "-" : ""}{fmt(value)}
+      <span
+        className={`text-xs font-mono w-20 text-right shrink-0 ${bold ? `font-bold text-sm ${color === 'green' ? 'text-emerald-400' : color === 'red' ? 'text-red-400' : 'text-white'}` : color === 'red' ? 'text-red-400 font-semibold' : color === 'green' ? 'text-emerald-400 font-semibold' : color === 'amber' ? 'text-amber-400 font-semibold' : 'text-[rgba(153,197,255,0.6)]'}`}
+      >
+        {value < 0 ? '-' : ''}
+        {fmt(value)}
       </span>
     </div>
   );
@@ -256,11 +358,11 @@ function WFRow({ label, value, pctOf, color, bold = false, indent = false }) {
 
 function Verdict({ level, children }) {
   const s = {
-    good: "bg-emerald-500/10 border-emerald-500/25 border-l-4 border-l-emerald-400 text-emerald-300",
-    warn: "bg-amber-500/10 border-amber-500/25 border-l-4 border-l-amber-400 text-amber-300",
-    bad:  "bg-red-500/10 border-red-500/25 border-l-4 border-l-red-400 text-red-300",
+    good: 'bg-emerald-500/10 border-emerald-500/25 border-l-4 border-l-emerald-400 text-emerald-300',
+    warn: 'bg-amber-500/10 border-amber-500/25 border-l-4 border-l-amber-400 text-amber-300',
+    bad: 'bg-red-500/10 border-red-500/25 border-l-4 border-l-red-400 text-red-300',
   };
-  const icon = { good: "✓", warn: "!", bad: "✕" };
+  const icon = { good: '✓', warn: '!', bad: '✕' };
   return (
     <div className={`flex gap-3 p-4 border rounded-xl text-sm leading-relaxed ${s[level]}`}>
       <span className="shrink-0 text-sm font-bold w-4 text-center">{icon[level]}</span>
@@ -271,80 +373,186 @@ function Verdict({ level, children }) {
 
 // ─── TOOL 01: Hire a cleaner ──────────────────────────────────────────────────
 function HireTool({ accounts }) {
-  const [wage,    setWage]    = useState(13);
-  const [hrs,     setHrs]     = useState(25);
+  const [wage, setWage] = useState(13);
+  const [hrs, setHrs] = useState(25);
   const [genRate, setGenRate] = useState(22);
 
   const calc = useMemo(() => {
-    const monthlyWage   = (wage * hrs * 52) / 12;
-    const annualWage    = wage * hrs * 52;
-    const empNI         = calcEmployerNI(annualWage) / 12;
-    const monthlyRev    = (genRate * hrs * 52) / 12;
-    const gross         = monthlyRev - monthlyWage - empNI;
-    const tax           = gross > 0 ? gross * (accounts.taxRate + 0.09) : 0;
-    const net           = gross - tax;
-    const margin        = monthlyRev > 0 ? (gross / monthlyRev) * 100 : 0;
-    const breakEvenRate = monthlyRev > 0
-      ? ((monthlyWage + empNI) / ((hrs * 52) / 12))
-      : 0;
+    const monthlyWage = (wage * hrs * 52) / 12;
+    const annualWage = wage * hrs * 52;
+    const empNI = calcEmployerNI(annualWage) / 12;
+    const monthlyRev = (genRate * hrs * 52) / 12;
+    const gross = monthlyRev - monthlyWage - empNI;
+    const tax = gross > 0 ? gross * (accounts.taxRate + 0.09) : 0;
+    const net = gross - tax;
+    const margin = monthlyRev > 0 ? (gross / monthlyRev) * 100 : 0;
+    const breakEvenRate = monthlyRev > 0 ? (monthlyWage + empNI) / ((hrs * 52) / 12) : 0;
     const payback = net > 0 ? Math.ceil(1200 / net) : null;
     return { monthlyWage, empNI, monthlyRev, gross, tax, net, margin, breakEvenRate, payback };
   }, [wage, hrs, genRate, accounts]);
 
-  const level = calc.gross < 0 ? "bad" : calc.margin < 25 ? "warn" : "good";
+  const level = calc.gross < 0 ? 'bad' : calc.margin < 25 ? 'warn' : 'good';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div className="space-y-4">
         <Card className="overflow-hidden">
-          <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>The hire</SL></div>
+          <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
+            <SL>The hire</SL>
+          </div>
           <div className="p-4 space-y-5">
-            <Slider label="Their hourly wage (£)" value={wage} min={12} max={22} step={0.5} onChange={setWage} display={`£${wage.toFixed(2)}/hr`} hint="National Living Wage 2026: £12.21" />
-            <Slider label="Hours per week" value={hrs} min={8} max={40} step={1} onChange={setHrs} display={`${hrs} hrs/wk`} hint={`Annual wage: ${fmt(wage * hrs * 52)}`} />
-            <Slider label="Revenue they generate (£/hr)" value={genRate} min={15} max={50} step={1} onChange={setGenRate} display={`£${genRate}/hr`} hint={`Monthly revenue from them: ${fmt(calc.monthlyRev)}`} />
+            <Slider
+              label="Their hourly wage (£)"
+              value={wage}
+              min={12}
+              max={22}
+              step={0.5}
+              onChange={setWage}
+              display={`£${wage.toFixed(2)}/hr`}
+              hint="National Living Wage 2026: £12.21"
+            />
+            <Slider
+              label="Hours per week"
+              value={hrs}
+              min={8}
+              max={40}
+              step={1}
+              onChange={setHrs}
+              display={`${hrs} hrs/wk`}
+              hint={`Annual wage: ${fmt(wage * hrs * 52)}`}
+            />
+            <Slider
+              label="Revenue they generate (£/hr)"
+              value={genRate}
+              min={15}
+              max={50}
+              step={1}
+              onChange={setGenRate}
+              display={`£${genRate}/hr`}
+              hint={`Monthly revenue from them: ${fmt(calc.monthlyRev)}`}
+            />
           </div>
         </Card>
         <Alert type="gold">
-          Add ~15% to base wage for holiday pay (12.07%), minimum pension (3%), and public liability insurance. The true cost is higher than the wage alone.
+          Add ~15% to base wage for holiday pay (12.07%), minimum pension (3%), and public liability
+          insurance. The true cost is higher than the wage alone.
         </Alert>
       </div>
 
       <div className="space-y-4">
         {/* Answer first — verdict hero */}
-        <Card className={`overflow-hidden border-t-2 ${level==="good"?"border-t-emerald-500":level==="warn"?"border-t-amber-400":"border-t-red-500"}`}>
+        <Card
+          className={`overflow-hidden border-t-2 ${level === 'good' ? 'border-t-emerald-500' : level === 'warn' ? 'border-t-amber-400' : 'border-t-red-500'}`}
+        >
           <div className="px-5 py-5">
             <SL className="mb-2">Your net gain from this hire</SL>
-            <p className={`text-5xl font-bold tabular-nums ${calc.net>0?"text-emerald-600":"text-red-500"}`}>
-              {calc.net>0?"+":"-"}{fmt(Math.abs(calc.net))}
+            <p
+              className={`text-5xl font-bold tabular-nums ${calc.net > 0 ? 'text-emerald-600' : 'text-red-500'}`}
+            >
+              {calc.net > 0 ? '+' : '-'}
+              {fmt(Math.abs(calc.net))}
             </p>
-            <p className="text-sm text-[rgba(153,197,255,0.4)] mt-1">per month after their wage, employer NI, and your income tax</p>
+            <p className="text-sm text-[rgba(153,197,255,0.4)] mt-1">
+              per month after their wage, employer NI, and your income tax
+            </p>
             {calc.payback && calc.net > 0 && (
-              <p className="text-xs text-[rgba(153,197,255,0.4)] mt-1">Onboarding cost (~£1,200) paid back in <span className="font-semibold text-white">{calc.payback} months</span></p>
+              <p className="text-xs text-[rgba(153,197,255,0.4)] mt-1">
+                Onboarding cost (~£1,200) paid back in{' '}
+                <span className="font-semibold text-white">{calc.payback} months</span>
+              </p>
             )}
           </div>
         </Card>
 
         <div className="grid grid-cols-2 gap-3">
-          <RStat label="They generate"     value={fmt(calc.monthlyRev)}              accent="text-[#10b981]"  sub="per month" />
-          <RStat label="Total monthly cost" value={fmt(calc.monthlyWage+calc.empNI)}  accent="text-red-500"     sub="wage + employer NI" />
-          <RStat label="Gross profit"        value={fmt(calc.gross)}                   accent={calc.gross>0?"text-white":"text-red-500"} />
-          <RStat label="Break-even rate"     value={`£${calc.breakEvenRate.toFixed(2)}/hr`} accent="text-amber-600" sub="minimum to cover cost" />
+          <RStat
+            label="They generate"
+            value={fmt(calc.monthlyRev)}
+            accent="text-[#10b981]"
+            sub="per month"
+          />
+          <RStat
+            label="Total monthly cost"
+            value={fmt(calc.monthlyWage + calc.empNI)}
+            accent="text-red-500"
+            sub="wage + employer NI"
+          />
+          <RStat
+            label="Gross profit"
+            value={fmt(calc.gross)}
+            accent={calc.gross > 0 ? 'text-white' : 'text-red-500'}
+          />
+          <RStat
+            label="Break-even rate"
+            value={`£${calc.breakEvenRate.toFixed(2)}/hr`}
+            accent="text-amber-600"
+            sub="minimum to cover cost"
+          />
         </div>
 
         <Card className="p-4">
           <SL className="mb-3">Where the revenue goes</SL>
-          <WFRow label="Revenue generated"   value={calc.monthlyRev}                 pctOf={calc.monthlyRev} color="blue" />
-          <WFRow label="Their wage"           value={-calc.monthlyWage}              pctOf={calc.monthlyRev} color="red" indent />
-          <WFRow label="Employer NI"          value={-calc.empNI}                    pctOf={calc.monthlyRev} color="red" indent />
-          <WFRow label="Gross profit"         value={calc.gross}                     pctOf={calc.monthlyRev} color={calc.gross>0?"green":"red"} />
-          <WFRow label="Your tax + NI"        value={-calc.tax}                      pctOf={calc.monthlyRev} color="amber" indent />
-          <WFRow label="Net gain to you"      value={calc.net}                       pctOf={calc.monthlyRev} color="green" bold />
+          <WFRow
+            label="Revenue generated"
+            value={calc.monthlyRev}
+            pctOf={calc.monthlyRev}
+            color="blue"
+          />
+          <WFRow
+            label="Their wage"
+            value={-calc.monthlyWage}
+            pctOf={calc.monthlyRev}
+            color="red"
+            indent
+          />
+          <WFRow
+            label="Employer NI"
+            value={-calc.empNI}
+            pctOf={calc.monthlyRev}
+            color="red"
+            indent
+          />
+          <WFRow
+            label="Gross profit"
+            value={calc.gross}
+            pctOf={calc.monthlyRev}
+            color={calc.gross > 0 ? 'green' : 'red'}
+          />
+          <WFRow
+            label="Your tax + NI"
+            value={-calc.tax}
+            pctOf={calc.monthlyRev}
+            color="amber"
+            indent
+          />
+          <WFRow
+            label="Net gain to you"
+            value={calc.net}
+            pctOf={calc.monthlyRev}
+            color="green"
+            bold
+          />
         </Card>
 
         <Verdict level={level}>
-          {level==="bad" && <>At £{wage.toFixed(2)}/hr and {hrs}hrs/week, this hire costs you money. They need to generate at least <strong>£{calc.breakEvenRate.toFixed(2)}/hr</strong> to break even.</>}
-          {level==="warn" && <>Profitable but only <strong>{pct(calc.margin)} margin</strong>. One quiet week wipes the gain. Raise their billable rate before committing.</>}
-          {level==="good" && <>Hire them. <strong>{pct(calc.margin)} margin</strong> nets you <strong>{fmt(calc.net)}/month</strong> after all costs and your tax.</>}
+          {level === 'bad' && (
+            <>
+              At £{wage.toFixed(2)}/hr and {hrs}hrs/week, this hire costs you money. They need to
+              generate at least <strong>£{calc.breakEvenRate.toFixed(2)}/hr</strong> to break even.
+            </>
+          )}
+          {level === 'warn' && (
+            <>
+              Profitable but only <strong>{pct(calc.margin)} margin</strong>. One quiet week wipes
+              the gain. Raise their billable rate before committing.
+            </>
+          )}
+          {level === 'good' && (
+            <>
+              Hire them. <strong>{pct(calc.margin)} margin</strong> nets you{' '}
+              <strong>{fmt(calc.net)}/month</strong> after all costs and your tax.
+            </>
+          )}
         </Verdict>
       </div>
     </div>
@@ -357,29 +565,57 @@ function StructureTool({ accounts }) {
   const [salary, setSalary] = useState(12570);
 
   const calc = useMemo(() => {
-    const st  = calcSoleTax(profit);
+    const st = calcSoleTax(profit);
     const ltd = calcLtdTax(profit, salary);
     const saving = ltd.takeHome - st.takeHome;
     return { st, ltd, saving };
   }, [profit, salary]);
 
-  const level = calc.saving > 5000 ? "good" : calc.saving > 1500 ? "warn" : "bad";
+  const level = calc.saving > 5000 ? 'good' : calc.saving > 1500 ? 'warn' : 'bad';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div className="space-y-4">
         <Card className="overflow-hidden">
-          <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Your profit</SL></div>
+          <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
+            <SL>Your profit</SL>
+          </div>
           <div className="p-4 space-y-5">
-            <Slider label="Annual profit (£)" value={profit} min={15000} max={200000} step={1000} onChange={setProfit} display={fmt(profit)} hint={`From your accounts: ${fmt(accounts.annualProfit||33480)}`} />
-            <Slider label="Director salary if Ltd (£)" value={salary} min={12570} max={50000} step={500} onChange={setSalary} display={fmt(salary)} hint="£12,570 = personal allowance — most tax-efficient" />
+            <Slider
+              label="Annual profit (£)"
+              value={profit}
+              min={15000}
+              max={200000}
+              step={1000}
+              onChange={setProfit}
+              display={fmt(profit)}
+              hint={`From your accounts: ${fmt(accounts.annualProfit || 33480)}`}
+            />
+            <Slider
+              label="Director salary if Ltd (£)"
+              value={salary}
+              min={12570}
+              max={50000}
+              step={500}
+              onChange={setSalary}
+              display={fmt(salary)}
+              hint="£12,570 = personal allowance — most tax-efficient"
+            />
           </div>
         </Card>
 
         <Card className="overflow-hidden">
-          <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>What limited company means in practice</SL></div>
+          <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
+            <SL>What limited company means in practice</SL>
+          </div>
           <div className="divide-y divide-gray-100">
-            {[["Accountant cost","£1,000–£2,500/yr","text-red-500"],["Companies House","Annual accounts + £13 fee","text-[rgba(153,197,255,0.5)]"],["Payroll admin","Monthly RTI submission","text-amber-600"],["Personal liability","Limited — you're protected","text-emerald-600"],["Credibility","Ltd suffix on invoices","text-emerald-600"]].map(([l,v,c])=>(
+            {[
+              ['Accountant cost', '£1,000–£2,500/yr', 'text-red-500'],
+              ['Companies House', 'Annual accounts + £13 fee', 'text-[rgba(153,197,255,0.5)]'],
+              ['Payroll admin', 'Monthly RTI submission', 'text-amber-600'],
+              ['Personal liability', "Limited — you're protected", 'text-emerald-600'],
+              ['Credibility', 'Ltd suffix on invoices', 'text-emerald-600'],
+            ].map(([l, v, c]) => (
               <div key={l} className="flex justify-between px-4 py-2.5 text-sm">
                 <span className="text-[rgba(153,197,255,0.6)]">{l}</span>
                 <span className={`font-semibold ${c}`}>{v}</span>
@@ -391,14 +627,21 @@ function StructureTool({ accounts }) {
 
       <div className="space-y-4">
         {/* Annual saving hero */}
-        <Card className={`overflow-hidden border-t-2 ${level==="good"?"border-t-emerald-500":level==="warn"?"border-t-amber-400":"border-t-red-500"}`}>
+        <Card
+          className={`overflow-hidden border-t-2 ${level === 'good' ? 'border-t-emerald-500' : level === 'warn' ? 'border-t-amber-400' : 'border-t-red-500'}`}
+        >
           <div className="px-5 py-5">
             <SL className="mb-2">Annual saving — Ltd vs sole trader</SL>
-            <p className={`text-5xl font-bold tabular-nums ${calc.saving>0?"text-emerald-600":"text-red-500"}`}>
-              {calc.saving>0?"+":""}{fmt(calc.saving)}
+            <p
+              className={`text-5xl font-bold tabular-nums ${calc.saving > 0 ? 'text-emerald-600' : 'text-red-500'}`}
+            >
+              {calc.saving > 0 ? '+' : ''}
+              {fmt(calc.saving)}
             </p>
             <p className="text-sm text-[rgba(153,197,255,0.4)] mt-1">
-              {calc.saving > 2000 ? `After £1,500 accountant cost: net benefit ${fmt(calc.saving-1500)}/yr` : "Accountant cost likely wipes this saving"}
+              {calc.saving > 2000
+                ? `After £1,500 accountant cost: net benefit ${fmt(calc.saving - 1500)}/yr`
+                : 'Accountant cost likely wipes this saving'}
             </p>
           </div>
         </Card>
@@ -406,23 +649,56 @@ function StructureTool({ accounts }) {
         {/* Side by side */}
         <div className="grid grid-cols-2 gap-3">
           <Card className="overflow-hidden border-t-2 border-t-[#10b981]">
-            <div className="px-4 py-3 bg-[rgba(153,197,255,0.04)] border-b border-[rgba(153,197,255,0.08)]"><SL>Sole trader</SL></div>
+            <div className="px-4 py-3 bg-[rgba(153,197,255,0.04)] border-b border-[rgba(153,197,255,0.08)]">
+              <SL>Sole trader</SL>
+            </div>
             <div className="divide-y divide-gray-100">
-              {[["Income tax",fmt(calc.st.basic+calc.st.higher),"text-red-500"],["Class 4 NI",fmt(calc.st.ni),"text-red-500"],["Total tax",fmt(calc.st.total),"text-amber-600",true],["Take-home",fmt(calc.st.takeHome),"text-emerald-600",true]].map(([l,v,c,bold])=>(
-                <div key={l} className={`flex justify-between px-4 py-2.5 text-sm ${bold?"bg-[rgba(153,197,255,0.04)]":""}`}>
-                  <span className={bold?"font-semibold text-gray-700":"text-[rgba(153,197,255,0.6)]"}>{l}</span>
-                  <span className={`font-mono ${bold?"font-bold":""} ${c}`}>{v}</span>
+              {[
+                ['Income tax', fmt(calc.st.basic + calc.st.higher), 'text-red-500'],
+                ['Class 4 NI', fmt(calc.st.ni), 'text-red-500'],
+                ['Total tax', fmt(calc.st.total), 'text-amber-600', true],
+                ['Take-home', fmt(calc.st.takeHome), 'text-emerald-600', true],
+              ].map(([l, v, c, bold]) => (
+                <div
+                  key={l}
+                  className={`flex justify-between px-4 py-2.5 text-sm ${bold ? 'bg-[rgba(153,197,255,0.04)]' : ''}`}
+                >
+                  <span
+                    className={
+                      bold ? 'font-semibold text-gray-700' : 'text-[rgba(153,197,255,0.6)]'
+                    }
+                  >
+                    {l}
+                  </span>
+                  <span className={`font-mono ${bold ? 'font-bold' : ''} ${c}`}>{v}</span>
                 </div>
               ))}
             </div>
           </Card>
           <Card className="overflow-hidden border-t-2 border-t-emerald-500">
-            <div className="px-4 py-3 bg-[rgba(153,197,255,0.04)] border-b border-[rgba(153,197,255,0.08)]"><SL>Limited company</SL></div>
+            <div className="px-4 py-3 bg-[rgba(153,197,255,0.04)] border-b border-[rgba(153,197,255,0.08)]">
+              <SL>Limited company</SL>
+            </div>
             <div className="divide-y divide-gray-100">
-              {[["Corp. tax",fmt(calc.ltd.corpTax),"text-red-500"],["Income tax",fmt(calc.ltd.salTax),"text-red-500"],["Dividend tax",fmt(calc.ltd.divTax),"text-red-500"],["Total tax",fmt(calc.ltd.totalTax),"text-amber-600",true],["Take-home",fmt(calc.ltd.takeHome),"text-emerald-600",true]].map(([l,v,c,bold])=>(
-                <div key={l} className={`flex justify-between px-4 py-2.5 text-sm ${bold?"bg-[rgba(153,197,255,0.04)]":""}`}>
-                  <span className={bold?"font-semibold text-gray-700":"text-[rgba(153,197,255,0.6)]"}>{l}</span>
-                  <span className={`font-mono ${bold?"font-bold":""} ${c}`}>{v}</span>
+              {[
+                ['Corp. tax', fmt(calc.ltd.corpTax), 'text-red-500'],
+                ['Income tax', fmt(calc.ltd.salTax), 'text-red-500'],
+                ['Dividend tax', fmt(calc.ltd.divTax), 'text-red-500'],
+                ['Total tax', fmt(calc.ltd.totalTax), 'text-amber-600', true],
+                ['Take-home', fmt(calc.ltd.takeHome), 'text-emerald-600', true],
+              ].map(([l, v, c, bold]) => (
+                <div
+                  key={l}
+                  className={`flex justify-between px-4 py-2.5 text-sm ${bold ? 'bg-[rgba(153,197,255,0.04)]' : ''}`}
+                >
+                  <span
+                    className={
+                      bold ? 'font-semibold text-gray-700' : 'text-[rgba(153,197,255,0.6)]'
+                    }
+                  >
+                    {l}
+                  </span>
+                  <span className={`font-mono ${bold ? 'font-bold' : ''} ${c}`}>{v}</span>
                 </div>
               ))}
             </div>
@@ -430,13 +706,31 @@ function StructureTool({ accounts }) {
         </div>
 
         <Alert type="blue">
-          Estimate only — not tax advice. Ask your accountant for exact figures before incorporating. Rates based on {currentTaxYearLabel()}.
+          Estimate only — not tax advice. Ask your accountant for exact figures before
+          incorporating. Rates based on {currentTaxYearLabel()}.
         </Alert>
 
         <Verdict level={level}>
-          {level==="bad"  && <>At {fmt(profit)} profit, stay sole trader. The saving ({fmt(Math.abs(calc.saving))}) is less than a good accountant costs. Go limited when profit consistently exceeds £50,000.</>}
-          {level==="warn" && <>Borderline. You save {fmt(calc.saving)}/yr, but after accountant fees the net benefit is around {fmt(calc.saving-1500)}. Worth a conversation with an accountant, not urgent.</>}
-          {level==="good" && <>Go limited. You save <strong>{fmt(calc.saving)}/yr</strong> — well above accountant costs. This is a clear win at your profit level. Get it set up.</>}
+          {level === 'bad' && (
+            <>
+              At {fmt(profit)} profit, stay sole trader. The saving ({fmt(Math.abs(calc.saving))})
+              is less than a good accountant costs. Go limited when profit consistently exceeds
+              £50,000.
+            </>
+          )}
+          {level === 'warn' && (
+            <>
+              Borderline. You save {fmt(calc.saving)}/yr, but after accountant fees the net benefit
+              is around {fmt(calc.saving - 1500)}. Worth a conversation with an accountant, not
+              urgent.
+            </>
+          )}
+          {level === 'good' && (
+            <>
+              Go limited. You save <strong>{fmt(calc.saving)}/yr</strong> — well above accountant
+              costs. This is a clear win at your profit level. Get it set up.
+            </>
+          )}
         </Verdict>
       </div>
     </div>
@@ -446,10 +740,10 @@ function StructureTool({ accounts }) {
 // ─── TOOL 03: Should I raise my prices ────────────────────────────────────────
 const PRICE_TEMPLATES = {
   gentle: {
-    label: "Gentle — for long-term clients",
-    subject: "A small update to our pricing",
+    label: 'Gentle — for long-term clients',
+    subject: 'A small update to our pricing',
     body: (name, oldPrice, newPrice, date) =>
-`Hi ${name},
+      `Hi ${name},
 
 I hope you're well. I wanted to give you plenty of notice that from ${date}, my pricing will be moving from ${fmt(oldPrice)} to ${fmt(newPrice)} per visit.
 
@@ -462,10 +756,10 @@ If you have any questions at all, please just reply to this message.
 Many thanks`,
   },
   direct: {
-    label: "Direct — straightforward and confident",
-    subject: "Pricing update from [Month]",
+    label: 'Direct — straightforward and confident',
+    subject: 'Pricing update from [Month]',
     body: (name, oldPrice, newPrice, date) =>
-`Hi ${name},
+      `Hi ${name},
 
 Just a quick note to let you know my prices are increasing from ${date}.
 
@@ -478,10 +772,10 @@ Thanks for your continued support — it genuinely means a lot.
 Best`,
   },
   premium: {
-    label: "Premium — reframes as added value",
-    subject: "An update from [Your Business Name]",
+    label: 'Premium — reframes as added value',
+    subject: 'An update from [Your Business Name]',
     body: (name, oldPrice, newPrice, date) =>
-`Hi ${name},
+      `Hi ${name},
 
 I'm writing to let you know about a pricing update coming into effect from ${date}.
 
@@ -495,123 +789,249 @@ Kind regards`,
   },
 };
 
-function PriceTool({ accounts }) {
-  const [currentPrice,  setCurrentPrice]  = useState(65);
-  const [risePercent,   setRisePercent]   = useState(10);
-  const [clients,       setClients]       = useState(18);
-  const [visitsPerMonth,setVisits]        = useState(2);
-  const [expectedChurn, setChurn]         = useState(8);
-  const [template,      setTemplate]      = useState("gentle");
-  const [activeTab,     setActiveTab]     = useState("calculator");
-  const [clientName,    setClientName]    = useState("");
-  const [effectiveDate, setEffDate]       = useState("");
-  const [copied,        setCopied]        = useState(false);
-  const [bulkSent,      setBulkSent]      = useState(false);
+function PriceTool() {
+  const [currentPrice, setCurrentPrice] = useState(65);
+  const [risePercent, setRisePercent] = useState(10);
+  const [clients, setClients] = useState(18);
+  const [visitsPerMonth, setVisits] = useState(2);
+  const [expectedChurn, setChurn] = useState(8);
+  const [template, setTemplate] = useState('gentle');
+  const [activeTab, setActiveTab] = useState('calculator');
+  const [clientName, setClientName] = useState('');
+  const [effectiveDate, setEffDate] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const calc = useMemo(() => {
-    const newPrice       = currentPrice * (1 + risePercent/100);
-    const clientsLost    = Math.round(clients * expectedChurn/100);
-    const clientsLeft    = clients - clientsLost;
-    const currentAnnual  = currentPrice * clients * visitsPerMonth * 12;
-    const newAnnual      = newPrice * clientsLeft * visitsPerMonth * 12;
-    const uplift         = newAnnual - currentAnnual;
-    const monthlyUplift  = uplift / 12;
-    const newPriceFmt    = Math.round(newPrice * 10) / 10;
-    return { newPrice: newPriceFmt, clientsLost, clientsLeft, currentAnnual, newAnnual, uplift, monthlyUplift };
+    const newPrice = currentPrice * (1 + risePercent / 100);
+    const clientsLost = Math.round((clients * expectedChurn) / 100);
+    const clientsLeft = clients - clientsLost;
+    const currentAnnual = currentPrice * clients * visitsPerMonth * 12;
+    const newAnnual = newPrice * clientsLeft * visitsPerMonth * 12;
+    const uplift = newAnnual - currentAnnual;
+    const monthlyUplift = uplift / 12;
+    const newPriceFmt = Math.round(newPrice * 10) / 10;
+    return {
+      newPrice: newPriceFmt,
+      clientsLost,
+      clientsLeft,
+      currentAnnual,
+      newAnnual,
+      uplift,
+      monthlyUplift,
+    };
   }, [currentPrice, risePercent, clients, visitsPerMonth, expectedChurn]);
 
-  const level = calc.uplift > 2000 ? "good" : calc.uplift > 0 ? "warn" : "bad";
+  const level = calc.uplift > 2000 ? 'good' : calc.uplift > 0 ? 'warn' : 'bad';
 
   const tmpl = PRICE_TEMPLATES[template];
   const messageBody = tmpl.body(clientName, currentPrice, calc.newPrice, effectiveDate);
 
   const copyMessage = () => {
-    navigator.clipboard?.writeText(messageBody).catch(()=>{});
+    navigator.clipboard?.writeText(messageBody).catch(() => {});
     setCopied(true);
-    setTimeout(()=>setCopied(false), 2500);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   const TABS = [
-    { id:"calculator", label:"Calculator" },
-    { id:"templates",  label:"Message templates" },
-    { id:"bulk",       label:"Bulk send guide" },
+    { id: 'calculator', label: 'Calculator' },
+    { id: 'templates', label: 'Message templates' },
+    { id: 'bulk', label: 'Bulk send guide' },
   ];
 
   return (
     <div className="space-y-4">
       {/* Tab bar */}
       <div className="flex gap-0 border-b border-[rgba(153,197,255,0.12)]">
-        {TABS.map(t => (
-          <button key={t.id} onClick={()=>setActiveTab(t.id)}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all -mb-px ${activeTab===t.id?"border-[#10b981] text-[#10b981]":"border-transparent text-[rgba(153,197,255,0.6)] hover:text-white"}`}>
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all -mb-px ${activeTab === t.id ? 'border-[#10b981] text-[#10b981]' : 'border-transparent text-[rgba(153,197,255,0.6)] hover:text-white'}`}
+          >
             {t.label}
           </button>
         ))}
       </div>
 
-      {activeTab === "calculator" && (
+      {activeTab === 'calculator' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-4">
             <Card className="overflow-hidden">
-              <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Your current pricing</SL></div>
+              <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
+                <SL>Your current pricing</SL>
+              </div>
               <div className="p-4 space-y-5">
-                <Slider label="Current price per visit (£)" value={currentPrice} min={30} max={300} step={5} onChange={setCurrentPrice} display={fmt(currentPrice)} />
-                <Slider label="Price rise (%)" value={risePercent} min={3} max={25} step={1} onChange={setRisePercent} display={`+${risePercent}%`} hint={`New price: ${fmt(calc.newPrice)} per visit`} />
-                <Slider label="Active clients" value={clients} min={5} max={60} step={1} onChange={setClients} display={`${clients} clients`} />
-                <Slider label="Visits per month per client" value={visitsPerMonth} min={1} max={8} step={1} onChange={setVisits} display={`${visitsPerMonth} visits`} />
-                <Slider label="Expected churn at this rise (%)" value={expectedChurn} min={0} max={40} step={1} onChange={setChurn} display={`${expectedChurn}%`} hint={`${calc.clientsLost} client${calc.clientsLost!==1?"s":""} might leave`} />
+                <Slider
+                  label="Current price per visit (£)"
+                  value={currentPrice}
+                  min={30}
+                  max={300}
+                  step={5}
+                  onChange={setCurrentPrice}
+                  display={fmt(currentPrice)}
+                />
+                <Slider
+                  label="Price rise (%)"
+                  value={risePercent}
+                  min={3}
+                  max={25}
+                  step={1}
+                  onChange={setRisePercent}
+                  display={`+${risePercent}%`}
+                  hint={`New price: ${fmt(calc.newPrice)} per visit`}
+                />
+                <Slider
+                  label="Active clients"
+                  value={clients}
+                  min={5}
+                  max={60}
+                  step={1}
+                  onChange={setClients}
+                  display={`${clients} clients`}
+                />
+                <Slider
+                  label="Visits per month per client"
+                  value={visitsPerMonth}
+                  min={1}
+                  max={8}
+                  step={1}
+                  onChange={setVisits}
+                  display={`${visitsPerMonth} visits`}
+                />
+                <Slider
+                  label="Expected churn at this rise (%)"
+                  value={expectedChurn}
+                  min={0}
+                  max={40}
+                  step={1}
+                  onChange={setChurn}
+                  display={`${expectedChurn}%`}
+                  hint={`${calc.clientsLost} client${calc.clientsLost !== 1 ? 's' : ''} might leave`}
+                />
               </div>
             </Card>
           </div>
 
           <div className="space-y-4">
-            <Card className={`overflow-hidden border-t-2 ${level==="good"?"border-t-emerald-500":level==="warn"?"border-t-amber-400":"border-t-red-500"}`}>
+            <Card
+              className={`overflow-hidden border-t-2 ${level === 'good' ? 'border-t-emerald-500' : level === 'warn' ? 'border-t-amber-400' : 'border-t-red-500'}`}
+            >
               <div className="px-5 py-5">
                 <SL className="mb-2">Net annual change</SL>
-                <p className={`text-5xl font-bold tabular-nums ${calc.uplift>0?"text-emerald-600":"text-red-500"}`}>
-                  {calc.uplift>0?"+":""}{fmt(calc.uplift)}
+                <p
+                  className={`text-5xl font-bold tabular-nums ${calc.uplift > 0 ? 'text-emerald-600' : 'text-red-500'}`}
+                >
+                  {calc.uplift > 0 ? '+' : ''}
+                  {fmt(calc.uplift)}
                 </p>
-                <p className="text-sm text-[rgba(153,197,255,0.4)] mt-1">{fmt(calc.monthlyUplift)}/month · even after losing {calc.clientsLost} client{calc.clientsLost!==1?"s":""}</p>
+                <p className="text-sm text-[rgba(153,197,255,0.4)] mt-1">
+                  {fmt(calc.monthlyUplift)}/month · even after losing {calc.clientsLost} client
+                  {calc.clientsLost !== 1 ? 's' : ''}
+                </p>
               </div>
             </Card>
 
             <div className="grid grid-cols-2 gap-3">
-              <RStat label="New price"        value={fmt(calc.newPrice)}       accent="text-[#10b981]" sub={`up from ${fmt(currentPrice)}`} />
-              <RStat label="Clients lost"      value={`${calc.clientsLost}`}   accent={calc.clientsLost>4?"text-red-500":"text-amber-600"} sub="estimated" />
-              <RStat label="Revenue now"       value={fmt(calc.currentAnnual)} accent="text-[rgba(153,197,255,0.6)]" sub="annual" />
-              <RStat label="Revenue after"     value={fmt(calc.newAnnual)}     accent={calc.newAnnual>calc.currentAnnual?"text-emerald-600":"text-red-500"} sub="annual" />
+              <RStat
+                label="New price"
+                value={fmt(calc.newPrice)}
+                accent="text-[#10b981]"
+                sub={`up from ${fmt(currentPrice)}`}
+              />
+              <RStat
+                label="Clients lost"
+                value={`${calc.clientsLost}`}
+                accent={calc.clientsLost > 4 ? 'text-red-500' : 'text-amber-600'}
+                sub="estimated"
+              />
+              <RStat
+                label="Revenue now"
+                value={fmt(calc.currentAnnual)}
+                accent="text-[rgba(153,197,255,0.6)]"
+                sub="annual"
+              />
+              <RStat
+                label="Revenue after"
+                value={fmt(calc.newAnnual)}
+                accent={calc.newAnnual > calc.currentAnnual ? 'text-emerald-600' : 'text-red-500'}
+                sub="annual"
+              />
             </div>
 
             <Verdict level={level}>
-              {level==="bad"  && <>At {expectedChurn}% churn, a {risePercent}% rise loses you money. Either improve retention first, or try a smaller rise of 5–7%.</>}
-              {level==="warn" && <>Profitable but modest. Even losing {calc.clientsLost} client{calc.clientsLost!==1?"s":""}, you gain {fmt(calc.uplift)}/yr. Every client who stays pays {fmt(risePercent/100*currentPrice)} more per visit.</>}
-              {level==="good" && <>Raise your prices. Even losing {calc.clientsLost} client{calc.clientsLost!==1?"s":""}, you earn <strong>{fmt(calc.uplift)} more per year</strong>. The clients who leave make room for better-paying ones.</>}
+              {level === 'bad' && (
+                <>
+                  At {expectedChurn}% churn, a {risePercent}% rise loses you money. Either improve
+                  retention first, or try a smaller rise of 5–7%.
+                </>
+              )}
+              {level === 'warn' && (
+                <>
+                  Profitable but modest. Even losing {calc.clientsLost} client
+                  {calc.clientsLost !== 1 ? 's' : ''}, you gain {fmt(calc.uplift)}/yr. Every client
+                  who stays pays {fmt((risePercent / 100) * currentPrice)} more per visit.
+                </>
+              )}
+              {level === 'good' && (
+                <>
+                  Raise your prices. Even losing {calc.clientsLost} client
+                  {calc.clientsLost !== 1 ? 's' : ''}, you earn{' '}
+                  <strong>{fmt(calc.uplift)} more per year</strong>. The clients who leave make room
+                  for better-paying ones.
+                </>
+              )}
             </Verdict>
           </div>
         </div>
       )}
 
-      {activeTab === "templates" && (
+      {activeTab === 'templates' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-4">
             <Card className="overflow-hidden">
-              <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Customise</SL></div>
+              <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
+                <SL>Customise</SL>
+              </div>
               <div className="p-4 space-y-3">
                 <div>
-                  <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">Client name</label>
-                  <input type="text" value={clientName} onChange={e=>setClientName(e.target.value)} className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#99c5ff] transition-colors" />
+                  <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">
+                    Client name
+                  </label>
+                  <input
+                    type="text"
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#99c5ff] transition-colors"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">Effective date</label>
-                  <input type="text" value={effectiveDate} onChange={e=>setEffDate(e.target.value)} placeholder="e.g. 1 June 2026" className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#99c5ff] transition-colors" />
+                  <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">
+                    Effective date
+                  </label>
+                  <input
+                    type="text"
+                    value={effectiveDate}
+                    onChange={(e) => setEffDate(e.target.value)}
+                    placeholder="e.g. 1 June 2026"
+                    className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#99c5ff] transition-colors"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-2">Template style</label>
+                  <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-2">
+                    Template style
+                  </label>
                   <div className="space-y-2">
                     {Object.entries(PRICE_TEMPLATES).map(([id, t]) => (
-                      <button key={id} onClick={()=>setTemplate(id)}
-                        className={`w-full text-left px-3 py-2.5 border rounded-sm text-sm transition-colors ${template===id?"bg-[#059669] text-white border-[#059669]":"bg-white text-gray-700 border-[rgba(153,197,255,0.12)] hover:border-[#10b981]"}`}>
-                        <p className={`font-semibold ${template===id?"text-white":"text-white"}`}>{t.label}</p>
+                      <button
+                        key={id}
+                        onClick={() => setTemplate(id)}
+                        className={`w-full text-left px-3 py-2.5 border rounded-sm text-sm transition-colors ${template === id ? 'bg-[#059669] text-white border-[#059669]' : 'bg-white text-gray-700 border-[rgba(153,197,255,0.12)] hover:border-[#10b981]'}`}
+                      >
+                        <p
+                          className={`font-semibold ${template === id ? 'text-white' : 'text-white'}`}
+                        >
+                          {t.label}
+                        </p>
                       </button>
                     ))}
                   </div>
@@ -625,35 +1045,70 @@ function PriceTool({ accounts }) {
               <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
                 <div>
                   <SL className="mb-0">Message preview</SL>
-                  <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">Subject: {tmpl.subject}</p>
+                  <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">
+                    Subject: {tmpl.subject}
+                  </p>
                 </div>
-                <button onClick={copyMessage} className={`px-3 py-1.5 text-xs font-bold border rounded-sm transition-colors ${copied?"bg-emerald-50 text-emerald-700 border-emerald-200":"bg-white text-[rgba(153,197,255,0.5)] border-[rgba(153,197,255,0.12)] hover:border-[#10b981] hover:text-[#10b981]"}`}>
-                  {copied ? "Copied" : "Copy"}
+                <button
+                  onClick={copyMessage}
+                  className={`px-3 py-1.5 text-xs font-bold border rounded-sm transition-colors ${copied ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-[rgba(153,197,255,0.5)] border-[rgba(153,197,255,0.12)] hover:border-[#10b981] hover:text-[#10b981]'}`}
+                >
+                  {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
               <div className="p-4">
-                <pre className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">{messageBody}</pre>
+                <pre className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
+                  {messageBody}
+                </pre>
               </div>
             </Card>
           </div>
         </div>
       )}
 
-      {activeTab === "bulk" && (
+      {activeTab === 'bulk' && (
         <div className="space-y-4">
           <Card className="overflow-hidden">
-            <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Bulk price rise guide</SL></div>
+            <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
+              <SL>Bulk price rise guide</SL>
+            </div>
             <div className="divide-y divide-gray-100">
               {[
-                { step:"1", title:"Pick your date", body:"Give at least 4 weeks notice. Avoid holidays and busy periods. A date at the start of a month is easiest to remember." },
-                { step:"2", title:"Segment your clients", body:"Send the message to your lowest-paying clients first — they have the most room for a rise. Your highest-paying, longest-standing clients last with a more personal message." },
-                { step:"3", title:"Send individually, not BCC", body:"A price rise message sent to your clients' names individually converts better than a bulk email. It takes longer but the retention rate is higher." },
-                { step:"4", title:"The 48-hour rule", body:"If a client hasn't responded within 48 hours, follow up with a brief: 'Just wanted to make sure you received my message about pricing — happy to chat if helpful.'" },
-                { step:"5", title:"If they push back", body:"Acknowledge it: 'I completely understand — it's never a nice message to receive.' Then hold firm: 'I've kept it as small as I can while keeping the service quality the same.' Most clients accept it." },
-                { step:"6", title:"Log who you've told", body:"Use the customer tracker to tag clients as 'price rise sent' and 'price rise accepted'. You'll want to know who's on the new rate before the date arrives." },
+                {
+                  step: '1',
+                  title: 'Pick your date',
+                  body: 'Give at least 4 weeks notice. Avoid holidays and busy periods. A date at the start of a month is easiest to remember.',
+                },
+                {
+                  step: '2',
+                  title: 'Segment your clients',
+                  body: 'Send the message to your lowest-paying clients first — they have the most room for a rise. Your highest-paying, longest-standing clients last with a more personal message.',
+                },
+                {
+                  step: '3',
+                  title: 'Send individually, not BCC',
+                  body: "A price rise message sent to your clients' names individually converts better than a bulk email. It takes longer but the retention rate is higher.",
+                },
+                {
+                  step: '4',
+                  title: 'The 48-hour rule',
+                  body: "If a client hasn't responded within 48 hours, follow up with a brief: 'Just wanted to make sure you received my message about pricing — happy to chat if helpful.'",
+                },
+                {
+                  step: '5',
+                  title: 'If they push back',
+                  body: "Acknowledge it: 'I completely understand — it's never a nice message to receive.' Then hold firm: 'I've kept it as small as I can while keeping the service quality the same.' Most clients accept it.",
+                },
+                {
+                  step: '6',
+                  title: "Log who you've told",
+                  body: "Use the customer tracker to tag clients as 'price rise sent' and 'price rise accepted'. You'll want to know who's on the new rate before the date arrives.",
+                },
               ].map(({ step, title, body }) => (
                 <div key={step} className="flex items-start gap-4 px-4 py-4">
-                  <div className="w-7 h-7 rounded-full bg-[#064e3b] text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{step}</div>
+                  <div className="w-7 h-7 rounded-full bg-[#064e3b] text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                    {step}
+                  </div>
                   <div>
                     <p className="text-sm font-semibold text-white mb-0.5">{title}</p>
                     <p className="text-sm text-[rgba(153,197,255,0.6)] leading-relaxed">{body}</p>
@@ -663,7 +1118,9 @@ function PriceTool({ accounts }) {
             </div>
           </Card>
           <Alert type="gold">
-            Most cleaners who raise prices lose fewer clients than they expect. Industry average churn on a 10% rise is 5–8%. The clients who do leave are often your most price-sensitive — the ones who call about every invoice and push back on extras.
+            Most cleaners who raise prices lose fewer clients than they expect. Industry average
+            churn on a 10% rise is 5–8%. The clients who do leave are often your most
+            price-sensitive — the ones who call about every invoice and push back on extras.
           </Alert>
         </div>
       )}
@@ -674,44 +1131,61 @@ function PriceTool({ accounts }) {
 // ─── TOOL 04: Add a new service ───────────────────────────────────────────────
 const SERVICE_PRESETS = [
   {
-    name: "Solo window cleaner — adding gutters",
-    desc: "Already visiting for windows. Gutters are a natural same-visit upsell with almost no extra travel.",
-    equipCost: 200, jobsPerMonth: 8, pricePerJob: 90, addedHrs: 1.5,
+    name: 'Solo window cleaner — adding gutters',
+    desc: 'Already visiting for windows. Gutters are a natural same-visit upsell with almost no extra travel.',
+    equipCost: 200,
+    jobsPerMonth: 8,
+    pricePerJob: 90,
+    addedHrs: 1.5,
     existingRev: 3200,
   },
   {
-    name: "Residential cleaner — adding commercial",
-    desc: "Moving into office cleaning in the evenings or early mornings to fill dead time.",
-    equipCost: 0, jobsPerMonth: 4, pricePerJob: 180, addedHrs: 4,
+    name: 'Residential cleaner — adding commercial',
+    desc: 'Moving into office cleaning in the evenings or early mornings to fill dead time.',
+    equipCost: 0,
+    jobsPerMonth: 4,
+    pricePerJob: 180,
+    addedHrs: 4,
     existingRev: 4800,
   },
   {
-    name: "General cleaner — adding carpet cleaning",
-    desc: "Buying a carpet cleaning machine and offering it as an add-on at regular cleans.",
-    equipCost: 1200, jobsPerMonth: 6, pricePerJob: 80, addedHrs: 1.5,
+    name: 'General cleaner — adding carpet cleaning',
+    desc: 'Buying a carpet cleaning machine and offering it as an add-on at regular cleans.',
+    equipCost: 1200,
+    jobsPerMonth: 6,
+    pricePerJob: 80,
+    addedHrs: 1.5,
     existingRev: 4200,
   },
   {
-    name: "Part-time cleaner — going full-time",
-    desc: "Currently 3 days/week. Modelling what full-time looks like with a full client book.",
-    equipCost: 0, jobsPerMonth: 12, pricePerJob: 70, addedHrs: 2,
+    name: 'Part-time cleaner — going full-time',
+    desc: 'Currently 3 days/week. Modelling what full-time looks like with a full client book.',
+    equipCost: 0,
+    jobsPerMonth: 12,
+    pricePerJob: 70,
+    addedHrs: 2,
     existingRev: 2100,
   },
   {
-    name: "Commercial cleaner — adding exterior",
-    desc: "Adding window rounds and pressure washing to existing commercial clients.",
-    equipCost: 800, jobsPerMonth: 5, pricePerJob: 150, addedHrs: 3,
+    name: 'Commercial cleaner — adding exterior',
+    desc: 'Adding window rounds and pressure washing to existing commercial clients.',
+    equipCost: 800,
+    jobsPerMonth: 5,
+    pricePerJob: 150,
+    addedHrs: 3,
     existingRev: 7200,
   },
 ];
 
 function ServiceTool({ accounts }) {
-  const [equipCost,    setEquipCost]   = useState(800);
-  const [jobsPerMonth, setJobs]        = useState(6);
-  const [pricePerJob,  setPrice]       = useState(80);
-  const [addedHrs,     setHrs]         = useState(1.5);
-  const [existingRev,  setExisting]    = useState(Math.round((accounts.ytdIncome/12)/100)*100 || 4000);
-  const [activePreset, setActivePreset]= useState(null);
+  const [equipCost, setEquipCost] = useState(800);
+  const [jobsPerMonth, setJobs] = useState(6);
+  const [pricePerJob, setPrice] = useState(80);
+  const [addedHrs, setHrs] = useState(1.5);
+  const [existingRev, setExisting] = useState(
+    Math.round(accounts.ytdIncome / 12 / 100) * 100 || 4000
+  );
+  const [activePreset, setActivePreset] = useState(null);
 
   const loadPreset = (i) => {
     const p = SERVICE_PRESETS[i];
@@ -724,19 +1198,37 @@ function ServiceTool({ accounts }) {
   };
 
   const calc = useMemo(() => {
-    const monthlyRev    = jobsPerMonth * pricePerJob;
-    const annualRev     = monthlyRev * 12;
-    const annualProfit  = annualRev * (1 - accounts.taxRate - 0.09) * 0.65;
-    const monthlyHrs    = jobsPerMonth * addedHrs;
+    const monthlyRev = jobsPerMonth * pricePerJob;
+    const annualRev = monthlyRev * 12;
+    const annualProfit = annualRev * (1 - accounts.taxRate - 0.09) * 0.65;
+    const monthlyHrs = jobsPerMonth * addedHrs;
     const effectiveRate = addedHrs > 0 ? pricePerJob / addedHrs : 0;
-    const paybackMonths = equipCost > 0 && monthlyRev > 0 ? Math.ceil(equipCost / (monthlyRev * 0.65)) : 0;
-    const newTotalRev   = existingRev + monthlyRev;
-    const aiaRelief     = equipCost * accounts.taxRate;
-    const netEquipCost  = equipCost - aiaRelief;
-    return { monthlyRev, annualRev, annualProfit, monthlyHrs, effectiveRate, paybackMonths, newTotalRev, aiaRelief, netEquipCost };
+    const paybackMonths =
+      equipCost > 0 && monthlyRev > 0 ? Math.ceil(equipCost / (monthlyRev * 0.65)) : 0;
+    const newTotalRev = existingRev + monthlyRev;
+    const aiaRelief = equipCost * accounts.taxRate;
+    const netEquipCost = equipCost - aiaRelief;
+    return {
+      monthlyRev,
+      annualRev,
+      annualProfit,
+      monthlyHrs,
+      effectiveRate,
+      paybackMonths,
+      newTotalRev,
+      aiaRelief,
+      netEquipCost,
+    };
   }, [equipCost, jobsPerMonth, pricePerJob, addedHrs, existingRev, accounts]);
 
-  const level = equipCost === 0 ? "good" : calc.paybackMonths <= 4 ? "good" : calc.paybackMonths <= 9 ? "warn" : "bad";
+  const level =
+    equipCost === 0
+      ? 'good'
+      : calc.paybackMonths <= 4
+        ? 'good'
+        : calc.paybackMonths <= 9
+          ? 'warn'
+          : 'bad';
 
   return (
     <div className="space-y-5">
@@ -744,16 +1236,31 @@ function ServiceTool({ accounts }) {
       <Card className="overflow-hidden">
         <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
           <SL>Play with a mock business scenario</SL>
-          <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">Tap to load a preset — see how this decision would look for a business like yours</p>
+          <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5">
+            Tap to load a preset — see how this decision would look for a business like yours
+          </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-[rgba(153,197,255,0.06)]">
           {SERVICE_PRESETS.map((p, i) => (
-            <button key={i} onClick={() => loadPreset(i)}
-              className={`text-left p-4 transition-colors ${activePreset===i?"bg-[#064e3b] text-white":"bg-white hover:bg-[rgba(153,197,255,0.04)]"}`}>
-              <p className={`text-sm font-semibold mb-1 ${activePreset===i?"text-white":"text-white"}`}>{p.name}</p>
-              <p className={`text-xs leading-relaxed ${activePreset===i?"text-[#86efac]":"text-[rgba(153,197,255,0.4)]"}`}>{p.desc}</p>
-              <p className={`text-xs font-bold mt-2 ${activePreset===i?"text-[#86efac]":"text-[#10b981]"}`}>
-                {fmt(p.jobsPerMonth*p.pricePerJob)}/mo new revenue
+            <button
+              key={i}
+              onClick={() => loadPreset(i)}
+              className={`text-left p-4 transition-colors ${activePreset === i ? 'bg-[#064e3b] text-white' : 'bg-white hover:bg-[rgba(153,197,255,0.04)]'}`}
+            >
+              <p
+                className={`text-sm font-semibold mb-1 ${activePreset === i ? 'text-white' : 'text-white'}`}
+              >
+                {p.name}
+              </p>
+              <p
+                className={`text-xs leading-relaxed ${activePreset === i ? 'text-[#86efac]' : 'text-[rgba(153,197,255,0.4)]'}`}
+              >
+                {p.desc}
+              </p>
+              <p
+                className={`text-xs font-bold mt-2 ${activePreset === i ? 'text-[#86efac]' : 'text-[#10b981]'}`}
+              >
+                {fmt(p.jobsPerMonth * p.pricePerJob)}/mo new revenue
               </p>
             </button>
           ))}
@@ -763,37 +1270,137 @@ function ServiceTool({ accounts }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="space-y-4">
           <Card className="overflow-hidden">
-            <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Adjust the numbers</SL></div>
+            <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
+              <SL>Adjust the numbers</SL>
+            </div>
             <div className="p-4 space-y-5">
-              <Slider label="Equipment cost (£)" value={equipCost} min={0} max={5000} step={50} onChange={v=>{setEquipCost(v);setActivePreset(null);}} display={equipCost===0?"No equipment needed":fmt(equipCost)} hint={equipCost>0?`AIA tax relief saves ${fmt(calc.aiaRelief)} — effective cost ${fmt(calc.netEquipCost)}`:undefined} />
-              <Slider label="Jobs per month" value={jobsPerMonth} min={1} max={25} step={1} onChange={v=>{setJobs(v);setActivePreset(null);}} display={`${jobsPerMonth} jobs`} />
-              <Slider label="Price per job (£)" value={pricePerJob} min={30} max={400} step={5} onChange={v=>{setPrice(v);setActivePreset(null);}} display={fmt(pricePerJob)} hint={`${fmt(calc.effectiveRate)}/hr effective rate`} />
-              <Slider label="Hours per job" value={addedHrs} min={0.5} max={8} step={0.5} onChange={v=>{setHrs(v);setActivePreset(null);}} display={`${addedHrs}hrs`} hint={`${calc.monthlyHrs.toFixed(1)} extra hrs/month`} />
+              <Slider
+                label="Equipment cost (£)"
+                value={equipCost}
+                min={0}
+                max={5000}
+                step={50}
+                onChange={(v) => {
+                  setEquipCost(v);
+                  setActivePreset(null);
+                }}
+                display={equipCost === 0 ? 'No equipment needed' : fmt(equipCost)}
+                hint={
+                  equipCost > 0
+                    ? `AIA tax relief saves ${fmt(calc.aiaRelief)} — effective cost ${fmt(calc.netEquipCost)}`
+                    : undefined
+                }
+              />
+              <Slider
+                label="Jobs per month"
+                value={jobsPerMonth}
+                min={1}
+                max={25}
+                step={1}
+                onChange={(v) => {
+                  setJobs(v);
+                  setActivePreset(null);
+                }}
+                display={`${jobsPerMonth} jobs`}
+              />
+              <Slider
+                label="Price per job (£)"
+                value={pricePerJob}
+                min={30}
+                max={400}
+                step={5}
+                onChange={(v) => {
+                  setPrice(v);
+                  setActivePreset(null);
+                }}
+                display={fmt(pricePerJob)}
+                hint={`${fmt(calc.effectiveRate)}/hr effective rate`}
+              />
+              <Slider
+                label="Hours per job"
+                value={addedHrs}
+                min={0.5}
+                max={8}
+                step={0.5}
+                onChange={(v) => {
+                  setHrs(v);
+                  setActivePreset(null);
+                }}
+                display={`${addedHrs}hrs`}
+                hint={`${calc.monthlyHrs.toFixed(1)} extra hrs/month`}
+              />
             </div>
           </Card>
         </div>
 
         <div className="space-y-4">
-          <Card className={`overflow-hidden border-t-2 ${level==="good"?"border-t-emerald-500":level==="warn"?"border-t-amber-400":"border-t-red-500"}`}>
+          <Card
+            className={`overflow-hidden border-t-2 ${level === 'good' ? 'border-t-emerald-500' : level === 'warn' ? 'border-t-amber-400' : 'border-t-red-500'}`}
+          >
             <div className="px-5 py-5">
               <SL className="mb-2">New monthly revenue</SL>
               <p className="text-5xl font-bold tabular-nums text-white">{fmt(calc.monthlyRev)}</p>
-              <p className="text-sm text-[rgba(153,197,255,0.4)] mt-1">{fmt(calc.annualRev)}/yr · your total business becomes {fmt(calc.newTotalRev)}/mo</p>
+              <p className="text-sm text-[rgba(153,197,255,0.4)] mt-1">
+                {fmt(calc.annualRev)}/yr · your total business becomes {fmt(calc.newTotalRev)}/mo
+              </p>
             </div>
           </Card>
 
           <div className="grid grid-cols-2 gap-3">
-            <RStat label="Annual profit (est.)" value={fmt(calc.annualProfit)} accent="text-emerald-600" sub="after tax" />
-            <RStat label="Equipment payback"    value={calc.paybackMonths>0?`${calc.paybackMonths} months`:"No cost"} accent={calc.paybackMonths<=4?"text-emerald-600":calc.paybackMonths<=9?"text-amber-600":"text-red-500"} />
-            <RStat label="Rate per hour"         value={`£${Math.round(calc.effectiveRate)}/hr`} accent="text-white" />
-            <RStat label="Extra hours/month"     value={`${calc.monthlyHrs.toFixed(1)} hrs`} accent="text-white" />
+            <RStat
+              label="Annual profit (est.)"
+              value={fmt(calc.annualProfit)}
+              accent="text-emerald-600"
+              sub="after tax"
+            />
+            <RStat
+              label="Equipment payback"
+              value={calc.paybackMonths > 0 ? `${calc.paybackMonths} months` : 'No cost'}
+              accent={
+                calc.paybackMonths <= 4
+                  ? 'text-emerald-600'
+                  : calc.paybackMonths <= 9
+                    ? 'text-amber-600'
+                    : 'text-red-500'
+              }
+            />
+            <RStat
+              label="Rate per hour"
+              value={`£${Math.round(calc.effectiveRate)}/hr`}
+              accent="text-white"
+            />
+            <RStat
+              label="Extra hours/month"
+              value={`${calc.monthlyHrs.toFixed(1)} hrs`}
+              accent="text-white"
+            />
           </div>
 
           <Verdict level={level}>
-            {level==="good" && equipCost===0 && <>Zero-risk add-on. No equipment needed — {fmt(calc.annualRev)} in new annual revenue for something you can offer immediately.</>}
-            {level==="good" && equipCost>0   && <>Worth it. Equipment pays for itself in <strong>{calc.paybackMonths} months</strong>. After that it's {fmt(calc.monthlyRev)}/month in pure additional revenue.</>}
-            {level==="warn"  && <>Reasonable investment — {calc.paybackMonths}-month payback. Make sure you have the client demand for {jobsPerMonth} jobs/month before buying.</>}
-            {level==="bad"   && <>{calc.paybackMonths} months to break even is high risk. Either raise the price per job or find more clients before committing to equipment.</>}
+            {level === 'good' && equipCost === 0 && (
+              <>
+                Zero-risk add-on. No equipment needed — {fmt(calc.annualRev)} in new annual revenue
+                for something you can offer immediately.
+              </>
+            )}
+            {level === 'good' && equipCost > 0 && (
+              <>
+                Worth it. Equipment pays for itself in <strong>{calc.paybackMonths} months</strong>.
+                After that it's {fmt(calc.monthlyRev)}/month in pure additional revenue.
+              </>
+            )}
+            {level === 'warn' && (
+              <>
+                Reasonable investment — {calc.paybackMonths}-month payback. Make sure you have the
+                client demand for {jobsPerMonth} jobs/month before buying.
+              </>
+            )}
+            {level === 'bad' && (
+              <>
+                {calc.paybackMonths} months to break even is high risk. Either raise the price per
+                job or find more clients before committing to equipment.
+              </>
+            )}
           </Verdict>
         </div>
       </div>
@@ -803,43 +1410,45 @@ function ServiceTool({ accounts }) {
 
 // ─── TOOL 05: Most valuable hour ─────────────────────────────────────────────
 const DEFAULT_SERVICES = [
-  { id:1, name:"Regular clean",   jobs:12, price:65,  hrs:2.0, color:"bg-emerald-500" },
-  { id:2, name:"Deep clean",      jobs:3,  price:120, hrs:3.5, color:"bg-[#10b981]"  },
-  { id:3, name:"Commercial",      jobs:4,  price:150, hrs:4.0, color:"bg-[#064e3b]"  },
-  { id:4, name:"Window clean",    jobs:6,  price:65,  hrs:1.5, color:"bg-amber-500"   },
-  { id:5, name:"Oven clean",      jobs:2,  price:65,  hrs:1.5, color:"bg-orange-500"  },
+  { id: 1, name: 'Regular clean', jobs: 12, price: 65, hrs: 2.0, color: 'bg-emerald-500' },
+  { id: 2, name: 'Deep clean', jobs: 3, price: 120, hrs: 3.5, color: 'bg-[#10b981]' },
+  { id: 3, name: 'Commercial', jobs: 4, price: 150, hrs: 4.0, color: 'bg-[#064e3b]' },
+  { id: 4, name: 'Window clean', jobs: 6, price: 65, hrs: 1.5, color: 'bg-amber-500' },
+  { id: 5, name: 'Oven clean', jobs: 2, price: 65, hrs: 1.5, color: 'bg-orange-500' },
 ];
 
-function MostValuableHourTool({ accounts }) {
+function MostValuableHourTool() {
   const [services, setServices] = useState(DEFAULT_SERVICES);
-  const [editing, setEditing]   = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const updateService = (id, field, val) =>
-    setServices(prev => prev.map(s => s.id===id ? {...s,[field]:val} : s));
+    setServices((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: val } : s)));
 
   const addService = () =>
-    setServices(prev => [...prev, { id: Date.now(), name:"New service", jobs:2, price:80, hrs:2, color:"bg-gray-400" }]);
+    setServices((prev) => [
+      ...prev,
+      { id: Date.now(), name: 'New service', jobs: 2, price: 80, hrs: 2, color: 'bg-gray-400' },
+    ]);
 
-  const removeService = (id) =>
-    setServices(prev => prev.filter(s => s.id !== id));
+  const removeService = (id) => setServices((prev) => prev.filter((s) => s.id !== id));
 
   const ranked = useMemo(() => {
     return [...services]
-      .filter(s => s.jobs > 0 && s.hrs > 0)
-      .map(s => ({
+      .filter((s) => s.jobs > 0 && s.hrs > 0)
+      .map((s) => ({
         ...s,
-        ratePerHr:   s.price / s.hrs,
-        monthlyRev:  s.jobs * s.price,
-        monthlyHrs:  s.jobs * s.hrs,
+        ratePerHr: s.price / s.hrs,
+        monthlyRev: s.jobs * s.price,
+        monthlyHrs: s.jobs * s.hrs,
       }))
-      .sort((a,b) => b.ratePerHr - a.ratePerHr);
+      .sort((a, b) => b.ratePerHr - a.ratePerHr);
   }, [services]);
 
-  const totalRev  = ranked.reduce((s,r)=>s+r.monthlyRev, 0);
-  const totalHrs  = ranked.reduce((s,r)=>s+r.monthlyHrs, 0);
-  const avgRate   = totalHrs > 0 ? totalRev / totalHrs : 0;
-  const top       = ranked[0];
-  const bottom    = ranked[ranked.length - 1];
+  const totalRev = ranked.reduce((s, r) => s + r.monthlyRev, 0);
+  const totalHrs = ranked.reduce((s, r) => s + r.monthlyHrs, 0);
+  const avgRate = totalHrs > 0 ? totalRev / totalHrs : 0;
+  const top = ranked[0];
+  const bottom = ranked[ranked.length - 1];
   const hourSwapGain = top && bottom ? (top.ratePerHr - bottom.ratePerHr) * 4 * 4 : 0;
 
   return (
@@ -849,26 +1458,70 @@ function MostValuableHourTool({ accounts }) {
         <Card className="overflow-hidden">
           <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)] flex items-center justify-between">
             <SL>Your work mix</SL>
-            <button onClick={addService} className="text-xs font-bold text-[#10b981] hover:underline">+ Add service</button>
+            <button
+              onClick={addService}
+              className="text-xs font-bold text-[#10b981] hover:underline"
+            >
+              + Add service
+            </button>
           </div>
           <div className="divide-y divide-gray-100">
-            {services.map(s => (
+            {services.map((s) => (
               <div key={s.id} className="p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.color}`} />
                   {editing === s.id ? (
-                    <input type="text" value={s.name} onChange={e=>updateService(s.id,"name",e.target.value)}
-                      onBlur={()=>setEditing(null)} autoFocus
-                      className="flex-1 text-sm font-semibold text-white border-0 border-b border-[#10b981] focus:outline-none bg-transparent" />
+                    <input
+                      type="text"
+                      value={s.name}
+                      onChange={(e) => updateService(s.id, 'name', e.target.value)}
+                      onBlur={() => setEditing(null)}
+                      autoFocus
+                      className="flex-1 text-sm font-semibold text-white border-0 border-b border-[#10b981] focus:outline-none bg-transparent"
+                    />
                   ) : (
-                    <button onClick={()=>setEditing(s.id)} className="text-sm font-semibold text-white hover:text-[#10b981] flex-1 text-left">{s.name}</button>
+                    <button
+                      onClick={() => setEditing(s.id)}
+                      className="text-sm font-semibold text-white hover:text-[#10b981] flex-1 text-left"
+                    >
+                      {s.name}
+                    </button>
                   )}
-                  <button onClick={()=>removeService(s.id)} className="text-gray-300 hover:text-red-400 text-xs ml-auto">✕</button>
+                  <button
+                    onClick={() => removeService(s.id)}
+                    className="text-gray-300 hover:text-red-400 text-xs ml-auto"
+                  >
+                    ✕
+                  </button>
                 </div>
                 <div className="space-y-3">
-                  <Slider label="Jobs/month" value={s.jobs} min={0} max={25} step={1} onChange={v=>updateService(s.id,"jobs",v)} display={`${s.jobs}`} />
-                  <Slider label="Price (£)"   value={s.price} min={20} max={400} step={5} onChange={v=>updateService(s.id,"price",v)} display={fmt(s.price)} />
-                  <Slider label="Hours/job"   value={s.hrs} min={0.5} max={8} step={0.5} onChange={v=>updateService(s.id,"hrs",v)} display={`${s.hrs}h`} />
+                  <Slider
+                    label="Jobs/month"
+                    value={s.jobs}
+                    min={0}
+                    max={25}
+                    step={1}
+                    onChange={(v) => updateService(s.id, 'jobs', v)}
+                    display={`${s.jobs}`}
+                  />
+                  <Slider
+                    label="Price (£)"
+                    value={s.price}
+                    min={20}
+                    max={400}
+                    step={5}
+                    onChange={(v) => updateService(s.id, 'price', v)}
+                    display={fmt(s.price)}
+                  />
+                  <Slider
+                    label="Hours/job"
+                    value={s.hrs}
+                    min={0.5}
+                    max={8}
+                    step={0.5}
+                    onChange={(v) => updateService(s.id, 'hrs', v)}
+                    display={`${s.hrs}h`}
+                  />
                 </div>
               </div>
             ))}
@@ -880,41 +1533,58 @@ function MostValuableHourTool({ accounts }) {
       <div className="space-y-4">
         <Card className="overflow-hidden border-t-2 border-t-[#064e3b]">
           <div className="px-4 py-3 bg-[#064e3b] text-white flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-widest">Ranked by actual hourly rate</p>
+            <p className="text-xs font-bold uppercase tracking-widest">
+              Ranked by actual hourly rate
+            </p>
             <Chip color="sky">£{Math.round(avgRate)}/hr avg</Chip>
           </div>
           <div className="divide-y divide-gray-100">
             {ranked.map((r, i) => {
-              const revShare = totalRev > 0 ? Math.round((r.monthlyRev/totalRev)*100) : 0;
-              const hrsShare = totalHrs > 0 ? Math.round((r.monthlyHrs/totalHrs)*100) : 0;
-              const above    = r.ratePerHr >= avgRate;
-              const isTop    = i === 0;
+              const revShare = totalRev > 0 ? Math.round((r.monthlyRev / totalRev) * 100) : 0;
+              const hrsShare = totalHrs > 0 ? Math.round((r.monthlyHrs / totalHrs) * 100) : 0;
+              const above = r.ratePerHr >= avgRate;
+              const isTop = i === 0;
               const isBottom = i === ranked.length - 1 && ranked.length > 1;
               return (
-                <div key={r.id} className={`px-4 py-3 ${isTop?"bg-emerald-50/40":isBottom?"bg-red-50/30":""}`}>
+                <div
+                  key={r.id}
+                  className={`px-4 py-3 ${isTop ? 'bg-emerald-50/40' : isBottom ? 'bg-red-50/30' : ''}`}
+                >
                   <div className="flex items-center gap-3 mb-2">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                      isTop?"bg-emerald-500 text-white":isBottom?"bg-red-400 text-white":"bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.5)]"
-                    }`}>{i+1}</div>
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                        isTop
+                          ? 'bg-emerald-500 text-white'
+                          : isBottom
+                            ? 'bg-red-400 text-white'
+                            : 'bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.5)]'
+                      }`}
+                    >
+                      {i + 1}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full shrink-0 ${r.color}`} />
                         <p className="text-sm font-semibold text-white truncate">{r.name}</p>
-                        {isTop    && <Chip color="green">Best earner</Chip>}
+                        {isTop && <Chip color="green">Best earner</Chip>}
                         {isBottom && <Chip color="red">Lowest earner</Chip>}
                       </div>
                       <p className="text-xs text-[rgba(153,197,255,0.4)] mt-0.5 ml-4">
                         {revShare}% of revenue · {hrsShare}% of your time
                       </p>
                     </div>
-                    <p className={`text-lg font-bold tabular-nums shrink-0 ${above?"text-emerald-600":"text-red-500"}`}>
+                    <p
+                      className={`text-lg font-bold tabular-nums shrink-0 ${above ? 'text-emerald-600' : 'text-red-500'}`}
+                    >
                       £{Math.round(r.ratePerHr)}/hr
                     </p>
                   </div>
                   <div className="ml-10">
                     <div className="h-2.5 bg-[rgba(153,197,255,0.06)] rounded-sm overflow-hidden">
-                      <div className={`h-full ${r.color} rounded-sm transition-all duration-500`}
-                        style={{ width:`${top ? (r.ratePerHr/top.ratePerHr)*100 : 100}%` }} />
+                      <div
+                        className={`h-full ${r.color} rounded-sm transition-all duration-500`}
+                        style={{ width: `${top ? (r.ratePerHr / top.ratePerHr) * 100 : 100}%` }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -927,16 +1597,23 @@ function MostValuableHourTool({ accounts }) {
           <Card className="p-4 border-l-4 border-l-[#10b981]">
             <SL className="mb-2">The opportunity</SL>
             <p className="text-sm text-gray-700 leading-relaxed">
-              <strong>{top.name}</strong> earns you <strong>£{Math.round(top.ratePerHr)}/hr</strong>. {bottom.name} earns £{Math.round(bottom.ratePerHr)}/hr.
-              If you replaced 4 hours of {bottom.name} with {top.name} each week, you'd earn an extra <strong className="text-emerald-600">{fmt(hourSwapGain)}/month</strong> for the same hours worked.
+              <strong>{top.name}</strong> earns you <strong>£{Math.round(top.ratePerHr)}/hr</strong>
+              . {bottom.name} earns £{Math.round(bottom.ratePerHr)}/hr. If you replaced 4 hours of{' '}
+              {bottom.name} with {top.name} each week, you'd earn an extra{' '}
+              <strong className="text-emerald-600">{fmt(hourSwapGain)}/month</strong> for the same
+              hours worked.
             </p>
           </Card>
         )}
 
         <div className="grid grid-cols-3 gap-3">
-          <RStat label="Monthly revenue" value={fmt(totalRev)}            accent="text-white" />
-          <RStat label="Monthly hours"   value={`${totalHrs.toFixed(0)}hrs`} accent="text-white" />
-          <RStat label="Average rate"    value={`£${Math.round(avgRate)}/hr`} accent="text-[#10b981]" />
+          <RStat label="Monthly revenue" value={fmt(totalRev)} accent="text-white" />
+          <RStat label="Monthly hours" value={`${totalHrs.toFixed(0)}hrs`} accent="text-white" />
+          <RStat
+            label="Average rate"
+            value={`£${Math.round(avgRate)}/hr`}
+            accent="text-[#10b981]"
+          />
         </div>
       </div>
     </div>
@@ -945,76 +1622,143 @@ function MostValuableHourTool({ accounts }) {
 
 // ─── TOOL 06: Org chart builder ───────────────────────────────────────────────
 const ROLE_DEFS = {
-  owner:   { label:"Owner / Director", color:"border-t-[#064e3b]",  avatarBg:"bg-[#064e3b]/10 text-white",    rate:0     },
-  manager: { label:"Operations Mgr",   color:"border-t-[#10b981]",  avatarBg:"bg-blue-100 text-[#10b981]",         rate:18    },
-  lead:    { label:"Team Lead",         color:"border-t-emerald-500", avatarBg:"bg-emerald-100 text-emerald-700",     rate:15    },
-  cleaner: { label:"Cleaner",           color:"border-t-amber-500",   avatarBg:"bg-amber-100 text-amber-700",         rate:12.50 },
-  admin:   { label:"Admin / Office",   color:"border-t-purple-400",  avatarBg:"bg-purple-100 text-purple-700",       rate:14    },
-  vacant:  { label:"Vacant slot",       color:"border-dashed border-gray-300", avatarBg:"bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.4)]", rate:12.50 },
+  owner: {
+    label: 'Owner / Director',
+    color: 'border-t-[#064e3b]',
+    avatarBg: 'bg-[#064e3b]/10 text-white',
+    rate: 0,
+  },
+  manager: {
+    label: 'Operations Mgr',
+    color: 'border-t-[#10b981]',
+    avatarBg: 'bg-blue-100 text-[#10b981]',
+    rate: 18,
+  },
+  lead: {
+    label: 'Team Lead',
+    color: 'border-t-emerald-500',
+    avatarBg: 'bg-emerald-100 text-emerald-700',
+    rate: 15,
+  },
+  cleaner: {
+    label: 'Cleaner',
+    color: 'border-t-amber-500',
+    avatarBg: 'bg-amber-100 text-amber-700',
+    rate: 12.5,
+  },
+  admin: {
+    label: 'Admin / Office',
+    color: 'border-t-purple-400',
+    avatarBg: 'bg-purple-100 text-purple-700',
+    rate: 14,
+  },
+  vacant: {
+    label: 'Vacant slot',
+    color: 'border-dashed border-gray-300',
+    avatarBg: 'bg-[rgba(153,197,255,0.06)] text-[rgba(153,197,255,0.4)]',
+    rate: 12.5,
+  },
 };
 
 const ORG_PRESETS = [
   {
-    name:"Solo operator",    revenue:"£3–5k/mo",
-    tiers:[[{id:1,type:"owner",  name:"You",     hrs:40,rate:0    }]],
+    name: 'Solo operator',
+    revenue: '£3–5k/mo',
+    tiers: [[{ id: 1, type: 'owner', name: 'You', hrs: 40, rate: 0 }]],
   },
   {
-    name:"First hire",       revenue:"£5–8k/mo",
-    tiers:[[{id:1,type:"owner",  name:"You",     hrs:40,rate:0    }],
-           [{id:2,type:"cleaner",name:"Cleaner", hrs:25,rate:12.50}]],
+    name: 'First hire',
+    revenue: '£5–8k/mo',
+    tiers: [
+      [{ id: 1, type: 'owner', name: 'You', hrs: 40, rate: 0 }],
+      [{ id: 2, type: 'cleaner', name: 'Cleaner', hrs: 25, rate: 12.5 }],
+    ],
   },
   {
-    name:"Small team",       revenue:"£8–12k/mo",
-    tiers:[[{id:1,type:"owner",  name:"You",       hrs:35,rate:0    }],
-           [{id:2,type:"cleaner",name:"Cleaner 1",  hrs:40,rate:13  },
-            {id:3,type:"cleaner",name:"Cleaner 2",  hrs:40,rate:13  }]],
+    name: 'Small team',
+    revenue: '£8–12k/mo',
+    tiers: [
+      [{ id: 1, type: 'owner', name: 'You', hrs: 35, rate: 0 }],
+      [
+        { id: 2, type: 'cleaner', name: 'Cleaner 1', hrs: 40, rate: 13 },
+        { id: 3, type: 'cleaner', name: 'Cleaner 2', hrs: 40, rate: 13 },
+      ],
+    ],
   },
   {
-    name:"Growing operation",revenue:"£15–22k/mo",
-    tiers:[[{id:1,type:"owner",  name:"You",       hrs:30,rate:0    }],
-           [{id:2,type:"lead",   name:"Team Lead", hrs:40,rate:15  }],
-           [{id:3,type:"cleaner",name:"Cleaner 1",  hrs:40,rate:13  },
-            {id:4,type:"cleaner",name:"Cleaner 2",  hrs:40,rate:13  },
-            {id:5,type:"cleaner",name:"Cleaner 3",  hrs:40,rate:13  }]],
+    name: 'Growing operation',
+    revenue: '£15–22k/mo',
+    tiers: [
+      [{ id: 1, type: 'owner', name: 'You', hrs: 30, rate: 0 }],
+      [{ id: 2, type: 'lead', name: 'Team Lead', hrs: 40, rate: 15 }],
+      [
+        { id: 3, type: 'cleaner', name: 'Cleaner 1', hrs: 40, rate: 13 },
+        { id: 4, type: 'cleaner', name: 'Cleaner 2', hrs: 40, rate: 13 },
+        { id: 5, type: 'cleaner', name: 'Cleaner 3', hrs: 40, rate: 13 },
+      ],
+    ],
   },
   {
-    name:"Full company",     revenue:"£30k+/mo",
-    tiers:[[{id:1,type:"owner",  name:"You",       hrs:20,rate:0    }],
-           [{id:2,type:"manager",name:"Ops Manager",hrs:40,rate:18  }],
-           [{id:3,type:"lead",   name:"Lead A",    hrs:40,rate:15  },
-            {id:4,type:"lead",   name:"Lead B",    hrs:40,rate:15  }],
-           [{id:5,type:"cleaner",name:"C1",         hrs:40,rate:13  },
-            {id:6,type:"cleaner",name:"C2",         hrs:40,rate:13  },
-            {id:7,type:"cleaner",name:"C3",         hrs:40,rate:13  },
-            {id:8,type:"cleaner",name:"C4",         hrs:40,rate:13  }]],
+    name: 'Full company',
+    revenue: '£30k+/mo',
+    tiers: [
+      [{ id: 1, type: 'owner', name: 'You', hrs: 20, rate: 0 }],
+      [{ id: 2, type: 'manager', name: 'Ops Manager', hrs: 40, rate: 18 }],
+      [
+        { id: 3, type: 'lead', name: 'Lead A', hrs: 40, rate: 15 },
+        { id: 4, type: 'lead', name: 'Lead B', hrs: 40, rate: 15 },
+      ],
+      [
+        { id: 5, type: 'cleaner', name: 'C1', hrs: 40, rate: 13 },
+        { id: 6, type: 'cleaner', name: 'C2', hrs: 40, rate: 13 },
+        { id: 7, type: 'cleaner', name: 'C3', hrs: 40, rate: 13 },
+        { id: 8, type: 'cleaner', name: 'C4', hrs: 40, rate: 13 },
+      ],
+    ],
   },
 ];
 
 let _oid = 100;
 const oid = () => ++_oid;
 
-function monthlyCost(p) { return (p.rate * p.hrs * 52) / 12; }
-function empNIMonthly(p){ return Math.max(0,(p.rate*p.hrs*52-9100)*0.138/12); }
-function totalCostPerson(p){ return monthlyCost(p) + empNIMonthly(p); }
-function revNeeded(p)   { return totalCostPerson(p) / 0.65; }
+function monthlyCost(p) {
+  return (p.rate * p.hrs * 52) / 12;
+}
+function empNIMonthly(p) {
+  return Math.max(0, ((p.rate * p.hrs * 52 - 9100) * 0.138) / 12);
+}
+function totalCostPerson(p) {
+  return monthlyCost(p) + empNIMonthly(p);
+}
+function revNeeded(p) {
+  return totalCostPerson(p) / 0.65;
+}
 
-function OrgTool({ accounts }) {
-  const [tiers,      setTiers]      = useState(ORG_PRESETS[1].tiers.map(tier=>tier.map(p=>({...p}))));
-  const [activeView, setActiveView] = useState("chart");
-  const [selected,   setSelected]   = useState(null);
-  const [addingTo,   setAddingTo]   = useState(null); // tier index
+function OrgTool() {
+  const [tiers, setTiers] = useState(
+    ORG_PRESETS[1].tiers.map((tier) => tier.map((p) => ({ ...p })))
+  );
+  const [activeView, setActiveView] = useState('chart');
+  const [selected, setSelected] = useState(null);
+  const [addingTo, setAddingTo] = useState(null); // tier index
 
-  const allPeople   = tiers.flat();
-  const staff       = allPeople.filter(p=>p.type!=="owner");
-  const totalWage   = allPeople.reduce((s,p)=>s+totalCostPerson(p),0);
-  const totalRevReq = staff.reduce((s,p)=>s+revNeeded(p),0);
-  const headcount   = staff.length;
+  const allPeople = tiers.flat();
+  const staff = allPeople.filter((p) => p.type !== 'owner');
+  const totalWage = allPeople.reduce((s, p) => s + totalCostPerson(p), 0);
+  const totalRevReq = staff.reduce((s, p) => s + revNeeded(p), 0);
+  const headcount = staff.length;
 
   const addPersonToTier = (tierIdx, type) => {
     const def = ROLE_DEFS[type];
-    const newP = { id:oid(), type, name:def.label, hrs:type==="owner"?40:25, rate:def.rate };
-    setTiers(prev => {
-      const next = prev.map(t=>[...t]);
+    const newP = {
+      id: oid(),
+      type,
+      name: def.label,
+      hrs: type === 'owner' ? 40 : 25,
+      rate: def.rate,
+    };
+    setTiers((prev) => {
+      const next = prev.map((t) => [...t]);
       next[tierIdx] = [...next[tierIdx], newP];
       return next;
     });
@@ -1023,54 +1767,74 @@ function OrgTool({ accounts }) {
 
   const addNewTier = (type) => {
     const def = ROLE_DEFS[type];
-    const newP = { id:oid(), type, name:def.label, hrs:25, rate:def.rate };
-    setTiers(prev => [...prev, [newP]]);
+    const newP = { id: oid(), type, name: def.label, hrs: 25, rate: def.rate };
+    setTiers((prev) => [...prev, [newP]]);
     setAddingTo(null);
   };
 
   const removePerson = (id) => {
-    setTiers(prev => prev.map(t=>t.filter(p=>p.id!==id)).filter(t=>t.length>0));
-    if (selected===id) setSelected(null);
+    setTiers((prev) => prev.map((t) => t.filter((p) => p.id !== id)).filter((t) => t.length > 0));
+    if (selected === id) setSelected(null);
   };
 
   const updatePerson = (id, field, val) =>
-    setTiers(prev => prev.map(t=>t.map(p=>p.id===id?{...p,[field]:val}:p)));
+    setTiers((prev) => prev.map((t) => t.map((p) => (p.id === id ? { ...p, [field]: val } : p))));
 
   const loadPreset = (i) => {
-    setTiers(ORG_PRESETS[i].tiers.map(tier=>tier.map(p=>({...p}))));
+    setTiers(ORG_PRESETS[i].tiers.map((tier) => tier.map((p) => ({ ...p }))));
     setSelected(null);
   };
 
-  const selectedPerson = selected ? allPeople.find(p=>p.id===selected) : null;
+  const selectedPerson = selected ? allPeople.find((p) => p.id === selected) : null;
 
-  const orgLevel = totalRevReq === 0 ? "good" : totalRevReq < 6000 ? "good" : totalRevReq < 15000 ? "warn" : "bad";
+  const orgLevel =
+    totalRevReq === 0 ? 'good' : totalRevReq < 6000 ? 'good' : totalRevReq < 15000 ? 'warn' : 'bad';
 
   return (
     <div className="space-y-4">
       {/* View tabs */}
       <div className="flex gap-0 border-b border-[rgba(153,197,255,0.12)]">
-        {[{id:"chart",label:"Org chart"},{id:"presets",label:"Preset structures"},{id:"finance",label:"Financial breakdown"}].map(t=>(
-          <button key={t.id} onClick={()=>{setActiveView(t.id);setSelected(null);}}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all -mb-px ${activeView===t.id?"border-[#10b981] text-[#10b981]":"border-transparent text-[rgba(153,197,255,0.6)] hover:text-white"}`}>
+        {[
+          { id: 'chart', label: 'Org chart' },
+          { id: 'presets', label: 'Preset structures' },
+          { id: 'finance', label: 'Financial breakdown' },
+        ].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => {
+              setActiveView(t.id);
+              setSelected(null);
+            }}
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all -mb-px ${activeView === t.id ? 'border-[#10b981] text-[#10b981]' : 'border-transparent text-[rgba(153,197,255,0.6)] hover:text-white'}`}
+          >
             {t.label}
           </button>
         ))}
       </div>
 
-      {activeView === "presets" && (
+      {activeView === 'presets' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {ORG_PRESETS.map((p,i) => (
-            <button key={i} onClick={()=>{loadPreset(i);setActiveView("chart");}}
-              className="text-left border border-[rgba(153,197,255,0.12)] rounded-sm p-4 hover:border-[#10b981] hover:bg-blue-50/30 transition-colors">
+          {ORG_PRESETS.map((p, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                loadPreset(i);
+                setActiveView('chart');
+              }}
+              className="text-left border border-[rgba(153,197,255,0.12)] rounded-sm p-4 hover:border-[#10b981] hover:bg-blue-50/30 transition-colors"
+            >
               <p className="text-sm font-bold text-white mb-1">{p.name}</p>
-              <p className="text-xs text-[rgba(153,197,255,0.4)] mb-3">{p.tiers.flat().length} people · {p.tiers.length} tier{p.tiers.length!==1?"s":""}</p>
+              <p className="text-xs text-[rgba(153,197,255,0.4)] mb-3">
+                {p.tiers.flat().length} people · {p.tiers.length} tier
+                {p.tiers.length !== 1 ? 's' : ''}
+              </p>
               <p className="text-sm font-semibold text-emerald-600">{p.revenue}</p>
             </button>
           ))}
         </div>
       )}
 
-      {activeView === "chart" && (
+      {activeView === 'chart' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Chart canvas */}
           <div className="lg:col-span-2 space-y-4">
@@ -1082,28 +1846,48 @@ function OrgTool({ accounts }) {
                       <div className="flex flex-col items-center">
                         <div className="w-px h-5 bg-gray-300" />
                         {tier.length > 1 && (
-                          <div className="relative w-full" style={{ width:`${tier.length * 156}px`, height:2 }}>
-                            <div className="absolute top-0 bg-gray-300" style={{ left:78, right:78, height:2 }} />
+                          <div
+                            className="relative w-full"
+                            style={{ width: `${tier.length * 156}px`, height: 2 }}
+                          >
+                            <div
+                              className="absolute top-0 bg-gray-300"
+                              style={{ left: 78, right: 78, height: 2 }}
+                            />
                           </div>
                         )}
                         {tier.length > 1 && <div className="h-5" />}
                       </div>
                     )}
                     <div className="flex gap-3 justify-center">
-                      {tier.map(p => {
+                      {tier.map((p) => {
                         const def = ROLE_DEFS[p.type] ?? ROLE_DEFS.cleaner;
                         const cost = totalCostPerson(p);
-                        const initials = p.name.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
+                        const initials = p.name
+                          .split(' ')
+                          .map((w) => w[0])
+                          .slice(0, 2)
+                          .join('')
+                          .toUpperCase();
                         const isSel = selected === p.id;
                         return (
-                          <div key={p.id} onClick={()=>setSelected(isSel?null:p.id)}
-                            className={`w-36 border-t-2 ${def.color} border border-[rgba(153,197,255,0.12)] rounded-sm bg-white p-3 cursor-pointer transition-all ${isSel?"ring-2 ring-[#10b981] shadow-sm":""}`}>
-                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold mx-auto mb-2 ${def.avatarBg}`}>
-                              {initials || "?"}
+                          <div
+                            key={p.id}
+                            onClick={() => setSelected(isSel ? null : p.id)}
+                            className={`w-36 border-t-2 ${def.color} border border-[rgba(153,197,255,0.12)] rounded-sm bg-white p-3 cursor-pointer transition-all ${isSel ? 'ring-2 ring-[#10b981] shadow-sm' : ''}`}
+                          >
+                            <div
+                              className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold mx-auto mb-2 ${def.avatarBg}`}
+                            >
+                              {initials || '?'}
                             </div>
-                            <p className="text-xs font-bold text-gray-700 text-center leading-tight truncate">{p.name}</p>
-                            <p className="text-xs text-[rgba(153,197,255,0.4)] text-center mt-0.5 truncate">{def.label}</p>
-                            {p.type !== "owner" && (
+                            <p className="text-xs font-bold text-gray-700 text-center leading-tight truncate">
+                              {p.name}
+                            </p>
+                            <p className="text-xs text-[rgba(153,197,255,0.4)] text-center mt-0.5 truncate">
+                              {def.label}
+                            </p>
+                            {p.type !== 'owner' && (
                               <p className="text-xs font-semibold text-red-500 text-center mt-1">
                                 -{fmt(cost)}/mo
                               </p>
@@ -1114,20 +1898,34 @@ function OrgTool({ accounts }) {
                       {/* Add to this tier */}
                       {addingTo === ti ? (
                         <div className="w-36 border-2 border-dashed border-[#10b981] rounded-sm bg-blue-50/30 p-2">
-                          <p className="text-xs font-bold text-[#10b981] text-center mb-2">Add role</p>
+                          <p className="text-xs font-bold text-[#10b981] text-center mb-2">
+                            Add role
+                          </p>
                           <div className="space-y-1">
-                            {Object.entries(ROLE_DEFS).filter(([k])=>k!=="owner"&&k!=="vacant").map(([id,def])=>(
-                              <button key={id} onClick={()=>addPersonToTier(ti,id)}
-                                className="w-full text-xs py-1 px-2 bg-white border border-[rgba(153,197,255,0.12)] rounded-sm hover:border-[#10b981] hover:text-[#10b981] text-[rgba(153,197,255,0.5)] text-left transition-colors">
-                                {def.label}
-                              </button>
-                            ))}
-                            <button onClick={()=>setAddingTo(null)} className="w-full text-xs py-1 text-[rgba(153,197,255,0.4)] hover:text-[rgba(153,197,255,0.5)] text-center">Cancel</button>
+                            {Object.entries(ROLE_DEFS)
+                              .filter(([k]) => k !== 'owner' && k !== 'vacant')
+                              .map(([id, def]) => (
+                                <button
+                                  key={id}
+                                  onClick={() => addPersonToTier(ti, id)}
+                                  className="w-full text-xs py-1 px-2 bg-white border border-[rgba(153,197,255,0.12)] rounded-sm hover:border-[#10b981] hover:text-[#10b981] text-[rgba(153,197,255,0.5)] text-left transition-colors"
+                                >
+                                  {def.label}
+                                </button>
+                              ))}
+                            <button
+                              onClick={() => setAddingTo(null)}
+                              className="w-full text-xs py-1 text-[rgba(153,197,255,0.4)] hover:text-[rgba(153,197,255,0.5)] text-center"
+                            >
+                              Cancel
+                            </button>
                           </div>
                         </div>
                       ) : (
-                        <button onClick={()=>setAddingTo(ti)}
-                          className="w-36 border-2 border-dashed border-[rgba(153,197,255,0.12)] rounded-sm flex flex-col items-center justify-center gap-1 py-4 hover:border-[#10b981] hover:text-[#10b981] text-gray-300 transition-colors">
+                        <button
+                          onClick={() => setAddingTo(ti)}
+                          className="w-36 border-2 border-dashed border-[rgba(153,197,255,0.12)] rounded-sm flex flex-col items-center justify-center gap-1 py-4 hover:border-[#10b981] hover:text-[#10b981] text-gray-300 transition-colors"
+                        >
                           <span className="text-lg leading-none">+</span>
                           <span className="text-xs font-semibold">Add role</span>
                         </button>
@@ -1138,22 +1936,36 @@ function OrgTool({ accounts }) {
                 {/* Add new tier */}
                 <div className="flex flex-col items-center mt-2">
                   <div className="w-px h-5 bg-gray-300" />
-                  {addingTo === "new" ? (
+                  {addingTo === 'new' ? (
                     <div className="border-2 border-dashed border-[#10b981] rounded-sm bg-blue-50/30 p-3 w-52">
-                      <p className="text-xs font-bold text-[#10b981] text-center mb-2">Add a new tier</p>
+                      <p className="text-xs font-bold text-[#10b981] text-center mb-2">
+                        Add a new tier
+                      </p>
                       <div className="space-y-1">
-                        {Object.entries(ROLE_DEFS).filter(([k])=>k!=="owner"&&k!=="vacant").map(([id,def])=>(
-                          <button key={id} onClick={()=>addNewTier(id)}
-                            className="w-full text-xs py-1 px-2 bg-white border border-[rgba(153,197,255,0.12)] rounded-sm hover:border-[#10b981] hover:text-[#10b981] text-[rgba(153,197,255,0.5)] text-left transition-colors">
-                            {def.label}
-                          </button>
-                        ))}
-                        <button onClick={()=>setAddingTo(null)} className="w-full text-xs py-1 text-[rgba(153,197,255,0.4)] hover:text-[rgba(153,197,255,0.5)] text-center">Cancel</button>
+                        {Object.entries(ROLE_DEFS)
+                          .filter(([k]) => k !== 'owner' && k !== 'vacant')
+                          .map(([id, def]) => (
+                            <button
+                              key={id}
+                              onClick={() => addNewTier(id)}
+                              className="w-full text-xs py-1 px-2 bg-white border border-[rgba(153,197,255,0.12)] rounded-sm hover:border-[#10b981] hover:text-[#10b981] text-[rgba(153,197,255,0.5)] text-left transition-colors"
+                            >
+                              {def.label}
+                            </button>
+                          ))}
+                        <button
+                          onClick={() => setAddingTo(null)}
+                          className="w-full text-xs py-1 text-[rgba(153,197,255,0.4)] hover:text-[rgba(153,197,255,0.5)] text-center"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   ) : (
-                    <button onClick={()=>setAddingTo("new")}
-                      className="px-4 py-2 border-2 border-dashed border-[rgba(153,197,255,0.12)] rounded-sm text-xs font-bold text-[rgba(153,197,255,0.4)] hover:border-[#10b981] hover:text-[#10b981] transition-colors">
+                    <button
+                      onClick={() => setAddingTo('new')}
+                      className="px-4 py-2 border-2 border-dashed border-[rgba(153,197,255,0.12)] rounded-sm text-xs font-bold text-[rgba(153,197,255,0.4)] hover:border-[#10b981] hover:text-[#10b981] transition-colors"
+                    >
                       + Add tier below
                     </button>
                   )}
@@ -1163,17 +1975,49 @@ function OrgTool({ accounts }) {
 
             {/* Summary bar */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <RStat label="Total wage bill"    value={fmt(totalWage)}   accent={totalWage>8000?"text-red-500":"text-white"} sub="per month" />
-              <RStat label="Revenue to sustain" value={fmt(totalRevReq)} accent="text-white" sub="break-even" />
-              <RStat label="Headcount"           value={`${headcount} staff`} accent="text-white" />
-              <RStat label="Avg cost/head"       value={headcount>0?fmt(totalWage/headcount):"—"} accent="text-[rgba(153,197,255,0.5)]" sub="per month" />
+              <RStat
+                label="Total wage bill"
+                value={fmt(totalWage)}
+                accent={totalWage > 8000 ? 'text-red-500' : 'text-white'}
+                sub="per month"
+              />
+              <RStat
+                label="Revenue to sustain"
+                value={fmt(totalRevReq)}
+                accent="text-white"
+                sub="break-even"
+              />
+              <RStat label="Headcount" value={`${headcount} staff`} accent="text-white" />
+              <RStat
+                label="Avg cost/head"
+                value={headcount > 0 ? fmt(totalWage / headcount) : '—'}
+                accent="text-[rgba(153,197,255,0.5)]"
+                sub="per month"
+              />
             </div>
 
             <Verdict level={orgLevel}>
-              {totalRevReq===0 && <>Solo operator — no wage overhead. All revenue is yours.</>}
-              {totalRevReq>0 && totalRevReq<6000  && <>Your team needs to generate <strong>{fmt(totalRevReq)}/month</strong> to cover wages — a realistic target. Each person needs roughly {fmt(totalRevReq/Math.max(headcount,1))}/month in jobs.</>}
-              {totalRevReq>=6000 && totalRevReq<15000 && <>This structure needs <strong>{fmt(totalRevReq)}/month</strong>. Achievable, but make sure you have the client pipeline before all {headcount} hires are in place.</>}
-              {totalRevReq>=15000 && <>This is a significant operation — <strong>{fmt(totalRevReq)}/month</strong> needed. Only viable with commercial contracts or a very full residential book in place.</>}
+              {totalRevReq === 0 && <>Solo operator — no wage overhead. All revenue is yours.</>}
+              {totalRevReq > 0 && totalRevReq < 6000 && (
+                <>
+                  Your team needs to generate <strong>{fmt(totalRevReq)}/month</strong> to cover
+                  wages — a realistic target. Each person needs roughly{' '}
+                  {fmt(totalRevReq / Math.max(headcount, 1))}/month in jobs.
+                </>
+              )}
+              {totalRevReq >= 6000 && totalRevReq < 15000 && (
+                <>
+                  This structure needs <strong>{fmt(totalRevReq)}/month</strong>. Achievable, but
+                  make sure you have the client pipeline before all {headcount} hires are in place.
+                </>
+              )}
+              {totalRevReq >= 15000 && (
+                <>
+                  This is a significant operation — <strong>{fmt(totalRevReq)}/month</strong>{' '}
+                  needed. Only viable with commercial contracts or a very full residential book in
+                  place.
+                </>
+              )}
             </Verdict>
           </div>
 
@@ -1183,34 +2027,70 @@ function OrgTool({ accounts }) {
               <Card className="overflow-hidden">
                 <div className="px-4 py-3 bg-[#064e3b] text-white flex items-center justify-between">
                   <p className="text-sm font-bold">{selectedPerson.name}</p>
-                  <button onClick={()=>{removePerson(selectedPerson.id);}} className="text-xs text-red-300 hover:text-red-100 font-bold">Remove</button>
+                  <button
+                    onClick={() => {
+                      removePerson(selectedPerson.id);
+                    }}
+                    className="text-xs text-red-300 hover:text-red-100 font-bold"
+                  >
+                    Remove
+                  </button>
                 </div>
                 <div className="p-4 space-y-4">
                   <div>
-                    <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">Name</label>
-                    <input type="text" value={selectedPerson.name} onChange={e=>updatePerson(selectedPerson.id,"name",e.target.value)}
-                      className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#99c5ff] transition-colors" />
+                    <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedPerson.name}
+                      onChange={(e) => updatePerson(selectedPerson.id, 'name', e.target.value)}
+                      className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#99c5ff] transition-colors"
+                    />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">Role</label>
-                    <select value={selectedPerson.type} onChange={e=>updatePerson(selectedPerson.id,"type",e.target.value)}
-                      className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#99c5ff] transition-colors">
-                      {Object.entries(ROLE_DEFS).map(([id,def])=>(
-                        <option key={id} value={id}>{def.label}</option>
+                    <label className="block text-xs font-bold tracking-widest uppercase text-[rgba(153,197,255,0.4)] mb-1">
+                      Role
+                    </label>
+                    <select
+                      value={selectedPerson.type}
+                      onChange={(e) => updatePerson(selectedPerson.id, 'type', e.target.value)}
+                      className="w-full bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.15)] rounded-xl px-3 py-2 text-sm text-white placeholder-[rgba(153,197,255,0.3)] focus:outline-none focus:border-[#99c5ff] transition-colors"
+                    >
+                      {Object.entries(ROLE_DEFS).map(([id, def]) => (
+                        <option key={id} value={id}>
+                          {def.label}
+                        </option>
                       ))}
                     </select>
                   </div>
-                  {selectedPerson.type !== "owner" && (
+                  {selectedPerson.type !== 'owner' && (
                     <>
-                      <Slider label="Hourly rate (£)" value={selectedPerson.rate} min={11} max={25} step={0.5} onChange={v=>updatePerson(selectedPerson.id,"rate",v)} display={`£${selectedPerson.rate.toFixed(2)}/hr`} />
-                      <Slider label="Hours per week" value={selectedPerson.hrs} min={8} max={40} step={1} onChange={v=>updatePerson(selectedPerson.id,"hrs",v)} display={`${selectedPerson.hrs}hrs`} />
+                      <Slider
+                        label="Hourly rate (£)"
+                        value={selectedPerson.rate}
+                        min={11}
+                        max={25}
+                        step={0.5}
+                        onChange={(v) => updatePerson(selectedPerson.id, 'rate', v)}
+                        display={`£${selectedPerson.rate.toFixed(2)}/hr`}
+                      />
+                      <Slider
+                        label="Hours per week"
+                        value={selectedPerson.hrs}
+                        min={8}
+                        max={40}
+                        step={1}
+                        onChange={(v) => updatePerson(selectedPerson.id, 'hrs', v)}
+                        display={`${selectedPerson.hrs}hrs`}
+                      />
                       <div className="bg-[rgba(153,197,255,0.04)] border border-[rgba(153,197,255,0.08)] rounded-sm divide-y divide-gray-100 text-sm">
                         {[
-                          ["Monthly wage",      fmt(monthlyCost(selectedPerson))],
-                          ["Employer NI",       fmt(empNIMonthly(selectedPerson))],
-                          ["Total monthly cost",fmt(totalCostPerson(selectedPerson))],
-                          ["Revenue they need", fmt(revNeeded(selectedPerson))],
-                        ].map(([l,v])=>(
+                          ['Monthly wage', fmt(monthlyCost(selectedPerson))],
+                          ['Employer NI', fmt(empNIMonthly(selectedPerson))],
+                          ['Total monthly cost', fmt(totalCostPerson(selectedPerson))],
+                          ['Revenue they need', fmt(revNeeded(selectedPerson))],
+                        ].map(([l, v]) => (
                           <div key={l} className="flex justify-between px-3 py-2 text-xs">
                             <span className="text-[rgba(153,197,255,0.4)]">{l}</span>
                             <span className="font-semibold text-white">{v}</span>
@@ -1223,21 +2103,29 @@ function OrgTool({ accounts }) {
               </Card>
             ) : (
               <Card className="p-5 text-center">
-                <p className="text-sm text-[rgba(153,197,255,0.4)] mb-1">Click any role card to edit</p>
-                <p className="text-xs text-[rgba(153,197,255,0.4)]">Change name, role, hours, and rate. Revenue needed updates automatically.</p>
+                <p className="text-sm text-[rgba(153,197,255,0.4)] mb-1">
+                  Click any role card to edit
+                </p>
+                <p className="text-xs text-[rgba(153,197,255,0.4)]">
+                  Change name, role, hours, and rate. Revenue needed updates automatically.
+                </p>
               </Card>
             )}
 
             <Alert type="gold">
-              Revenue needed = what each person must generate to justify their cost at a 65% gross margin. This assumes they're billing at your average job rate, not just covering their wage.
+              Revenue needed = what each person must generate to justify their cost at a 65% gross
+              margin. This assumes they're billing at your average job rate, not just covering their
+              wage.
             </Alert>
           </div>
         </div>
       )}
 
-      {activeView === "finance" && (
+      {activeView === 'finance' && (
         <Card className="overflow-hidden">
-          <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]"><SL>Full cost breakdown</SL></div>
+          <div className="px-4 py-3 border-b border-[rgba(153,197,255,0.08)]">
+            <SL>Full cost breakdown</SL>
+          </div>
           {/* Header */}
           <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-[rgba(153,197,255,0.04)] text-xs font-bold tracking-widests uppercase text-[rgba(153,197,255,0.4)] border-b border-[rgba(153,197,255,0.08)]">
             <span className="col-span-4">Person</span>
@@ -1247,22 +2135,32 @@ function OrgTool({ accounts }) {
             <span className="col-span-2 text-right">Rev. needed</span>
           </div>
           <div className="divide-y divide-gray-100">
-            {allPeople.map(p=>{
-              const def  = ROLE_DEFS[p.type]??ROLE_DEFS.cleaner;
+            {allPeople.map((p) => {
+              const def = ROLE_DEFS[p.type] ?? ROLE_DEFS.cleaner;
               const wage = monthlyCost(p);
-              const ni   = empNIMonthly(p);
-              const tot  = totalCostPerson(p);
-              const rev  = revNeeded(p);
+              const ni = empNIMonthly(p);
+              const tot = totalCostPerson(p);
+              const rev = revNeeded(p);
               return (
                 <div key={p.id} className="grid grid-cols-12 gap-2 px-4 py-3 text-sm items-center">
                   <div className="col-span-4">
                     <p className="font-semibold text-white">{p.name}</p>
-                    <p className="text-xs text-[rgba(153,197,255,0.4)]">{def.label} · £{p.rate}/hr · {p.hrs}h/wk</p>
+                    <p className="text-xs text-[rgba(153,197,255,0.4)]">
+                      {def.label} · £{p.rate}/hr · {p.hrs}h/wk
+                    </p>
                   </div>
-                  <span className="col-span-2 text-right font-mono text-red-500">{wage>0?`-${fmt(wage)}`:"—"}</span>
-                  <span className="col-span-2 text-right font-mono text-red-500">{ni>0?`-${fmt(ni)}`:"—"}</span>
-                  <span className="col-span-2 text-right font-mono font-semibold text-red-500">{tot>0?`-${fmt(tot)}`:"Owner"}</span>
-                  <span className="col-span-2 text-right font-mono font-semibold text-emerald-600">{rev>0?fmt(rev):"—"}</span>
+                  <span className="col-span-2 text-right font-mono text-red-500">
+                    {wage > 0 ? `-${fmt(wage)}` : '—'}
+                  </span>
+                  <span className="col-span-2 text-right font-mono text-red-500">
+                    {ni > 0 ? `-${fmt(ni)}` : '—'}
+                  </span>
+                  <span className="col-span-2 text-right font-mono font-semibold text-red-500">
+                    {tot > 0 ? `-${fmt(tot)}` : 'Owner'}
+                  </span>
+                  <span className="col-span-2 text-right font-mono font-semibold text-emerald-600">
+                    {rev > 0 ? fmt(rev) : '—'}
+                  </span>
                 </div>
               );
             })}
@@ -1270,10 +2168,16 @@ function OrgTool({ accounts }) {
           {/* Totals row */}
           <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-[rgba(153,197,255,0.04)] border-t border-[rgba(153,197,255,0.12)] text-sm font-bold">
             <span className="col-span-4 text-white">Total</span>
-            <span className="col-span-2 text-right font-mono text-red-500">-{fmt(allPeople.reduce((s,p)=>s+monthlyCost(p),0))}</span>
-            <span className="col-span-2 text-right font-mono text-red-500">-{fmt(allPeople.reduce((s,p)=>s+empNIMonthly(p),0))}</span>
+            <span className="col-span-2 text-right font-mono text-red-500">
+              -{fmt(allPeople.reduce((s, p) => s + monthlyCost(p), 0))}
+            </span>
+            <span className="col-span-2 text-right font-mono text-red-500">
+              -{fmt(allPeople.reduce((s, p) => s + empNIMonthly(p), 0))}
+            </span>
             <span className="col-span-2 text-right font-mono text-red-500">-{fmt(totalWage)}</span>
-            <span className="col-span-2 text-right font-mono text-emerald-600">{fmt(totalRevReq)}</span>
+            <span className="col-span-2 text-right font-mono text-emerald-600">
+              {fmt(totalRevReq)}
+            </span>
           </div>
         </Card>
       )}
@@ -1283,12 +2187,12 @@ function OrgTool({ accounts }) {
 
 // ─── Tool nav ─────────────────────────────────────────────────────────────────
 const TOOLS = [
-  { id:"hire",      label:"Hire a cleaner",      num:"01", q:"Will this hire make me money?" },
-  { id:"structure", label:"Sole trader vs Ltd",  num:"02", q:"Should I go limited?" },
-  { id:"prices",    label:"Raise my prices",     num:"03", q:"How much, when, and how?" },
-  { id:"service",   label:"Add a new service",   num:"04", q:"Is it worth the investment?" },
-  { id:"hour",      label:"Most valuable hour",  num:"05", q:"Which work pays best per hour?" },
-  { id:"org",       label:"Org chart",           num:"06", q:"Design my business structure" },
+  { id: 'hire', label: 'Hire a cleaner', num: '01', q: 'Will this hire make me money?' },
+  { id: 'structure', label: 'Sole trader vs Ltd', num: '02', q: 'Should I go limited?' },
+  { id: 'prices', label: 'Raise my prices', num: '03', q: 'How much, when, and how?' },
+  { id: 'service', label: 'Add a new service', num: '04', q: 'Is it worth the investment?' },
+  { id: 'hour', label: 'Most valuable hour', num: '05', q: 'Which work pays best per hour?' },
+  { id: 'org', label: 'Org chart', num: '06', q: 'Design my business structure' },
 ];
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
@@ -1296,22 +2200,28 @@ export default function BusinessLabTab({ accountsData, onNavigate: onNavigatePro
   const routerNavigate = useNavigate();
   const onNavigate = onNavigateProp || ((tab) => routerNavigate(`/${tab}`));
   const accounts = { ...DEFAULT_ACCOUNTS, ...(accountsData ?? {}) };
-  const [activeTool, setActiveTool] = useState("hire");
-  const active = TOOLS.find(t => t.id === activeTool);
+  const [activeTool, setActiveTool] = useState('hire');
+  const active = TOOLS.find((t) => t.id === activeTool);
 
   return (
     <div className="-mx-4 md:-mx-8 -my-6 relative" style={greenCanvas()}>
       {/* Grid texture */}
-      <div className="absolute inset-0 opacity-[0.04] pointer-events-none"
-        style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.5) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.5) 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
+      <div
+        className="absolute inset-0 opacity-[0.04] pointer-events-none"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.5) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.5) 1px,transparent 1px)',
+          backgroundSize: '32px 32px',
+        }}
+      />
 
       <div className="relative max-w-5xl mx-auto px-4 md:px-8 pt-6 pb-28 space-y-5 z-10">
-
         {/* First-visit goals coach */}
         <BusinessLabGoalsCoach />
 
         {/* Hero */}
-        <div className="relative overflow-hidden"
+        <div
+          className="relative overflow-hidden"
           style={{
             ...glassDark({ radius: CONNECT_RADII.xl, blur: 20 }),
             background: `
@@ -1319,46 +2229,82 @@ export default function BusinessLabTab({ accountsData, onNavigate: onNavigatePro
               radial-gradient(60% 60% at 0% 100%, rgba(1, 10, 79, 0.30) 0%, transparent 60%),
               rgba(255,255,255,0.04)
             `,
-          }}>
+          }}
+        >
           <div className="relative px-6 md:px-9 py-7 md:py-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="inline-flex items-center gap-2 mb-3">
-                <div className="w-7 h-7 rounded-xl flex items-center justify-center"
-                  style={{ background: '#059669', boxShadow: '0 8px 20px -6px rgba(5,150,105,0.6)' }}>
+                <div
+                  className="w-7 h-7 rounded-xl flex items-center justify-center"
+                  style={{
+                    background: '#059669',
+                    boxShadow: '0 8px 20px -6px rgba(5,150,105,0.6)',
+                  }}
+                >
                   <TrendingUp size={13} className="text-white" strokeWidth={2.5} />
                 </div>
-                <span className="text-[10px] font-black tracking-[0.28em] text-white/70 uppercase">Business Lab</span>
+                <span className="text-[10px] font-black tracking-[0.28em] text-white/70 uppercase">
+                  Business Lab
+                </span>
               </div>
-              <h1 className="text-white mb-2"
-                style={{ fontSize: 26, fontWeight: 900, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-                Six tools for the{' '}
-                <span style={{ color: '#86efac' }}>questions that matter.</span>
+              <h1
+                className="text-white mb-2"
+                style={{
+                  fontSize: 26,
+                  fontWeight: 900,
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.15,
+                }}
+              >
+                Six tools for the <span style={{ color: '#86efac' }}>questions that matter.</span>
               </h1>
               <p className="text-white/70 text-[14px] leading-relaxed max-w-2xl">
-                Hire, price, restructure, add a service — every answer verdict-first, before the numbers. {currentTaxYearLabel()} UK rates.
+                Hire, price, restructure, add a service — every answer verdict-first, before the
+                numbers. {currentTaxYearLabel()} UK rates.
               </p>
             </div>
-            <div className="shrink-0 flex items-center gap-2 px-4 py-3 rounded-2xl"
-              style={{ ...glassDark({ radius: CONNECT_RADII.md, strong: true }) }}>
-              <span className={`w-2 h-2 rounded-full shrink-0 ${accountsData?"bg-emerald-400 animate-pulse":"bg-white/30"}`} />
+            <div
+              className="shrink-0 flex items-center gap-2 px-4 py-3 rounded-2xl"
+              style={{ ...glassDark({ radius: CONNECT_RADII.md, strong: true }) }}
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${accountsData ? 'bg-emerald-400 animate-pulse' : 'bg-white/30'}`}
+              />
               <div>
-                <p className="text-xs font-black text-white leading-none">{accountsData?"Live from accounts":"Estimates"}</p>
-                <p className="text-[10px] text-white/50 mt-1">{accounts.ytdIncome > 0 ? `${fmt(accounts.ytdIncome)}/yr · ` : ""}{Math.round(accounts.taxRate*100)}% tax</p>
+                <p className="text-xs font-black text-white leading-none">
+                  {accountsData ? 'Live from accounts' : 'Estimates'}
+                </p>
+                <p className="text-[10px] text-white/50 mt-1">
+                  {accounts.ytdIncome > 0 ? `${fmt(accounts.ytdIncome)}/yr · ` : ''}
+                  {Math.round(accounts.taxRate * 100)}% tax
+                </p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Tool selector */}
-        <div className="flex gap-1.5 p-1 bg-[rgba(0,0,0,0.2)] rounded-2xl overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-          {TOOLS.map(t => (
-            <button key={t.id} onClick={()=>setActiveTool(t.id)}
+        <div
+          className="flex gap-1.5 p-1 bg-[rgba(0,0,0,0.2)] rounded-2xl overflow-x-auto"
+          style={{ scrollbarWidth: 'none' }}
+        >
+          {TOOLS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTool(t.id)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap shrink-0 ${
-                activeTool===t.id ? "bg-[#059669] text-white shadow-lg shadow-[#059669]/30" : "text-[rgba(153,197,255,0.5)] hover:text-white"
-              }`}>
+                activeTool === t.id
+                  ? 'bg-[#059669] text-white shadow-lg shadow-[#059669]/30'
+                  : 'text-[rgba(153,197,255,0.5)] hover:text-white'
+              }`}
+            >
               <span className="hidden sm:inline">{t.label}</span>
-              <span className="sm:hidden">{t.label.split(" ")[0]}</span>
-              <span className={`text-[10px] font-mono ${activeTool===t.id?"text-white/60":"text-[rgba(153,197,255,0.25)]"}`}>{t.num}</span>
+              <span className="sm:hidden">{t.label.split(' ')[0]}</span>
+              <span
+                className={`text-[10px] font-mono ${activeTool === t.id ? 'text-white/60' : 'text-[rgba(153,197,255,0.25)]'}`}
+              >
+                {t.num}
+              </span>
             </button>
           ))}
         </div>
@@ -1367,25 +2313,32 @@ export default function BusinessLabTab({ accountsData, onNavigate: onNavigatePro
         <div className="px-1 hidden lg:block">
           <p className="text-xs text-[rgba(153,197,255,0.5)]">
             <span className="font-bold text-white">{active?.label}</span>
-            {" · "}
+            {' · '}
             <span className="italic text-[rgba(153,197,255,0.4)]">"{active?.q}"</span>
           </p>
         </div>
 
         {/* Content */}
         <div>
-          {activeTool==="hire"      && <HireTool           accounts={accounts} />}
-          {activeTool==="structure" && <StructureTool       accounts={accounts} />}
-          {activeTool==="prices"    && <PriceTool           accounts={accounts} />}
-          {activeTool==="service"   && <ServiceTool         accounts={accounts} />}
-          {activeTool==="hour"      && <MostValuableHourTool accounts={accounts} />}
-          {activeTool==="org"       && <OrgTool             accounts={accounts} />}
+          {activeTool === 'hire' && <HireTool accounts={accounts} />}
+          {activeTool === 'structure' && <StructureTool accounts={accounts} />}
+          {activeTool === 'prices' && <PriceTool accounts={accounts} />}
+          {activeTool === 'service' && <ServiceTool accounts={accounts} />}
+          {activeTool === 'hour' && <MostValuableHourTool accounts={accounts} />}
+          {activeTool === 'org' && <OrgTool accounts={accounts} />}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between py-2 px-1">
-          <p className="text-[10px] text-[rgba(153,197,255,0.3)]">Estimates only — not financial or tax advice. {currentTaxYearLabel()} UK rates.</p>
-          <button onClick={()=>onNavigate?.("accounts")} className="text-[10px] text-[#99c5ff] font-bold hover:text-white transition-colors">View live accounts →</button>
+          <p className="text-[10px] text-[rgba(153,197,255,0.3)]">
+            Estimates only — not financial or tax advice. {currentTaxYearLabel()} UK rates.
+          </p>
+          <button
+            onClick={() => onNavigate?.('accounts')}
+            className="text-[10px] text-[#99c5ff] font-bold hover:text-white transition-colors"
+          >
+            View live accounts →
+          </button>
         </div>
       </div>
     </div>
