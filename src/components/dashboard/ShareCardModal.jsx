@@ -15,7 +15,12 @@ export default function ShareCardModal({
   const [copied, setCopied] = useState(false);
   const earnedBadges = badges.filter((b) => b.earned).slice(0, 4);
   const sc = SECTOR_COLORS[sector] ?? SECTOR_COLORS.residential;
-  const topPct = Math.round(((rank ?? totalUsers) / (totalUsers ?? 1)) * 100);
+  // Only show a percentile on a leaderboard big enough for it to mean something,
+  // and never claim "Top 100%" (rank 1 of 1) — clamp to a sensible 1–99 range.
+  const meaningfulRank = rank != null && (totalUsers ?? 0) >= 10;
+  const topPct = meaningfulRank
+    ? Math.min(99, Math.max(1, Math.round((rank / totalUsers) * 100)))
+    : null;
   const tierColor =
     score?.total >= 90
       ? '#a78bfa'
@@ -132,7 +137,7 @@ export default function ShareCardModal({
                   <span className="text-white font-black text-lg leading-none">#{rank ?? '?'}</span>
                   <span className="text-brand-skyblue/60 text-[10px] mt-0.5">Leaderboard</span>
                 </div>
-                {rank != null && (
+                {meaningfulRank && (
                   <div className="flex flex-col items-center px-4 py-2 rounded-xl bg-white/10 border border-white/10">
                     <span className="text-white font-black text-lg leading-none">
                       Top {topPct}%

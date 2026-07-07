@@ -1913,7 +1913,9 @@ const ALL_BADGES = [
     desc: 'Ranked in the top 10% of Cadi businesses',
     color: 'from-yellow-400 to-amber-500',
     border: 'border-yellow-300',
-    check: ({ rank, total }) => rank <= Math.ceil(total * 0.1),
+    // Guard against a tiny leaderboard: "top 10%" is meaningless when there
+    // are only a handful of businesses (rank 1 of 1 would trivially "earn" it).
+    check: ({ rank, total }) => total >= 10 && rank <= Math.ceil(total * 0.1),
   },
   {
     id: 'top_25',
@@ -1922,7 +1924,7 @@ const ALL_BADGES = [
     desc: 'Ranked in the top 25% of Cadi businesses',
     color: 'from-amber-300 to-yellow-500',
     border: 'border-amber-200',
-    check: ({ rank, total }) => rank <= Math.ceil(total * 0.25),
+    check: ({ rank, total }) => total >= 10 && rank <= Math.ceil(total * 0.25),
   },
   {
     id: 'invoices_clean',

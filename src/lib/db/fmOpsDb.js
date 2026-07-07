@@ -1409,7 +1409,11 @@ export async function getFmOverview() {
       .select('id, sub_user_id, price', { count: 'exact' })
       .is('deleted_at', null)
       .eq('status', 'complete')
-      .eq('approval_status', 'pending'),
+      .eq('approval_status', 'pending')
+      // Only sub-assigned (Connect) jobs count toward the FM approval queue —
+      // matches listJobsForApproval so this KPI equals the Work approval tab.
+      // Without this, an owner+FM user's personal jobs (sub_user_id null) leak in.
+      .not('sub_user_id', 'is', null),
     supabase
       .from('connect_invoices')
       .select('id, total_value, status, sub_user_id', { count: 'exact' })
