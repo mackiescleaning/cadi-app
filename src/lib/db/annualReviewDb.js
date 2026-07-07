@@ -76,6 +76,16 @@ export function ltdAccountingYearBoundaries(endMonth, endYear) {
   };
 }
 
+// Normalise the DB entity_type into the internal 'ltd' | 'sole_trader'
+// convention this module uses everywhere. The canonical value stored in
+// business_settings.entity_type is 'limited_company' (used across Settings,
+// Onboarding, MoneyTracker, InvoiceGenerator, saPack, invoicePdf); older/other
+// data may say 'ltd'. Accept both so a limited company is never mis-treated as
+// a sole trader (wrong tax path, wrong risk register, wrong narrative).
+export function normalizeEntityType(raw) {
+  return raw === 'ltd' || raw === 'limited_company' ? 'ltd' : 'sole_trader';
+}
+
 // Resolve the "current review period" a user is filing against, branched
 // on entity type. Returns { start, end, label, isLtd }.
 export async function getCurrentReviewPeriod() {
@@ -88,7 +98,7 @@ export async function getCurrentReviewPeriod() {
     .eq('owner_id', ownerId)
     .maybeSingle();
 
-  const isLtd = settings?.entity_type === 'ltd';
+  const isLtd = normalizeEntityType(settings?.entity_type) === 'ltd';
   if (isLtd && settings?.accounting_year_end_month) {
     // Pick the most recently completed accounting year. If today is past
     // the accounting year end this calendar year, that's the period; else

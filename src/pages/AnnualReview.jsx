@@ -39,6 +39,7 @@ import {
   composeExecSummary,
   execSummaryKpis,
   buildRiskRegister,
+  normalizeEntityType,
 } from '../lib/db/annualReviewDb';
 import { supabase } from '../lib/supabase';
 
@@ -4549,7 +4550,7 @@ export default function AnnualReviewTab({ accountsData }) {
             .maybeSingle(),
         ]);
         if (!alive) return;
-        setEntityType(settingsRow?.data?.entity_type || 'sole_trader');
+        setEntityType(normalizeEntityType(settingsRow?.data?.entity_type));
         setVatRegistered(!!settingsRow?.data?.vat_registered);
         setBusinessSettings(settingsRow?.data || null);
         setBusinessName(
