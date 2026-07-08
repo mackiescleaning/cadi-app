@@ -6,10 +6,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ArrowLeft, X } from 'lucide-react';
+import { Check, ArrowLeft, X, Crown, Lock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { markStepComplete, checkAndCompletePhase1 } from '../lib/db/thirtyDayPlanDb';
 import { useAuth } from '../context/AuthContext';
+import { usePlan } from '../hooks/usePlan';
 import FirstVisitCoach from '../components/FirstVisitCoach';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -409,7 +410,34 @@ function ProcessorCard({
   accountName,
   onDisconnect,
   isSkip,
+  locked,
+  onUpgrade,
 }) {
+  // Pro-gated on Lite — show the card so users know it exists, but the action
+  // routes to upgrade instead of a connect flow they can't complete.
+  if (locked && !connected) {
+    return (
+      <div className="rounded-2xl border border-[rgba(153,197,255,0.15)] bg-[rgba(255,255,255,0.02)] p-5 flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-2">
+          {logo && <div>{logo}</div>}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#f5b21a]/15 border border-[#f5b21a]/30 text-[#f5b21a] text-[10px] font-black uppercase tracking-wider shrink-0">
+            <Crown size={10} /> Pro
+          </span>
+        </div>
+        <div>
+          <p className="text-sm font-black text-white">{title}</p>
+          <p className="text-xs text-[rgba(153,197,255,0.5)] mt-1 leading-relaxed">{body}</p>
+        </div>
+        <button
+          onClick={onUpgrade}
+          className="w-full py-2.5 rounded-xl text-sm font-bold transition-colors bg-[#f5b21a]/15 hover:bg-[#f5b21a]/25 text-[#f5b21a] border border-[#f5b21a]/30 flex items-center justify-center gap-1.5"
+        >
+          <Lock size={13} /> Upgrade to Pro
+        </button>
+      </div>
+    );
+  }
+
   if (connected) {
     return (
       <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 flex flex-col gap-3">
@@ -478,6 +506,7 @@ const DEFAULT_TEMPLATE = {
 export default function InvoiceSettings() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const { isPro } = usePlan();
 
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
   const [connections, setConnections] = useState({ stripe: null, gocardless: null });
@@ -940,12 +969,34 @@ export default function InvoiceSettings() {
         <div className="mt-12 pt-10 border-t border-[rgba(153,197,255,0.1)]">
           <div className="flex items-start justify-between gap-4 mb-2">
             <div>
-              <h2 className="text-xl font-black text-white">
-                Want customers to pay you through Cadi?
-              </h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-xl font-black text-white">
+                  Want customers to pay you through Cadi?
+                </h2>
+                {!isPro && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#f5b21a]/15 border border-[#f5b21a]/30 text-[#f5b21a] text-[10px] font-black uppercase tracking-wider">
+                    <Crown size={10} /> Pro
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-[rgba(153,197,255,0.5)] mt-1">
-                Optional — your invoices work fine without this. If you connect a processor,
-                customers see a "Pay now" button on every invoice.
+                {isPro ? (
+                  <>
+                    Optional — your invoices work fine without this. Connect a processor and
+                    customers get a "Pay now" button on every invoice.
+                  </>
+                ) : (
+                  <>
+                    <span className="text-white font-bold">
+                      Creating, branding and sending invoices is included on Lite — that's all set
+                      up above.
+                    </span>{' '}
+                    Taking card payments (Stripe) or Direct Debit (GoCardless) automatically through
+                    Cadi is a <span className="text-[#f5b21a] font-bold">Pro</span> feature. On Lite
+                    you can still get paid — add your bank details above and customers pay by
+                    transfer, cash, or however you already accept.
+                  </>
+                )}
               </p>
             </div>
             {skipDismissed && (
@@ -976,6 +1027,8 @@ export default function InvoiceSettings() {
                 connected={stripeConnected}
                 accountName={connections.stripe?.provider_account_name}
                 onDisconnect={() => handleDisconnect('stripe')}
+                locked={!isPro}
+                onUpgrade={() => navigate('/upgrade')}
               />
 
               {/* GoCardless */}
@@ -994,6 +1047,8 @@ export default function InvoiceSettings() {
                 connected={gcConnected}
                 accountName={connections.gocardless?.provider_account_name}
                 onDisconnect={() => handleDisconnect('gocardless')}
+                locked={!isPro}
+                onUpgrade={() => navigate('/upgrade')}
               />
 
               {/* Skip */}
