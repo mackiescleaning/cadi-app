@@ -71,6 +71,7 @@ import ShareCardModal from '../components/dashboard/ShareCardModal';
 import MobileDashboard from '../components/dashboard/MobileDashboard';
 import Onboarding from './Onboarding';
 import ThirtyDayPlan from '../components/ThirtyDayPlan';
+import ResumeOnboardingBanner from '../components/ResumeOnboardingBanner';
 import { usePlan, PRO_TABS } from '../hooks/usePlan';
 import { UpgradeModal, UpgradeSuccessModal } from '../components/UpgradePrompt';
 
@@ -2668,6 +2669,7 @@ export default function DashboardTab({
 
       {/* ── Mobile layout (< sm breakpoint) ── */}
       <div className="sm:hidden flex flex-col h-full">
+        <ResumeOnboardingBanner />
         <MobileDashboard
           score={score}
           weekJobs={weekJobs}
@@ -2697,6 +2699,9 @@ export default function DashboardTab({
         `,
         }}
       >
+        {/* Resume the migration/menu wizard if setup was left unfinished. */}
+        <ResumeOnboardingBanner />
+
         {/* ── 30 Day Plan — full-width at top, visible until Phase 4 complete ── */}
         <ThirtyDayPlan onRefresh={() => {}} />
 
