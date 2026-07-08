@@ -1713,6 +1713,7 @@ export default function CustomerImport({
   const [pendingCustomers, setPendingCustomers] = useState([]);
   const [showCap, setShowCap] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const [capMode, setCapMode] = useState('csv'); // 'csv' | 'cp' — which importer the cap modal drives
   const [lastImportBatchId, setLastImportBatchId] = useState(null);
 
   const handleUndoImport = async () => {
@@ -1757,9 +1758,19 @@ export default function CustomerImport({
     let roundCount = 0;
     const failures = [];
     const jobsToCreate = [];
+    // Lite hard cap — divert overflow to pending_customers rather than letting
+    // the enforce_free_customer_limit trigger reject the insert with a 400.
+    const existingActiveCP = existingCustomers.filter(
+      (c) => (c.status ?? 'active') !== 'archived'
+    ).length;
+    const overflowPending = [];
 
     for (let i = 0; i < entries.length; i++) {
       const { customer, rounds } = entries[i];
+      if (!isPro && existingActiveCP + count >= LITE_CAP) {
+        overflowPending.push({ data: customer });
+        continue;
+      }
       try {
         const saved = await upsertCustomer({
           ...customer,
@@ -1829,6 +1840,14 @@ export default function CustomerImport({
       .filter((j) => j.date >= todayStr)
       .slice(0, 5);
 
+    if (overflowPending.length > 0) {
+      try {
+        await storePendingCustomers(overflowPending);
+      } catch (e) {
+        console.warn('pending_customers store failed (CP)', e);
+      }
+    }
+
     setImporting(false);
     if (count > 0) {
       setImportedCount(count);
@@ -1869,13 +1888,18 @@ export default function CustomerImport({
       },
     }));
 
-    if (!isPro) {
-      const fresh = resolved.filter((e) => !e.isDupe);
-      if (fresh.length > LITE_CAP) {
-        const dupes = resolved.filter((e) => e.isDupe);
-        await doImportCP([...fresh.slice(0, LITE_CAP), ...dupes]);
-        return;
-      }
+    const existingActive = existingCustomers.filter(
+      (c) => (c.status ?? 'active') !== 'archived'
+    ).length;
+    const fresh = resolved.filter((e) => !e.isDupe);
+    if (!isPro && existingActive + fresh.length > LITE_CAP) {
+      // Same choose-30-or-upgrade popup as the standard CSV path. Wrap each
+      // entry as { data } so CapModal / CustomerPicker can render it, keeping
+      // the original CleanerPlanner entry on __cp for the importer.
+      setCapMode('cp');
+      setPendingCustomers(resolved.map((e) => ({ data: e.customer, __cp: e })));
+      setShowCap(true);
+      return;
     }
     await doImportCP(resolved);
   };
@@ -1886,7 +1910,18 @@ export default function CustomerImport({
     const batchId = newImportBatchId();
     let count = 0;
     const failures = [];
+    // Lite hard cap — never attempt an insert the enforce_free_customer_limit
+    // trigger will reject (which surfaces as a raw 400). Anything past the cap
+    // is diverted to pending_customers instead of hitting the DB.
+    const existingActive = existingCustomers.filter(
+      (c) => (c.status ?? 'active') !== 'archived'
+    ).length;
+    const cappedOverflow = [];
     for (let i = 0; i < customers.length; i++) {
+      if (!isPro && existingActive + count >= LITE_CAP) {
+        cappedOverflow.push(customers[i]);
+        continue;
+      }
       try {
         await upsertCustomer({ ...customers[i].data, importBatchId: batchId });
         count++;
@@ -1895,9 +1930,10 @@ export default function CustomerImport({
         failures.push(err?.message || 'Unknown error');
       }
     }
-    if (overflow.length > 0) {
+    const allOverflow = [...overflow, ...cappedOverflow];
+    if (allOverflow.length > 0) {
       try {
-        await storePendingCustomers(overflow);
+        await storePendingCustomers(allOverflow);
       } catch (e) {
         console.warn('pending_customers store failed', e);
       }
@@ -1922,7 +1958,11 @@ export default function CustomerImport({
 
   const handleImport = async (customers) => {
     const freshCustomers = customers.filter((c) => !c.isDupe);
-    if (!isPro && freshCustomers.length > LITE_CAP) {
+    const existingActive = existingCustomers.filter(
+      (c) => (c.status ?? 'active') !== 'archived'
+    ).length;
+    if (!isPro && existingActive + freshCustomers.length > LITE_CAP) {
+      setCapMode('csv');
       setPendingCustomers(customers);
       setShowCap(true);
       return;
@@ -1942,6 +1982,11 @@ export default function CustomerImport({
 
   const handleCapImportRecent = async () => {
     setShowCap(false);
+    if (capMode === 'cp') {
+      // doImportCP applies the same Lite cap internally and stages the rest.
+      await doImportCP(pendingCustomers.map((p) => p.__cp));
+      return;
+    }
     const toImport = pendingCustomers.slice(0, LITE_CAP);
     const overflow = pendingCustomers.slice(LITE_CAP);
     await doImport(toImport, overflow);
@@ -1949,6 +1994,22 @@ export default function CustomerImport({
 
   const handlePickerConfirm = async (selectedIndices) => {
     setShowPicker(false);
+    if (capMode === 'cp') {
+      const entries = pendingCustomers.map((p) => p.__cp);
+      const selectedSet = new Set(selectedIndices);
+      const selected = selectedIndices.map((i) => entries[i]);
+      const rest = entries.filter((_, i) => !selectedSet.has(i));
+      // Stage the unpicked ones so they load in on upgrade, then import the picks.
+      if (rest.length > 0) {
+        try {
+          await storePendingCustomers(rest.map((e) => ({ data: e.customer })));
+        } catch (e) {
+          console.warn('pending_customers store failed (CP)', e);
+        }
+      }
+      await doImportCP(selected);
+      return;
+    }
     const toImport = selectedIndices.map((i) => pendingCustomers[i]);
     const overflow = pendingCustomers.filter((_, i) => !selectedIndices.includes(i));
     await doImport(toImport, overflow);
