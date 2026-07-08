@@ -47,6 +47,9 @@ verify_jwt = false
 [functions.staff-payslip]
 verify_jwt = false
 
+[functions.staff-payment]
+verify_jwt = false
+
 # ── Public invite lookups — resolve an invite token before the user has a JWT ─
 [functions.invite-lookup]
 verify_jwt = false

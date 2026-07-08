@@ -12,6 +12,7 @@ import ArchiveButton from './ArchiveButton';
 import AddCustomerModal from './AddCustomerModal';
 import CustomerMetrics from './CustomerMetrics';
 import GrowthTab from './GrowthTab';
+import JobDrawer from '../Scheduler/JobDrawer';
 
 export default function CustomerDetail({
   customer,
@@ -29,13 +30,6 @@ export default function CustomerDetail({
   const daysSince = hasLastJob
     ? Math.floor((Date.now() - new Date(customer.lastJobDate)) / 86400000)
     : null;
-  const totalJobs = customer.completedJobs ?? 0;
-  const lastJobLabel =
-    hasLastJob && daysSince >= 0
-      ? `${daysSince}d ago`
-      : customer.nextJobDate
-        ? `in ${Math.max(0, Math.ceil((new Date(customer.nextJobDate) - Date.now()) / 86400000))}d`
-        : '—';
   const uniqueTypes = [...new Set(customer.services.map((s) => s.type))];
 
   const navigate = useNavigate();
@@ -125,7 +119,15 @@ export default function CustomerDetail({
   // the Scheduler — marking a job Done in another view re-renders the
   // customer profile immediately. Invoices are still queried per-open
   // because they're not held in DataContext.
-  const { jobs: contextJobs } = useData();
+  const { jobs: contextJobs, updateJob, deleteJob } = useData();
+  // The job the shared JobDrawer is open on (same drawer the Scheduler uses).
+  // We open it with the FULL context job, not the stripped allJobs row, so the
+  // drawer can resolve the linked customer and show every field.
+  const [drawerJob, setDrawerJob] = useState(null);
+  const openJob = (id) => {
+    const full = (contextJobs || []).find((j) => j.id === id);
+    if (full) setDrawerJob(full);
+  };
   const allJobs = useMemo(() => {
     return (contextJobs || [])
       .filter((j) => j.customerId === customer.id)
@@ -143,6 +145,35 @@ export default function CustomerDetail({
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
       .slice(0, 200);
   }, [contextJobs, customer.id]);
+
+  // Mini-dashboard stats. Reliability = share of past visits actually marked
+  // complete (sharpens once the Run view introduces an explicit "Missed"
+  // status; today an un-completed past job counts against). Same balance/round
+  // data the Scheduler's job drawer shows — one source, two surfaces.
+  const jobStats = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const done = allJobs.filter((j) => j.status === 'complete').length;
+    const past = allJobs.filter(
+      (j) => j.status === 'complete' || (j.date && j.date < today)
+    ).length;
+    return {
+      done,
+      total: allJobs.length,
+      reliability: past ? Math.round((done / past) * 100) : null,
+    };
+  }, [allJobs]);
+
+  const nextDue = customer.nextJobDate || customer.dueDate || null;
+  const nextDueLabel = nextDue
+    ? new Date(nextDue + 'T00:00:00').toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+      })
+    : '—';
+  const roundLabel = customer.roundName || rounds[0]?.round_name || null;
+  const billingLabel =
+    BILLING_MODES.find((m) => m.key === (customer.billing_mode || 'invoice_per_job'))?.label ??
+    'Invoice per job';
 
   const [allInvoices, setAllInvoices] = useState([]);
   useEffect(() => {
@@ -281,6 +312,18 @@ export default function CustomerDetail({
         />
       )}
 
+      {/* Same drawer the Scheduler uses — opening a job here edits it through
+          the identical path (status, notes, payment), so the two tabs stay in
+          sync. No onEditJob: full reschedule/reprice stays in the Scheduler. */}
+      {drawerJob && (
+        <JobDrawer
+          job={drawerJob}
+          onClose={() => setDrawerJob(null)}
+          onUpdateJob={updateJob}
+          onDeleteJob={deleteJob}
+        />
+      )}
+
       <div
         className="relative overflow-hidden shrink-0"
         style={{ background: 'linear-gradient(135deg, #0d1e78 0%, #05124a 60%, #010a4f 100%)' }}
@@ -306,6 +349,16 @@ export default function CustomerDetail({
               <p className="text-xs text-[#99c5ff] mt-0.5">
                 {customer.postcode} · {customer.frequency}
               </p>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                {roundLabel && (
+                  <span className="inline-flex items-center text-[10px] font-bold text-[#99c5ff] bg-[#99c5ff]/15 border border-[#99c5ff]/25 rounded-full px-2 py-0.5">
+                    {roundLabel} round
+                  </span>
+                )}
+                <span className="inline-flex items-center text-[10px] font-bold text-[#99c5ff] bg-[#99c5ff]/15 border border-[#99c5ff]/25 rounded-full px-2 py-0.5">
+                  {billingLabel}
+                </span>
+              </div>
               <div className="mt-1.5">
                 <StarRating
                   value={customer.rating || 0}
@@ -338,38 +391,60 @@ export default function CustomerDetail({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          {/* Mini dashboard — the at-a-glance numbers, balance first because
+              it's the one that changes what you do. Same balance the Scheduler
+              job drawer shows. Deeper trends live in the Metrics tab. */}
+          <div className="grid grid-cols-4 gap-1.5">
             {[
               {
-                label: 'Lifetime value',
-                value: `£${customer.lifetimeValue.toLocaleString()}`,
-                accent: 'text-emerald-600',
-                // Sub-label surfaces collection state. If anything is
-                // outstanding the owner sees it inline; otherwise the
-                // tile reads as a clean win.
+                label: 'Balance',
+                value:
+                  customer.outstandingBalance > 0
+                    ? `£${customer.outstandingBalance.toLocaleString()}`
+                    : '£0',
+                accent: customer.outstandingBalance > 0 ? 'text-red-600' : 'text-emerald-600',
                 sub:
                   customer.outstandingBalance > 0
-                    ? `£${customer.outstandingBalance.toLocaleString()} outstanding`
+                    ? `${customer.unpaidInvoiceCount} unpaid`
                     : customer.paidLifetimeValue > 0
                       ? 'all paid ✓'
                       : null,
-                subAccent: customer.outstandingBalance > 0 ? 'text-amber-600' : 'text-emerald-600',
+                subAccent: customer.outstandingBalance > 0 ? 'text-red-500' : 'text-emerald-600',
               },
-              { label: 'Total jobs', value: totalJobs, accent: 'text-[#010a4f]' },
               {
-                label: hasLastJob && daysSince >= 0 ? 'Last job' : 'Next job',
-                value: lastJobLabel,
-                accent: hasLastJob && daysSince > 60 ? 'text-amber-600' : 'text-[#010a4f]',
+                label: 'Lifetime',
+                value: `£${customer.lifetimeValue.toLocaleString()}`,
+                accent: 'text-emerald-600',
+              },
+              {
+                label: 'Reliability',
+                value: jobStats.reliability != null ? `${jobStats.reliability}%` : jobStats.done,
+                accent: 'text-[#010a4f]',
+                sub: jobStats.total ? `${jobStats.done} done` : null,
+                subAccent: 'text-[#010a4f]/55',
+              },
+              {
+                label: 'Next due',
+                value: nextDueLabel,
+                accent:
+                  hasLastJob && daysSince > 60 && nextDueLabel === '—'
+                    ? 'text-amber-600'
+                    : 'text-[#010a4f]',
               },
             ].map(({ label, value, accent, sub, subAccent }) => (
-              <GlassSurface key={label} tone="light" depth="lift" className="px-2 py-2 text-center">
-                <p className="text-[10px] text-[#010a4f]/55 mb-0.5 font-semibold tracking-wide uppercase">
+              <GlassSurface
+                key={label}
+                tone="light"
+                depth="lift"
+                className="px-1.5 py-2 text-center"
+              >
+                <p className="text-[9px] text-[#010a4f]/55 mb-0.5 font-semibold tracking-wide uppercase">
                   {label}
                 </p>
-                <p className={`text-base font-black ${accent}`}>{value}</p>
+                <p className={`text-sm font-black ${accent}`}>{value}</p>
                 {sub && (
                   <p
-                    className={`text-[10px] font-semibold mt-0.5 ${subAccent || 'text-[#010a4f]/55'}`}
+                    className={`text-[9px] font-semibold mt-0.5 ${subAccent || 'text-[#010a4f]/55'}`}
                   >
                     {sub}
                   </p>
@@ -703,7 +778,9 @@ export default function CustomerDetail({
           </>
         )}
 
-        {activeTab === 'metrics' && <CustomerMetrics customer={customer} jobs={allJobs} />}
+        {activeTab === 'metrics' && (
+          <CustomerMetrics customer={customer} jobs={allJobs} invoices={allInvoices} />
+        )}
 
         {activeTab === 'history' && (
           <>
@@ -730,39 +807,46 @@ export default function CustomerDetail({
                           ? 'bg-amber-500/15 text-amber-300 border-amber-500/25'
                           : 'bg-blue-500/15 text-blue-300 border-blue-500/25';
                   return (
-                    <GlassCard key={job.id} className="p-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-2 h-2 rounded-full shrink-0 ${job.status === 'completed' ? 'bg-emerald-400' : isPast ? 'bg-amber-400' : 'bg-[#99c5ff]'}`}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">
-                            {job.service || 'Clean'}
-                          </p>
-                          <p className="text-xs text-[rgba(153,197,255,0.4)]">
-                            {job.date
-                              ? new Date(job.date).toLocaleDateString('en-GB', {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  year: 'numeric',
-                                })
-                              : '—'}
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          {job.price > 0 && (
-                            <p className="text-sm font-bold text-emerald-400">
-                              £{Number(job.price).toFixed(2)}
+                    <button
+                      key={job.id}
+                      type="button"
+                      onClick={() => openJob(job.id)}
+                      className="block w-full text-left"
+                    >
+                      <GlassCard className="p-3 hover:border-[#99c5ff]/40 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-2 h-2 rounded-full shrink-0 ${job.status === 'completed' ? 'bg-emerald-400' : isPast ? 'bg-amber-400' : 'bg-[#99c5ff]'}`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">
+                              {job.service || 'Clean'}
                             </p>
-                          )}
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded-lg border font-bold capitalize ${statusColour}`}
-                          >
-                            {job.status}
-                          </span>
+                            <p className="text-xs text-[rgba(153,197,255,0.4)]">
+                              {job.date
+                                ? new Date(job.date).toLocaleDateString('en-GB', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })
+                                : '—'}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            {job.price > 0 && (
+                              <p className="text-sm font-bold text-emerald-400">
+                                £{Number(job.price).toFixed(2)}
+                              </p>
+                            )}
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-lg border font-bold capitalize ${statusColour}`}
+                            >
+                              {job.status}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </GlassCard>
+                      </GlassCard>
+                    </button>
                   );
                 })}
               </div>

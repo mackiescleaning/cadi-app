@@ -3,14 +3,14 @@
 // Extracted verbatim from Scheduler.jsx. Note: this is a slide-in drawer,
 // not a centred modal, so it does NOT use ModalShell.
 
-import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { X, Pencil, Trash2, CheckCircle2, FileText, Send } from "lucide-react";
-import { TYPE, STATUS_STYLES, STATUS_LABELS } from "../../lib/jobTheme";
-import { useData } from "../../context/DataContext";
-import { supabase } from "../../lib/supabase";
-import { updateInvoice } from "../../lib/db/invoiceDb";
-import { BILLING_MODES } from "../../lib/billing";
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { X, Pencil, Trash2, CheckCircle2, FileText, Send } from 'lucide-react';
+import { TYPE, STATUS_STYLES, STATUS_LABELS } from '../../lib/jobTheme';
+import { useData } from '../../context/DataContext';
+import { supabase } from '../../lib/supabase';
+import { updateInvoice } from '../../lib/db/invoiceDb';
+import { BILLING_MODES } from '../../lib/billing';
 import {
   fmtTime,
   durLabel,
@@ -18,28 +18,119 @@ import {
   getJobAssignees,
   getJobAssigneeLabel,
   tintForCrew,
-} from "./helpers";
-import RiskChip from "./RiskChip";
+} from './helpers';
+import RiskChip from './RiskChip';
 
 function SectionLabel({ children }) {
-  return <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-slate-400">{children}</p>;
+  return (
+    <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-slate-400">{children}</p>
+  );
 }
 
 function StatusBadge({ status }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold ${STATUS_STYLES[status]}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold ${STATUS_STYLES[status]}`}
+    >
       {STATUS_LABELS[status]}
     </span>
   );
 }
 
 function TypeBadge({ type }) {
-  const s = TYPE[type] ?? { label: type, chip: "bg-gray-100 text-gray-600 border-gray-200", dot: "bg-gray-400" };
+  const s = TYPE[type] ?? {
+    label: type,
+    chip: 'bg-gray-100 text-gray-600 border-gray-200',
+    dot: 'bg-gray-400',
+  };
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${s.chip}`}>
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${s.chip}`}
+    >
       <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
       {s.label}
     </span>
+  );
+}
+
+// ─── Customer context ──────────────────────────────────────────────────────
+// Surfaces the connective tissue between a job and its customer: the running
+// balance (the money thread that links the schedule and the customer tab),
+// the round it belongs to, its schedule, and last/next visit. Everything here
+// is already in DataContext's mapped customer, so no extra fetch. Clicking the
+// header jumps to the customer drawer — the "same object, another door".
+function fmtDay(d) {
+  if (!d) return '—';
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: '2-digit',
+  });
+}
+
+function CustomerContext({ customer, onClose }) {
+  const navigate = useNavigate();
+  const balance = Number(customer.outstandingBalance) || 0;
+  const unpaid = Number(customer.unpaidInvoiceCount) || 0;
+  const owes = balance > 0;
+  const schedule =
+    customer.schedule ||
+    (customer.frequency && customer.frequency !== 'one-off'
+      ? customer.frequency.charAt(0).toUpperCase() + customer.frequency.slice(1)
+      : 'One-off');
+
+  const facts = [
+    ['Round', customer.roundName || '—'],
+    ['Schedule', schedule],
+    ['Last visit', fmtDay(customer.lastJobDate)],
+    ['Next due', fmtDay(customer.nextJobDate || customer.dueDate)],
+  ];
+
+  return (
+    <div>
+      <SectionLabel>Customer</SectionLabel>
+      <div className="mt-2 rounded-xl border border-slate-200 bg-white overflow-hidden">
+        <button
+          onClick={() => {
+            onClose?.();
+            navigate(`/customers/${customer.id}`);
+          }}
+          className="w-full text-left px-4 py-2.5 flex items-center justify-between gap-2 border-b border-slate-100 hover:bg-slate-50 transition-colors"
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-slate-900 truncate">{customer.name}</p>
+            <p className="text-[11px] font-semibold text-blue-600">View customer →</p>
+          </div>
+          <div className="text-right shrink-0">
+            {owes ? (
+              <>
+                <p className="text-sm font-black tabular-nums text-red-600">
+                  Owes £{fmtMoney(balance)}
+                </p>
+                <p className="text-[10.5px] text-red-500">
+                  {unpaid} unpaid invoice{unpaid === 1 ? '' : 's'}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm font-bold text-emerald-600">Up to date</p>
+            )}
+          </div>
+        </button>
+        <div className="grid grid-cols-2">
+          {facts.map(([label, val], i) => (
+            <div
+              key={label}
+              className={`px-4 py-2 ${i % 2 === 0 ? 'border-r border-slate-100' : ''} ${i < 2 ? 'border-b border-slate-100' : ''}`}
+            >
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                {label}
+              </p>
+              <p className="text-xs font-semibold text-slate-800 truncate">{val}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -57,7 +148,7 @@ function PaymentSection({ job, customer, onClose }) {
   const [error, setError] = useState(null);
 
   const billingMode = customer?.billing_mode || customer?.billingMode || 'invoice_per_job';
-  const modeLabel = BILLING_MODES.find(m => m.key === billingMode)?.label ?? 'Invoice per job';
+  const modeLabel = BILLING_MODES.find((m) => m.key === billingMode)?.label ?? 'Invoice per job';
 
   // Look for any invoice that already contains a line referencing this job.
   // We narrow to drafts + recent invoices first to keep this cheap. lines is
@@ -81,7 +172,9 @@ function PaymentSection({ job, customer, onClose }) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [job.id]);
 
   const markPaid = async () => {
@@ -93,7 +186,7 @@ function PaymentSection({ job, customer, onClose }) {
         status: 'paid',
         paid_at: new Date().toISOString(),
       });
-      setInvoice(prev => ({ ...prev, ...updated }));
+      setInvoice((prev) => ({ ...prev, ...updated }));
     } catch {
       setError("Couldn't mark this paid. Try again.");
     } finally {
@@ -108,23 +201,27 @@ function PaymentSection({ job, customer, onClose }) {
   };
 
   const isComplete = job.status === 'complete';
-  const isPaid     = invoice?.status === 'paid' || !!invoice?.paid_at;
-  const isSent     = !!invoice?.sent_at;
+  const isPaid = invoice?.status === 'paid' || !!invoice?.paid_at;
+  const isSent = !!invoice?.sent_at;
 
   // Visual state — pill colour + headline
   let stateLabel, stateCls;
   if (isPaid) {
     stateLabel = 'Paid';
-    stateCls   = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    stateCls = 'bg-emerald-100 text-emerald-700 border-emerald-200';
   } else if (invoice) {
-    stateLabel = isSent ? 'Sent — awaiting payment' : `${invoice.status?.[0]?.toUpperCase()}${invoice.status?.slice(1) || 'Draft'}`;
-    stateCls   = isSent ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-slate-100 text-slate-700 border-slate-200';
+    stateLabel = isSent
+      ? 'Sent — awaiting payment'
+      : `${invoice.status?.[0]?.toUpperCase()}${invoice.status?.slice(1) || 'Draft'}`;
+    stateCls = isSent
+      ? 'bg-amber-100 text-amber-800 border-amber-200'
+      : 'bg-slate-100 text-slate-700 border-slate-200';
   } else if (isComplete) {
     stateLabel = 'No invoice yet';
-    stateCls   = 'bg-amber-50 text-amber-700 border-amber-200';
+    stateCls = 'bg-amber-50 text-amber-700 border-amber-200';
   } else {
     stateLabel = 'Will draft on completion';
-    stateCls   = 'bg-blue-50 text-blue-700 border-blue-200';
+    stateCls = 'bg-blue-50 text-blue-700 border-blue-200';
   }
 
   return (
@@ -137,7 +234,9 @@ function PaymentSection({ job, customer, onClose }) {
             <p className="text-[11px] text-slate-500 font-medium">Billing mode</p>
             <p className="text-sm font-bold text-slate-900 truncate">{modeLabel}</p>
           </div>
-          <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-md border shrink-0 ${stateCls}`}>
+          <span
+            className={`text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-md border shrink-0 ${stateCls}`}
+          >
             {stateLabel}
           </span>
         </div>
@@ -151,12 +250,25 @@ function PaymentSection({ job, customer, onClose }) {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-slate-900 truncate">{invoice.invoice_num}</p>
               <p className="text-[11px] text-slate-500">
-                {invoice.date ? new Date(invoice.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
-                {invoice.lines && invoice.lines.length > 1 ? ` · ${invoice.lines.length} lines` : ''}
+                {invoice.date
+                  ? new Date(invoice.date + 'T00:00:00').toLocaleDateString('en-GB', {
+                      day: 'numeric',
+                      month: 'short',
+                    })
+                  : '—'}
+                {invoice.lines && invoice.lines.length > 1
+                  ? ` · ${invoice.lines.length} lines`
+                  : ''}
               </p>
             </div>
             <p className="text-sm font-black tabular-nums text-emerald-600">
-              £{fmtMoney((invoice.lines || []).reduce((s, l) => s + (Number(l.total ?? l.unit_price ?? 0) || 0), 0))}
+              £
+              {fmtMoney(
+                (invoice.lines || []).reduce(
+                  (s, l) => s + (Number(l.total ?? l.unit_price ?? 0) || 0),
+                  0
+                )
+              )}
             </p>
           </div>
         )}
@@ -195,7 +307,10 @@ function PaymentSection({ job, customer, onClose }) {
           )}
           {!invoice && customer?.id && (
             <button
-              onClick={() => { onClose?.(); navigate(`/customers/${customer.id}`); }}
+              onClick={() => {
+                onClose?.();
+                navigate(`/customers/${customer.id}`);
+              }}
               className="text-[11px] font-semibold text-slate-500 hover:text-blue-700 transition-colors"
             >
               Change billing mode →
@@ -204,21 +319,35 @@ function PaymentSection({ job, customer, onClose }) {
         </div>
 
         {error && (
-          <div className="px-4 py-2 text-[11px] text-red-700 bg-red-50 border-t border-red-100">{error}</div>
+          <div className="px-4 py-2 text-[11px] text-red-700 bg-red-50 border-t border-red-100">
+            {error}
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-export default function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEditJob, risk = null }) {
+export default function JobDrawer({
+  job,
+  onClose,
+  onUpdateJob,
+  onDeleteJob,
+  onEditJob,
+  risk = null,
+}) {
   const { customers } = useData();
   // Resolve the customer for this job. Falls back to a name match so older
   // jobs without a customerId still get a billing-mode read.
   const linkedCustomer = useMemo(() => {
     if (!customers) return null;
-    if (job.customerId) return customers.find(c => c.id === job.customerId) ?? null;
-    if (job.customer) return customers.find(c => (c.name || '').toLowerCase() === String(job.customer).toLowerCase()) ?? null;
+    if (job.customerId) return customers.find((c) => c.id === job.customerId) ?? null;
+    if (job.customer)
+      return (
+        customers.find(
+          (c) => (c.name || '').toLowerCase() === String(job.customer).toLowerCase()
+        ) ?? null
+      );
     return null;
   }, [customers, job.customerId, job.customer]);
 
@@ -256,25 +385,39 @@ export default function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEd
   const t = TYPE[job.type] || TYPE.residential;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/30 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-slate-900/30 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-sm h-full bg-white shadow-2xl overflow-y-auto"
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100" style={{ background: t.fill }}>
+        <div
+          className="flex items-center justify-between px-5 py-4 border-b border-slate-100"
+          style={{ background: t.fill }}
+        >
           <div>
             <p className="font-black text-base text-slate-900">{job.customer}</p>
             <p className="text-xs text-slate-600 mt-0.5">{job.service}</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Full edit (reschedule/reprice) lives in the Scheduler. When the
+                drawer is opened from the customer tab no onEditJob is passed,
+                so we hide the button rather than show a dead one. */}
+            {onEditJob && (
+              <button
+                onClick={() => onEditJob(job)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+              >
+                <Pencil size={12} />
+                Edit
+              </button>
+            )}
             <button
-              onClick={() => onEditJob?.(job)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-700 transition-colors"
             >
-              <Pencil size={12} />
-              Edit
-            </button>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors">
               <X size={18} />
             </button>
           </div>
@@ -288,7 +431,9 @@ export default function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEd
           </div>
           {risk?.reasons?.length > 0 && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Things to check</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                Things to check
+              </p>
               {risk.reasons.map((r, i) => (
                 <p key={i} className="text-xs text-amber-900 flex items-start gap-1.5">
                   <span className="mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 bg-amber-500" />
@@ -298,16 +443,25 @@ export default function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEd
             </div>
           )}
 
+          {/* Customer context — balance + round + schedule, the thread that
+              ties this job to the customer tab. Only when a customer is linked. */}
+          {linkedCustomer && <CustomerContext customer={linkedCustomer} onClose={onClose} />}
+
           {getJobAssignees(job).length > 1 && (
             <div>
               <SectionLabel>Team on this job</SectionLabel>
               <div className="flex gap-2 mt-2 flex-wrap">
-                {getJobAssignees(job).map(name => (
-                  <div key={name} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 rounded-full">
+                {getJobAssignees(job).map((name) => (
+                  <div
+                    key={name}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 rounded-full"
+                  >
                     <span
                       className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
                       style={{ background: tintForCrew(name) }}
-                    >{name.charAt(0).toUpperCase()}</span>
+                    >
+                      {name.charAt(0).toUpperCase()}
+                    </span>
                     <span className="text-xs font-semibold text-slate-700">{name}</span>
                   </div>
                 ))}
@@ -317,17 +471,38 @@ export default function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEd
 
           <div className="rounded-xl border border-slate-200 divide-y divide-slate-100">
             {[
-              ["Date",      job.date ? new Date(job.date + 'T00:00:00').toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : "—"],
-              ["Address",   [job.addressLine1, job.addressLine2, job.postcode].filter(Boolean).join(', ') || job.postcode || "—"],
-              ["Frequency", job.recurrence && job.recurrence !== 'one-off' ? job.recurrence.charAt(0).toUpperCase() + job.recurrence.slice(1) : "One-off"],
-              ["Time",      `${fmtTime(job.startHour)} — ${fmtTime(job.startHour + job.durationHrs)}`],
-              ["Duration",  durLabel(job.durationHrs)],
-              ["Price",     `£${job.price}`],
-              ["Assignee",  getJobAssigneeLabel(job)],
+              [
+                'Date',
+                job.date
+                  ? new Date(job.date + 'T00:00:00').toLocaleDateString('en-GB', {
+                      weekday: 'short',
+                      day: 'numeric',
+                      month: 'short',
+                    })
+                  : '—',
+              ],
+              [
+                'Address',
+                [job.addressLine1, job.addressLine2, job.postcode].filter(Boolean).join(', ') ||
+                  job.postcode ||
+                  '—',
+              ],
+              [
+                'Frequency',
+                job.recurrence && job.recurrence !== 'one-off'
+                  ? job.recurrence.charAt(0).toUpperCase() + job.recurrence.slice(1)
+                  : 'One-off',
+              ],
+              ['Time', `${fmtTime(job.startHour)} — ${fmtTime(job.startHour + job.durationHrs)}`],
+              ['Duration', durLabel(job.durationHrs)],
+              ['Price', `£${job.price}`],
+              ['Assignee', getJobAssigneeLabel(job)],
             ].map(([label, val]) => (
               <div key={label} className="flex justify-between px-4 py-2.5 text-sm">
                 <span className="text-slate-500 font-medium">{label}</span>
-                <span className={`font-semibold ${label === "Price" ? "text-emerald-600" : label === "Assignee" && getJobAssignees(job).length === 0 ? "text-red-600" : "text-slate-900"}`}>
+                <span
+                  className={`font-semibold ${label === 'Price' ? 'text-emerald-600' : label === 'Assignee' && getJobAssignees(job).length === 0 ? 'text-red-600' : 'text-slate-900'}`}
+                >
                   {val}
                 </span>
               </div>
@@ -337,14 +512,14 @@ export default function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEd
           <div>
             <SectionLabel>Update status</SectionLabel>
             <div className="grid grid-cols-2 gap-2 mt-2">
-              {["scheduled","in-progress","complete","unassigned"].map(st => (
+              {['scheduled', 'in-progress', 'complete', 'unassigned'].map((st) => (
                 <button
                   key={st}
                   onClick={() => setStatus(st)}
                   className={`py-2 text-xs font-bold uppercase tracking-wide rounded-lg border transition-all ${
                     status === st
-                      ? "bg-slate-900 text-white border-slate-900"
-                      : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
                   }`}
                 >
                   {STATUS_LABELS[st]}
@@ -355,13 +530,15 @@ export default function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEd
 
           {/* Payment — only when there's a linked customer to drive billing.
               Without a link the section would be confusing rather than useful. */}
-          {linkedCustomer && <PaymentSection job={job} customer={linkedCustomer} onClose={onClose} />}
+          {linkedCustomer && (
+            <PaymentSection job={job} customer={linkedCustomer} onClose={onClose} />
+          )}
 
           <div>
             <SectionLabel>Notes</SectionLabel>
             <textarea
               value={notes}
-              onChange={e => setNotes(e.target.value)}
+              onChange={(e) => setNotes(e.target.value)}
               className="mt-2 w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
               rows={3}
               placeholder="Add job notes, access codes, client preferences…"
@@ -369,11 +546,15 @@ export default function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEd
           </div>
 
           {drawerError && (
-            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{drawerError}</div>
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+              {drawerError}
+            </div>
           )}
           {confirmDelete ? (
             <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 space-y-2">
-              <p className="text-xs font-bold text-red-700">Delete this job? This cannot be undone.</p>
+              <p className="text-xs font-bold text-red-700">
+                Delete this job? This cannot be undone.
+              </p>
               <div className="flex gap-2">
                 <button
                   onClick={handleDelete}
@@ -396,11 +577,11 @@ export default function JobDrawer({ job, onClose, onUpdateJob, onDeleteJob, onEd
                 disabled={!hasChanges || saving}
                 className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wide rounded-xl transition-all ${
                   hasChanges && !saving
-                    ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                    : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                 }`}
               >
-                {saving ? "Saving..." : "Save changes"}
+                {saving ? 'Saving...' : 'Save changes'}
               </button>
               <button
                 onClick={() => setConfirmDelete(true)}
