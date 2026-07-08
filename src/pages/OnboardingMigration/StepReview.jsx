@@ -266,11 +266,14 @@ export default function StepReview({ session, onAdvance }) {
       const includeIds = overCap
         ? kept.filter((row) => effectiveSelected.has(customerKeyOf(row))).map((row) => row.id)
         : null;
-      const r = await commitParsedToCustomers(session.id, overCap ? { includeIds } : {});
+      await commitParsedToCustomers(session.id, overCap ? { includeIds } : {});
+      // Advance the wizard to the service-menu builder (Step 4). Do NOT
+      // navigate away — StepMenu renders in place for step 'menu_review' and
+      // drafts a menu from the customers we just brought in. (Historically this
+      // navigated to /customers because StepMenu didn't exist yet; that skipped
+      // menu-building and left the service catalogue empty.)
       await updateStep(session.id, 'menu_review');
       onAdvance({ ...session, step: 'menu_review' });
-      // For now Step 4 isn't built — drop them on Customers so they see results.
-      navigate('/customers', { state: { onboardingDone: r } });
     } catch (e) {
       setError(e?.message ?? "Couldn't bring them in. Try again?");
       setCommitting(false);
