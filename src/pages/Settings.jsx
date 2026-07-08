@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePlan } from '../hooks/usePlan';
 import { supabase } from '../lib/supabase';
+import { startProCheckout } from '../lib/upgrade';
 import { getBusinessSettings, upsertBusinessSettings } from '../lib/db/settingsDb';
 import {
   inviteMember,
@@ -2285,7 +2286,7 @@ export default function Settings() {
                 Upgrade to Cadi Pro to unlock all features for £{priceMonthly}/month.
               </p>
               <button
-                onClick={() => navigate('/upgrade')}
+                onClick={() => startProCheckout()}
                 className="w-full py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-bold text-sm rounded-xl transition-colors"
               >
                 Subscribe — £{priceMonthly}/month

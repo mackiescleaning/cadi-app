@@ -17,6 +17,7 @@ import {
 } from '../lib/db/thirtyDayPlanDb';
 import { supabase } from '../lib/supabase';
 import { usePlan } from '../hooks/usePlan';
+import { startProCheckout } from '../lib/upgrade';
 import WeekOneMoneyLog from './WeekOneMoneyLog';
 
 // ── Phase 1 step definitions ──────────────────────────────────────────────────
@@ -363,7 +364,6 @@ function Phase2Celebration({ stats, onClose }) {
 // ── Phase 3 celebration modal ─────────────────────────────────────────────────
 
 function Phase3Celebration({ stats, onClose, onViewFrontDesk }) {
-  const navigate = useNavigate();
   const { isPro } = usePlan();
 
   return (
@@ -450,7 +450,7 @@ function Phase3Celebration({ stats, onClose, onViewFrontDesk }) {
             <button
               onClick={() => {
                 onClose?.();
-                navigate('/upgrade');
+                startProCheckout();
               }}
               className="w-full text-left px-4 py-3.5 rounded-xl border border-amber-400/30 hover:bg-amber-400/10 transition-colors mb-2"
               style={{ background: 'rgba(251,191,36,0.06)' }}

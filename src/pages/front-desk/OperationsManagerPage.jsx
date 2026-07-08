@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { usePlan } from '../../hooks/usePlan';
 import { useBusinessId } from '../../hooks/useBusinessId';
 import { supabase } from '../../lib/supabase';
 import { markStepComplete } from '../../lib/db/thirtyDayPlanDb';
+import { startProCheckout } from '../../lib/upgrade';
 import ActivateOperationsManager from '../../components/ActivateOperationsManager';
 import TeamMembersUI from '../../components/TeamMembersUI';
 import {
@@ -81,7 +82,6 @@ function Toggle({ enabled, onChange, disabled }) {
 }
 
 export default function OperationsManagerPage() {
-  const navigate = useNavigate();
   const businessId = useBusinessId();
   const [searchParams, setSearchParams] = useSearchParams();
   const fromPhase3 = searchParams.get('from') === 'phase3';
@@ -284,7 +284,7 @@ export default function OperationsManagerPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button
-                onClick={() => navigate('/upgrade')}
+                onClick={() => startProCheckout()}
                 className="flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white bg-[#1f48ff] rounded-xl hover:bg-[#3a5eff] transition-colors"
               >
                 Upgrade to Pro — £{priceMonthly}/month
@@ -344,7 +344,7 @@ export default function OperationsManagerPage() {
                 </span>
               </div>
               <button
-                onClick={() => navigate('/upgrade')}
+                onClick={() => startProCheckout()}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-bold rounded-lg transition-colors"
               >
                 Upgrade to Pro <ArrowRight size={11} />
@@ -448,7 +448,7 @@ export default function OperationsManagerPage() {
             Upgrade to Pro to activate your Operations Manager and stop manually ticking off jobs.
           </p>
           <button
-            onClick={() => navigate('/upgrade')}
+            onClick={() => startProCheckout()}
             className="px-6 py-3 bg-[#1f48ff] hover:bg-[#3a5eff] text-white font-black text-sm rounded-xl transition-all shadow-lg"
           >
             Upgrade to Pro — £{priceMonthly}/month

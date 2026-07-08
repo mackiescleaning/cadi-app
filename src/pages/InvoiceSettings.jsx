@@ -11,6 +11,7 @@ import { supabase } from '../lib/supabase';
 import { markStepComplete, checkAndCompletePhase1 } from '../lib/db/thirtyDayPlanDb';
 import { useAuth } from '../context/AuthContext';
 import { usePlan } from '../hooks/usePlan';
+import { startProCheckout } from '../lib/upgrade';
 import FirstVisitCoach from '../components/FirstVisitCoach';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1028,7 +1029,7 @@ export default function InvoiceSettings() {
                 accountName={connections.stripe?.provider_account_name}
                 onDisconnect={() => handleDisconnect('stripe')}
                 locked={!isPro}
-                onUpgrade={() => navigate('/upgrade')}
+                onUpgrade={() => startProCheckout()}
               />
 
               {/* GoCardless */}
@@ -1048,7 +1049,7 @@ export default function InvoiceSettings() {
                 accountName={connections.gocardless?.provider_account_name}
                 onDisconnect={() => handleDisconnect('gocardless')}
                 locked={!isPro}
-                onUpgrade={() => navigate('/upgrade')}
+                onUpgrade={() => startProCheckout()}
               />
 
               {/* Skip */}

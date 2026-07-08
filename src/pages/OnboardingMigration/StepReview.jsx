@@ -5,7 +5,6 @@
 // the card moves to Ready automatically.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Check,
   X,
@@ -33,6 +32,7 @@ import {
 import { parseFrequency } from '../../lib/migration/parsers';
 import { lookupPostcode, searchAddresses } from '../../lib/postcode';
 import { usePlan, FREE_CUSTOMER_LIMIT } from '../../hooks/usePlan';
+import { startProCheckout } from '../../lib/upgrade';
 
 const CATEGORIES = [
   { key: 'residential', label: 'Residential', accent: '#1f48ff' },
@@ -120,7 +120,6 @@ function customerKeyOf(r) {
 }
 
 export default function StepReview({ session, onAdvance }) {
-  const navigate = useNavigate();
   const { isPro } = usePlan();
   const [rows, setRows] = useState(null); // null = loading
   const [existingCount, setExistingCount] = useState(0); // active customers already on the account
@@ -362,7 +361,7 @@ export default function StepReview({ session, onAdvance }) {
                 <div className="flex flex-wrap items-center gap-2 mt-3">
                   <button
                     type="button"
-                    onClick={() => navigate('/upgrade')}
+                    onClick={() => startProCheckout()}
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-black transition-colors shadow-lg shadow-[#1f48ff]/20"
                   >
                     <Crown size={14} /> Upgrade to Pro — £39/mo
@@ -519,7 +518,7 @@ export default function StepReview({ session, onAdvance }) {
           <button
             onClick={
               overCap && headroom === 0
-                ? () => navigate('/upgrade')
+                ? () => startProCheckout()
                 : overCap && willImportCount === 0
                   ? undefined
                   : !allReady

@@ -21,6 +21,7 @@ import { bulkInsertRounds, deleteRoundsForCustomer } from '../lib/db/customerRou
 import { bulkCreateJobs } from '../lib/db/jobsDb';
 import { supabase } from '../lib/supabase';
 import { usePlan } from '../hooks/usePlan';
+import { startProCheckout } from '../lib/upgrade';
 import {
   parseFrequency,
   parseBalance,
@@ -1972,7 +1973,7 @@ export default function CustomerImport({
 
   const handleCapUpgrade = () => {
     setShowCap(false);
-    window.location.href = '/upgrade';
+    startProCheckout();
   };
 
   const handleCapPick = () => {
