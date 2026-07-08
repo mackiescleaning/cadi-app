@@ -397,9 +397,15 @@ export async function deleteParsedCustomer(id) {
 // Commit kept rows to live customers + recurring_jobs. No silent auto-commits —
 // this is called from a user-explicit "Bring N in" button on the review screen.
 // Returns { customersCreated, recurringCreated }.
-export async function commitParsedToCustomers(sessionId, { limit = null } = {}) {
+export async function commitParsedToCustomers(sessionId, { limit = null, includeIds = null } = {}) {
   const parsed = await listParsedForSession(sessionId);
-  const kept = parsed.filter((p) => p.keep && !p.committed);
+  let kept = parsed.filter((p) => p.keep && !p.committed);
+  // Explicit selection wins over `limit` — the user hand-picked which parsed
+  // rows to bring in (Lite "choose your 30"). Restrict to those before grouping.
+  if (Array.isArray(includeIds)) {
+    const idSet = new Set(includeIds);
+    kept = kept.filter((p) => idSet.has(p.id));
+  }
   if (!kept.length) return { customersCreated: 0, recurringCreated: 0, jobsImported: 0 };
 
   // ── 1. Group parsed rows by customer ─────────────────────────────────────
@@ -654,15 +660,13 @@ export async function commitParsedToCustomers(sessionId, { limit = null } = {}) 
       ? existing.wizard_completed_steps
       : [];
     const nextSteps = steps.includes('customers') ? steps : [...steps, 'customers'];
-    await supabase
-      .from('business_settings')
-      .upsert(
-        {
-          owner_id: ownerId,
-          setup_data: { ...existing, customers_imported: true, wizard_completed_steps: nextSteps },
-        },
-        { onConflict: 'owner_id' }
-      );
+    await supabase.from('business_settings').upsert(
+      {
+        owner_id: ownerId,
+        setup_data: { ...existing, customers_imported: true, wizard_completed_steps: nextSteps },
+      },
+      { onConflict: 'owner_id' }
+    );
   } catch {
     /* silent — wizard tick is non-critical */
   }
@@ -916,15 +920,13 @@ export async function commitMenuToServices(sessionId, menu) {
     const ex = bs?.setup_data ?? {};
     const steps = Array.isArray(ex.wizard_completed_steps) ? ex.wizard_completed_steps : [];
     const next = steps.includes('services') ? steps : [...steps, 'services'];
-    await supabase
-      .from('business_settings')
-      .upsert(
-        {
-          owner_id: ownerId,
-          setup_data: { ...ex, menu_generated: true, wizard_completed_steps: next },
-        },
-        { onConflict: 'owner_id' }
-      );
+    await supabase.from('business_settings').upsert(
+      {
+        owner_id: ownerId,
+        setup_data: { ...ex, menu_generated: true, wizard_completed_steps: next },
+      },
+      { onConflict: 'owner_id' }
+    );
   } catch {
     /* silent */
   }

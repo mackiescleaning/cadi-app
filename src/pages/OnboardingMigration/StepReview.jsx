@@ -107,6 +107,18 @@ const BUCKETS = [
   },
 ];
 
+// A stable key per distinct customer — MUST match customerKey() in
+// commitParsedToCustomers so the customers the UI lets you pick are the same
+// ones the commit actually brings in.
+function customerKeyOf(r) {
+  if (r.customer_ref && String(r.customer_ref).trim()) return `ref:${r.customer_ref.trim()}`;
+  return `np:${String(r.name ?? '')
+    .trim()
+    .toLowerCase()}::${String(r.postcode ?? '')
+    .replace(/\s/g, '')
+    .toUpperCase()}`;
+}
+
 export default function StepReview({ session, onAdvance }) {
   const navigate = useNavigate();
   const { isPro } = usePlan();
@@ -120,6 +132,10 @@ export default function StepReview({ session, onAdvance }) {
   const rowRefs = useRef(new Map());
   const [focusedRowId, setFocusedRowId] = useState(null);
   const [forceExpandId, setForceExpandId] = useState(null);
+  // Lite "choose your 30" — the customer keys the user has picked to bring in
+  // now. Only used when over the cap. Seeded once with the first `headroom`.
+  const [selectedKeys, setSelectedKeys] = useState(() => new Set());
+  const selectionSeeded = useRef(false);
 
   const load = async () => {
     try {
@@ -138,23 +154,34 @@ export default function StepReview({ session, onAdvance }) {
     load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Seed the picker once: preselect the first `headroom` customers so a Lite
+  // user who just wants "the first 30" can commit without touching anything,
+  // but can swap any of them out.
+  useEffect(() => {
+    if (rows == null || selectionSeeded.current) return;
+    const keys = [];
+    const seen = new Set();
+    rows
+      .filter((r) => r.keep)
+      .forEach((r) => {
+        const k = customerKeyOf(r);
+        if (!seen.has(k)) {
+          seen.add(k);
+          keys.push(k);
+        }
+      });
+    const hr = Math.max(0, FREE_CUSTOMER_LIMIT - existingCount);
+    if (!isPro && keys.length > hr && hr > 0) {
+      setSelectedKeys(new Set(keys.slice(0, hr)));
+      selectionSeeded.current = true;
+    }
+  }, [rows, existingCount, isPro]);
+
   const grouped = useMemo(() => {
     const out = { ready: [], nearly: [], decision: [] };
     (rows ?? []).forEach((r) => (out[r.bucket] ?? out.decision).push(r));
     return out;
   }, [rows]);
-
-  // A stable key per distinct customer — MUST match customerKey() in
-  // commitParsedToCustomers so the "first N" the UI previews are the same
-  // "first N" the commit actually brings in.
-  const distinctCustomerKey = (r) => {
-    if (r.customer_ref && String(r.customer_ref).trim()) return `ref:${r.customer_ref.trim()}`;
-    return `np:${String(r.name ?? '')
-      .trim()
-      .toLowerCase()}::${String(r.postcode ?? '')
-      .replace(/\s/g, '')
-      .toUpperCase()}`;
-  };
 
   const kept = (rows ?? []).filter((r) => r.keep);
   const keptCount = kept.length;
@@ -162,27 +189,48 @@ export default function StepReview({ session, onAdvance }) {
   // Distinct customers across the kept jobs (so the user sees "168 jobs for
   // 53 customers", not just "168 jobs"), in commit order.
   const keptKeysInOrder = [];
-  const seenKeptKeys = new Set();
+  const keptKeySet = new Set();
   kept.forEach((r) => {
-    const k = distinctCustomerKey(r);
-    if (!seenKeptKeys.has(k)) {
-      seenKeptKeys.add(k);
+    const k = customerKeyOf(r);
+    if (!keptKeySet.has(k)) {
+      keptKeySet.add(k);
       keptKeysInOrder.push(k);
     }
   });
   const distinctCustomers = keptKeysInOrder.length;
 
   // Lite headroom — how many more customers this account may add before the
-  // 30-cap. Pro/Max = unlimited. Over cap ⇒ bring in the first `headroom` now
-  // and stage the rest for later (nothing is lost).
+  // 30-cap. Pro/Max = unlimited.
   const headroom = Math.max(0, FREE_CUSTOMER_LIMIT - existingCount);
   const overCap = !isPro && distinctCustomers > headroom;
-  const importKeys = new Set(isPro ? keptKeysInOrder : keptKeysInOrder.slice(0, headroom));
-  const willImportCount = importKeys.size;
+
+  // Over the cap, the user hand-picks which customers to bring in.
+  // effectiveSelected = current picks that are still in the kept set (a pick
+  // whose card was dropped/deleted drops out of the selection automatically).
+  const effectiveSelected = new Set([...selectedKeys].filter((k) => keptKeySet.has(k)));
+  const atSelectionCap = effectiveSelected.size >= headroom;
+
+  const importKeys = overCap ? effectiveSelected : keptKeySet;
+  const willImportCount = overCap ? effectiveSelected.size : distinctCustomers;
+
+  const toggleSelect = (key) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+        return next;
+      }
+      // Cap against the still-kept picks so we never exceed the Lite headroom.
+      const effCount = [...next].filter((k) => keptKeySet.has(k)).length;
+      if (effCount >= headroom) return prev;
+      next.add(key);
+      return next;
+    });
+  };
 
   // Readiness is judged only on the rows we'll actually commit — a Lite user
-  // shouldn't have to perfect 148 cards just to bring in their first 30.
-  const importRows = kept.filter((r) => importKeys.has(distinctCustomerKey(r)));
+  // shouldn't have to perfect 148 cards just to bring in their chosen 30.
+  const importRows = kept.filter((r) => importKeys.has(customerKeyOf(r)));
   const readyKept = importRows.filter((r) => customerReadiness(r).ready);
   const notReadyKept = importRows.filter((r) => !customerReadiness(r).ready);
   const allReady = importRows.length > 0 && notReadyKept.length === 0;
@@ -215,9 +263,10 @@ export default function StepReview({ session, onAdvance }) {
     setError(null);
     setCommitting(true);
     try {
-      const r = await commitParsedToCustomers(session.id, {
-        limit: isPro ? null : headroom,
-      });
+      const includeIds = overCap
+        ? kept.filter((row) => effectiveSelected.has(customerKeyOf(row))).map((row) => row.id)
+        : null;
+      const r = await commitParsedToCustomers(session.id, overCap ? { includeIds } : {});
       await updateStep(session.id, 'menu_review');
       onAdvance({ ...session, step: 'menu_review' });
       // For now Step 4 isn't built — drop them on Customers so they see results.
@@ -294,11 +343,11 @@ export default function StepReview({ session, onAdvance }) {
                 </p>
                 <p className="text-xs text-[#010a4f]/60 mt-1 leading-relaxed">
                   Cadi Lite brings in up to {FREE_CUSTOMER_LIMIT} customers.{' '}
-                  {willImportCount > 0 ? (
+                  {headroom > 0 ? (
                     <>
-                      Upgrade to Pro for all {distinctCustomers}, or bring in {willImportCount} now
-                      — the rest stay saved so you can add them anytime after you upgrade. Nothing's
-                      lost.
+                      Upgrade to Pro for all {distinctCustomers}, or choose the {headroom} you want
+                      now — tap the circle on each card. The rest stay saved so you can add them
+                      anytime after you upgrade. Nothing's lost.
                     </>
                   ) : (
                     <>
@@ -315,9 +364,9 @@ export default function StepReview({ session, onAdvance }) {
                   >
                     <Crown size={14} /> Upgrade to Pro — £39/mo
                   </button>
-                  {willImportCount > 0 && (
+                  {headroom > 0 && (
                     <span className="text-[11px] font-semibold text-[#010a4f]/50">
-                      or bring in {willImportCount} below ↓
+                      or choose your {headroom} below ↓
                     </span>
                   )}
                 </div>
@@ -372,6 +421,10 @@ export default function StepReview({ session, onAdvance }) {
                     key={row.id}
                     row={row}
                     bucket={b}
+                    selectable={overCap}
+                    selected={effectiveSelected.has(customerKeyOf(row))}
+                    selectDisabled={!effectiveSelected.has(customerKeyOf(row)) && atSelectionCap}
+                    onToggleSelect={() => toggleSelect(customerKeyOf(row))}
                     refSetter={(el) => {
                       if (el) rowRefs.current.set(row.id, el);
                       else rowRefs.current.delete(row.id);
@@ -432,7 +485,17 @@ export default function StepReview({ session, onAdvance }) {
           minimum details (name, contact, service, frequency, next-due). */}
       <div className="sticky bottom-0 left-0 right-0 z-20 bg-white/90 backdrop-blur-md border-t border-[#1f48ff]/15">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 py-3">
-          {keptCount > 0 && !allReady && (
+          {overCap && headroom > 0 && (
+            <div className="mb-2 flex items-center justify-between gap-2 px-1">
+              <span className="text-[11px] font-black text-[#1f48ff]">
+                {willImportCount} of {headroom} picked
+              </span>
+              <span className="text-[10px] font-semibold text-[#010a4f]/45 text-right">
+                Tap a card's circle to choose who comes in now
+              </span>
+            </div>
+          )}
+          {keptCount > 0 && !allReady && willImportCount > 0 && (
             <button
               type="button"
               onClick={() => jumpToFirstUnready(focusedRowId)}
@@ -452,17 +515,21 @@ export default function StepReview({ session, onAdvance }) {
           )}
           <button
             onClick={
-              overCap && willImportCount === 0
+              overCap && headroom === 0
                 ? () => navigate('/upgrade')
-                : !allReady
-                  ? () => jumpToFirstUnready(focusedRowId)
-                  : commit
-            }
-            disabled={committing || keptCount === 0}
-            className={`w-full py-3.5 rounded-xl text-white text-sm font-black shadow-lg transition-all ${
-              keptCount === 0 || committing
-                ? 'bg-[#f0f4ff] border border-[#1f48ff]/15 text-[#010a4f]/45 cursor-not-allowed shadow-none'
                 : overCap && willImportCount === 0
+                  ? undefined
+                  : !allReady
+                    ? () => jumpToFirstUnready(focusedRowId)
+                    : commit
+            }
+            disabled={
+              committing || keptCount === 0 || (overCap && headroom > 0 && willImportCount === 0)
+            }
+            className={`w-full py-3.5 rounded-xl text-white text-sm font-black shadow-lg transition-all ${
+              keptCount === 0 || committing || (overCap && headroom > 0 && willImportCount === 0)
+                ? 'bg-[#f0f4ff] border border-[#1f48ff]/15 text-[#010a4f]/45 cursor-not-allowed shadow-none'
+                : overCap && headroom === 0
                   ? 'bg-[#1f48ff] hover:bg-[#3a5eff] shadow-[#1f48ff]/30'
                   : !allReady
                     ? 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 hover:border-amber-300'
@@ -473,13 +540,15 @@ export default function StepReview({ session, onAdvance }) {
               ? 'Bringing them in…'
               : keptCount === 0
                 ? 'Nothing kept — toggle a few in'
-                : overCap && willImportCount === 0
+                : overCap && headroom === 0
                   ? 'Upgrade to bring these in →'
-                  : !allReady
-                    ? `${readyKept.length} ready · ${notReadyKept.length} need details — fix them →`
-                    : overCap
-                      ? `Bring in ${willImportCount} of ${distinctCustomers} customers →`
-                      : `Bring in ${readyKept.length} job${readyKept.length === 1 ? '' : 's'} for ${distinctCustomers} customer${distinctCustomers === 1 ? '' : 's'} →`}
+                  : overCap && willImportCount === 0
+                    ? 'Pick who to bring in ↑'
+                    : !allReady
+                      ? `${readyKept.length} ready · ${notReadyKept.length} need details — fix them →`
+                      : overCap
+                        ? `Bring in ${willImportCount} of ${distinctCustomers} customers →`
+                        : `Bring in ${readyKept.length} job${readyKept.length === 1 ? '' : 's'} for ${distinctCustomers} customer${distinctCustomers === 1 ? '' : 's'} →`}
           </button>
         </div>
       </div>
@@ -500,6 +569,10 @@ function ParsedRow({
   isFocused,
   forceExpand,
   onForceExpandConsumed,
+  selectable = false,
+  selected = false,
+  selectDisabled = false,
+  onToggleSelect,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -518,6 +591,9 @@ function ParsedRow({
 
   const dirty = Object.keys(edits).length > 0;
   const keepValue = v('keep');
+  // Whether this card is being brought in now: driven by the pick control when
+  // over the Lite cap, otherwise by the keep toggle.
+  const included = selectable ? selected : keepValue;
 
   const saveAll = async () => {
     if (!dirty) {
@@ -568,9 +644,11 @@ function ParsedRow({
       className={`relative rounded-2xl border bg-white transition-all overflow-hidden ${
         isFocused
           ? 'border-amber-400 shadow-xl shadow-amber-200 ring-2 ring-amber-300'
-          : keepValue
-            ? 'border-[#1f48ff]/15'
-            : 'border-[#1f48ff]/15 opacity-50'
+          : !included
+            ? 'border-[#1f48ff]/15 opacity-50'
+            : selectable && selected
+              ? 'border-[#1f48ff]/40 ring-1 ring-[#1f48ff]/20'
+              : 'border-[#1f48ff]/15'
       }`}
     >
       <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: bucket.barColor }} />
@@ -601,22 +679,49 @@ function ParsedRow({
             placeholder="£?"
             className="w-16 text-right bg-transparent border-0 border-b border-transparent hover:border-[#1f48ff]/15 focus:border-[#1f48ff] focus:outline-none text-sm font-black text-emerald-600 py-0.5 tabular-nums placeholder-[#010a4f]/35"
           />
-          <button
-            onClick={() => quickSave({ keep: !keepValue })}
-            aria-label={keepValue ? 'Drop' : 'Keep'}
-            title={
-              keepValue
-                ? 'Drop from this commit (kept in review)'
-                : 'Keep — bring this one into Cadi'
-            }
-            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all shrink-0 ${
-              keepValue
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
-                : 'bg-[#f0f4ff] border-[#1f48ff]/15 text-[#010a4f]/45'
-            }`}
-          >
-            {keepValue ? <Check size={14} strokeWidth={2.5} /> : <X size={14} />}
-          </button>
+          {selectable ? (
+            /* Over the Lite cap: pick which customers to bring in now. A round
+               control = "chosen"; the keep toggle is retired here since the
+               pick is the inclusion decision. Disabled once 30 are chosen. */
+            <button
+              onClick={onToggleSelect}
+              disabled={selectDisabled}
+              aria-label={selected ? 'Remove from this import' : 'Bring in now'}
+              title={
+                selected
+                  ? 'Chosen — will be brought in now'
+                  : selectDisabled
+                    ? "You've chosen 30 — remove one to add another"
+                    : 'Choose this customer to bring in now'
+              }
+              className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all shrink-0 ${
+                selected
+                  ? 'bg-[#1f48ff] border-[#1f48ff] text-white'
+                  : selectDisabled
+                    ? 'bg-[#f0f4ff] border-[#1f48ff]/10 text-[#010a4f]/20 cursor-not-allowed'
+                    : 'bg-white border-[#1f48ff]/30 text-transparent hover:border-[#1f48ff] hover:text-[#1f48ff]/40'
+              }`}
+            >
+              <Check size={14} strokeWidth={2.5} />
+            </button>
+          ) : (
+            <button
+              onClick={() => quickSave({ keep: !keepValue })}
+              aria-label={keepValue ? 'Drop' : 'Keep'}
+              title={
+                keepValue
+                  ? 'Drop from this commit (kept in review)'
+                  : 'Keep — bring this one into Cadi'
+              }
+              className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all shrink-0 ${
+                keepValue
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
+                  : 'bg-[#f0f4ff] border-[#1f48ff]/15 text-[#010a4f]/45'
+              }`}
+            >
+              {keepValue ? <Check size={14} strokeWidth={2.5} /> : <X size={14} />}
+            </button>
+          )}
           {/* Hard delete — removes the parsed_customers row entirely so it
               vanishes from the review. Use when the owner is sure they
               don't want this person in Cadi at all (vs the keep toggle
