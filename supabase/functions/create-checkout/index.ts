@@ -3,14 +3,24 @@
  * Cadi — creates a Stripe Checkout Session for the chosen subscription tier.
  *
  * Client sends { tier: 'pro' | 'max', returnUrl?: string }
- * Function picks the matching STRIPE_PRICE_ID and redirects to Stripe Checkout.
+ * Function builds the line items for the tier and redirects to Stripe Checkout.
+ *
+ * Pricing:
+ *   Pro — single flat price (STRIPE_PRO_PRICE_ID), £39/mo.
+ *   Max — base + per-employee: STRIPE_MAX_PRICE_ID is the £99/mo base which
+ *         includes MAX_INCLUDED_SEATS active staff; each active staff member
+ *         beyond that adds one unit of STRIPE_MAX_SEAT_PRICE_ID (£5/mo). Seat
+ *         quantity is taken from the caller's active staff_members at checkout.
+ *         (Ongoing quantity sync as staff change is a separate job — see notes.)
+ *   Launch discounts are handled by Stripe promotion codes (allow_promotion_codes).
  *
  * Environment variables:
- *   STRIPE_SECRET_KEY      — sk_live_...
- *   STRIPE_PRO_PRICE_ID    — price_... for the £39/mo Pro tier
- *   STRIPE_MAX_PRICE_ID    — price_... for the £79/mo Max tier (placeholder)
- *   APP_URL                — https://app.cadi.cleaning
- *   SUPABASE_URL           — auto-injected
+ *   STRIPE_SECRET_KEY        — sk_live_...
+ *   STRIPE_PRO_PRICE_ID      — price_... for the £39/mo Pro tier
+ *   STRIPE_MAX_PRICE_ID      — price_... for the £99/mo Max base (incl. 5 staff)
+ *   STRIPE_MAX_SEAT_PRICE_ID — price_... for the £5/mo per-employee seat add-on
+ *   APP_URL                  — https://app.cadi.cleaning
+ *   SUPABASE_URL             — auto-injected
  *   SUPABASE_SERVICE_ROLE_KEY — auto-injected
  */
 
@@ -18,9 +28,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.21.0?target=denonext";
 
-const STRIPE_SECRET_KEY   = Deno.env.get("STRIPE_SECRET_KEY")!;
-const STRIPE_PRO_PRICE_ID = Deno.env.get("STRIPE_PRO_PRICE_ID") ?? Deno.env.get("STRIPE_PRICE_ID")!;
-const STRIPE_MAX_PRICE_ID = Deno.env.get("STRIPE_MAX_PRICE_ID");
+const STRIPE_SECRET_KEY        = Deno.env.get("STRIPE_SECRET_KEY")!;
+const STRIPE_PRO_PRICE_ID      = Deno.env.get("STRIPE_PRO_PRICE_ID") ?? Deno.env.get("STRIPE_PRICE_ID")!;
+const STRIPE_MAX_PRICE_ID      = Deno.env.get("STRIPE_MAX_PRICE_ID");
+const STRIPE_MAX_SEAT_PRICE_ID = Deno.env.get("STRIPE_MAX_SEAT_PRICE_ID");
+// Active staff included in the Max base before per-employee charges kick in.
+const MAX_INCLUDED_SEATS = 5;
 const APP_URL             = Deno.env.get("APP_URL") ?? "https://app.cadi.cleaning";
 // Origins permitted for the client-supplied returnUrl. Anything else falls back
 // to APP_URL — prevents open-redirect-via-Stripe-success-url. Comma-separated.
@@ -63,7 +76,7 @@ const json = (data: unknown, status: number, req: Request) =>
     headers: { ...corsHeaders(req), "Content-Type": "application/json" },
   });
 
-function priceIdForTier(tier: string): string | null {
+function basePriceForTier(tier: string): string | null {
   if (tier === "pro")  return STRIPE_PRO_PRICE_ID;
   if (tier === "max")  return STRIPE_MAX_PRICE_ID ?? null;
   return null;
@@ -85,9 +98,24 @@ serve(async (req: Request) => {
     const tier      = (body.tier as string) ?? "pro";
     const returnUrl = safeReturnUrl(body.returnUrl as string | undefined);
 
-    const priceId = priceIdForTier(tier);
-    if (!priceId) {
+    const basePrice = basePriceForTier(tier);
+    if (!basePrice) {
       return json({ error: `No price configured for tier: ${tier}` }, 400, req);
+    }
+
+    // Line items: base for every tier; Max adds one per-employee seat unit for
+    // each active staff member beyond the included allowance.
+    const lineItems: { price: string; quantity: number }[] = [{ price: basePrice, quantity: 1 }];
+    if (tier === "max" && STRIPE_MAX_SEAT_PRICE_ID) {
+      const { count } = await sb
+        .from("staff_members")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", user.id)
+        .eq("active", true);
+      const chargeableSeats = Math.max(0, (count ?? 0) - MAX_INCLUDED_SEATS);
+      if (chargeableSeats > 0) {
+        lineItems.push({ price: STRIPE_MAX_SEAT_PRICE_ID, quantity: chargeableSeats });
+      }
     }
 
     const { data: profile } = await sb
@@ -129,7 +157,7 @@ serve(async (req: Request) => {
     const session = await stripe.checkout.sessions.create({
       mode:                        "subscription",
       customer:                    customerId,
-      line_items:                  [{ price: priceId, quantity: 1 }],
+      line_items:                  lineItems,
       allow_promotion_codes:       true,
       billing_address_collection:  "auto",
       success_url: `${returnUrl}/dashboard?upgraded=1&session_id={CHECKOUT_SESSION_ID}`,
