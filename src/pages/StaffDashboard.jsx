@@ -15,6 +15,9 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
+  Banknote,
+  Building2,
+  Repeat,
 } from 'lucide-react';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -257,6 +260,193 @@ function TeammateChips({ assignees, myName }) {
           {name.split(' ')[0]}
         </span>
       ))}
+    </div>
+  );
+}
+
+// ─── Take-payment sheet ──────────────────────────────────────────────────────
+// Method-aware payment recording, calling the staff-payment edge function with
+// the staff token. Cash/BACS record a receipt; Direct Debit collects against
+// the mandate and is offered to supervisors/managers only (the server enforces
+// the same gate — this is advisory). Demo sessions simulate locally.
+const PAY_METHODS = [
+  { key: 'cash', label: 'Cash', icon: Banknote },
+  { key: 'bacs', label: 'Bank transfer', icon: Building2 },
+  { key: 'direct_debit', label: 'Direct Debit', icon: Repeat, privileged: true },
+];
+
+function StaffPaymentSheet({ job, staffMember, staffFetchInit }) {
+  const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState('cash');
+  const [amount, setAmount] = useState(job.price != null ? String(job.price) : '');
+  const [reference, setReference] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [done, setDone] = useState(null); // { label } once recorded
+
+  const canDD = ['supervisor', 'manager'].includes(staffMember?.role);
+  const methods = PAY_METHODS.filter((m) => !m.privileged || canDD);
+  const isDemo = !staffMember?.id || !staffMember?.ownerId || !UUID_RE.test(String(job.id));
+
+  const methodLabel = (k) => PAY_METHODS.find((m) => m.key === k)?.label ?? k;
+
+  async function submit() {
+    const value = Number(amount);
+    if (!(value > 0)) {
+      setError('Enter an amount');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+
+    // Demo / no real session — simulate so the flow is demonstrable.
+    if (isDemo) {
+      setTimeout(() => {
+        setDone({
+          label:
+            method === 'direct_debit'
+              ? `Direct Debit sent — £${value.toFixed(2)}`
+              : `Recorded £${value.toFixed(2)} — ${methodLabel(method)}`,
+        });
+        setSubmitting(false);
+      }, 500);
+      return;
+    }
+
+    try {
+      const init = staffFetchInit({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: job.id,
+          method,
+          amount: value,
+          reference: reference || undefined,
+        }),
+      });
+      if (!init) {
+        setSubmitting(false);
+        return;
+      }
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/staff-payment`, init);
+      const d = await res.json();
+      if (!res.ok || d.error) {
+        setError(d.error || 'Could not record the payment.');
+      } else if (d.alreadyPaid) {
+        setDone({ label: 'Already paid' });
+      } else if (d.pending) {
+        setDone({ label: 'Direct Debit sent · settles when it clears' });
+      } else {
+        setDone({
+          label: `Recorded £${value.toFixed(2)} — ${methodLabel(method)}${d.invoice_settled ? ' · invoice settled' : ''}`,
+        });
+      }
+    } catch {
+      setError('Could not reach the server. Try again.');
+    }
+    setSubmitting(false);
+  }
+
+  if (done) {
+    return (
+      <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-xl">
+        <CheckCircle size={14} className="text-emerald-500 flex-shrink-0" />
+        <p className="text-xs font-semibold text-emerald-700">{done.label}</p>
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="w-full py-2.5 border border-[#1f48ff]/30 text-[#1f48ff] text-xs font-bold rounded-xl hover:bg-[#1f48ff]/5 transition-colors flex items-center justify-center gap-1.5"
+      >
+        <Banknote size={13} /> Take payment
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 space-y-2.5">
+      {/* Method chips */}
+      <div className="grid grid-cols-3 gap-1.5">
+        {methods.map((m) => {
+          const Icon = m.icon;
+          const active = method === m.key;
+          return (
+            <button
+              key={m.key}
+              onClick={() => setMethod(m.key)}
+              className={`flex flex-col items-center gap-1 py-2 rounded-lg border text-[10px] font-bold transition-colors ${
+                active
+                  ? 'bg-[#1f48ff] text-white border-[#1f48ff]'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-[#1f48ff]/40'
+              }`}
+            >
+              <Icon size={15} />
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Amount + reference */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center flex-1 bg-white border border-gray-200 rounded-lg px-2.5">
+          <span className="text-sm text-gray-400 font-semibold">£</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00"
+            className="w-full py-2 px-1.5 text-sm font-semibold text-[#010a4f] bg-transparent focus:outline-none"
+          />
+        </div>
+        <input
+          type="text"
+          value={reference}
+          onChange={(e) => setReference(e.target.value)}
+          placeholder="Ref (optional)"
+          className="w-28 py-2 px-2.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-[#1f48ff]/40"
+        />
+      </div>
+
+      {method === 'direct_debit' && (
+        <p className="text-[10px] text-gray-500">
+          Collects against the customer’s Direct Debit — settles when it clears.
+        </p>
+      )}
+
+      {error && <p className="text-[11px] font-semibold text-red-600">{error}</p>}
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => {
+            setOpen(false);
+            setError(null);
+          }}
+          className="px-3 py-2 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={submitting}
+          className="flex-1 py-2 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-600 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+        >
+          {submitting ? (
+            <>
+              <Spinner /> Recording…
+            </>
+          ) : method === 'direct_debit' ? (
+            'Collect now'
+          ) : (
+            'Record payment'
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -596,6 +786,9 @@ function JobCard({ job, myName, staffMember, externalTimesheet, onStatusChange, 
               )}
             </button>
           )}
+
+          {/* Take payment — record cash/BACS or (supervisors) collect DD */}
+          <StaffPaymentSheet job={job} staffMember={staffMember} staffFetchInit={staffFetchInit} />
         </div>
       )}
     </div>
