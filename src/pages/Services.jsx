@@ -31,6 +31,7 @@ import {
   seedServicesFromOnboarding,
 } from '../lib/db/servicesDb';
 import { supabase } from '../lib/supabase';
+import { loadActiveSession } from '../lib/db/onboardingDb';
 import ServiceChat from '../components/ServiceChat';
 import ServiceTemplatePicker from '../components/ServiceTemplatePicker';
 import PriceListImporter from '../components/PriceListImporter';
@@ -1424,6 +1425,26 @@ function Toast({ message, onDismiss }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+// Step-aware copy for the "resume onboarding" banner. The migration wizard
+// runs review → menu_review → reveal; if the user drops out mid-flow there's
+// otherwise no obvious way back in.
+function onboardingResumeCopy(step) {
+  if (step === 'menu_review')
+    return {
+      title: 'Finish building your service menu',
+      body: "Your customers are in and Cadi drafted a menu from them — review the prices and lock it in, and it'll fill this page.",
+    };
+  if (step === 'schedule_review' || step === 'reveal')
+    return {
+      title: 'One step left to finish setup',
+      body: 'Wrap up your onboarding to go live.',
+    };
+  return {
+    title: 'Pick up your setup where you left off',
+    body: 'You have a Cadi onboarding in progress.',
+  };
+}
+
 export default function Services() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -1441,6 +1462,22 @@ export default function Services() {
   const [chatSession, setChatSession] = useState(null);
   const [templatePickerCategory, setTemplatePickerCategory] = useState(null);
   const [importerOpen, setImporterOpen] = useState(false);
+  // In-progress onboarding session (step !== 'complete') so we can offer a
+  // "pick up where you left off" resume — the migration wizard hands off to
+  // the service-menu builder, and users lose the thread when they land here.
+  const [onbSession, setOnbSession] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    loadActiveSession()
+      .then((s) => {
+        if (alive && s && s.step !== 'complete') setOnbSession(s);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const handleTemplateApplied = async ({ pack, count }) => {
     const refreshed = await listServices({ includeInactive: true });
@@ -1761,6 +1798,32 @@ export default function Services() {
           })}
         </div>
       </div>
+
+      {/* Resume onboarding — surfaces the in-progress migration/menu wizard so
+          users who dropped out after importing customers can get back in. Only
+          while the catalogue is still empty (the stuck case), so a populated
+          menu from an older abandoned session doesn't keep nagging. */}
+      {onbSession && services.length === 0 && (
+        <div className="mx-5 sm:mx-6 mt-4 rounded-2xl border border-[#4f78ff]/30 bg-[#4f78ff]/10 p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[#4f78ff]/20 border border-[#4f78ff]/30 flex items-center justify-center shrink-0 text-lg">
+            ↩️
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-black text-white">
+              {onboardingResumeCopy(onbSession.step).title}
+            </p>
+            <p className="text-xs text-[rgba(153,197,255,0.65)] leading-snug mt-0.5">
+              {onboardingResumeCopy(onbSession.step).body}
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/onboarding/customers')}
+            className="shrink-0 px-3.5 py-2 rounded-xl bg-[#4f78ff] hover:bg-[#3d68ff] text-white text-xs font-black transition-colors"
+          >
+            Pick up where you left off →
+          </button>
+        </div>
+      )}
 
       {/* Service grid */}
       <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5">
