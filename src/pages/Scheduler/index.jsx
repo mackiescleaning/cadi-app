@@ -26,6 +26,7 @@ import MonthView from './MonthView';
 import QuarterView from './QuarterView';
 import WeekView from './WeekView';
 import DayView from './DayView';
+import RunView from './RunView';
 import { useWeather } from '../../hooks/useWeather';
 import { TYPE } from '../../lib/jobTheme';
 import { detectJobRisks } from '../../lib/jobRisk';
@@ -86,7 +87,7 @@ function ViewTabs({ view, setView, dayOffset, setDayOffset }) {
   // Rounds view hidden pre-launch — the round-organisation flow needs
   // more work to be usable. Re-add "Rounds" here when ready. The
   // RoundsView component, DB helpers and migration are all still in tree.
-  const views = ['Day', 'Week', 'Month', 'Quarter'];
+  const views = ['Day', 'Run', 'Week', 'Month', 'Quarter'];
   return (
     <div
       className="flex rounded-lg border overflow-hidden text-xs font-semibold"
@@ -120,7 +121,7 @@ function ViewTabs({ view, setView, dayOffset, setDayOffset }) {
 
 function DateNav({ view, dayOffset, setDayOffset }) {
   let dateLabel = '';
-  if (view === 'Day') {
+  if (view === 'Day' || view === 'Run') {
     const d = getViewDate(dayOffset, 'Day');
     dateLabel = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   } else if (view === 'Week') {
@@ -618,7 +619,7 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
   const dayCrews = useMemo(() => deriveCrews(todayJobs), [todayJobs]);
 
   const headerJobs =
-    view === 'Day'
+    view === 'Day' || view === 'Run'
       ? todayJobs
       : view === 'Month'
         ? monthJobs
@@ -791,7 +792,7 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
           </div>
         </div>
 
-        {view === 'Day' && (
+        {(view === 'Day' || view === 'Run') && (
           <div
             className="border-t backdrop-blur"
             style={{ borderColor: 'rgba(153,197,255,0.12)', background: 'rgba(1,10,79,0.35)' }}
@@ -813,15 +814,17 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
                 allJobs={allJobs}
               />
             </div>
-            <div className="px-4 sm:px-6 py-2.5">
-              <FilterBar
-                typeFilter={typeFilter}
-                setTypeFilter={setTypeFilter}
-                crews={dayCrews}
-                crewFilter={crewFilter}
-                setCrewFilter={setCrewFilter}
-              />
-            </div>
+            {view === 'Day' && (
+              <div className="px-4 sm:px-6 py-2.5">
+                <FilterBar
+                  typeFilter={typeFilter}
+                  setTypeFilter={setTypeFilter}
+                  crews={dayCrews}
+                  crewFilter={crewFilter}
+                  setCrewFilter={setCrewFilter}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -839,6 +842,16 @@ export default function SchedulerTab({ onJobClick: externalJobClick }) {
               onAddJob={() => setShowNewJob(true)}
               onImport={() => navigate('/onboarding/customers')}
               weather={weather}
+              onError={showError}
+            />
+          )}
+          {view === 'Run' && (
+            <RunView
+              jobs={todayJobs}
+              customers={customers}
+              onJobClick={handleJobClick}
+              updateJob={undoableUpdateJob}
+              onAddJob={() => setShowNewJob(true)}
               onError={showError}
             />
           )}
