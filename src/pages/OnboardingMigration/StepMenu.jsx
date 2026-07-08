@@ -376,11 +376,26 @@ function ServiceCard({ service, accent, onChange, onDelete }) {
             className="flex-1 min-w-0 bg-transparent border-0 border-b border-transparent hover:border-[#1f48ff]/15 focus:border-[#1f48ff] focus:outline-none text-sm font-black text-[#010a4f] py-0.5 placeholder-[#010a4f]/35"
           />
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* "From £X" prefix when this tier absorbed the long tail —
-                signals to customers "starts at this price". */}
-            {v('from_price') && (
-              <span className="text-[10px] font-bold text-emerald-600 uppercase">from</span>
-            )}
+            {/* "From £X" toggle — mark the price as a starting/guide price so
+                the menu and Front Desk quote it as "from £X" rather than a flat
+                price. Handy for enquiry-only services where the final price
+                depends on the site. */}
+            <button
+              type="button"
+              onClick={() => commit('from_price', !v('from_price'))}
+              title={
+                v('from_price')
+                  ? 'Shown as a “from” price — Front Desk quotes “from £X”. Tap to make it a flat price.'
+                  : 'Mark as a “from” price — Front Desk will quote “from £X”.'
+              }
+              className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded-md border transition-colors ${
+                v('from_price')
+                  ? 'bg-emerald-50 border-emerald-500/40 text-emerald-600'
+                  : 'bg-[#f0f4ff] border-[#1f48ff]/15 text-[#010a4f]/40 hover:text-[#1f48ff] hover:border-[#1f48ff]/30'
+              }`}
+            >
+              from
+            </button>
             {/* Estimated pill — template filled this slot by progression
                 rather than observation. Owner edits to clear. */}
             {isEstimated && (

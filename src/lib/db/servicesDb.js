@@ -112,37 +112,42 @@ export function serviceHasPricing(s) {
 }
 
 export function formatPricingSummary(s) {
+  // "from £X" guide-price flag (set in the menu builder, stored on
+  // inference_meta.from_price). Prefix the summary so the catalogue and any
+  // surface using this helper reads "from £X".
+  const isFrom = Boolean(s.price_is_from ?? s.inference_meta?.from_price);
+  const withFrom = (str) => (isFrom && str.startsWith('£') ? `from ${str}` : str);
   if (s.pricing_type === 'per_size') {
     const priced = (s.pricing_matrix ?? []).filter((r) => r.price > 0);
     if (!priced.length) return 'Price needed';
     const prices = priced.map((r) => r.price);
     const min = Math.min(...prices),
       max = Math.max(...prices);
-    return min === max ? `£${min} by size` : `£${min} – £${max} by size`;
+    return withFrom(min === max ? `£${min} by size` : `£${min} – £${max} by size`);
   }
   if (s.pricing_type === 'hourly') {
     if (!s.price_hourly_rate) return 'Price needed';
     let str = `£${s.price_hourly_rate}/hr`;
     if (s.price_hourly_minimum_hours) str += `, min ${s.price_hourly_minimum_hours}hr`;
-    return str;
+    return withFrom(str);
   }
   if (s.pricing_type === 'fixed') {
     const prices = [s.price_fixed_basic, s.price_fixed_standard, s.price_fixed_premium].filter(
       Boolean
     );
     if (!prices.length) return 'Price needed';
-    if (prices.length === 1) return `£${prices[0]} fixed`;
-    return `£${Math.min(...prices)} – £${Math.max(...prices)} fixed`;
+    if (prices.length === 1) return isFrom ? `from £${prices[0]}` : `£${prices[0]} fixed`;
+    return withFrom(`£${Math.min(...prices)} – £${Math.max(...prices)} fixed`);
   }
   if (s.pricing_type === 'per_sqm') {
     if (!s.price_per_sqm) return 'Price needed';
-    return `£${s.price_per_sqm}/m²`;
+    return withFrom(`£${s.price_per_sqm}/m²`);
   }
   if (s.pricing_type === 'per_room') {
     if (!s.price_per_room) return 'Price needed';
     let str = `£${s.price_per_room}/room`;
     if (s.price_per_bathroom) str += ` + £${s.price_per_bathroom}/bathroom`;
-    return str;
+    return withFrom(str);
   }
   if (s.pricing_type === 'custom') return 'Custom quote';
   return 'Price needed';

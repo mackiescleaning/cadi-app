@@ -829,6 +829,9 @@ export async function commitMenuToServices(sessionId, menu) {
         evidence: group.rep?.evidence ?? null,
         source_prices: group.rep?.source_prices ?? null,
         tier_estimates: Object.keys(tierEstimates).length ? tierEstimates : null,
+        // "from £X" guide-price flag — set in the StepMenu builder. getCatalogue
+        // + formatPricingSummary read this to prefix "from"; Front Desk can too.
+        from_price: Boolean(group.rep?.from_price),
         // Seed free-form Cadi context from the section question Cadi asked
         // during StepMenu. Owner edits this in the catalogue editor; Front
         // Desk reads it when quoting this service.
