@@ -88,14 +88,14 @@ export async function completeSession(sessionId) {
 // ─── Imports + uploads ──────────────────────────────────────────────────────
 
 const MIME_TO_SOURCE = {
-  'text/csv':                                                              'csv',
-  'application/vnd.ms-excel':                                              'xlsx',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':     'xlsx',
-  'application/pdf':                                                       'pdf',
-  'image/jpeg':                                                            'image',
-  'image/png':                                                             'image',
-  'image/webp':                                                            'image',
-  'text/plain':                                                            'csv', // best effort
+  'text/csv': 'csv',
+  'application/vnd.ms-excel': 'xlsx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/pdf': 'pdf',
+  'image/jpeg': 'image',
+  'image/png': 'image',
+  'image/webp': 'image',
+  'text/plain': 'csv', // best effort
 };
 
 export function sourceTypeForFile(file) {
@@ -103,11 +103,11 @@ export function sourceTypeForFile(file) {
   const fromMime = MIME_TO_SOURCE[file.type];
   if (fromMime) return fromMime;
   const ext = (file.name || '').toLowerCase().split('.').pop();
-  if (ext === 'csv')                                  return 'csv';
-  if (ext === 'xlsx' || ext === 'xls')                return 'xlsx';
-  if (ext === 'pdf')                                  return 'pdf';
-  if (['jpg','jpeg','png','webp','heic'].includes(ext)) return 'image';
-  if (ext === 'txt')                                  return 'csv';
+  if (ext === 'csv') return 'csv';
+  if (ext === 'xlsx' || ext === 'xls') return 'xlsx';
+  if (ext === 'pdf') return 'pdf';
+  if (['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext)) return 'image';
+  if (ext === 'txt') return 'csv';
   return null;
 }
 
@@ -125,7 +125,7 @@ export async function createFileImport({ sessionId, file }) {
     .from('customer_imports')
     .insert({
       business_id: bid,
-      session_id:  sessionId,
+      session_id: sessionId,
       source_type: sourceType,
       parse_status: 'pending',
     })
@@ -136,12 +136,10 @@ export async function createFileImport({ sessionId, file }) {
   // 2. Upload to bucket. Sanitise filename to avoid weird URLs.
   const safeName = (file.name || 'upload').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 120);
   const path = `${bid}/${imp.id}/${safeName}`;
-  const { error: upErr } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, file, {
-      contentType: file.type || 'application/octet-stream',
-      upsert: false,
-    });
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
+    contentType: file.type || 'application/octet-stream',
+    upsert: false,
+  });
   if (upErr) {
     // Roll back the row so we don't leave orphaned imports.
     await supabase.from('customer_imports').delete().eq('id', imp.id);
@@ -169,7 +167,7 @@ export async function createTextImport({ sessionId, text }) {
     .from('customer_imports')
     .insert({
       business_id: bid,
-      session_id:  sessionId,
+      session_id: sessionId,
       source_type: 'pasted_text',
       parse_status: 'pending',
     })
@@ -259,7 +257,9 @@ export async function listImportsForSession(sessionId) {
 
 export async function deleteImport(importId, storagePath) {
   if (storagePath) {
-    try { await supabase.storage.from(BUCKET).remove([storagePath]); } catch {}
+    try {
+      await supabase.storage.from(BUCKET).remove([storagePath]);
+    } catch {}
   }
   const { error } = await supabase.from('customer_imports').delete().eq('id', importId);
   if (error) throw error;
@@ -273,7 +273,7 @@ export async function listParsedForSession(sessionId) {
     .from('customer_imports')
     .select('id')
     .eq('session_id', sessionId);
-  const importIds = (imps ?? []).map(i => i.id);
+  const importIds = (imps ?? []).map((i) => i.id);
   if (!importIds.length) return [];
   const { data, error } = await supabase
     .from('parsed_customers')
@@ -293,12 +293,10 @@ export async function updateParsedCustomer(id, patches) {
     // We need the current row to figure out the new bucket if patches don't
     // include both — defer the bucket recompute to the caller via a follow-up
     // fetch. For now, recompute simply when both are present in patches.
-    const hasRrule  = Boolean(next.frequency_rrule ?? null);
+    const hasRrule = Boolean(next.frequency_rrule ?? null);
     const hasAnchor = Boolean(next.anchor_date ?? null);
     if ('frequency_rrule' in next && 'anchor_date' in next) {
-      next.bucket = hasRrule && hasAnchor ? 'ready'
-                  : hasRrule              ? 'nearly'
-                                          : 'decision';
+      next.bucket = hasRrule && hasAnchor ? 'ready' : hasRrule ? 'nearly' : 'decision';
     }
   }
   const { data, error } = await supabase
@@ -327,7 +325,7 @@ export async function bulkApplyServiceToMissing(sessionId, label) {
     .select('id')
     .eq('session_id', sessionId);
   if (impErr) throw impErr;
-  const importIds = (imports ?? []).map(i => i.id);
+  const importIds = (imports ?? []).map((i) => i.id);
   if (!importIds.length) return 0;
 
   const { data: all, error: selErr } = await supabase
@@ -337,11 +335,12 @@ export async function bulkApplyServiceToMissing(sessionId, label) {
   if (selErr) throw selErr;
 
   const ids = (all ?? [])
-    .filter(r =>
-      !(String(r.service_label ?? '').trim()) &&
-      !(Array.isArray(r.service_labels) && r.service_labels.length)
+    .filter(
+      (r) =>
+        !String(r.service_label ?? '').trim() &&
+        !(Array.isArray(r.service_labels) && r.service_labels.length)
     )
-    .map(r => r.id);
+    .map((r) => r.id);
   if (!ids.length) return 0;
 
   const { error: upErr } = await supabase
@@ -356,7 +355,9 @@ export async function bulkApplyServiceToMissing(sessionId, label) {
 // doesn't have one yet. Mirrors bulkApplyServiceToMissing for the same UX
 // shortcut — one tap covers everything the auto-detector left null.
 export async function bulkApplyDivisionToMissing(sessionId, division) {
-  const clean = String(division || '').trim().toLowerCase();
+  const clean = String(division || '')
+    .trim()
+    .toLowerCase();
   if (!['residential', 'commercial', 'exterior'].includes(clean)) return 0;
 
   const { data: imports, error: impErr } = await supabase
@@ -364,7 +365,7 @@ export async function bulkApplyDivisionToMissing(sessionId, division) {
     .select('id')
     .eq('session_id', sessionId);
   if (impErr) throw impErr;
-  const importIds = (imports ?? []).map(i => i.id);
+  const importIds = (imports ?? []).map((i) => i.id);
   if (!importIds.length) return 0;
 
   const { data: all, error: selErr } = await supabase
@@ -373,9 +374,7 @@ export async function bulkApplyDivisionToMissing(sessionId, division) {
     .in('import_id', importIds);
   if (selErr) throw selErr;
 
-  const ids = (all ?? [])
-    .filter(r => !String(r.category ?? '').trim())
-    .map(r => r.id);
+  const ids = (all ?? []).filter((r) => !String(r.category ?? '').trim()).map((r) => r.id);
   if (!ids.length) return 0;
 
   const { error: upErr } = await supabase
@@ -398,30 +397,10 @@ export async function deleteParsedCustomer(id) {
 // Commit kept rows to live customers + recurring_jobs. No silent auto-commits —
 // this is called from a user-explicit "Bring N in" button on the review screen.
 // Returns { customersCreated, recurringCreated }.
-export async function commitParsedToCustomers(sessionId) {
+export async function commitParsedToCustomers(sessionId, { limit = null } = {}) {
   const parsed = await listParsedForSession(sessionId);
-  const kept = parsed.filter(p => p.keep && !p.committed);
-  if (!kept.length) return { customersCreated: 0, recurringCreated: 0 };
-
-  // Server-side readiness gate. The UI also checks this; this is the safety
-  // net so we never silently commit half-baked customers.
-  const notReady = kept.filter(p => !customerReadiness(p).ready);
-  if (notReady.length) {
-    const names = notReady.slice(0, 3).map(p => p.name || 'one without a name').join(', ');
-    const more  = notReady.length > 3 ? ` and ${notReady.length - 3} more` : '';
-    throw new Error(`${notReady.length} customer${notReady.length === 1 ? ' isn’t' : "s aren’t"} ready yet — ${names}${more}.`);
-  }
-
-  // customers + recurring_jobs RLS gate on owner_id = auth.uid(). The
-  // my_business_id() value can be different from auth.uid() (see the live
-  // RLS-state memory). Use the auth uid directly.
-  const ownerId = await getCurrentUserId();
-
-  // Stamp a batch id so the existing Undo infrastructure (import_batch_id)
-  // works on the onboarding flow too.
-  const batchId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const kept = parsed.filter((p) => p.keep && !p.committed);
+  if (!kept.length) return { customersCreated: 0, recurringCreated: 0, jobsImported: 0 };
 
   // ── 1. Group parsed rows by customer ─────────────────────────────────────
   // Each parsed row represents one JOB. Multiple jobs can belong to the same
@@ -429,9 +408,14 @@ export async function commitParsedToCustomers(sessionId) {
   // gutters = 2 rows). Group by customer_ref, falling back to name+postcode.
   // Each group becomes ONE customer row + N recurring_jobs rows.
   const customerKey = (p) => {
-    if (p.customer_ref && String(p.customer_ref).trim()) return `ref:${String(p.customer_ref).trim()}`;
-    const name = String(p.name ?? '').trim().toLowerCase();
-    const pc   = String(p.postcode ?? '').replace(/\s/g, '').toUpperCase();
+    if (p.customer_ref && String(p.customer_ref).trim())
+      return `ref:${String(p.customer_ref).trim()}`;
+    const name = String(p.name ?? '')
+      .trim()
+      .toLowerCase();
+    const pc = String(p.postcode ?? '')
+      .replace(/\s/g, '')
+      .toUpperCase();
     return `np:${name}::${pc}`;
   };
 
@@ -442,6 +426,42 @@ export async function commitParsedToCustomers(sessionId) {
     groups.get(k).push({ ...p, _origIdx: idx });
   });
 
+  // Lite cap — when `limit` is supplied, only commit the first `limit` distinct
+  // customers. The rest stay as uncommitted parsed_customers so they can be
+  // brought in later (e.g. after upgrading to Pro) — nothing is deleted. This
+  // keeps the batch insert below the enforce_free_customer_limit trigger so it
+  // can't 400 and roll the whole thing back.
+  const allKeys = Array.from(groups.keys());
+  const includedKeys = new Set(limit == null ? allKeys : allKeys.slice(0, Math.max(0, limit)));
+  const includedKept = kept.filter((p) => includedKeys.has(customerKey(p)));
+
+  // Server-side readiness gate — only the customers we're actually committing
+  // need to be ready. The UI also checks this; this is the safety net so we
+  // never silently commit half-baked customers.
+  const notReady = includedKept.filter((p) => !customerReadiness(p).ready);
+  if (notReady.length) {
+    const names = notReady
+      .slice(0, 3)
+      .map((p) => p.name || 'one without a name')
+      .join(', ');
+    const more = notReady.length > 3 ? ` and ${notReady.length - 3} more` : '';
+    throw new Error(
+      `${notReady.length} customer${notReady.length === 1 ? ' isn’t' : 's aren’t'} ready yet — ${names}${more}.`
+    );
+  }
+
+  // customers + recurring_jobs RLS gate on owner_id = auth.uid(). The
+  // my_business_id() value can be different from auth.uid() (see the live
+  // RLS-state memory). Use the auth uid directly.
+  const ownerId = await getCurrentUserId();
+
+  // Stamp a batch id so the existing Undo infrastructure (import_batch_id)
+  // works on the onboarding flow too.
+  const batchId =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
   const primaryServices = (p) => {
     if (Array.isArray(p.service_labels) && p.service_labels.length) return p.service_labels;
     return p.service_label ? [p.service_label] : [];
@@ -450,18 +470,24 @@ export async function commitParsedToCustomers(sessionId) {
   // For each group: pick the row with the most contact info as the
   // "representative" + merge all service labels across the group.
   const customerRows = [];
-  const customerGroupKeys = [];   // parallel array for FK mapping below
+  const customerGroupKeys = []; // parallel array for FK mapping below
 
   for (const [key, rows] of groups.entries()) {
+    if (!includedKeys.has(key)) continue; // Lite cap — overflow stays uncommitted
     customerGroupKeys.push(key);
     const rep = rows.reduce((best, r) => {
-      const score = (r.postcode ? 2 : 0) + (r.phone ? 1 : 0) + (r.email ? 1 : 0) + (r.address ? 1 : 0);
-      const bestScore = (best.postcode ? 2 : 0) + (best.phone ? 1 : 0) + (best.email ? 1 : 0) + (best.address ? 1 : 0);
+      const score =
+        (r.postcode ? 2 : 0) + (r.phone ? 1 : 0) + (r.email ? 1 : 0) + (r.address ? 1 : 0);
+      const bestScore =
+        (best.postcode ? 2 : 0) +
+        (best.phone ? 1 : 0) +
+        (best.email ? 1 : 0) +
+        (best.address ? 1 : 0);
       return score > bestScore ? r : best;
     }, rows[0]);
 
     const allServices = new Set();
-    rows.forEach(r => primaryServices(r).forEach(s => allServices.add(s)));
+    rows.forEach((r) => primaryServices(r).forEach((s) => allServices.add(s)));
 
     // AR-balance guard (spec §6.1). Sum any outstanding_balance across the
     // group so the live customer shows the total they owe — but NEVER use
@@ -477,40 +503,43 @@ export async function commitParsedToCustomers(sessionId) {
     const roundName = (rep.notes ?? '').match(/Round:\s*([^·\n]+)/i)?.[1]?.trim() || null;
 
     customerRows.push({
-      owner_id:           ownerId,
-      name:               rep.name || 'Unnamed customer',
-      email:              rep.email,
-      phone:              rep.phone,
-      postcode:           rep.postcode,
-      address_line1:      rep.address,
-      notes:              composeNotes(rep),
-      category:           rep.category,
+      owner_id: ownerId,
+      name: rep.name || 'Unnamed customer',
+      email: rep.email,
+      phone: rep.phone,
+      postcode: rep.postcode,
+      address_line1: rep.address,
+      notes: composeNotes(rep),
+      category: rep.category,
       // status is the lifecycle flag (active/archived) — stays 'active' so
       // existing filters keep working. account_status is the operational
       // state — flip to 'pending_review' so the Customers tab can surface
       // imported rows for approval before scheduler / reports treat them as
       // live work. One tap to "Approve all" once the owner has eyeballed.
-      status:             'active',
-      source:             'onboarding',
-      import_id:          rep.import_id,
-      import_batch_id:    batchId,
-      service_types:      Array.from(allServices),
-      customer_balance:   totalBalance > 0 ? totalBalance : null,
+      status: 'active',
+      source: 'onboarding',
+      import_id: rep.import_id,
+      import_batch_id: batchId,
+      service_types: Array.from(allServices),
+      customer_balance: totalBalance > 0 ? totalBalance : null,
       // Phase E follow-up: surface more of what we already parsed.
       customer_reference: rep.customer_ref || null,
-      round_name:         roundName,
+      round_name: roundName,
 
       // First-job denormalised fields (the customers UI uses these for sort + display).
       // Roll past dates forward to the next future occurrence so customers
       // don't land with a 2-year-old "due date" that would push their first
       // Cadi-scheduled clean years out.
-      price_per_visit:    rep.price != null ? Number(rep.price) : null,
-      schedule:           rep.frequency_raw,
-      frequency:          rruleToHumanShort(rep.frequency_rrule) ?? rep.frequency_raw ?? null,
-      due_date:           rollAnchorForward(rep.anchor_date, rep.frequency_rrule),
-      next_job_date:      rollAnchorForward(rep.anchor_date, rep.frequency_rrule),
-      account_status:     'pending_review',
+      price_per_visit: rep.price != null ? Number(rep.price) : null,
+      schedule: rep.frequency_raw,
+      frequency: rruleToHumanShort(rep.frequency_rrule) ?? rep.frequency_raw ?? null,
+      due_date: rollAnchorForward(rep.anchor_date, rep.frequency_rrule),
+      next_job_date: rollAnchorForward(rep.anchor_date, rep.frequency_rrule),
+      account_status: 'pending_review',
     });
+  }
+  if (!customerRows.length) {
+    return { customersCreated: 0, recurringCreated: 0, jobsImported: 0, batchId };
   }
   const { data: insertedCustomers, error: custErr } = await supabase
     .from('customers')
@@ -530,26 +559,31 @@ export async function commitParsedToCustomers(sessionId) {
     if (!p.frequency_rrule) continue;
     const customerId = customerIdByKey.get(customerKey(p));
     if (!customerId) continue;
-    const services = Array.isArray(p.service_labels) && p.service_labels.length
-      ? p.service_labels
-      : (p.service_label ? [p.service_label] : ['']);
+    const services =
+      Array.isArray(p.service_labels) && p.service_labels.length
+        ? p.service_labels
+        : p.service_label
+          ? [p.service_label]
+          : [''];
     const primaryService = services[0] || '';
     recurringRows.push({
-      owner_id:        ownerId,
-      customer_id:     customerId,
-      service:         primaryService,
-      type:            mapCategoryToJobType(p.category),
-      price:           Number(p.price) || 0,
-      duration_hrs:    1,
-      assignees:       [],
-      assignee_ids:    [],
-      freq:            rruleToFreq(p.frequency_rrule),
-      freq_interval:   rruleToInterval(p.frequency_rrule),
-      anchor_date:     rollAnchorForward(p.anchor_date, p.frequency_rrule) || new Date().toISOString().slice(0, 10),
-      preferred_hour:  9,
-      status:          'active',
-      notes:           p.notes,
-      source:          'onboarding',
+      owner_id: ownerId,
+      customer_id: customerId,
+      service: primaryService,
+      type: mapCategoryToJobType(p.category),
+      price: Number(p.price) || 0,
+      duration_hrs: 1,
+      assignees: [],
+      assignee_ids: [],
+      freq: rruleToFreq(p.frequency_rrule),
+      freq_interval: rruleToInterval(p.frequency_rrule),
+      anchor_date:
+        rollAnchorForward(p.anchor_date, p.frequency_rrule) ||
+        new Date().toISOString().slice(0, 10),
+      preferred_hour: 9,
+      status: 'active',
+      notes: p.notes,
+      source: 'onboarding',
       import_batch_id: batchId,
     });
   }
@@ -568,7 +602,9 @@ export async function commitParsedToCustomers(sessionId) {
   try {
     const { data: bid } = await supabase.rpc('my_business_id');
     roundsBusinessId = bid ?? null;
-  } catch { /* silent — we'll skip the rounds writeback below */ }
+  } catch {
+    /* silent — we'll skip the rounds writeback below */
+  }
 
   const roundRows = [];
   for (const p of kept) {
@@ -576,17 +612,17 @@ export async function commitParsedToCustomers(sessionId) {
     const customerId = customerIdByKey.get(customerKey(p));
     if (!customerId) continue;
     roundRows.push({
-      business_id:     roundsBusinessId,
-      customer_id:     customerId,
-      job_reference:   null,
-      round_name:      p.frequency_raw || null,
-      schedule:        p.frequency_raw || null,
+      business_id: roundsBusinessId,
+      customer_id: customerId,
+      job_reference: null,
+      round_name: p.frequency_raw || null,
+      schedule: p.frequency_raw || null,
       price_per_visit: Number(p.price) > 0 ? Number(p.price) : null,
-      due_date:        rollAnchorForward(p.anchor_date, p.frequency_rrule),
+      due_date: rollAnchorForward(p.anchor_date, p.frequency_rrule),
       // Mirror the customers row — pending_review until the owner approves
       // the imported batch in the Customers tab.
-      account_status:  'pending_review',
-      notes:           p.notes,
+      account_status: 'pending_review',
+      notes: p.notes,
       import_batch_id: batchId,
     });
   }
@@ -600,7 +636,9 @@ export async function commitParsedToCustomers(sessionId) {
   }
 
   // ── 3. mark parsed_customers committed ──────────────────────────────────
-  const keptIds = kept.map(p => p.id);
+  // Only the rows we actually committed — Lite overflow stays uncommitted so it
+  // can be brought in later after an upgrade.
+  const keptIds = includedKept.map((p) => p.id);
   await supabase.from('parsed_customers').update({ committed: true }).in('id', keptIds);
 
   // ── 4. tick the wizard's "Bring your customers across" step ──────────────
@@ -612,20 +650,40 @@ export async function commitParsedToCustomers(sessionId) {
       .eq('owner_id', ownerId)
       .maybeSingle();
     const existing = bs?.setup_data ?? {};
-    const steps = Array.isArray(existing.wizard_completed_steps) ? existing.wizard_completed_steps : [];
+    const steps = Array.isArray(existing.wizard_completed_steps)
+      ? existing.wizard_completed_steps
+      : [];
     const nextSteps = steps.includes('customers') ? steps : [...steps, 'customers'];
-    await supabase.from('business_settings').upsert(
-      { owner_id: ownerId, setup_data: { ...existing, customers_imported: true, wizard_completed_steps: nextSteps } },
-      { onConflict: 'owner_id' }
-    );
-  } catch { /* silent — wizard tick is non-critical */ }
+    await supabase
+      .from('business_settings')
+      .upsert(
+        {
+          owner_id: ownerId,
+          setup_data: { ...existing, customers_imported: true, wizard_completed_steps: nextSteps },
+        },
+        { onConflict: 'owner_id' }
+      );
+  } catch {
+    /* silent — wizard tick is non-critical */
+  }
 
   return {
-    customersCreated:  insertedCustomers?.length ?? 0,
-    recurringCreated:  recurringRows.length,
-    jobsImported:      kept.length,
+    customersCreated: insertedCustomers?.length ?? 0,
+    recurringCreated: recurringRows.length,
+    jobsImported: includedKept.length,
     batchId,
   };
+}
+
+// Count the caller's active (non-archived) customers. Used by the onboarding
+// review screen to work out Lite headroom before committing an import.
+export async function countActiveCustomers() {
+  const { count, error } = await supabase
+    .from('customers')
+    .select('id', { count: 'exact', head: true })
+    .neq('status', 'archived');
+  if (error) throw error;
+  return count ?? 0;
 }
 
 // ── Step 4 — Service menu ────────────────────────────────────────────────────
@@ -673,11 +731,12 @@ export async function commitMenuToServices(sessionId, menu) {
     // Cadi may have asked a section-level question and the owner answered it
     // in StepMenu. Carry the Q+A through so we can seed cadi_context on every
     // service in this section — Front Desk reads it later when quoting.
-    const sectionContext = (section?.question && section?.question_answer)
-      ? `Cadi asked: ${String(section.question).trim()}\nYou said: ${String(section.question_answer).trim()}`
-      : null;
+    const sectionContext =
+      section?.question && section?.question_answer
+        ? `Cadi asked: ${String(section.question).trim()}\nYou said: ${String(section.question_answer).trim()}`
+        : null;
     const local = new Map();
-    for (const entry of (Array.isArray(section?.services) ? section.services : [])) {
+    for (const entry of Array.isArray(section?.services) ? section.services : []) {
       const name = String(entry?.name ?? '').trim();
       if (!name) continue;
       const canonical = String(entry?.tier_of ?? '').trim() || name;
@@ -701,17 +760,23 @@ export async function commitMenuToServices(sessionId, menu) {
     .select('id, name')
     .eq('business_id', businessId);
   const existingByName = new Map(
-    (existing ?? []).map(e => [String(e.name ?? '').toLowerCase().trim(), e.id])
+    (existing ?? []).map((e) => [
+      String(e.name ?? '')
+        .toLowerCase()
+        .trim(),
+      e.id,
+    ])
   );
 
-  let inserted = 0, updated = 0, tiersWritten = 0;
+  let inserted = 0,
+    updated = 0,
+    tiersWritten = 0;
 
   for (const group of groups) {
-    const isTiered = group.entries.length > 1
-                  || group.entries.some(e => e?.tier_of);
+    const isTiered = group.entries.length > 1 || group.entries.some((e) => e?.tier_of);
     const repModel = group.rep?.pricing_model ?? 'flat';
     const pricing_model = isTiered ? 'tiered' : repModel;
-    const booking_mode  = group.rep?.booking_mode ?? 'enquiry';
+    const booking_mode = group.rep?.booking_mode ?? 'enquiry';
 
     // pricing_config — model-specific. quotePrice reads from here.
     let pricing_config = null;
@@ -721,9 +786,8 @@ export async function commitMenuToServices(sessionId, menu) {
 
     // booking_ready — surfaces show "bookable" badge when true. Locked off
     // for enquiry-mode services per the floor invariant.
-    const booking_ready = booking_mode !== 'enquiry' && (
-      isTiered || (group.rep?.suggested_price != null)
-    );
+    const booking_ready =
+      booking_mode !== 'enquiry' && (isTiered || group.rep?.suggested_price != null);
 
     // Phase D — template-locked services carry per-tier is_estimated flags.
     // We can't add columns, so we persist a { tier_key → bool } map on
@@ -739,32 +803,32 @@ export async function commitMenuToServices(sessionId, menu) {
     }
 
     const serviceRow = {
-      business_id:           businessId,
-      name:                  group.canonical,
-      category:              group.division || null,
-      description_included:  String(group.rep?.description ?? '').trim() || null,
-      pricing_type:          'fixed',
+      business_id: businessId,
+      name: group.canonical,
+      category: group.division || null,
+      description_included: String(group.rep?.description ?? '').trim() || null,
+      pricing_type: 'fixed',
       // For tiered services we don't put a single base price on the row —
       // quotePrice resolves per-tier.
-      price_fixed_basic:     isTiered ? null : (group.rep?.suggested_price ?? null),
-      price_low:             group.rep?.price_low  ?? null,
-      price_high:            group.rep?.price_high ?? null,
+      price_fixed_basic: isTiered ? null : (group.rep?.suggested_price ?? null),
+      price_low: group.rep?.price_low ?? null,
+      price_high: group.rep?.price_high ?? null,
       generated_from_import: true,
-      is_active:             true,
+      is_active: true,
       booking_mode,
       pricing_model,
       pricing_config,
       default_duration_mins: group.rep?.default_duration_mins ?? null,
-      status:                'live',
+      status: 'live',
       booking_ready,
       inference_meta: {
-        evidence:       group.rep?.evidence ?? null,
-        source_prices:  group.rep?.source_prices ?? null,
+        evidence: group.rep?.evidence ?? null,
+        source_prices: group.rep?.source_prices ?? null,
         tier_estimates: Object.keys(tierEstimates).length ? tierEstimates : null,
         // Seed free-form Cadi context from the section question Cadi asked
         // during StepMenu. Owner edits this in the catalogue editor; Front
         // Desk reads it when quoting this service.
-        cadi_context:   group.sectionContext ?? null,
+        cadi_context: group.sectionContext ?? null,
       },
     };
 
@@ -794,32 +858,35 @@ export async function commitMenuToServices(sessionId, menu) {
     // ── service_tiers rows for tiered services ──────────────────────────
     if (isTiered) {
       // Sort by suggested_price so tier_key indices reflect price order.
-      const sortedEntries = [...group.entries].sort((a, b) =>
-        Number(a?.suggested_price ?? a?.price_low ?? 0) -
-        Number(b?.suggested_price ?? b?.price_low ?? 0)
+      const sortedEntries = [...group.entries].sort(
+        (a, b) =>
+          Number(a?.suggested_price ?? a?.price_low ?? 0) -
+          Number(b?.suggested_price ?? b?.price_low ?? 0)
       );
       const tierRows = sortedEntries.map((entry, idx) => {
         // Template-locked entries already carry a canonical tier_key; use it
         // directly so the catalogue editor and Front Desk widget see stable
         // keys ("3bed", "2storey") rather than re-slugified labels.
-        const after = String(entry.name ?? '').split(/[—-]/).slice(1).join('-').trim();
+        const after = String(entry.name ?? '')
+          .split(/[—-]/)
+          .slice(1)
+          .join('-')
+          .trim();
         const tierLabel = after || `Tier ${idx + 1}`;
-        const tierKey   = entry?.tier_key
-                       || slugifyForKey(tierLabel)
-                       || `tier${idx + 1}`;
+        const tierKey = entry?.tier_key || slugifyForKey(tierLabel) || `tier${idx + 1}`;
         return {
-          service_id:     serviceId,
-          tier_key:       tierKey,
-          label:          tierLabel,
-          price:          Number(entry?.suggested_price ?? entry?.price_low ?? 0),
+          service_id: serviceId,
+          tier_key: tierKey,
+          label: tierLabel,
+          price: Number(entry?.suggested_price ?? entry?.price_low ?? 0),
           customer_count: Number(entry?.customer_count) || 0,
-          is_default:     Boolean(entry?.is_default),    // template tells us, else assigned below
-          sort_order:     idx,
+          is_default: Boolean(entry?.is_default), // template tells us, else assigned below
+          sort_order: idx,
         };
       });
       // Default tier — for template-locked services, the template already
       // tagged one. For ad-hoc tiers, fall back to most-customers heuristic.
-      if (tierRows.length && !tierRows.some(r => r.is_default)) {
+      if (tierRows.length && !tierRows.some((r) => r.is_default)) {
         let maxIdx = 0;
         for (let i = 1; i < tierRows.length; i++) {
           if (tierRows[i].customer_count > tierRows[maxIdx].customer_count) maxIdx = i;
@@ -849,11 +916,18 @@ export async function commitMenuToServices(sessionId, menu) {
     const ex = bs?.setup_data ?? {};
     const steps = Array.isArray(ex.wizard_completed_steps) ? ex.wizard_completed_steps : [];
     const next = steps.includes('services') ? steps : [...steps, 'services'];
-    await supabase.from('business_settings').upsert(
-      { owner_id: ownerId, setup_data: { ...ex, menu_generated: true, wizard_completed_steps: next } },
-      { onConflict: 'owner_id' }
-    );
-  } catch { /* silent */ }
+    await supabase
+      .from('business_settings')
+      .upsert(
+        {
+          owner_id: ownerId,
+          setup_data: { ...ex, menu_generated: true, wizard_completed_steps: next },
+        },
+        { onConflict: 'owner_id' }
+      );
+  } catch {
+    /* silent */
+  }
 
   return { inserted, updated, tiers: tiersWritten };
 }
@@ -883,9 +957,9 @@ async function snapshotCatalogue(businessId, ownerId) {
     const nextVersion = (lastVer?.version ?? 0) + 1;
     await supabase.from('catalogue_versions').insert({
       business_id: businessId,
-      version:     nextVersion,
-      snapshot:    catalogue,
-      created_by:  ownerId,
+      version: nextVersion,
+      snapshot: catalogue,
+      created_by: ownerId,
     });
   } catch (e) {
     console.warn('catalogue snapshot failed:', e?.message ?? e);
@@ -915,16 +989,15 @@ export function customerReadiness(p, { noScheduleOk = null } = {}) {
   if (!hasIdent) missing.push('address or contact');
 
   // Service
-  const hasService = (Array.isArray(p.service_labels) && p.service_labels.length)
-    || Boolean(String(p.service_label ?? '').trim());
+  const hasService =
+    (Array.isArray(p.service_labels) && p.service_labels.length) ||
+    Boolean(String(p.service_label ?? '').trim());
   if (!hasService) missing.push('service');
 
   // Schedule fields are only required for Ready / Nearly. Decision bucket
   // means "kept on file, no schedule" — perfectly valid to commit.
   // Caller can still force the check off via noScheduleOk=true.
-  const schedRequired = noScheduleOk === null
-    ? (p.bucket !== 'decision')
-    : !noScheduleOk;
+  const schedRequired = noScheduleOk === null ? p.bucket !== 'decision' : !noScheduleOk;
   if (schedRequired) {
     if (!String(p.frequency_rrule ?? '').trim() && !String(p.frequency_raw ?? '').trim()) {
       missing.push('frequency');
@@ -977,13 +1050,13 @@ export function rollAnchorForward(anchorDate, rrule, fromDate = new Date()) {
   if (/FREQ=WEEKLY/.test(rrule)) {
     const stepMs = 7 * interval * 86400000;
     const cycles = Math.ceil((today - anchor) / stepMs);
-    const next   = new Date(anchor.getTime() + cycles * stepMs);
+    const next = new Date(anchor.getTime() + cycles * stepMs);
     return toLocalISODate(next);
   }
   if (/FREQ=DAILY/.test(rrule)) {
     const stepMs = interval * 86400000;
     const cycles = Math.ceil((today - anchor) / stepMs);
-    const next   = new Date(anchor.getTime() + cycles * stepMs);
+    const next = new Date(anchor.getTime() + cycles * stepMs);
     return toLocalISODate(next);
   }
   if (/FREQ=MONTHLY/.test(rrule)) {
@@ -997,8 +1070,8 @@ export function rollAnchorForward(anchorDate, rrule, fromDate = new Date()) {
 // Format a Date as YYYY-MM-DD using its LOCAL components (not UTC). Avoids
 // the BST/UTC off-by-one that `.toISOString().slice(0,10)` produces.
 function toLocalISODate(d) {
-  const y  = d.getFullYear();
-  const m  = String(d.getMonth() + 1).padStart(2, '0');
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${dd}`;
 }
@@ -1014,16 +1087,16 @@ function rruleToHumanShort(rrule) {
     return `every ${i} weeks`;
   }
   if (/FREQ=MONTHLY/.test(rrule)) return i === 1 ? 'monthly' : `every ${i} months`;
-  if (/FREQ=DAILY/.test(rrule))   return i === 1 ? 'daily'   : `every ${i} days`;
+  if (/FREQ=DAILY/.test(rrule)) return i === 1 ? 'daily' : `every ${i} days`;
   return rrule;
 }
 
 // ── small rrule helpers (full RRULE.js is overkill for the subset we emit) ──
 function rruleToFreq(rrule) {
   if (!rrule) return 'one-off';
-  if (/FREQ=WEEKLY/.test(rrule))  return 'weekly';
+  if (/FREQ=WEEKLY/.test(rrule)) return 'weekly';
   if (/FREQ=MONTHLY/.test(rrule)) return 'monthly';
-  if (/FREQ=DAILY/.test(rrule))   return 'daily';
+  if (/FREQ=DAILY/.test(rrule)) return 'daily';
   return 'one-off';
 }
 function rruleToInterval(rrule) {
@@ -1031,7 +1104,7 @@ function rruleToInterval(rrule) {
   return m ? parseInt(m[1], 10) : 1;
 }
 function mapCategoryToJobType(cat) {
-  if (cat === 'exterior')   return 'exterior';
+  if (cat === 'exterior') return 'exterior';
   if (cat === 'commercial') return 'commercial';
   return 'residential';
 }
@@ -1041,12 +1114,12 @@ function mapCategoryToJobType(cat) {
 function rowToSession(r) {
   if (!r) return null;
   return {
-    id:          r.id,
-    businessId:  r.business_id,
-    step:        r.step,
-    divisions:   r.divisions ?? [],
-    createdAt:   r.created_at,
-    updatedAt:   r.updated_at,
+    id: r.id,
+    businessId: r.business_id,
+    step: r.step,
+    divisions: r.divisions ?? [],
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
     completedAt: r.completed_at,
   };
 }

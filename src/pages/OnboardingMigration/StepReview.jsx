@@ -16,6 +16,7 @@ import {
   MapPin,
   ArrowLeft,
   Trash2,
+  Crown,
 } from 'lucide-react';
 import {
   listParsedForSession,
@@ -24,12 +25,14 @@ import {
   bulkApplyServiceToMissing,
   bulkApplyDivisionToMissing,
   commitParsedToCustomers,
+  countActiveCustomers,
   updateStep,
   customerReadiness,
   rollAnchorForward,
 } from '../../lib/db/onboardingDb';
 import { parseFrequency } from '../../lib/migration/parsers';
 import { lookupPostcode, searchAddresses } from '../../lib/postcode';
+import { usePlan, FREE_CUSTOMER_LIMIT } from '../../hooks/usePlan';
 
 const CATEGORIES = [
   { key: 'residential', label: 'Residential', accent: '#1f48ff' },
@@ -106,7 +109,9 @@ const BUCKETS = [
 
 export default function StepReview({ session, onAdvance }) {
   const navigate = useNavigate();
+  const { isPro } = usePlan();
   const [rows, setRows] = useState(null); // null = loading
+  const [existingCount, setExistingCount] = useState(0); // active customers already on the account
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState(null);
   const [edits, setEdits] = useState({}); // pending edits by row id
@@ -118,8 +123,12 @@ export default function StepReview({ session, onAdvance }) {
 
   const load = async () => {
     try {
-      const fresh = await listParsedForSession(session.id);
+      const [fresh, cnt] = await Promise.all([
+        listParsedForSession(session.id),
+        countActiveCustomers().catch(() => 0),
+      ]);
       setRows(fresh);
+      setExistingCount(cnt);
     } catch (e) {
       setError(e?.message ?? "Couldn't load your customers.");
     }
@@ -135,11 +144,48 @@ export default function StepReview({ session, onAdvance }) {
     return out;
   }, [rows]);
 
+  // A stable key per distinct customer — MUST match customerKey() in
+  // commitParsedToCustomers so the "first N" the UI previews are the same
+  // "first N" the commit actually brings in.
+  const distinctCustomerKey = (r) => {
+    if (r.customer_ref && String(r.customer_ref).trim()) return `ref:${r.customer_ref.trim()}`;
+    return `np:${String(r.name ?? '')
+      .trim()
+      .toLowerCase()}::${String(r.postcode ?? '')
+      .replace(/\s/g, '')
+      .toUpperCase()}`;
+  };
+
   const kept = (rows ?? []).filter((r) => r.keep);
   const keptCount = kept.length;
-  const readyKept = kept.filter((r) => customerReadiness(r).ready);
-  const notReadyKept = kept.filter((r) => !customerReadiness(r).ready);
-  const allReady = keptCount > 0 && notReadyKept.length === 0;
+
+  // Distinct customers across the kept jobs (so the user sees "168 jobs for
+  // 53 customers", not just "168 jobs"), in commit order.
+  const keptKeysInOrder = [];
+  const seenKeptKeys = new Set();
+  kept.forEach((r) => {
+    const k = distinctCustomerKey(r);
+    if (!seenKeptKeys.has(k)) {
+      seenKeptKeys.add(k);
+      keptKeysInOrder.push(k);
+    }
+  });
+  const distinctCustomers = keptKeysInOrder.length;
+
+  // Lite headroom — how many more customers this account may add before the
+  // 30-cap. Pro/Max = unlimited. Over cap ⇒ bring in the first `headroom` now
+  // and stage the rest for later (nothing is lost).
+  const headroom = Math.max(0, FREE_CUSTOMER_LIMIT - existingCount);
+  const overCap = !isPro && distinctCustomers > headroom;
+  const importKeys = new Set(isPro ? keptKeysInOrder : keptKeysInOrder.slice(0, headroom));
+  const willImportCount = importKeys.size;
+
+  // Readiness is judged only on the rows we'll actually commit — a Lite user
+  // shouldn't have to perfect 148 cards just to bring in their first 30.
+  const importRows = kept.filter((r) => importKeys.has(distinctCustomerKey(r)));
+  const readyKept = importRows.filter((r) => customerReadiness(r).ready);
+  const notReadyKept = importRows.filter((r) => !customerReadiness(r).ready);
+  const allReady = importRows.length > 0 && notReadyKept.length === 0;
 
   // Click handler for the banner + disabled CTA. Finds the first kept-but-
   // not-ready card, scrolls it into view, opens its Edit Details drawer,
@@ -165,23 +211,13 @@ export default function StepReview({ session, onAdvance }) {
     window.setTimeout(() => setFocusedRowId((curr) => (curr === target.id ? null : curr)), 1600);
   };
 
-  // Count distinct customers across the kept jobs so the user sees "168 jobs
-  // for 53 customers" rather than just "168 jobs" (which is misleading).
-  const distinctCustomerKey = (r) => {
-    if (r.customer_ref && String(r.customer_ref).trim()) return `ref:${r.customer_ref.trim()}`;
-    return `np:${String(r.name ?? '')
-      .trim()
-      .toLowerCase()}::${String(r.postcode ?? '')
-      .replace(/\s/g, '')
-      .toUpperCase()}`;
-  };
-  const distinctCustomers = new Set(kept.map(distinctCustomerKey)).size;
-
   const commit = async () => {
     setError(null);
     setCommitting(true);
     try {
-      const r = await commitParsedToCustomers(session.id);
+      const r = await commitParsedToCustomers(session.id, {
+        limit: isPro ? null : headroom,
+      });
       await updateStep(session.id, 'menu_review');
       onAdvance({ ...session, step: 'menu_review' });
       // For now Step 4 isn't built — drop them on Customers so they see results.
@@ -241,6 +277,54 @@ export default function StepReview({ session, onAdvance }) {
             </p>
           )}
         </div>
+
+        {/* Lite cap heads-up — shown up front, before the user organises cards,
+            so there's no surprise at commit time. Two ways forward: upgrade for
+            all of them, or bring in the first {headroom} now and add the rest
+            after upgrading (nothing is deleted). */}
+        {overCap && (
+          <div className="mb-6 rounded-2xl border border-[#1f48ff]/20 bg-[#f0f4ff] p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#1f48ff]/10 flex items-center justify-center shrink-0 text-lg">
+                🏢
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-black text-[#010a4f]">
+                  You've got {distinctCustomers} customers — that's a real business.
+                </p>
+                <p className="text-xs text-[#010a4f]/60 mt-1 leading-relaxed">
+                  Cadi Lite brings in up to {FREE_CUSTOMER_LIMIT} customers.{' '}
+                  {willImportCount > 0 ? (
+                    <>
+                      Upgrade to Pro for all {distinctCustomers}, or bring in {willImportCount} now
+                      — the rest stay saved so you can add them anytime after you upgrade. Nothing's
+                      lost.
+                    </>
+                  ) : (
+                    <>
+                      You're already at the limit. Upgrade to Pro to bring these {distinctCustomers}{' '}
+                      in — they stay saved until you do.
+                    </>
+                  )}
+                </p>
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/upgrade')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1f48ff] hover:bg-[#3a5eff] text-white text-xs font-black transition-colors shadow-lg shadow-[#1f48ff]/20"
+                  >
+                    <Crown size={14} /> Upgrade to Pro — £39/mo
+                  </button>
+                  {willImportCount > 0 && (
+                    <span className="text-[11px] font-semibold text-[#010a4f]/50">
+                      or bring in {willImportCount} below ↓
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <BulkDivisionBar
           rows={rows}
@@ -358,8 +442,8 @@ export default function StepReview({ session, onAdvance }) {
               <AlertCircle size={11} className="text-amber-600 shrink-0" />
               <span className="flex-1">
                 <span className="font-bold">{notReadyKept.length}</span> of{' '}
-                <span className="font-bold">{keptCount}</span> still need details before they can
-                land.
+                <span className="font-bold">{willImportCount}</span> still need details before they
+                can land.
               </span>
               <span className="text-[10px] font-bold text-amber-700 shrink-0">
                 {focusedRowId ? 'Next →' : 'Take me to one →'}
@@ -367,23 +451,35 @@ export default function StepReview({ session, onAdvance }) {
             </button>
           )}
           <button
-            onClick={!allReady ? () => jumpToFirstUnready(focusedRowId) : commit}
+            onClick={
+              overCap && willImportCount === 0
+                ? () => navigate('/upgrade')
+                : !allReady
+                  ? () => jumpToFirstUnready(focusedRowId)
+                  : commit
+            }
             disabled={committing || keptCount === 0}
             className={`w-full py-3.5 rounded-xl text-white text-sm font-black shadow-lg transition-all ${
               keptCount === 0 || committing
                 ? 'bg-[#f0f4ff] border border-[#1f48ff]/15 text-[#010a4f]/45 cursor-not-allowed shadow-none'
-                : !allReady
-                  ? 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 hover:border-amber-300'
-                  : 'bg-[#1f48ff] hover:bg-[#3a5eff] shadow-[#1f48ff]/30'
+                : overCap && willImportCount === 0
+                  ? 'bg-[#1f48ff] hover:bg-[#3a5eff] shadow-[#1f48ff]/30'
+                  : !allReady
+                    ? 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 hover:border-amber-300'
+                    : 'bg-[#1f48ff] hover:bg-[#3a5eff] shadow-[#1f48ff]/30'
             }`}
           >
             {committing
               ? 'Bringing them in…'
               : keptCount === 0
                 ? 'Nothing kept — toggle a few in'
-                : !allReady
-                  ? `${readyKept.length} ready · ${notReadyKept.length} need details — fix them →`
-                  : `Bring in ${readyKept.length} job${readyKept.length === 1 ? '' : 's'} for ${distinctCustomers} customer${distinctCustomers === 1 ? '' : 's'} →`}
+                : overCap && willImportCount === 0
+                  ? 'Upgrade to bring these in →'
+                  : !allReady
+                    ? `${readyKept.length} ready · ${notReadyKept.length} need details — fix them →`
+                    : overCap
+                      ? `Bring in ${willImportCount} of ${distinctCustomers} customers →`
+                      : `Bring in ${readyKept.length} job${readyKept.length === 1 ? '' : 's'} for ${distinctCustomers} customer${distinctCustomers === 1 ? '' : 's'} →`}
           </button>
         </div>
       </div>
