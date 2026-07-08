@@ -778,7 +778,9 @@ export default function CustomerDetail({
           </>
         )}
 
-        {activeTab === 'metrics' && <CustomerMetrics customer={customer} jobs={allJobs} />}
+        {activeTab === 'metrics' && (
+          <CustomerMetrics customer={customer} jobs={allJobs} invoices={allInvoices} />
+        )}
 
         {activeTab === 'history' && (
           <>
