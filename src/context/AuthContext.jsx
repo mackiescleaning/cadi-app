@@ -5,6 +5,10 @@ import { supabase } from '../lib/supabase';
 // Activity in any tab resets the timer (BroadcastChannel sync).
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const IDLE_WARNING_MS = 60 * 1000; // warn 60s before sign-out
+// Last user activity across ALL tabs, shared via localStorage. The idle timer
+// measures inactivity against this so a stale/background tab can't sign out a
+// tab you're actively using (Supabase shares one session per browser).
+const LAST_ACTIVITY_KEY = 'cadi_last_activity_at';
 
 const AuthContext = createContext({});
 
@@ -97,27 +101,65 @@ export function AuthProvider({ children }) {
     const channel =
       typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('cadi-activity') : null;
 
-    const resetTimer = () => {
-      setIdleWarning(false);
+    const readLastActivity = () => {
+      try {
+        return Number(localStorage.getItem(LAST_ACTIVITY_KEY)) || 0;
+      } catch {
+        return 0;
+      }
+    };
+    // Throttle writes so mousemove doesn't hammer localStorage.
+    let lastWrite = 0;
+    const markActivity = () => {
+      const now = Date.now();
+      if (now - lastWrite < 2000) return;
+      lastWrite = now;
+      try {
+        localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+      } catch {}
+    };
+
+    // Self-rescheduling idle check. "Idle" is measured against the most recent
+    // activity in ANY tab (shared via localStorage) — so when this timer fires
+    // it re-checks and only signs out after a full IDLE_TIMEOUT_MS of
+    // inactivity everywhere, instead of ejecting a tab you're actively using.
+    const scheduleCheck = () => {
       clearTimeout(idleTimerRef.current);
       clearTimeout(idleWarningRef.current);
-      idleWarningRef.current = setTimeout(
-        () => setIdleWarning(true),
-        IDLE_TIMEOUT_MS - IDLE_WARNING_MS
-      );
-      idleTimerRef.current = setTimeout(() => {
+      const last = readLastActivity() || Date.now();
+      const remaining = IDLE_TIMEOUT_MS - (Date.now() - last);
+      if (remaining <= 0) {
+        console.warn('[auth] idle sign-out — no activity in any tab for 30m');
         signOut();
-      }, IDLE_TIMEOUT_MS);
+        return;
+      }
+      const warnIn = remaining - IDLE_WARNING_MS;
+      if (warnIn <= 0) setIdleWarning(true);
+      else idleWarningRef.current = setTimeout(() => setIdleWarning(true), warnIn);
+      idleTimerRef.current = setTimeout(scheduleCheck, remaining);
     };
 
     const onLocalActivity = () => {
-      resetTimer();
+      markActivity();
+      setIdleWarning(false);
+      scheduleCheck();
       try {
         channel?.postMessage('activity');
       } catch {}
     };
     const onRemoteActivity = (ev) => {
-      if (ev.data === 'activity') resetTimer();
+      if (ev.data === 'activity') {
+        setIdleWarning(false);
+        scheduleCheck();
+      }
+    };
+    // Second cross-tab signal in case BroadcastChannel is unavailable: another
+    // tab writing LAST_ACTIVITY_KEY fires a storage event here.
+    const onStorage = (e) => {
+      if (e.key === LAST_ACTIVITY_KEY) {
+        setIdleWarning(false);
+        scheduleCheck();
+      }
     };
 
     const events = [
@@ -130,7 +172,9 @@ export function AuthProvider({ children }) {
     ];
     events.forEach((e) => window.addEventListener(e, onLocalActivity, { passive: true }));
     if (channel) channel.addEventListener('message', onRemoteActivity);
-    resetTimer();
+    window.addEventListener('storage', onStorage);
+    markActivity();
+    scheduleCheck();
 
     return () => {
       events.forEach((e) => window.removeEventListener(e, onLocalActivity));
@@ -138,6 +182,7 @@ export function AuthProvider({ children }) {
         channel.removeEventListener('message', onRemoteActivity);
         channel.close();
       }
+      window.removeEventListener('storage', onStorage);
       clearTimeout(idleTimerRef.current);
       clearTimeout(idleWarningRef.current);
     };
