@@ -1,6 +1,6 @@
 # Accounts Foundation — Build Spec
 
-**Status:** P1 SHIPPED · P2 BUILT (2026-07-12) · **Owner:** (you) · **Date:** 2026-07-12
+**Status:** P1 SHIPPED · P2 + P3 BUILT (2026-07-12) · **Owner:** (you) · **Date:** 2026-07-12
 
 > **P1 done:** migrations 095–097 applied to prod (business_tax_profile, chart_of_accounts,
 > bank_category_rules, transactions.vat_treatment, seed fn + new-business trigger + backfill).
@@ -18,7 +18,18 @@
 > loan per `business_tax_profile.structure`), and an inline **spot-check** (confirm/change
 > Cadi's low-confidence guesses via the existing yapily-api categorise path). Prod build
 > passes; digest is gated behind a real account with bank/statement transactions so it can't
-> render in demo. **Not yet committed or live-verified with a real logged-in account.**
+> render in demo. Committed + pushed on branch `feat/accounts-p2-money-confidence` (also wires
+> the Dashboard "Truly yours" hero to the same Drawings/Director's-loan framing).
+>
+> **P3 built (2026-07-12):** `src/components/AdaptiveAccountsSummary.jsx` — the Layer-2 adaptive
+> summary, mounted at the top of the Accounts → Overview tab. Entity-aware, derived from the
+> chart + `business_tax_profile`: turnover (useYtdIncome) → allowable costs (useYtdExpenses,
+> filtered by chart.is_allowable on the expense lane) → profit → set-aside tax (calcSelfEmployedTax
+> for sole traders, calculateCT for Ltd) → personal drawings/director's-loan (personal-lane
+> transactions) → VAT flag when registered. "Indicative — your accountant files" disclaimer.
+> Renders in demo with coherent demo figures; verified in-browser (arithmetic checked, no console
+> errors). Reads `business_tax_profile.structure` (not `business_settings.entity_type`) as the
+> entity source of truth. Committed on the same P2 branch.
 > **Depends on:** the statement-upload bridge (`statement-import`), the `transactions` table, `yapily-api`.
 
 The goal of this doc is the _foundation_ under the Money → Accounts experience: an

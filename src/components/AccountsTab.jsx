@@ -11,6 +11,7 @@ import { useBusinessId } from '../hooks/useBusinessId';
 import { getBusinessSettings } from '../lib/db/settingsDb';
 import { useYtdExpenses, CATEGORY_TO_SA103 } from '../hooks/useYtdExpenses';
 import { useYtdIncome, useRollingTurnover, SOURCE_DISPLAY } from '../hooks/useYtdIncome';
+import AdaptiveAccountsSummary from './AdaptiveAccountsSummary';
 import {
   currentTaxYear,
   taxYearStart,
@@ -538,6 +539,10 @@ function OverviewTab({ setActiveTab, entityType = 'sole_trader', bizSettings = {
         </h2>
         <p className="text-xs text-[rgba(153,197,255,0.45)] mt-0.5">{headerSub}</p>
       </div>
+
+      {/* Adaptive Accounts summary (P3, Layer 2) — entity-aware turnover → profit →
+          tax → drawings/DLA, derived from the chart of accounts + tax profile. */}
+      <AdaptiveAccountsSummary />
 
       {/* Entity badge */}
       {isLtd && (
