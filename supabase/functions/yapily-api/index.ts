@@ -77,8 +77,14 @@ const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ??
   "https://app.cadi.cleaning,https://cadi.cleaning,http://localhost:5173,http://localhost:3000")
   .split(",").map(s => s.trim()).filter(Boolean);
 
+// Any localhost origin is a local dev server (can't be reached by a third party),
+// so allow it on top of the configured production origins — otherwise a non-standard
+// dev port (e.g. 3005 when 3000 is taken) fails CORS on every mutating call.
+const isLocalhost = (o: string) => /^https?:\/\/localhost(:\d+)?$/.test(o);
+
 function corsHeaders(origin: string | null): HeadersInit {
-  const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const allow =
+    origin && (ALLOWED_ORIGINS.includes(origin) || isLocalhost(origin)) ? origin : ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin":  allow,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -272,10 +278,16 @@ serve(async (req: Request) => {
       const isPro    = !!profile?.stripe_subscription_id;
       const daysBack = isPro ? 365 : 60;
 
-      const [{ data: rulesRows }, { data: openInvoices }] = await Promise.all([
+      // Unpaid invoices are actionable (propose / auto-mark-paid); paid invoices
+      // are loaded too, for attribution-only matching (link a payment to its
+      // customer/invoice without ever changing an already-settled invoice).
+      // NOTE: `amount` is not a column on invoices — the total is derived from
+      // `lines`. Selecting it errored, leaving allInvoices null and silently
+      // disabling all reconciliation.
+      const [{ data: rulesRows }, { data: allInvoices }] = await Promise.all([
         sb.from("merchant_rules").select("merchant_key,category,is_business").eq("user_id", user.id),
-        sb.from("invoices").select("id, customer, lines, status, customer_id, amount")
-          .eq("owner_id", user.id).in("status", ["sent", "viewed", "overdue"]),
+        sb.from("invoices").select("id, customer, lines, status, customer_id")
+          .eq("owner_id", user.id).in("status", ["sent", "viewed", "overdue", "partial", "paid"]),
       ]);
 
       const merchantRules = new Map<string, { category: string; isBusiness: boolean }>(
@@ -390,27 +402,31 @@ serve(async (req: Request) => {
             confidence = category !== "uncategorised" ? 0.85 : 0.0;
           }
 
-          // ── Proposed-match-only reconciliation ─────────────────────────────
-          // We NEVER auto-flip invoice.status here. We write the proposed match
-          // to transactions.matched_invoice_id + reconciliation_confidence so
-          // the UI can offer "Confirm payment" — except when we're VERY sure:
-          // exact amount, single candidate at that amount, similarity > 0.95.
+          // ── Reconciliation ─────────────────────────────────────────────────
+          // Unpaid candidates are actionable: proposed match written to
+          // matched_invoice_id + reconciliation_confidence so the UI can offer
+          // "Confirm payment", and auto-flipped to paid only when VERY sure
+          // (exact amount, single candidate, similarity > 0.95). Paid candidates
+          // are attribution-only: we link the payment to its customer/invoice but
+          // NEVER change an already-settled invoice's status.
           let matchedInvoiceId: string | null  = null;
           let matchedCustomerId: string | null = null;
           let reconConfidence                  = 0.0;
           let autoFlipSafe                     = false;
 
-          if (isCredit && openInvoices) {
+          if (isCredit && allInvoices) {
             const absAmount = Math.abs(amount);
             const payerName = merchant || description;
 
-            const candidates: Array<{ inv: { id: string; customer: { name?: string; first_name?: string; last_name?: string }; customer_id?: string; lines?: Array<{ rate: number; qty: number }> }; total: number; score: number }> = [];
-            for (const inv of openInvoices as Array<{
+            type Cand = { id: string; customerId: string | null; score: number };
+            const openCands: Cand[] = [];
+            const paidCands: Cand[] = [];
+            for (const inv of allInvoices as Array<{
               id: string;
               customer: { name?: string; first_name?: string; last_name?: string };
               lines: Array<{ rate: number; qty: number }>;
               customer_id?: string;
-              amount?: number;
+              status?: string;
             }>) {
               const invTotal = (inv.lines ?? []).reduce(
                 (s: number, l: { rate: number; qty: number }) => s + (l.rate ?? 0) * (l.qty ?? 1), 0,
@@ -418,20 +434,26 @@ serve(async (req: Request) => {
               if (Math.abs(invTotal - absAmount) > 0.01) continue; // exact only
               const invCustomer = [inv.customer?.name, inv.customer?.first_name, inv.customer?.last_name]
                 .filter(Boolean).join(" ");
-              const score = tokenSimilarity(payerName, invCustomer);
-              candidates.push({ inv, total: invTotal, score });
+              const cand: Cand = { id: inv.id, customerId: inv.customer_id ?? null, score: tokenSimilarity(payerName, invCustomer) };
+              (inv.status === "paid" ? paidCands : openCands).push(cand);
             }
 
-            if (candidates.length > 0) {
-              const best = candidates.sort((a, b) => b.score - a.score)[0];
-              if (best.score >= 0.6) {
-                matchedInvoiceId  = best.inv.id;
-                matchedCustomerId = best.inv.customer_id ?? null;
-                reconConfidence   = best.score;
-                category = "income_customer"; isBusiness = true;
-                // High-confidence auto-flip: exact amount, single candidate at that amount, very strong name match
-                if (candidates.length === 1 && best.score >= 0.95) autoFlipSafe = true;
-              }
+            const bestOf = (c: Cand[]) => (c.length ? [...c].sort((a, b) => b.score - a.score)[0] : null);
+            const bestOpen = bestOf(openCands);
+            const bestPaid = bestOf(paidCands);
+            if (bestOpen && bestOpen.score >= 0.6) {
+              matchedInvoiceId  = bestOpen.id;
+              matchedCustomerId = bestOpen.customerId;
+              reconConfidence   = bestOpen.score;
+              category = "income_customer"; isBusiness = true;
+              // High-confidence auto-flip: exact amount, single unpaid candidate, very strong name match
+              if (openCands.length === 1 && bestOpen.score >= 0.95) autoFlipSafe = true;
+            } else if (bestPaid && bestPaid.score >= 0.6) {
+              // Already-paid invoice → attribution only, never flip status
+              matchedInvoiceId  = bestPaid.id;
+              matchedCustomerId = bestPaid.customerId;
+              reconConfidence   = bestPaid.score;
+              category = "income_customer"; isBusiness = true;
             }
           } else if (isCredit && category === "uncategorised") {
             category = "income_other"; isBusiness = true;
