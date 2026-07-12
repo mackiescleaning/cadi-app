@@ -61,6 +61,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useCleanProData } from '../hooks/useCleanProData';
+import { useAccountsChart } from '../hooks/useAccountsChart';
 import { supabase } from '../lib/supabase';
 import { createMoneyEntry } from '../lib/db/moneyDb';
 import { listOpenMarketplaceListings } from '../lib/db/connectDb';
@@ -567,6 +568,11 @@ function MoneyConfidenceHero({
   isLive,
 }) {
   const [period, setPeriod] = useState('week');
+  // Entity-aware framing (P2 accounts foundation): the surplus is "drawings" for a
+  // sole trader, money to extract as salary/dividends for a Ltd (with personal spend
+  // on the business account sitting as a director's loan). Same source as the Money
+  // tab digest — business_tax_profile.structure.
+  const { isLtd } = useAccountsChart();
   const view = useMemo(() => buildMoneyView(entries, period), [entries, period]);
   const moneyInAnim = useCountUp(Math.round(view.moneyIn), 1400);
   const kept = view.moneyIn - view.moneyOut;
@@ -805,6 +811,12 @@ function MoneyConfidenceHero({
                       {fmt(trulyYours)}
                     </p>
                   </div>
+                  {/* Entity-aware framing — matches the Money tab's Drawings / Director's-loan lane. */}
+                  <p className="mt-1.5 text-[10px] text-emerald-300/70 leading-snug">
+                    {isLtd
+                      ? `Take it as salary or dividends — personal spend on the business account is a director’s loan, not profit.`
+                      : `Yours to draw whenever you need it — drawings aren’t a business cost.`}
+                  </p>
                 </div>
               );
             })()}
