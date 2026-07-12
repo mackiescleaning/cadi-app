@@ -1,12 +1,24 @@
 # Accounts Foundation — Build Spec
 
-**Status:** P1 SHIPPED (2026-07-12) · **Owner:** (you) · **Date:** 2026-07-12
+**Status:** P1 SHIPPED · P2 BUILT (2026-07-12) · **Owner:** (you) · **Date:** 2026-07-12
 
 > **P1 done:** migrations 095–097 applied to prod (business_tax_profile, chart_of_accounts,
 > bank_category_rules, transactions.vat_treatment, seed fn + new-business trigger + backfill).
 > All 6 businesses seeded (20-row chart + Starling map + tax profile). `statement-import` reworked
 > to read the chart from the DB (deployed) — behaviour verified identical to the old hardcode.
-> chris@mackies set to `ltd`. Next: P2 (money-confidence redesign).
+> chris@mackies set to `ltd`.
+>
+> **P2 built (2026-07-12, uncommitted):** the client now READS the chart — new
+> `src/lib/db/accountsDb.js` (chart + tax profile readers, LANE_META, personalNoun) and
+> `src/hooks/useAccountsChart.js` (loads chart + tax profile once, exposes byLane/laneOf/
+> labelOf/personalLabel). New `src/components/MoneyConfidenceDigest.jsx` renders the visible
+> redesign in the Money tab's OpenBankingBanner (replacing the old Business/Personal/Review
+> pill summary): a **trust bar** (categorised_by → you / bank / Cadi), the **four lanes**
+> (money in · business costs · personal · transfers, personal labelled Drawings vs Director's
+> loan per `business_tax_profile.structure`), and an inline **spot-check** (confirm/change
+> Cadi's low-confidence guesses via the existing yapily-api categorise path). Prod build
+> passes; digest is gated behind a real account with bank/statement transactions so it can't
+> render in demo. **Not yet committed or live-verified with a real logged-in account.**
 > **Depends on:** the statement-upload bridge (`statement-import`), the `transactions` table, `yapily-api`.
 
 The goal of this doc is the _foundation_ under the Money → Accounts experience: an

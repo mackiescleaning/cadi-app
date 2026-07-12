@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AskCadi from '../components/AskCadi';
 import UndoToast from '../components/ui/UndoToast';
+import MoneyConfidenceDigest from '../components/MoneyConfidenceDigest';
 import {
   createMoneyEntry,
   listMoneyEntries,
@@ -976,11 +977,6 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
   const autoGroupBy = merchantCompressionRatio > 0.7 ? 'amount' : 'merchant';
   const effectiveGroupBy = groupBy ?? autoGroupBy;
   const activeGroups = effectiveGroupBy === 'amount' ? amountGroups : merchantGroups;
-  const business = bankTxs.filter((t) => t.is_business === true);
-  const personal = bankTxs.filter((t) => t.is_business === false);
-  const personalTotal = personal
-    .filter((t) => Number(t.amount) < 0)
-    .reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
 
   if (user?.id === 'demo-user') return null;
 
@@ -1178,40 +1174,10 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
           </div>
         )}
 
-        {/* Summary pills */}
-        {bankTxs.length > 0 && (
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {[
-              { label: 'Business', value: business.length, color: 'text-emerald-400' },
-              { label: 'Personal', value: personal.length, color: 'text-amber-400' },
-              {
-                label: 'Review',
-                value: needsReview.length,
-                color: needsReview.length > 0 ? 'text-red-400' : 'text-[rgba(153,197,255,0.4)]',
-              },
-            ].map(({ label, value, color }) => (
-              <div
-                key={label}
-                className="rounded-xl bg-[rgba(153,197,255,0.05)] border border-[rgba(153,197,255,0.08)] p-2 text-center"
-              >
-                <p className={`text-base font-black ${color}`}>{value}</p>
-                <p className="text-[10px] text-[rgba(153,197,255,0.4)]">{label}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Personal spend insight */}
-        {personalTotal > 0 && (
-          <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-            <p className="text-xs text-amber-300 font-bold">
-              💡 Personal spend this period: £{personalTotal.toFixed(2)}
-            </p>
-            <p className="text-[10px] text-amber-300/70 mt-0.5">
-              Not included in your P&L — check none slipped through as business.
-            </p>
-          </div>
-        )}
+        {/* Money-confidence digest — four lanes, trust bar, spot-check (P2).
+            Reads the per-business chart of accounts; supersedes the old
+            Business/Personal/Review pill summary + personal-spend insight. */}
+        <MoneyConfidenceDigest bankTxs={bankTxs} onCategorise={handleCategorise} />
       </div>
 
       {/* ── Smart Sort: grouped bulk review ── */}
