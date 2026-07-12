@@ -36,6 +36,7 @@ const Staff = lazy(() => import('./pages/Staff'));
 const InboxPage = lazy(() => import('./pages/Inbox'));
 const ProUpgradePage = lazy(() => import('./components/ui/ProUpgrade'));
 const BankingSettings = lazy(() => import('./pages/BankingSettings'));
+const StatementImport = lazy(() => import('./pages/StatementImport'));
 const FinancialWalkthrough = lazy(() => import('./pages/FinancialWalkthrough'));
 const WeeklyReport = lazy(() => import('./pages/WeeklyReport'));
 const SiteSurvey = lazy(() => import('./pages/SiteSurvey'));
@@ -74,6 +75,8 @@ const GocardlessCallback = lazy(() => import('./pages/GocardlessCallback'));
 const GoCardlessPaymentCallback = lazy(() => import('./pages/GoCardlessPaymentCallback'));
 const StripeCallback = lazy(() => import('./pages/StripeCallback'));
 const YapilyCallback = lazy(() => import('./pages/TruelayerCallback'));
+const TlSandboxConnect = lazy(() => import('./pages/TlSandboxConnect'));
+const TlSandboxCallback = lazy(() => import('./pages/TlSandboxCallback'));
 
 // FM Ops Portal — live (subcontractor network co-ordination)
 const FmOpsLayout = lazy(() => import('./components/fm-ops/FmOpsLayout'));
@@ -153,6 +156,8 @@ function App() {
                   />
                   <Route path="/stripe/callback" element={<StripeCallback />} />
                   <Route path="/yapily/callback" element={<YapilyCallback />} />
+                  <Route path="/truelayer/connect" element={<TlSandboxConnect />} />
+                  <Route path="/truelayer/callback" element={<TlSandboxCallback />} />
 
                   {/* Invite accept — public, handles own auth */}
                   <Route path="/invite/:token" element={<InviteAccept />} />
@@ -305,6 +310,7 @@ function App() {
                     <Route path="connect/invoice" element={<EarnInvoice />} />
                     {/* Phase 2 */}
                     <Route path="banking/connect" element={<BankingSettings />} />
+                    <Route path="banking/upload" element={<StatementImport />} />
                     <Route path="walkthrough" element={<FinancialWalkthrough />} />
                     <Route path="reports/:id" element={<WeeklyReport />} />
                     {/* Commercial site survey */}

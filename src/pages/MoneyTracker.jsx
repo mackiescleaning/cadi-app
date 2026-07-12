@@ -89,6 +89,14 @@ const EXPENSE_CATS = [
     pill: 'bg-pink-500/15 border-pink-500/25 text-pink-300',
   },
   {
+    id: 'directors_wages',
+    label: 'Directors wages',
+    emoji: '💼',
+    hmrc: 'staffCosts',
+    dot: '#6366f1',
+    pill: 'bg-indigo-500/15 border-indigo-500/25 text-indigo-300',
+  },
+  {
     id: 'premises',
     label: 'Premises',
     emoji: '🏢',
@@ -1116,6 +1124,14 @@ function OpenBankingBanner({ bankTxs = [], setBankTxs, onSyncComplete, onExpense
               {syncing ? 'Syncing…' : '↻ Sync transactions'}
             </button>
           )}
+          <button
+            onClick={() => {
+              window.location.href = '/banking/upload';
+            }}
+            className="px-4 py-2 rounded-xl bg-[rgba(153,197,255,0.06)] border border-[rgba(153,197,255,0.12)] text-[rgba(153,197,255,0.6)] text-xs font-bold hover:text-[#99c5ff] transition-all"
+          >
+            📄 Upload statement
+          </button>
           {connected && bankTxs.length > 0 && (
             <button
               onClick={() => setShowTxs((v) => !v)}
