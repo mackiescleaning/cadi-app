@@ -77,8 +77,14 @@ const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ??
   "https://app.cadi.cleaning,https://cadi.cleaning,http://localhost:5173,http://localhost:3000")
   .split(",").map(s => s.trim()).filter(Boolean);
 
+// Any localhost origin is a local dev server (can't be reached by a third party),
+// so allow it on top of the configured production origins — otherwise a non-standard
+// dev port (e.g. 3005 when 3000 is taken) fails CORS on every mutating call.
+const isLocalhost = (o: string) => /^https?:\/\/localhost(:\d+)?$/.test(o);
+
 function corsHeaders(origin: string | null): HeadersInit {
-  const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const allow =
+    origin && (ALLOWED_ORIGINS.includes(origin) || isLocalhost(origin)) ? origin : ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin":  allow,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
