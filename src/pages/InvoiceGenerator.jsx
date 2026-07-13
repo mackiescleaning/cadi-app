@@ -365,15 +365,31 @@ function EmailModal({
     setSending(true);
     setError(null);
     try {
-      // Generate PDF attachment client-side (lazy import — keeps it out of main bundle).
+      // Generate PDF attachment client-side (lazy import — keeps it out of the main bundle).
+      // Split the two failure modes:
+      //  1. Module fails to LOAD — almost always a stale browser tab after a deploy (the
+      //     hashed chunk URL changed and 404s). Reload to fetch fresh assets and have the
+      //     user resend, rather than silently emailing the invoice with no PDF attached.
+      //  2. Generation throws on valid module — rare; fall back to sending without the PDF.
       let pdfAttachment = null;
+      let generateInvoicePdf;
       try {
-        const { generateInvoicePdf } = await import('../lib/invoicePdf');
+        ({ generateInvoicePdf } = await import('../lib/invoicePdf'));
+      } catch (loadErr) {
+        console.warn('invoicePdf module failed to load (stale chunk?) — reloading:', loadErr);
+        setError(
+          'Cadi was just updated — refreshing so your invoice sends with its PDF. Please resend once the page reloads.'
+        );
+        setTimeout(() => window.location.reload(), 1800);
+        setSending(false);
+        return;
+      }
+      try {
         pdfAttachment = generateInvoicePdf({ ...invoice, terms: invoice.terms }, business, {
           vatRegistered: !!accounts.vatRegistered,
         });
       } catch (pdfErr) {
-        console.warn('PDF generation failed — sending email without attachment:', pdfErr);
+        console.warn('PDF generation failed — sending without attachment:', pdfErr);
       }
 
       const { error: fnError } = await supabase.functions.invoke('send-invoice', {
