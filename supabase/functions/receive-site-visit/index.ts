@@ -12,6 +12,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkRateLimit, rateLimitedResponse, clientIp } from "../_shared/rateLimit.ts";
 
 const SUPABASE_URL         = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -163,6 +164,13 @@ serve(async (req) => {
   try { body = await req.json(); }
   catch { return json({ error: "Invalid JSON" }, 400); }
 
+  // ── Spam honeypot ──────────────────────────────────────────────────────────
+  // The website form renders hidden `website`/`hp` fields a human never sees or
+  // fills. Bots fill every input, so a non-empty value means it's a bot. Return a
+  // fake success so the bot doesn't learn it was blocked — but write/email nothing.
+  const honeypot = [body.website, body.hp].find((v) => typeof v === "string" && v.trim() !== "");
+  if (honeypot) return json({ ok: true });
+
   const {
     business_id,
     name, company, phone, email,
@@ -187,6 +195,39 @@ serve(async (req) => {
   if (!name && !email && !phone) return json({ error: "Missing contact details" }, 400);
 
   const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+  // ── IP rate limit ──────────────────────────────────────────────────────────
+  // A real customer submits once; a bot flood trips this. Fails open on DB error.
+  const rl = await checkRateLimit(sb, {
+    bucket:   "receive-site-visit",
+    key:      clientIp(req),
+    limit:    5,
+    windowMs: 60_000,
+  });
+  if (!rl.ok) return rateLimitedResponse(CORS_HEADERS, rl.resetAt);
+
+  // ── Dedupe: swallow an identical repeat submit within 10 minutes ────────────
+  // Kills double-fires (the bot this morning submitted twice in the same second)
+  // without dropping a genuine second enquiry later in the day. Values are passed
+  // as filter values (not string-interpolated), so no PostgREST filter injection.
+  {
+    const since = new Date(Date.now() - 10 * 60_000).toISOString();
+    let dupeId: string | null = null;
+    for (const [field, value] of [["email", email], ["phone", phone]] as const) {
+      if (!value || dupeId) continue;
+      const { data: dupe } = await sb
+        .from("agent_actions")
+        .select("id")
+        .eq("business_id", business_id)
+        .eq("action_type", "site_visit_request")
+        .gte("created_at", since)
+        .eq(`proposed_payload->>${field}`, value)
+        .limit(1)
+        .maybeSingle();
+      if (dupe?.id) dupeId = dupe.id;
+    }
+    if (dupeId) return json({ ok: true, action_id: dupeId, deduped: true });
+  }
 
   // ── Look up business owner email and name ──────────────────────────────────
   const { data: biz } = await sb
